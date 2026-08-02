@@ -616,6 +616,8 @@ async fn execute_through_crm(
                 branch_id,
                 user_id,
                 staff_advanced_service::StaffTaskRequest {
+                    client_id: None,
+                    appointment_id: None,
                     staff_id: payload
                         .get("staffId")
                         .and_then(Value::as_str)

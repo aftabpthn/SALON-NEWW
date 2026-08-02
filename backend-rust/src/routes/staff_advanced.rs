@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{FixedOffset, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -26,15 +26,16 @@ use crate::{
         staff_advanced_service::{
             self, BiometricConsentRequest, BiometricDeviceRequest, BiometricEventRequest,
             BiometricGatewayRegistration, BiometricGatewayRequest, BiometricMappingRequest,
-            IncentiveCopyRequest, IncentiveRuleRequest, MobileDashboardResponse,
-            MobileDeviceRegistration, MobileDeviceRequest, MobilePushSubscriptionRequest,
-            MobileSyncRequest, MobileSyncResponse, MobileTodayResponse,
-            PayrollAdjustmentRuleRequest, PayrollStructureRequest, SelfPushSubscriptionRequest,
-            StaffPerformanceResponse, StaffServiceTargetRequest, StaffTaskRequest,
+            IncentiveCopyRequest, IncentiveRuleRequest, MobileCrashReportRequest,
+            MobileDashboardResponse, MobileDeviceRegistration, MobileDeviceRequest,
+            MobilePushSubscriptionRequest, MobileSyncRequest, MobileSyncResponse,
+            MobileTodayResponse, PayrollAdjustmentRuleRequest, PayrollStructureRequest,
+            SelfPushSubscriptionRequest, StaffPerformanceResponse, StaffServiceTargetRequest,
+            StaffTaskRequest,
         },
         staff_app_service, staff_enterprise_service,
     },
-    state::AppState,
+    state::{AppState, TeamChatEvent},
 };
 
 pub fn router() -> Router<AppState> {
@@ -76,12 +77,20 @@ pub fn router() -> Router<AppState> {
         .route("/staff/self/targets", get(get_self_targets))
         .route("/staff/self/mobile/push-config", get(get_self_push_config))
         .route(
+            "/staff/self/mobile/release-policy",
+            get(get_self_release_policy),
+        )
+        .route(
             "/staff/self/mobile/devices",
             post(register_self_push_device),
         )
         .route(
             "/staff/self/mobile/push-subscriptions",
             post(save_self_push_subscription),
+        )
+        .route(
+            "/staff/self/mobile/crash-reports",
+            post(save_mobile_crash_report),
         )
         .route(
             "/staff/self/tasks/:id/status",
@@ -91,6 +100,7 @@ pub fn router() -> Router<AppState> {
             "/staff-self/calendar/:id",
             axum::routing::patch(update_self_schedule),
         )
+        .route("/staff-self/calendar", post(create_self_schedule))
         .route("/staff/tasks/:id/comments", post(add_task_comment))
         .route("/staff/performance", get(get_performance))
         .route("/staff/performance/:staff_id", get(get_staff_performance))
@@ -221,6 +231,18 @@ struct SelfScheduleUpdateRequest {
     end_time: Option<String>,
     status: Option<String>,
     notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SelfScheduleCreateRequest {
+    schedule_date: NaiveDate,
+    start_time: String,
+    end_time: String,
+    notes: Option<String>,
+    room_id: Option<String>,
+    role_id: Option<String>,
+    job_title: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -977,6 +999,7 @@ async fn create_task(
     )
     .await?;
     audit(&state, &claims, &branch_id, "staff.task.created", &row.id).await;
+    publish_task_event(&state, &tenant_id, &branch_id, &claims.sub, &row.id);
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1061,6 +1084,7 @@ async fn update_task(
     let row = staff_advanced_service::update_task(&state.db, &tenant_id, &branch_id, &id, payload)
         .await?;
     audit(&state, &claims, &branch_id, "staff.task.updated", &row.id).await;
+    publish_task_event(&state, &tenant_id, &branch_id, &claims.sub, &row.id);
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1101,6 +1125,21 @@ async fn get_self_push_config(
         configured: state.settings.mobile_push_provider_enabled() && !public_key.is_empty(),
         public_key,
     })))
+}
+
+#[derive(Debug, Deserialize)]
+struct ReleasePolicyQuery {
+    version: String,
+}
+
+async fn get_self_release_policy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    Query(query): Query<ReleasePolicyQuery>,
+) -> ApiResult<staff_advanced_service::StaffAppReleasePolicy> {
+    ensure_mobile_access(&claims)?;
+    let policy = staff_advanced_service::staff_app_release_policy(&state.settings, &query.version)?;
+    Ok(Json(ApiResponse::ok(policy)))
 }
 
 async fn register_self_push_device(
@@ -1157,6 +1196,41 @@ async fn save_self_push_subscription(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn save_mobile_crash_report(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<MobileCrashReportRequest>,
+) -> ApiResult<serde_json::Value> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.dashboard.read",
+        &["staff.self_manage", "appointments.read"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let id = staff_advanced_service::save_mobile_crash_report(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.mobile.crash_reported",
+        &id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(json!({ "id": id }))))
+}
+
 async fn update_self_task_status(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -1191,6 +1265,85 @@ async fn update_self_task_status(
         &row.id,
     )
     .await;
+    publish_task_event(&state, &tenant_id, &branch_id, &claims.sub, &row.id);
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+fn publish_task_event(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    user_id: &str,
+    task_id: &str,
+) {
+    let _ = state.team_chat_events.send(TeamChatEvent {
+        tenant_id: tenant_id.to_string(),
+        branch_id: branch_id.to_string(),
+        event_type: "staff.task.updated".into(),
+        message_id: task_id.to_string(),
+        sender_user_id: user_id.to_string(),
+    });
+}
+
+async fn create_self_schedule(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<SelfScheduleCreateRequest>,
+) -> ApiResult<serde_json::Value> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.roster.manage",
+        &[
+            "staff.app.calendar.manage",
+            "staff.self_manage",
+            "staff_self.write",
+        ],
+    )?;
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("valid IST offset"))
+        .date_naive();
+    if payload.schedule_date < today {
+        return Err(AppError::validation(
+            "self-service schedule creation is limited to today or a future date",
+        ));
+    }
+    let start_time = parse_self_schedule_time(Some(&payload.start_time), "startTime")?
+        .ok_or_else(|| AppError::validation("schedule start time is required"))?;
+    let end_time = parse_self_schedule_time(Some(&payload.end_time), "endTime")?
+        .ok_or_else(|| AppError::validation("schedule end time is required"))?;
+    if start_time >= end_time {
+        return Err(AppError::validation(
+            "schedule start and end time are invalid",
+        ));
+    }
+    let notes = payload.notes.as_deref().unwrap_or("").trim();
+    if notes.chars().count() > 500 {
+        return Err(AppError::validation(
+            "schedule notes cannot exceed 500 characters",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row=sqlx::query_scalar::<_,serde_json::Value>(r#"INSERT INTO staff_schedules(tenant_id,branch_id,staff_id,schedule_date,shift1_start,shift1_end,status,notes,room_id,role_id,job_title,updated_by)
+      VALUES($1,$2,$3,$4,$5,$6,'working',$7,NULLIF($8,''),NULLIF($9,''),$10,$11)
+      ON CONFLICT(tenant_id,branch_id,staff_id,schedule_date) DO NOTHING
+      RETURNING jsonb_build_object('id',id,'staffId',staff_id,'date',schedule_date,'startTime',shift1_start,'endTime',shift1_end,'status',status,'notes',notes,'roomId',room_id,'roleId',role_id,'jobTitle',job_title,'version',version)"#)
+      .bind(&tenant_id).bind(&branch_id).bind(&staff_id).bind(payload.schedule_date).bind(start_time).bind(end_time).bind(notes)
+      .bind(payload.room_id.as_deref().unwrap_or("").trim()).bind(payload.role_id.as_deref().unwrap_or("").trim())
+      .bind(payload.job_title.as_deref().unwrap_or("").trim()).bind(&claims.sub)
+      .fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to create staff schedule"))?
+      .ok_or_else(|| AppError::conflict("a schedule already exists for this date; edit it instead"))?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.schedule.self_created",
+        row.get("id").and_then(|value| value.as_str()).unwrap_or(""),
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1218,6 +1371,14 @@ async fn update_self_schedule(
             .await?;
     if payload.version < 1 {
         return Err(AppError::validation("schedule version is invalid"));
+    }
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("valid IST offset"))
+        .date_naive();
+    if payload.schedule_date.is_some_and(|date| date < today) {
+        return Err(AppError::validation(
+            "self-service schedule changes are limited to today or a future date",
+        ));
     }
     let start_time = parse_self_schedule_time(payload.start_time.as_deref(), "startTime")?;
     let end_time = parse_self_schedule_time(payload.end_time.as_deref(), "endTime")?;
@@ -1260,8 +1421,8 @@ async fn update_self_schedule(
               shift1_end=CASE WHEN $8::TIME IS NULL THEN shift1_end ELSE $8 END,
               status=CASE WHEN $9='' THEN status ELSE $9 END,
               notes=CASE WHEN $10='' THEN notes ELSE $10 END,
-              version=version+1,updated_at=NOW()
-            WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND version=$5
+              version=version+1,updated_by=$11,updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND version=$5 AND schedule_date>=$12
             RETURNING jsonb_build_object(
               'id',id,'staffId',staff_id,'scheduleDate',schedule_date,
               'startTime',shift1_start,'endTime',shift1_end,'status',status,'notes',notes,'version',version
@@ -1277,6 +1438,8 @@ async fn update_self_schedule(
     .bind(end_time)
     .bind(status)
     .bind(notes)
+    .bind(&claims.sub)
+    .bind(today)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to update staff schedule"))?

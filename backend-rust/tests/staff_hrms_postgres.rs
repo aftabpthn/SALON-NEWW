@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
 
@@ -5,7 +6,7 @@ use uuid::Uuid;
 mod staff_hrms_repository;
 
 async fn cleanup(db: &PgPool, tenant: &str) {
-    for table in ["hr_job_applications", "hr_job_openings"] {
+    for table in ["hr_job_applications", "hr_job_openings", "staff"] {
         sqlx::query(&format!("DELETE FROM {table} WHERE tenant_id=$1"))
             .bind(tenant)
             .execute(db)
@@ -26,6 +27,11 @@ async fn hrms_scope_constraints_and_optimistic_concurrency_hold() {
     let tenant = format!("hrms-test-{suffix}");
     let branch_a = format!("a-{suffix}");
     let branch_b = format!("b-{suffix}");
+    let staff_id = format!("staff-{suffix}");
+
+    sqlx::query("INSERT INTO staff(id,tenant_id,branch_id,employee_code,first_name,job_title) VALUES($1,$2,$3,$4,'Evidence','Stylist')")
+        .bind(&staff_id).bind(&tenant).bind(&branch_a).bind(format!("E-{}", &suffix[..8]))
+        .execute(&db).await.expect("evidence-gated staff");
 
     let opening_a: String = sqlx::query_scalar("INSERT INTO hr_job_openings(tenant_id,branch_id,title,employment_type,status,created_by) VALUES($1,$2,'Stylist','full_time','open','test') RETURNING id")
         .bind(&tenant).bind(&branch_a).fetch_one(&db).await.expect("branch A opening");
@@ -60,6 +66,22 @@ async fn hrms_scope_constraints_and_optimistic_concurrency_hold() {
     assert!(dashboard["orgChart"].is_array());
     assert!(dashboard["documentAlerts"].is_array());
     assert!(dashboard["learning"].is_object());
+
+    let intelligence = staff_hrms_repository::operations_intelligence(
+        &db,
+        &tenant,
+        &branch_a,
+        NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+        NaiveDate::from_ymd_opt(2026, 7, 31).unwrap(),
+    )
+    .await
+    .expect("HR operations intelligence query");
+    assert!(intelligence["summary"]["hrHealthScore"].is_null());
+    assert_eq!(intelligence["summary"]["evidenceCoveragePercent"], 0);
+    assert_eq!(
+        intelligence["summary"]["evidenceStatus"],
+        "insufficient_evidence"
+    );
 
     let update = "UPDATE hr_job_openings SET status=$4,version=version+1 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=1";
     let (first, second) = tokio::join!(

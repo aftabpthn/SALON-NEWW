@@ -1,5 +1,6 @@
 import { Component } from "@angular/core";
 import { IonApp, IonRouterOutlet } from "@ionic/angular/standalone";
+import { StaffNativeService } from "./core/staff-native.service";
 
 @Component({
   selector: "aura-root",
@@ -11,4 +12,6 @@ import { IonApp, IonRouterOutlet } from "@ionic/angular/standalone";
     </ion-app>
   `
 })
-export class AppComponent {}
+export class AppComponent {
+  constructor(native: StaffNativeService) { void native.initialize(); }
+}

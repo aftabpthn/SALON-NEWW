@@ -7,13 +7,15 @@ use axum::{
 };
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::Row;
 
 use crate::{
+    config::is_local_env,
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::{
         auth_repository::{self, AuthAuditInput},
+        security_repository,
         staff_configuration_repository::{
             AttendanceRuleInput, CatalogAssignmentInput, CommissionRuleInput, LeavePolicyInput,
             PayRateInput, ReplaceConfigurationInput, ReplaceStaffMastersInput, ShiftTemplateInput,
@@ -25,16 +27,70 @@ use crate::{
         staff_repository::{self, CreateStaff, StaffProfileRecord, StaffRecord, UpdateStaff},
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, staff_service},
+    services::{
+        auth_service::{self, AuthClaims},
+        client_service, invoice_delivery, migration_file_service, security_service,
+        staff_enterprise_service, staff_service,
+    },
     state::AppState,
 };
+use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/staff", get(list_staff).post(create_staff))
         .route("/staff/list", get(list_staff_page))
         .route("/staff/bulk-imports", post(import_staff_bulk))
+        .route(
+            "/staff/self/profile",
+            get(get_self_profile).patch(update_self_profile),
+        )
+        .route(
+            "/staff/self/profile/photo",
+            post(upload_self_profile_photo).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route(
+            "/staff/self/profile/photo/:file_id",
+            get(get_self_profile_photo),
+        )
+        .route(
+            "/staff/self/profile/contact-verification/request",
+            post(request_self_contact_verification),
+        )
+        .route(
+            "/staff/self/profile/contact-verification/verify",
+            post(verify_self_contact_verification),
+        )
+        .route(
+            "/staff/self/security-context",
+            get(get_self_security_context),
+        )
+        .route(
+            "/staff/self/security/sessions/:session_id/revoke",
+            post(revoke_self_session),
+        )
+        .route(
+            "/staff/self/security/devices/:device_id/revoke",
+            post(revoke_self_device),
+        )
+        .route("/staff/self/security/pin", post(set_self_device_pin))
+        .route(
+            "/staff/self/security/pin/verify",
+            post(verify_self_device_pin),
+        )
+        .route(
+            "/staff/self/preferred-branch",
+            post(set_self_preferred_branch),
+        )
         .route("/staff/files/:file_id", get(get_staff_file))
+        .route(
+            "/staff-self/payroll-documents",
+            get(list_self_payroll_documents),
+        )
+        .route(
+            "/staff-self/payroll-documents/:document_id/content",
+            get(get_self_payroll_document),
+        )
         .route(
             "/staff/:id/files",
             post(upload_staff_file).layer(DefaultBodyLimit::max(5 * 1024 * 1024)),
@@ -243,6 +299,41 @@ pub struct StaffFileUploadResponse {
     pub file_name: String,
     pub content_type: String,
     pub byte_size: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffSelfProfileUpdate {
+    pub email: Option<String>,
+    pub mobile: Option<String>,
+    pub mfa_code: Option<String>,
+    pub current_password: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffSelfContactVerificationRequest {
+    pub contact_type: String,
+    pub code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffSelfDeviceRequest {
+    pub device_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffSelfPinRequest {
+    pub device_id: String,
+    pub pin: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StaffSelfPreferredBranchRequest {
+    pub branch_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -979,6 +1070,908 @@ async fn update_staff_profile(
     ))))
 }
 
+async fn get_self_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.read",
+        &["staff.self_manage", "staff_self.write", "read:staff"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    Ok(Json(ApiResponse::ok(
+        self_profile_value(&state, &tenant_id, &branch_id, &staff_id).await?,
+    )))
+}
+
+async fn update_self_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfProfileUpdate>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.manage",
+        &[
+            "staff.self_manage",
+            "staff_self.write",
+            "write:staff",
+            "update:staff",
+        ],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let current = staff_repository::get(&state.db, &tenant_id, &branch_id, &staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff profile"))?
+        .ok_or_else(|| AppError::not_found("staff profile was not found"))?;
+    let email = match payload.email.as_deref().map(str::trim) {
+        Some("") => Some(String::new()),
+        Some(value) => Some(staff_service::normalize_login_email(value)?),
+        None => None,
+    };
+    let mobile = match payload.mobile.as_deref().map(str::trim) {
+        Some("") => Some(String::new()),
+        Some(value) => Some(client_service::normalize_phone(value)?),
+        None => None,
+    };
+    let email_changed = email.as_deref().is_some_and(|value| value != current.email);
+    let phone_changed = mobile
+        .as_deref()
+        .is_some_and(|value| value != current.mobile_phone);
+    let policy = security_service::get_policy(&state.db, &tenant_id, &branch_id)
+        .await?
+        .settings;
+    if policy.staff_contact_verification_required && (email_changed || phone_changed) {
+        security_service::verify_privileged_session(
+            &state.db,
+            state.settings.security_encryption_key.as_deref(),
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &claims.session_id,
+            payload.mfa_code.as_deref(),
+            payload.current_password.as_deref(),
+            Some("staff.profile.contact"),
+        )
+        .await?;
+    }
+    if email_changed || phone_changed {
+        staff_repository::update(
+            &state.db,
+            UpdateStaff {
+                tenant_id: &tenant_id,
+                branch_id: &branch_id,
+                id: &staff_id,
+                employee_code: None,
+                first_name: None,
+                middle_name: None,
+                last_name: None,
+                appointment_display_name: None,
+                email: email.as_deref(),
+                mobile_phone: mobile.as_deref(),
+                home_phone: None,
+                work_phone: None,
+                job_title: None,
+                active: None,
+            },
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to update staff profile"))?;
+        sqlx::query(
+            r#"INSERT INTO staff_profiles(staff_id,tenant_id,branch_id,email_verified_at,phone_verified_at)
+               VALUES($1,$2,$3,NULL,NULL)
+               ON CONFLICT(staff_id) DO UPDATE SET
+                 email_verified_at=CASE WHEN $4 THEN NULL ELSE staff_profiles.email_verified_at END,
+                 phone_verified_at=CASE WHEN $5 THEN NULL ELSE staff_profiles.phone_verified_at END,
+                 updated_at=NOW()"#,
+        )
+        .bind(&staff_id)
+        .bind(&tenant_id)
+        .bind(&branch_id)
+        .bind(email_changed)
+        .bind(phone_changed)
+        .execute(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to update contact verification"))?;
+        audit_staff_self(
+            &state,
+            &claims,
+            &branch_id,
+            "staff.profile.updated",
+            json!({"staffId":staff_id,"emailChanged":email_changed,"phoneChanged":phone_changed}),
+        )
+        .await;
+    }
+    Ok(Json(ApiResponse::ok(
+        self_profile_value(&state, &tenant_id, &branch_id, &staff_id).await?,
+    )))
+}
+
+async fn upload_self_profile_photo(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffFileUploadQuery>,
+    bytes: Bytes,
+) -> ApiResult<StaffFileUploadResponse> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.manage",
+        &[
+            "staff.self_manage",
+            "staff_self.write",
+            "write:staff",
+            "update:staff",
+        ],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let file_name = query.file_name.trim();
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    if query.kind.trim() != "photo"
+        || file_name.is_empty()
+        || file_name.chars().count() > 180
+        || file_name.chars().any(char::is_control)
+        || bytes.is_empty()
+        || bytes.len() > 5 * 1024 * 1024
+        || !is_supported_staff_photo(file_name, &content_type, &bytes)
+    {
+        return Err(AppError::validation(
+            "staff photo must be a valid JPG or PNG image up to 5 MB",
+        ));
+    }
+    migration_file_service::scan_upload_bytes(&bytes, !is_local_env(&state.settings.app_env))
+        .await?;
+    let row = staff_hr_repository::save_file(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        "photo",
+        file_name,
+        &content_type,
+        bytes.to_vec(),
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to upload staff photo"))?;
+    let stored_url = format!("/staff/files/{}", row.id);
+    sqlx::query(
+        r#"INSERT INTO staff_profiles(staff_id,tenant_id,branch_id,photo_url)
+           VALUES($1,$2,$3,$4)
+           ON CONFLICT(staff_id) DO UPDATE SET photo_url=EXCLUDED.photo_url,updated_at=NOW()"#,
+    )
+    .bind(&staff_id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&stored_url)
+    .execute(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to save staff photo"))?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.profile.photo_updated",
+        json!({"staffId":staff_id,"fileId":row.id}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(StaffFileUploadResponse {
+        file_url: stored_url,
+        file_id: row.id,
+        file_name: row.file_name,
+        content_type: row.content_type,
+        byte_size: row.byte_size,
+    })))
+}
+
+async fn get_self_profile_photo(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(file_id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.read",
+        &["staff.self_manage", "staff_self.write", "read:staff"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_hr_repository::get_file(&state.db, &tenant_id, &branch_id, &file_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff photo"))?
+        .filter(|row| row.staff_id == staff_id && row.content_type.starts_with("image/"))
+        .ok_or_else(|| AppError::not_found("staff photo was not found"))?;
+    staff_file_response(row)
+}
+
+async fn request_self_contact_verification(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfContactVerificationRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.manage",
+        &[
+            "staff.self_manage",
+            "staff_self.write",
+            "write:staff",
+            "update:staff",
+        ],
+    )?;
+    let contact_type = valid_contact_type(&payload.contact_type)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let staff = staff_repository::get(&state.db, &tenant_id, &branch_id, &staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load staff profile"))?
+        .ok_or_else(|| AppError::not_found("staff profile was not found"))?;
+    let target = if contact_type == "email" {
+        staff.email
+    } else {
+        staff.mobile_phone
+    };
+    if target.trim().is_empty() {
+        return Err(AppError::validation(format!(
+            "staff {contact_type} is not configured"
+        )));
+    }
+    let recent = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM staff_contact_verifications WHERE tenant_id=$1 AND user_id=$2 AND staff_id=$3 AND contact_type=$4 AND created_at>NOW()-INTERVAL '15 minutes'",
+    )
+    .bind(&tenant_id)
+    .bind(&claims.sub)
+    .bind(&staff_id)
+    .bind(contact_type)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to check contact verification rate limit"))?;
+    if recent >= 3 {
+        return Err(AppError::rate_limited(
+            "too many verification requests; try again later",
+        ));
+    }
+    let code = format!("{:06}", Uuid::new_v4().as_u128() % 1_000_000);
+    let code_hash = auth_service::hash_password(&code)
+        .map_err(|_| AppError::internal("failed to secure verification code"))?;
+    let challenge_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO staff_contact_verifications(id,tenant_id,branch_id,user_id,staff_id,contact_type,target_value,code_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()+INTERVAL '10 minutes')",
+    )
+    .bind(&challenge_id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&claims.sub)
+    .bind(&staff_id)
+    .bind(contact_type)
+    .bind(&target)
+    .bind(code_hash)
+    .execute(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to create contact verification"))?;
+    let channel = if contact_type == "email" {
+        "email"
+    } else {
+        "sms"
+    };
+    let delivery = json!({
+        "channel": channel,
+        "recipient": target,
+        "templateKind": "staffContactVerification",
+        "template": "staff_contact_verification",
+        "code": code,
+        "purpose": format!("verify_staff_{contact_type}"),
+        "ttlSeconds": 600,
+        "message": format!("Your AuraShine Staff App verification code is {code}. It expires in 10 minutes.")
+    });
+    if let Err(error) = invoice_delivery::deliver(&state.settings, &delivery).await {
+        let _ = sqlx::query("DELETE FROM staff_contact_verifications WHERE id=$1")
+            .bind(&challenge_id)
+            .execute(&state.db)
+            .await;
+        return Err(error);
+    }
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.contact_verification.requested",
+        json!({"staffId":staff_id,"contactType":contact_type}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(json!({
+        "sent": true,
+        "contactType": contact_type,
+        "target": masked_contact(&target, contact_type),
+        "expiresIn": 600
+    }))))
+}
+
+async fn verify_self_contact_verification(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfContactVerificationRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.profile.manage",
+        &[
+            "staff.self_manage",
+            "staff_self.write",
+            "write:staff",
+            "update:staff",
+        ],
+    )?;
+    let contact_type = valid_contact_type(&payload.contact_type)?;
+    let code = payload.code.as_deref().map(str::trim).unwrap_or("");
+    if code.len() != 6 || !code.chars().all(|value| value.is_ascii_digit()) {
+        return Err(AppError::validation(
+            "verification code must contain 6 digits",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start contact verification"))?;
+    let challenge = sqlx::query_as::<_, (String, String, String, i32, DateTime<Utc>)>(
+        "SELECT id,target_value,code_hash,attempts,expires_at FROM staff_contact_verifications WHERE tenant_id=$1 AND branch_id=$2 AND user_id=$3 AND staff_id=$4 AND contact_type=$5 AND status='pending' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&claims.sub)
+    .bind(&staff_id)
+    .bind(contact_type)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load contact verification"))?
+    .ok_or_else(|| AppError::not_found("contact verification was not found"))?;
+    if challenge.4 <= Utc::now() {
+        sqlx::query("UPDATE staff_contact_verifications SET status='failed' WHERE id=$1")
+            .bind(&challenge.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to expire contact verification"))?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to expire contact verification"))?;
+        return Err(AppError::conflict("verification code has expired"));
+    }
+    if !auth_service::verify_password(code, &challenge.2) {
+        let attempts = (challenge.3 + 1).min(5);
+        sqlx::query("UPDATE staff_contact_verifications SET attempts=$2,status=CASE WHEN $2>=5 THEN 'failed' ELSE status END WHERE id=$1")
+            .bind(&challenge.0)
+            .bind(attempts)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to update contact verification attempts"))?;
+        tx.commit()
+            .await
+            .map_err(|_| AppError::internal("failed to update contact verification attempts"))?;
+        return Err(AppError::unauthenticated("invalid verification code"));
+    }
+    let current = sqlx::query_as::<_, (String, String)>(
+        "SELECT email,mobile_phone FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&staff_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to validate current staff contact"))?;
+    let current_target = if contact_type == "email" {
+        current.0
+    } else {
+        current.1
+    };
+    if current_target != challenge.1 {
+        return Err(AppError::conflict(
+            "staff contact changed after the verification code was sent",
+        ));
+    }
+    sqlx::query(
+        "UPDATE staff_contact_verifications SET status='verified',verified_at=NOW() WHERE id=$1",
+    )
+    .bind(&challenge.0)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to complete contact verification"))?;
+    sqlx::query(
+        r#"INSERT INTO staff_profiles(staff_id,tenant_id,branch_id,email_verified_at,phone_verified_at)
+           VALUES($1,$2,$3,CASE WHEN $4='email' THEN NOW() ELSE NULL END,CASE WHEN $4='phone' THEN NOW() ELSE NULL END)
+           ON CONFLICT(staff_id) DO UPDATE SET
+             email_verified_at=CASE WHEN $4='email' THEN NOW() ELSE staff_profiles.email_verified_at END,
+             phone_verified_at=CASE WHEN $4='phone' THEN NOW() ELSE staff_profiles.phone_verified_at END,
+             updated_at=NOW()"#,
+    )
+    .bind(&staff_id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(contact_type)
+    .execute(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to mark staff contact verified"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit contact verification"))?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.contact_verification.completed",
+        json!({"staffId":staff_id,"contactType":contact_type}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(
+        json!({"verified":true,"contactType":contact_type}),
+    )))
+}
+
+async fn get_self_security_context(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffSelfDeviceRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.read",
+        &["staff.self_manage", "staff_self.write", "read:staff"],
+    )?;
+    let device_id = valid_device_id(&query.device_id)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let staff_name = sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(NULLIF(appointment_display_name,''),TRIM(CONCAT_WS(' ',first_name,last_name))) FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&staff_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load staff identity"))?;
+    let policy = security_service::get_policy(&state.db, &tenant_id, &branch_id)
+        .await?
+        .settings;
+    let mut sessions = security_repository::list_sessions(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load active sessions"))?;
+    sessions.retain(|session| session.user_id == claims.sub);
+    let mut devices = security_repository::list_devices(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load active devices"))?;
+    devices.retain(|device| device.user_id == claims.sub);
+    let pin_configured = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM staff_device_pins WHERE tenant_id=$1 AND user_id=$2 AND device_id=$3)",
+    )
+    .bind(&tenant_id)
+    .bind(&claims.sub)
+    .bind(&device_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load device PIN status"))?;
+    let location_configured = sqlx::query_scalar::<_, bool>(
+        "SELECT latitude IS NOT NULL AND longitude IS NOT NULL FROM branches WHERE tenant_id=$1 AND id=$2 AND active=TRUE",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load branch geofence"))?
+    .unwrap_or(false);
+    let role_exempt = policy
+        .staff_app_geofence_exempt_roles
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role));
+    Ok(Json(ApiResponse::ok(json!({
+        "staffId":staff_id,
+        "staffName":staff_name,
+        "currentSessionId":claims.session_id,
+        "currentDeviceId":device_id,
+        "pinConfigured":pin_configured,
+        "inactivityMinutes":policy.staff_app_inactivity_minutes,
+        "contactVerificationRequired":policy.staff_contact_verification_required,
+        "geofence":{
+            "mode":policy.staff_app_geofence_mode,
+            "radiusMeters":policy.staff_app_geofence_radius_meters,
+            "locationConfigured":location_configured,
+            "roleExempt":role_exempt
+        },
+        "sessions":sessions,
+        "devices":devices
+    }))))
+}
+
+async fn revoke_self_session(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let owned = security_repository::list_sessions(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate active session"))?
+        .into_iter()
+        .any(|session| session.user_id == claims.sub && session.session_id == session_id);
+    if !owned {
+        return Err(AppError::not_found("active session was not found"));
+    }
+    security_service::revoke_session(&state.db, &tenant_id, &branch_id, &claims.sub, &session_id)
+        .await?;
+    Ok(Json(ApiResponse::ok(
+        json!({"revoked":true,"current":session_id==claims.session_id}),
+    )))
+}
+
+async fn revoke_self_device(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(device_id): Path<String>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let device_id = valid_device_id(&device_id)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let owned = security_repository::list_devices(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate active device"))?
+        .into_iter()
+        .any(|device| device.user_id == claims.sub && device.device_id == device_id);
+    if !owned {
+        return Err(AppError::not_found("device was not found"));
+    }
+    security_service::revoke_device(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.sub,
+        &device_id,
+    )
+    .await?;
+    sqlx::query("DELETE FROM staff_device_pins WHERE tenant_id=$1 AND user_id=$2 AND device_id=$3")
+        .bind(&tenant_id)
+        .bind(&claims.sub)
+        .bind(&device_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to revoke device PIN"))?;
+    Ok(Json(ApiResponse::ok(json!({"revoked":true}))))
+}
+
+async fn set_self_device_pin(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfPinRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let device_id = valid_device_id(&payload.device_id)?;
+    let pin = payload.pin.trim();
+    if !(4..=8).contains(&pin.len()) || !pin.chars().all(|value| value.is_ascii_digit()) {
+        return Err(AppError::validation("PIN must contain 4 to 8 digits"));
+    }
+    let pin_hash = auth_service::hash_password(pin)
+        .map_err(|_| AppError::internal("failed to secure device PIN"))?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    sqlx::query(
+        r#"INSERT INTO staff_device_pins(tenant_id,user_id,device_id,pin_hash)
+           VALUES($1,$2,$3,$4)
+           ON CONFLICT(tenant_id,user_id,device_id) DO UPDATE SET
+             pin_hash=EXCLUDED.pin_hash,failed_attempts=0,locked_until=NULL,updated_at=NOW()"#,
+    )
+    .bind(&tenant_id)
+    .bind(&claims.sub)
+    .bind(&device_id)
+    .bind(pin_hash)
+    .execute(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to save device PIN"))?;
+    security_service::trust_device(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.sub,
+        &device_id,
+    )
+    .await?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.device_pin.updated",
+        json!({"deviceId":device_id}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(json!({"configured":true}))))
+}
+
+async fn verify_self_device_pin(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfPinRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.read",
+        &["staff.self_manage", "staff_self.write", "read:staff"],
+    )?;
+    let device_id = valid_device_id(&payload.device_id)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = sqlx::query_as::<_, (String, i32, Option<DateTime<Utc>>)>(
+        "SELECT pin_hash,failed_attempts,locked_until FROM staff_device_pins WHERE tenant_id=$1 AND user_id=$2 AND device_id=$3",
+    )
+    .bind(&tenant_id)
+    .bind(&claims.sub)
+    .bind(&device_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load device PIN"))?
+    .ok_or_else(|| AppError::not_found("device PIN is not configured"))?;
+    if row.2.is_some_and(|locked_until| locked_until > Utc::now()) {
+        return Err(AppError::forbidden("device PIN is temporarily locked"));
+    }
+    if !auth_service::verify_password(payload.pin.trim(), &row.0) {
+        let attempts = (row.1 + 1).min(10);
+        sqlx::query(
+            "UPDATE staff_device_pins SET failed_attempts=$4,locked_until=CASE WHEN $4>=5 THEN NOW()+INTERVAL '15 minutes' ELSE NULL END,updated_at=NOW() WHERE tenant_id=$1 AND user_id=$2 AND device_id=$3",
+        )
+        .bind(&tenant_id)
+        .bind(&claims.sub)
+        .bind(&device_id)
+        .bind(attempts)
+        .execute(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to update device PIN attempts"))?;
+        audit_staff_self(
+            &state,
+            &claims,
+            &branch_id,
+            "staff.device_pin.verified",
+            json!({"deviceId":device_id,"outcome":"denied"}),
+        )
+        .await;
+        return Err(AppError::unauthenticated("invalid device PIN"));
+    }
+    sqlx::query("UPDATE staff_device_pins SET failed_attempts=0,locked_until=NULL,updated_at=NOW() WHERE tenant_id=$1 AND user_id=$2 AND device_id=$3")
+        .bind(&tenant_id)
+        .bind(&claims.sub)
+        .bind(&device_id)
+        .execute(&state.db)
+        .await
+        .map_err(|_| AppError::internal("failed to reset device PIN attempts"))?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.device_pin.verified",
+        json!({"deviceId":device_id,"outcome":"success"}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(json!({"verified":true}))))
+}
+
+async fn set_self_preferred_branch(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSelfPreferredBranchRequest>,
+) -> ApiResult<serde_json::Value> {
+    require_self_app(
+        &claims,
+        "staff.app.settings.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let branch_id = payload.branch_id.trim();
+    if branch_id.is_empty() || branch_id.chars().count() > 120 {
+        return Err(AppError::validation("branchId is required"));
+    }
+    let (tenant_id, current_branch_id) = tenant_branch(&headers)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to save preferred branch"))?;
+    let allowed = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM user_branch_roles WHERE tenant_id=$1 AND user_id=$2 AND branch_id=$3 AND active=TRUE)",
+    )
+    .bind(&tenant_id)
+    .bind(&claims.sub)
+    .bind(branch_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to validate preferred branch"))?;
+    if !allowed {
+        return Err(AppError::forbidden("preferred branch is not authorized"));
+    }
+    sqlx::query("UPDATE user_branch_roles SET is_default=(branch_id=$3),updated_at=NOW() WHERE tenant_id=$1 AND user_id=$2 AND active=TRUE")
+        .bind(&tenant_id)
+        .bind(&claims.sub)
+        .bind(branch_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to save preferred branch"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit preferred branch"))?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &current_branch_id,
+        "staff.preferred_branch.updated",
+        json!({"branchId":branch_id}),
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(
+        json!({"preferredBranchId":branch_id}),
+    )))
+}
+
+async fn self_profile_value(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<serde_json::Value, AppError> {
+    let row = sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            String,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+        ),
+    >(
+        r#"SELECT staff.email,staff.mobile_phone,COALESCE(profile.photo_url,''),
+                  profile.email_verified_at,profile.phone_verified_at
+           FROM staff LEFT JOIN staff_profiles profile ON profile.staff_id=staff.id
+             AND profile.tenant_id=staff.tenant_id AND profile.branch_id=staff.branch_id
+           WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.id=$3 AND staff.active=TRUE"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load staff profile"))?
+    .ok_or_else(|| AppError::not_found("active staff profile was not found"))?;
+    Ok(json!({
+        "staffId":staff_id,
+        "email":row.0,
+        "mobile":row.1,
+        "photoUrl":row.2,
+        "emailVerified":row.3.is_some(),
+        "phoneVerified":row.4.is_some()
+    }))
+}
+
+fn require_self_app(
+    claims: &AuthClaims,
+    permission: &str,
+    legacy: &[&str],
+) -> Result<(), AppError> {
+    if auth_service::staff_app_permission_allowed(
+        claims,
+        permission,
+        &["owner", "admin", "manager", "staff"],
+        legacy,
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(format!(
+            "Missing permission: {permission}"
+        )))
+    }
+}
+
+fn valid_device_id(value: &str) -> Result<String, AppError> {
+    let value = value.trim();
+    if value.is_empty() || value.chars().count() > 200 || value.chars().any(char::is_control) {
+        Err(AppError::validation("valid deviceId is required"))
+    } else {
+        Ok(value.to_string())
+    }
+}
+
+fn valid_contact_type(value: &str) -> Result<&'static str, AppError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "email" => Ok("email"),
+        "phone" => Ok("phone"),
+        _ => Err(AppError::validation("contactType must be email or phone")),
+    }
+}
+
+fn masked_contact(value: &str, contact_type: &str) -> String {
+    if contact_type == "email" {
+        return value
+            .split_once('@')
+            .map(|(name, domain)| format!("{}***@{domain}", name.chars().next().unwrap_or('*')))
+            .unwrap_or_else(|| "***".to_string());
+    }
+    let suffix = value
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    format!("***{suffix}")
+}
+
+async fn audit_staff_self(
+    state: &AppState,
+    claims: &AuthClaims,
+    branch_id: &str,
+    event_type: &str,
+    details: serde_json::Value,
+) {
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &claims.tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(branch_id),
+            identity: None,
+            event_type,
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details,
+        },
+    )
+    .await;
+}
+
 async fn list_staff_documents(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1083,6 +2076,117 @@ async fn get_staff_file(
         .await
         .map_err(|_| AppError::internal("failed to load staff file"))?
         .ok_or_else(|| AppError::not_found("staff file was not found"))?;
+    staff_file_response(row)
+}
+
+fn self_payroll_document_type(value: &str) -> bool {
+    matches!(
+        value
+            .trim()
+            .to_ascii_lowercase()
+            .replace([' ', '-'], "_")
+            .as_str(),
+        "payroll"
+            | "payslip"
+            | "tax"
+            | "statutory"
+            | "salary_revision"
+            | "salary_advance"
+            | "reimbursement"
+            | "contract"
+            | "offer_letter"
+            | "policy"
+            | "handbook"
+    )
+}
+
+async fn list_self_payroll_documents(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<Value>> {
+    require_self_app(
+        &claims,
+        "staff.app.payroll.documents.read",
+        &["staff.payroll.read", "staff.payroll.manage", "read:payroll"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let rows = staff_hr_repository::list_documents(&state.db, &tenant_id, &branch_id, &staff_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll documents"))?;
+    Ok(Json(ApiResponse::ok(
+        rows.into_iter()
+            .filter(|row| {
+                row.verification_status == "verified"
+                    && self_payroll_document_type(&row.document_type)
+                    && row.document_url.starts_with("/staff/files/")
+            })
+            .map(|row| {
+                json!({
+                    "id":row.id,"documentType":row.document_type,"documentName":row.document_name,
+                    "expiryDate":row.expiry_date,"createdAt":row.created_at,
+                    "downloadPath":format!("/staff-self/payroll-documents/{}/content",row.id)
+                })
+            })
+            .collect(),
+    )))
+}
+
+async fn get_self_payroll_document(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(document_id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    require_self_app(
+        &claims,
+        "staff.app.payroll.documents.read",
+        &["staff.payroll.read", "staff.payroll.manage", "read:payroll"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let document = staff_hr_repository::get_document(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &document_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load payroll document"))?
+    .filter(|row| {
+        row.verification_status == "verified" && self_payroll_document_type(&row.document_type)
+    })
+    .ok_or_else(|| AppError::not_found("payroll document was not found"))?;
+    let file_id = document
+        .document_url
+        .strip_prefix("/staff/files/")
+        .filter(|value| !value.is_empty() && !value.contains('/'))
+        .ok_or_else(|| AppError::not_found("secure payroll document file was not found"))?;
+    let row = staff_hr_repository::get_file(&state.db, &tenant_id, &branch_id, file_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load payroll document file"))?
+        .filter(|row| row.staff_id == staff_id)
+        .ok_or_else(|| AppError::not_found("payroll document file was not found"))?;
+    audit_staff_self(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.payroll_document.downloaded",
+        json!({"staffId":staff_id,"documentId":document_id,"fileId":file_id}),
+    )
+    .await;
+    staff_file_response(row)
+}
+
+fn staff_file_response(
+    row: staff_hr_repository::StaffFileRecord,
+) -> Result<Response<Body>, AppError> {
     let safe_name = row
         .file_name
         .chars()
@@ -2034,7 +3138,8 @@ impl From<StaffRecord> for StaffResponse {
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_non_negative, is_supported_staff_photo, staff_sort_column, staff_sort_direction,
+        ensure_non_negative, is_supported_staff_photo, masked_contact, staff_sort_column,
+        staff_sort_direction, valid_contact_type,
     };
     use crate::services::staff_service;
 
@@ -2079,5 +3184,16 @@ mod tests {
         assert!(!staff_service::is_supported_photo_url(
             "https://example.com/profile.webp"
         ));
+    }
+
+    #[test]
+    fn phase1_staff_contact_verification_accepts_only_known_channels_and_masks_targets() {
+        assert_eq!(valid_contact_type("EMAIL").unwrap(), "email");
+        assert!(valid_contact_type("whatsapp").is_err());
+        assert_eq!(
+            masked_contact("asha@example.com", "email"),
+            "a***@example.com"
+        );
+        assert_eq!(masked_contact("+919876543210", "phone"), "***3210");
     }
 }

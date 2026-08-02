@@ -15,6 +15,11 @@
       <h2>{{ 'inventory.ui.96b7e8194e' | translate }}</h2>
       @if (canManage()) { <form (ngSubmit)="create()" class="create-form">
         <label>{{ 'inventory.ui.709a23220f' | translate }}<input name="name" [(ngModel)]="createForm.name" required maxlength="160" /></label>
+        <label>Audit date<as-date-picker [(value)]="createForm.businessDate" ariaLabel="Stock audit business date"></as-date-picker></label>
+        <label>Audit scope<select name="auditScope" [(ngModel)]="createForm.auditScope"><option value="full">Full stock count</option><option value="cycle">Partial / cycle count</option></select></label>
+        <label>Product scope<select name="productScope" [(ngModel)]="createForm.productScope"><option value="all">All products</option><option value="retail">Retail</option><option value="consumable">Consumable</option></select></label>
+        <label>Unaudited products<select name="unauditedPolicy" [(ngModel)]="createForm.unauditedPolicy"><option value="require_count">Require every product count</option><option value="counted_only">Submit counted products only</option><option value="projected_floor_zero">Use projection; negative becomes zero</option><option value="projected_preserve_negative">Use projection; preserve negative</option>@if (canUseZeroPolicy()) {<option value="zero">Set unaudited products to zero</option>}</select></label>
+        @if (createForm.auditScope === 'cycle') {<fieldset class="cycle-products"><legend>Cycle products</legend>@for (item of cycleItems; track item.id) {<label class="checkbox"><input type="checkbox" [checked]="createForm.itemIds.includes(item.id)" (change)="toggleCycleItem(item.id,$any($event.target).checked)" />{{ item.name }} · {{ item.sku }}</label>}@if (!cycleItems.length) {<span>No matching products</span>}</fieldset>}
         <label>{{ 'inventory.ui.f5f8a0edf3' | translate }}<select name="counters" [(ngModel)]="createForm.requiredCounters">@for (count of [1,2,3,4,5]; track count) {
           <option [ngValue]="count">{{ count }}</option>
         }</select></label>
@@ -24,7 +29,7 @@
       </form> }
       <h2>{{ 'inventory.ui.e11e37a925' | translate }}</h2>
       @for (row of sessions; track row) {
-        <button class="session" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.createdAt | date:'dd/MM/yyyy' }}</span></button>
+        <button class="session" type="button" [class.selected]="selected?.session?.id === row.id" (click)="select(row)"><strong>{{ row.name }}</strong><span>{{ row.status.replace('_', ' ') }} · {{ row.auditScope }} · {{ row.productScope }} · {{ row.businessDate | date:'dd/MM/yyyy' }}</span></button>
       }
       @if (!sessions.length && !loading) {
         <p class="empty">{{ 'inventory.ui.e0e86ccf92' | translate }}</p>
@@ -37,7 +42,7 @@
           <div class="session-title">
             <h2>{{ detail.session.name }}</h2>
             <span class="status-chip">{{ detail.session.status.replace('_', ' ') }}</span>
-            <span>{{ detail.session.blindCounting ? 'Blind count' : 'Visible count' }} · {{ detail.session.requiredCounters }} {{ detail.session.requiredCounters === 1 ? 'counter' : 'counters' }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span>
+            <span>{{ detail.session.auditScope }} · {{ detail.session.productScope }} · {{ detail.session.blindCounting ? 'Blind count' : 'Visible count' }} · Round {{ detail.session.currentRound }} · {{ detail.session.requiredCounters }} {{ detail.session.requiredCounters === 1 ? 'counter' : 'counters' }} · Cut-off {{ detail.session.cutoffAt | date:'dd/MM/yyyy HH:mm' }}</span>
           </div>
           <div class="actions">@if (canCount()) {
         <button type="button" (click)="saveProgress()" [disabled]="saving || !hasDraftCounts">Save progress</button>
@@ -46,7 +51,9 @@
         <button type="button" (click)="action('submit')" [disabled]="saving">{{ 'inventory.ui.46a9603925' | translate }}</button>
         }@if (canApprove()) {
         <button class="primary" type="button" (click)="action('approve')" [disabled]="saving">{{ 'inventory.ui.f9a63b82cb' | translate }}</button>
-      }</div></header>
+      }@if (detail.session.status === 'rejected' && canManage()) {<button class="primary" type="button" (click)="resubmit()" [disabled]="saving">Resubmit audit</button>}</div></header>
+      @if (detail.session.rejectionReason) {<p class="message error">Rejected: {{ detail.session.rejectionReason }}</p>}
+      @if (detail.session.productScope !== 'retail') {<p class="closing-link"><span>Open-container closing: <strong>{{ detail.session.floorClosingId ? 'Linked' : 'Required when open containers exist' }}</strong></span><button type="button" (click)="openContainerClosing()">Physical closing</button></p>}
       @if (detail.valueSummary; as valueSummary) {
         <p class="value-summary">
           @if (valueSummary.expectedValuePaise !== null) { <span>Expected value <strong>{{ money(valueSummary.expectedValuePaise) }}</strong></span> }
@@ -60,14 +67,16 @@
       <div class="product-toolbar">
         <label class="search-field"><span class="sr-only">Search products</span><input type="search" [(ngModel)]="searchQuery" placeholder="Search product or SKU" /></label>
         <button type="button" (click)="openScanner()">Scan barcode</button>
+        <button type="button" [disabled]="!canExportReports()" (click)="exportCsv()">Export CSV</button>
+        @if (canCount()) {<label class="file-button">Import CSV<input type="file" accept=".csv,text/csv" (change)="importCsv($event)" [disabled]="saving" /></label>}
         <span>Products: <strong>{{ detail.items.length }}</strong></span>
       </div>
       <div class="table-wrap"><table><thead><tr>
-        <th>Product</th><th>SKU</th><th>Unit</th><th class="numeric">Expected stock</th><th class="numeric">Counted quantity</th><th class="numeric">Variance</th>
+        <th>Product</th><th>SKU</th><th>Unit</th><th>Source</th><th class="numeric">Expected stock</th><th class="numeric">Counted quantity</th><th class="numeric">Variance</th>
         @if (!detail.session.blindCounting || !canCount()) { <th class="numeric">Unit cost</th><th class="numeric">Expected value</th><th class="numeric">Counted value</th><th class="numeric">Value variance</th> }
       </tr></thead><tbody>@for (item of visibleItems; track item.id) {
       <tr>
-        <td><strong>{{ item.itemName }}</strong></td><td>{{ item.sku }}</td><td>{{ item.unit }}</td>
+        <td><strong>{{ item.itemName }}</strong></td><td>{{ item.sku }}</td><td>{{ item.unit }}</td><td><span class="status-chip">{{ item.auditSource }}</span>@if (!item.includedInReconciliation) {<small>Excluded</small>}</td>
         <td class="numeric expected-evidence">@if (detail.session.blindCounting && canCount()) {
           Hidden
         } @else {
@@ -81,7 +90,7 @@
         }</td>
         <td class="numeric">@if (canCount()) {
           <input class="count-input" type="number" min="0" step="1" [name]="'count-' + item.id" [(ngModel)]="countDrafts[item.id]" [attr.aria-label]="'Counted quantity for ' + item.itemName" placeholder="" />
-        } @else { {{ item.approvedQuantity ?? '—' }} }</td>
+        } @else if (canReview() && item.includedInReconciliation) {<input class="count-input" type="number" min="0" step="1" [name]="'reconciled-' + item.id" [(ngModel)]="item.approvedQuantity" [attr.aria-label]="'Reconciled quantity for ' + item.itemName" />} @else { {{ item.approvedQuantity ?? '—' }} }</td>
         <td class="numeric" [class.variance]="!canCount() && item.varianceQuantity">{{ detail.session.blindCounting && canCount() ? 'Hidden' : (item.varianceQuantity ?? '—') }}
           @if (!canCount() && item.varianceCauseSuggestion) { <small class="cause-chip">{{ causeLabel(item.varianceCauseSuggestion) }}</small> }
         </td>
@@ -90,12 +99,12 @@
         }
       </tr>
       }@if (!visibleItems.length) {
-      <tr><td [attr.colspan]="(!detail.session.blindCounting || !canCount()) ? 10 : 6">{{ detail.items.length ? 'No matching products' : ('inventory.ui.b7a856107b' | translate) }}</td></tr>
+      <tr><td [attr.colspan]="(!detail.session.blindCounting || !canCount()) ? 11 : 7">{{ detail.items.length ? 'No matching products' : ('inventory.ui.b7a856107b' | translate) }}</td></tr>
       }</tbody></table></div>
       <footer class="count-progress"><span>{{ countedProductCount }} of {{ detail.items.length }} products counted</span><progress [value]="countedProductCount" [max]="detail.items.length || 1"></progress></footer>
       @if (canReview()) {
         <section class="variance-reasons"><h3>Variance reasons</h3>@for (item of detail.items; track item.id) {@if (item.varianceQuantity) {
-      <div><strong>{{ item.itemName }}<small class="cause-chip">{{ causeLabel(item.varianceCauseSuggestion) }}</small></strong><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" [attr.placeholder]="'inventory.ui.ec4bfc89d1' | translate" /><button type="button" (click)="saveReason(item)" [disabled]="saving">{{ 'inventory.ui.efc007a393' | translate }}</button></div>
+      <div><strong>{{ item.itemName }}<small class="cause-chip">{{ causeLabel(item.varianceCauseSuggestion) }}</small></strong><input [name]="'reason-' + item.id" [(ngModel)]="item.varianceReason" placeholder="Adjustment reason" /><input [name]="'notes-' + item.id" [(ngModel)]="item.reconciliationNotes" placeholder="Reconciliation notes" /><button type="button" (click)="saveReconciliation(item)" [disabled]="saving">Save</button></div>
       }}</section>
       }
   <section class="review-grid">@if (canReview()) {
@@ -110,6 +119,7 @@
     <p><strong>{{ finding.findingType }}</strong> · {{ finding.notes || 'No notes' }}</p>
   }</section>
 }
+  @if (detail.events.length) {<section class="findings"><h3>Immutable audit history</h3>@for (event of detail.events; track event.id) {<p><strong>{{ event.eventType.replace('_',' ') }}</strong> · {{ event.createdAt | date:'dd/MM/yyyy HH:mm' }} · {{ event.actorUserId }}@if (event.notes) { · {{ event.notes }}}</p>}</section>}
 </main>
 } @else if (loading) {
   <main class="audit-card loading-card" aria-live="polite">

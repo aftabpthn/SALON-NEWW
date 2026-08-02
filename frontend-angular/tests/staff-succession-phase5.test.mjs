@@ -21,6 +21,7 @@ test('Phase 5 calculates evidence and keeps promotion human-approved', () => {
   assert.match(routes, /\/staff\/hrms\/succession-candidates\/:id\/decision/);
   assert.match(repository, /nominated_by<>\$4/);
   assert.match(repository, /evidence_coverage_percent>=75/);
+  assert.match(repository, /insufficient_evidence/);
   assert.match(repository, /'transactionalWritesPerformed',FALSE/);
   assert.match(manager, /decideSuccessionCandidate/);
 });

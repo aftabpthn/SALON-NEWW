@@ -69,6 +69,8 @@ const MANAGER_PERMISSION_CODES: &[&str] = &[
     "staff.leave.manage",
     "staff.leave.read",
     "staff.manage",
+    "staff.hrms.manage",
+    "staff.hrms.read",
     "staff.payroll.read",
     "staff.read",
     "staff.schedule.manage",

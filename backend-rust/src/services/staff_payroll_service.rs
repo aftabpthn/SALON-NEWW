@@ -4055,7 +4055,7 @@ mod tests {
         let map = best_statutory_rules(&rules);
         let opted_out_pf = profile("", false, true);
         let result = compute_statutory(1_000_000, &map, true, Some(&opted_out_pf));
-        assert_eq!(result.employee_paise, 12_500); // only ESIC (0.75%) applied, PF skipped
+        assert_eq!(result.employee_paise, 7_500); // only ESIC (0.75%) applied, PF skipped
         assert!(result.errors.iter().any(|e| e.contains("ESIC number")));
         assert!(!result.errors.iter().any(|e| e.contains("UAN")));
     }

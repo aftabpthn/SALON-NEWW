@@ -600,10 +600,13 @@ fn purchase_grn_lines(
     {
         return Err(AppError::validation("GRN accounting totals are invalid"));
     }
+    let inventory_cost_paise = taxable_paise
+        .saturating_add(shipping_paise)
+        .saturating_add(handling_paise);
     let mut lines = vec![
         JournalLine {
             account_code: INVENTORY_ASSET_ACCOUNT,
-            debit_paise: taxable_paise,
+            debit_paise: inventory_cost_paise,
             credit_paise: 0,
         },
         JournalLine {
@@ -630,14 +633,6 @@ fn purchase_grn_lines(
         lines.push(JournalLine {
             account_code: "INPUT_IGST",
             debit_paise: igst_paise,
-            credit_paise: 0,
-        });
-    }
-    let commercial_charges = shipping_paise.saturating_add(handling_paise);
-    if commercial_charges > 0 {
-        lines.push(JournalLine {
-            account_code: "OPERATING_EXPENSE",
-            debit_paise: commercial_charges,
             credit_paise: 0,
         });
     }
@@ -722,15 +717,42 @@ pub async fn post_purchase_return(
     branch_id: &str,
     return_id: &str,
     taxable_paise: i64,
+    inventory_value_paise: i64,
     cgst_paise: i64,
     sgst_paise: i64,
     igst_paise: i64,
 ) -> Result<(), AppError> {
+    let lines = purchase_return_lines(
+        taxable_paise,
+        inventory_value_paise,
+        cgst_paise,
+        sgst_paise,
+        igst_paise,
+    )?;
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "purchase_return",
+        return_id,
+        "Purchase return",
+        lines,
+    )
+    .await
+}
+
+fn purchase_return_lines(
+    taxable_paise: i64,
+    inventory_value_paise: i64,
+    cgst_paise: i64,
+    sgst_paise: i64,
+    igst_paise: i64,
+) -> Result<Vec<JournalLine<'static>>, AppError> {
     let tax_paise = cgst_paise
         .saturating_add(sgst_paise)
         .saturating_add(igst_paise);
     let total_paise = taxable_paise.saturating_add(tax_paise);
-    if taxable_paise <= 0 || tax_paise < 0 {
+    if taxable_paise <= 0 || inventory_value_paise <= 0 || tax_paise < 0 {
         return Err(AppError::validation("purchase return totals are invalid"));
     }
     let mut lines = vec![
@@ -742,9 +764,22 @@ pub async fn post_purchase_return(
         JournalLine {
             account_code: INVENTORY_ASSET_ACCOUNT,
             debit_paise: 0,
-            credit_paise: taxable_paise,
+            credit_paise: inventory_value_paise,
         },
     ];
+    if inventory_value_paise > taxable_paise {
+        lines.push(JournalLine {
+            account_code: "STOCK_VARIANCE_LOSS",
+            debit_paise: inventory_value_paise - taxable_paise,
+            credit_paise: 0,
+        });
+    } else if inventory_value_paise < taxable_paise {
+        lines.push(JournalLine {
+            account_code: "STOCK_VARIANCE_GAIN",
+            debit_paise: 0,
+            credit_paise: taxable_paise - inventory_value_paise,
+        });
+    }
     if cgst_paise > 0 {
         lines.push(JournalLine {
             account_code: "INPUT_CGST",
@@ -766,16 +801,7 @@ pub async fn post_purchase_return(
             credit_paise: igst_paise,
         });
     }
-    post_entry(
-        tx,
-        tenant_id,
-        branch_id,
-        "purchase_return",
-        return_id,
-        "Purchase return",
-        lines,
-    )
-    .await
+    Ok(lines)
 }
 
 pub async fn post_supplier_payment(
@@ -1265,6 +1291,68 @@ pub async fn post_control_journal(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn post_inventory_adjustment(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_type: &str,
+    source_id: &str,
+    business_date: NaiveDate,
+    actor_user_id: &str,
+    quantity_delta: i32,
+    unit_cost_paise: i64,
+    reason: &str,
+) -> Result<Option<String>, AppError> {
+    let amount = i64::from(quantity_delta.saturating_abs()).saturating_mul(unit_cost_paise);
+    if amount == 0 {
+        return Ok(None);
+    }
+    let lines = if quantity_delta > 0 {
+        vec![
+            ManualJournalLine {
+                account_code: INVENTORY_ASSET_ACCOUNT.into(),
+                debit_paise: amount,
+                credit_paise: 0,
+            },
+            ManualJournalLine {
+                account_code: "STOCK_VARIANCE_GAIN".into(),
+                debit_paise: 0,
+                credit_paise: amount,
+            },
+        ]
+    } else {
+        vec![
+            ManualJournalLine {
+                account_code: if reason.to_lowercase().contains("theft") {
+                    "INVENTORY_SHRINKAGE_EXPENSE".into()
+                } else {
+                    "STOCK_VARIANCE_LOSS".into()
+                },
+                debit_paise: amount,
+                credit_paise: 0,
+            },
+            ManualJournalLine {
+                account_code: INVENTORY_ASSET_ACCOUNT.into(),
+                debit_paise: 0,
+                credit_paise: amount,
+            },
+        ]
+    };
+    post_control_journal(
+        tx,
+        tenant_id,
+        branch_id,
+        source_type,
+        source_id,
+        business_date,
+        "Inventory stock adjustment",
+        actor_user_id,
+        &lines,
+    )
+    .await
+}
+
 pub async fn reverse_journal(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -1544,8 +1632,8 @@ fn payment_account(method: &str) -> &'static str {
 mod tests {
     use super::{
         customer_credit_lines, invoice_correction_lines, is_balanced, payroll_deductions_payable,
-        purchase_grn_lines, refund_journal_lines, reverse_lines, InvoiceAccountingTotals,
-        JournalLine, RefundSettlement,
+        purchase_grn_lines, purchase_return_lines, refund_journal_lines, reverse_lines,
+        InvoiceAccountingTotals, JournalLine, RefundSettlement,
     };
 
     #[test]
@@ -1595,6 +1683,32 @@ mod tests {
         assert!(lines
             .iter()
             .any(|line| { line.account_code == "ROUNDING_INCOME" && line.credit_paise == 2 }));
+    }
+
+    #[test]
+    fn purchase_grn_capitalizes_shipping_and_handling_into_inventory() {
+        let lines = purchase_grn_lines(10_000, 900, 900, 0, 500, 250, 0)
+            .expect("landed cost purchase journal");
+        assert!(is_balanced(&lines));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "INVENTORY_ASSET" && line.debit_paise == 10_750 }));
+        assert!(!lines
+            .iter()
+            .any(|line| line.account_code == "OPERATING_EXPENSE"));
+    }
+
+    #[test]
+    fn purchase_return_removes_landed_inventory_value_and_stays_balanced() {
+        let lines = purchase_return_lines(10_000, 10_750, 900, 900, 0)
+            .expect("landed-cost purchase return journal");
+        assert!(is_balanced(&lines));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "INVENTORY_ASSET" && line.credit_paise == 10_750 }));
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "STOCK_VARIANCE_LOSS" && line.debit_paise == 750 }));
     }
 
     #[test]

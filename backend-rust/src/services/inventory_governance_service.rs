@@ -21,6 +21,8 @@ pub struct PolicyWrite {
     pub count_variance_threshold_bps: i32,
     #[serde(default = "default_count_value_variance_threshold_paise")]
     pub count_value_variance_threshold_paise: i64,
+    #[serde(default)]
+    pub allow_zero_unaudited_audit: bool,
     #[serde(default = "default_reorder_history_days")]
     pub reorder_history_days: i32,
     #[serde(default = "default_reorder_coverage_days")]
@@ -232,7 +234,7 @@ fn text(value: &str, name: &str, max: usize) -> Result<String, AppError> {
 }
 
 pub async fn policy(db: &PgPool, t: &str, b: &str) -> Result<Value, AppError> {
-    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","autoCheckoutRetailSales":true,"autoCheckoutServiceConsumption":true,"valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"countValueVarianceThresholdPaise":10000,"reorderHistoryDays":60,"reorderCoverageDays":30,"partialDeliveryPolicy":"allow","financialLockDate":null,"editLockDays":90,"masterEditLock":false,"excessReceivingPolicy":"permission_required","priceDifferencePrompt":true,"priceDifferenceThresholdBps":0,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
+    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","autoCheckoutRetailSales":true,"autoCheckoutServiceConsumption":true,"valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"countValueVarianceThresholdPaise":10000,"allowZeroUnauditedAudit":false,"reorderHistoryDays":60,"reorderCoverageDays":30,"partialDeliveryPolicy":"allow","financialLockDate":null,"editLockDays":90,"masterEditLock":false,"excessReceivingPolicy":"permission_required","priceDifferencePrompt":true,"priceDifferenceThresholdBps":0,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
 }
 pub async fn save_policy(
     db: &PgPool,
@@ -318,6 +320,7 @@ pub async fn save_policy(
         p.transfer_delay_cost_per_unit_day_paise,
         p.transfer_expected_days,
         &p.approval_matrix,
+        p.allow_zero_unaudited_audit,
     )
     .await
     .map_err(|e| db_error(e, "failed to save inventory policy"))
@@ -637,16 +640,35 @@ pub async fn checkout(
     actor: &str,
     p: CheckoutWrite,
 ) -> Result<Value, AppError> {
-    if p.quantity <= 0 || !matches!(p.destination_bucket.as_str(), "retail_available"|"consumable_available") {
-        return Err(AppError::validation("checkout quantity or destination bucket is invalid"));
+    if p.quantity <= 0
+        || !matches!(
+            p.destination_bucket.as_str(),
+            "retail_available" | "consumable_available"
+        )
+    {
+        return Err(AppError::validation(
+            "checkout quantity or destination bucket is invalid",
+        ));
     }
-    let item=text(&p.inventory_item_id,"inventoryItemId",100)?;
-    let employee=text(&p.employee_id,"employeeId",100)?;
-    let key=text(&p.idempotency_key,"idempotencyKey",160)?;
-    repo::move_stock_bucket(db,t,b,actor,
-        &item,"manual_checkout","store_unopened",&p.destination_bucket,p.quantity,Some(&employee),
-        checked_note(&p.comment,"comment",500)?,&key)
-        .await.map_err(|e|db_error(e,"inventory checkout could not be posted"))
+    let item = text(&p.inventory_item_id, "inventoryItemId", 100)?;
+    let employee = text(&p.employee_id, "employeeId", 100)?;
+    let key = text(&p.idempotency_key, "idempotencyKey", 160)?;
+    repo::move_stock_bucket(
+        db,
+        t,
+        b,
+        actor,
+        &item,
+        "manual_checkout",
+        "store_unopened",
+        &p.destination_bucket,
+        p.quantity,
+        Some(&employee),
+        checked_note(&p.comment, "comment", 500)?,
+        &key,
+    )
+    .await
+    .map_err(|e| db_error(e, "inventory checkout could not be posted"))
 }
 
 pub async fn convert(
@@ -659,13 +681,25 @@ pub async fn convert(
     if p.quantity <= 0 {
         return Err(AppError::validation("conversion quantity must be positive"));
     }
-    let item=text(&p.inventory_item_id,"inventoryItemId",100)?;
-    let employee=text(&p.employee_id,"employeeId",100)?;
-    let key=text(&p.idempotency_key,"idempotencyKey",160)?;
-    repo::move_stock_bucket(db,t,b,actor,
-        &item,"conversion",&p.source_bucket,&p.destination_bucket,p.quantity,Some(&employee),
-        checked_note(&p.comment,"comment",500)?,&key)
-        .await.map_err(|e|db_error(e,"inventory conversion could not be posted"))
+    let item = text(&p.inventory_item_id, "inventoryItemId", 100)?;
+    let employee = text(&p.employee_id, "employeeId", 100)?;
+    let key = text(&p.idempotency_key, "idempotencyKey", 160)?;
+    repo::move_stock_bucket(
+        db,
+        t,
+        b,
+        actor,
+        &item,
+        "conversion",
+        &p.source_bucket,
+        &p.destination_bucket,
+        p.quantity,
+        Some(&employee),
+        checked_note(&p.comment, "comment", 500)?,
+        &key,
+    )
+    .await
+    .map_err(|e| db_error(e, "inventory conversion could not be posted"))
 }
 
 pub async fn reverse_movement(
@@ -676,15 +710,25 @@ pub async fn reverse_movement(
     id: &str,
     p: MovementReversalWrite,
 ) -> Result<Value, AppError> {
-    let comment=text(&p.comment,"comment",500)?;
-    repo::reverse_operational_movement(db,t,b,actor,&text(id,"movementId",100)?,&comment,
-        &text(&p.idempotency_key,"idempotencyKey",160)?)
-        .await.map_err(|e|db_error(e,"inventory movement could not be reversed"))
+    let comment = text(&p.comment, "comment", 500)?;
+    repo::reverse_operational_movement(
+        db,
+        t,
+        b,
+        actor,
+        &text(id, "movementId", 100)?,
+        &comment,
+        &text(&p.idempotency_key, "idempotencyKey", 160)?,
+    )
+    .await
+    .map_err(|e| db_error(e, "inventory movement could not be reversed"))
 }
 
 fn checked_note<'a>(value: &'a str, name: &str, max: usize) -> Result<&'a str, AppError> {
-    let value=value.trim();
-    if value.chars().count()>max { return Err(AppError::validation(format!("{name} is invalid"))); }
+    let value = value.trim();
+    if value.chars().count() > max {
+        return Err(AppError::validation(format!("{name} is invalid")));
+    }
     Ok(value)
 }
 

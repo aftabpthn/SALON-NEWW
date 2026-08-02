@@ -46,7 +46,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             <div class="panel-title"><h2>Rankings</h2><span>{{ data.leaderboard.length }}</span></div>
             <div class="list">
               @for (row of data.leaderboard; track row.staffId) {
-                <div class="row leaderboard-row" [class.me]="row.isMe">
+                <details class="row leaderboard-row" [class.me]="row.isMe">
+                  <summary>
                   <div class="rank">#{{ row.rank }}</div>
                   <div class="row-main"><strong>{{ row.staffName }}</strong><small>{{ row.points }} points · {{ row.days }} tracked days @if (row.isMe) { · You }</small></div>
                   <div class="row-actions">
@@ -54,7 +55,9 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                     @if (row.rating !== null && row.rating !== undefined) { <span class="badge">{{ row.rating }}/5</span> }
                     @if (canSeeRevenue() && row.revenue !== null && row.revenue !== undefined) { <span class="badge">{{ row.revenue | paiseInr }}</span> }
                   </div>
-                </div>
+                  </summary>
+                  <div class="score-detail"><p>{{ row.scoreExplanation }}</p>@for (part of row.scoreComponents; track part.key) { <div><strong>{{ label(part.key) }}</strong><small>{{ part.value === null ? 'No evidence' : part.value + '%' }} · Weight {{ part.weightPercent }}% · {{ part.source }}</small></div> }</div>
+                </details>
               } @empty { <div class="leaderboard-empty"><p>No scored staff records yet.</p><small>Appointments, attendance, roster, sales, targets, or operations are required.</small></div> }
             </div>
           </article>
@@ -78,7 +81,11 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     .leaderboard-periods { display: flex; flex-wrap: wrap; gap: 8px; }
     .leaderboard-periods button { min-height: 38px; border: 1px solid var(--staff-border); border-radius: 12px; padding: 8px 12px; color: var(--staff-text); background: var(--staff-surface); font-weight: 700; }
     .leaderboard-periods button:hover, .leaderboard-periods button:focus-visible, .leaderboard-periods button.active { border-color: var(--staff-primary); color: var(--staff-primary-hover); background: var(--staff-primary-light); }
-    .leaderboard-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; }
+    .leaderboard-row { display: block; }
+    .leaderboard-row summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; list-style: none; cursor: pointer; }
+    .leaderboard-row summary::-webkit-details-marker { display: none; }
+    .score-detail { display: grid; gap: 8px; grid-column: 1 / -1; margin-top: 12px; padding: 12px; border-radius: 14px; background: var(--staff-surface-secondary); }
+    .score-detail p, .score-detail small { display: block; margin: 0; color: var(--staff-text-secondary); font-weight: 600; line-height: 1.45; }
     .scoring-basis { margin: 0; color: var(--staff-text-secondary); font-weight: 600; line-height: 1.6; }
     .leaderboard-row.me, .badge-row.earned { background: var(--staff-primary-light); }
     .rank { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px; color: var(--staff-primary-hover); background: var(--staff-primary-light); font-weight: 800; }
@@ -86,7 +93,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     .leaderboard-empty p { margin: 0; font-weight: 700; }
     .leaderboard-empty small { font-weight: 600; line-height: 1.4; }
     @media (max-width: 700px) {
-      .leaderboard-error, .leaderboard-row { align-items: stretch; grid-template-columns: auto minmax(0, 1fr); }
+      .leaderboard-error, .leaderboard-row summary { align-items: stretch; grid-template-columns: auto minmax(0, 1fr); }
       .leaderboard-error { flex-direction: column; }
       .leaderboard-error button { width: 100%; }
       .leaderboard-row .row-actions { grid-column: 1 / -1; justify-content: flex-start; }
@@ -137,6 +144,7 @@ export class StaffLeaderboardPage implements OnInit {
   canReadLeaderboard(): boolean { return this.staff.hasPermission("staff.app.leaderboard.read"); }
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["staff.app.business.service_amount.read", "read:finance", "read:sales", "read:payments", "read:invoices"]); }
   earnedBadges(data: StaffEnterpriseOs): number { return data.gamification.badges.filter((badge) => badge.earned).length; }
+  label(value: string): string { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   sourceGaps(data: StaffEnterpriseOs): string[] {
     const status = data.gamification.sourceStatus;
     if (!status) return [];

@@ -9,9 +9,11 @@ type ViewMode = 'day' | 'week' | 'month';
 type ScheduleStatus = 'working' | 'annual_leave' | 'jury_duty' | 'leave' | 'sick_leave' | 'special_leave' | 'weekly_off' | 'working_other_center' | 'not_set';
 type ScheduleStaff = { id: string; name: string; jobTitle: string; roleIds: string[] };
 type ScheduleRole = { id: string; name: string };
+type ScheduleRoom = { id: string; name: string; kind: string };
 type ScheduleOperationBlock = { id: string; staffId: string; scheduledDate: string; scheduledTime: string | null; title: string; operationType: string; status: string };
 type ScheduleEntry = {
   id?: string;
+  version?: number;
   staffId: string;
   scheduleDate: string;
   shift1Start: string;
@@ -20,8 +22,11 @@ type ScheduleEntry = {
   shift2End: string;
   status: ScheduleStatus;
   notes: string;
+  roomId: string;
+  roleId: string;
+  jobTitle: string;
 };
-type ScheduleData = { staff: ScheduleStaff[]; entries: ScheduleEntry[]; roles: ScheduleRole[]; jobs: string[]; operationBlocks?: ScheduleOperationBlock[] };
+type ScheduleData = { staff: ScheduleStaff[]; entries: ScheduleEntry[]; roles: ScheduleRole[]; rooms: ScheduleRoom[]; jobs: string[]; operationBlocks?: ScheduleOperationBlock[] };
 
 const STATUS_OPTIONS: Array<{ value: ScheduleStatus; label: string }> = [
   { value: 'working', label: 'Working' }, { value: 'annual_leave', label: 'Annual Leave' },
@@ -49,6 +54,7 @@ export class AvailabilityPageComponent implements OnInit {
   job = '';
   staffId = '';
   roles: ScheduleRole[] = [];
+  rooms: ScheduleRoom[] = [];
   jobs: string[] = [];
   staff: ScheduleStaff[] = [];
   employeeOptions: ScheduleStaff[] = [];
@@ -169,7 +175,7 @@ export class AvailabilityPageComponent implements OnInit {
     const existing = this.cell(person.id, date);
     this.editorStaff = person;
     this.editorDate = date;
-    this.editorDraft = existing ? { ...existing } : this.emptyEntry(person.id, date);
+    this.editorDraft = existing ? { ...existing } : { ...this.emptyEntry(person.id, date), jobTitle: person.jobTitle };
     this.editorSecondShiftOpen = this.hasSecondShift(this.editorDraft);
     this.editorOpen = true;
   }
@@ -299,6 +305,7 @@ export class AvailabilityPageComponent implements OnInit {
       this.staff = result.data.staff;
       if (!this.roleId && !this.job && !this.staffId) this.employeeOptions = result.data.staff;
       this.roles = result.data.roles;
+      this.rooms = result.data.rooms || [];
       this.jobs = result.data.jobs;
       this.entries = new Map(result.data.entries.map((entry) => {
         const normalized = { ...entry, shift1Start: this.time(entry.shift1Start), shift1End: this.time(entry.shift1End), shift2Start: this.time(entry.shift2Start), shift2End: this.time(entry.shift2End) };
@@ -328,7 +335,7 @@ export class AvailabilityPageComponent implements OnInit {
     if (entry.status === 'working' && !entry.shift1Start && !entry.shift2Start) return 'Working status requires at least one shift';
     return '';
   }
-  private emptyEntry(staffId: string, scheduleDate: string): ScheduleEntry { return { staffId, scheduleDate, shift1Start: '', shift1End: '', shift2Start: '', shift2End: '', status: 'not_set', notes: '' }; }
+  private emptyEntry(staffId: string, scheduleDate: string): ScheduleEntry { return { staffId, scheduleDate, shift1Start: '', shift1End: '', shift2Start: '', shift2End: '', status: 'not_set', notes: '', roomId: '', roleId: '', jobTitle: '' }; }
   private canDiscard() { return !this.dirty || window.confirm('Discard unsaved schedule changes?'); }
   private key(staffId: string, date: string) { return `${staffId}:${date}`; }
   private time(value?: string | null) { return value ? value.slice(0, 5) : ''; }

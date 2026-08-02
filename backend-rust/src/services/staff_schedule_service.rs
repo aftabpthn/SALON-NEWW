@@ -10,7 +10,7 @@ use crate::{
         staff_repository,
         staff_schedule_repository::{
             self, ScheduleEntryInput, ScheduleEntryRecord, ScheduleOperationBlockRecord,
-            ScheduleRoleRecord, ScheduleStaffRecord,
+            ScheduleRoleRecord, ScheduleRoomRecord, ScheduleStaffRecord,
         },
     },
 };
@@ -33,6 +33,7 @@ pub struct ScheduleData {
     pub staff: Vec<ScheduleStaffRecord>,
     pub entries: Vec<ScheduleEntryRecord>,
     pub roles: Vec<ScheduleRoleRecord>,
+    pub rooms: Vec<ScheduleRoomRecord>,
     pub jobs: Vec<String>,
     pub operation_blocks: Vec<ScheduleOperationBlockRecord>,
 }
@@ -48,9 +49,10 @@ pub async fn load(
     staff_id: &str,
 ) -> Result<ScheduleData, AppError> {
     validate_range(date_from, date_to)?;
-    let (staff, roles, jobs) = tokio::try_join!(
+    let (staff, roles, rooms, jobs) = tokio::try_join!(
         staff_schedule_repository::list_staff(db, tenant_id, branch_id, role_id, job, staff_id),
         staff_schedule_repository::list_roles(db, tenant_id),
+        staff_schedule_repository::list_rooms(db, tenant_id, branch_id),
         staff_repository::list_job_titles(db, tenant_id, branch_id),
     )
     .map_err(|_| AppError::internal("failed to load employee schedule"))?;
@@ -68,6 +70,7 @@ pub async fn load(
         staff,
         entries,
         roles,
+        rooms,
         jobs,
         operation_blocks,
     })
@@ -91,11 +94,16 @@ pub async fn save(
         return Err(AppError::validation("one or more staff are invalid"));
     }
     validate_entries(date_from, date_to, &staff_ids, &entries)?;
-    staff_schedule_repository::replace_range(
+    let saved = staff_schedule_repository::replace_range(
         db, tenant_id, branch_id, date_from, date_to, &staff_ids, entries,
     )
     .await
-    .map_err(|_| AppError::internal("failed to save employee schedule"))
+    .map_err(|_| AppError::internal("failed to save employee schedule"))?;
+    if saved {
+        Ok(())
+    } else {
+        Err(AppError::conflict("schedule changed; reload and try again"))
+    }
 }
 
 pub async fn copy_week(
@@ -170,6 +178,16 @@ fn validate_entries(
             && entry.schedule_date <= date_to
             && SCHEDULE_STATUSES.contains(&entry.status.as_str())
             && entry.notes.chars().count() <= 1000
+            && entry.job_title.chars().count() <= 160
+            && entry
+                .room_id
+                .as_deref()
+                .is_none_or(|value| !value.trim().is_empty() && value.chars().count() <= 120)
+            && entry
+                .role_id
+                .as_deref()
+                .is_none_or(|value| !value.trim().is_empty() && value.chars().count() <= 120)
+            && entry.version.is_none_or(|version| version > 0)
             && valid_shift(entry.shift1_start, entry.shift1_end)
             && valid_shift(entry.shift2_start, entry.shift2_end)
             && (entry.status != "working"
@@ -211,6 +229,10 @@ mod tests {
             shift2_end: None,
             status: "working".into(),
             notes: String::new(),
+            room_id: None,
+            role_id: None,
+            job_title: String::new(),
+            version: None,
         }];
         assert!(validate_entries(day, day, &["staff-1".into()], &entries).is_err());
     }

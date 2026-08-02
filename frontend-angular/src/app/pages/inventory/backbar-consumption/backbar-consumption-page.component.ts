@@ -10,6 +10,7 @@ import {
   BackbarControlService,
   BackbarAppointment as Appointment,
   BackbarClient as Client,
+  BackbarBatch as Batch,
   BackbarContainer as Container,
   BackbarItem as Item,
   BackbarService as Service,
@@ -46,6 +47,7 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   clients: Client[] = [];
   appointments: Appointment[] = [];
   containers: Container[] = [];
+  batches: Batch[] = [];
   usage: Usage[] = [];
   bowls: ColorBowl[] = [];
   dailyVariance: ColorDailyVariance[] = [];
@@ -97,6 +99,7 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   get varianceTotal() { return this.actualTotal - this.expectedTotal; }
   get pendingApprovals() { return this.usage.filter((row) => row.status === 'pending_approval').length; }
   get canReview() { return this.auth.hasRole('owner') || this.auth.hasPermission('inventory.approve'); }
+  get canExportReports() { return this.auth.hasAccess(['owner', 'admin'], ['reports.export']); }
   get filterAppointments() { return this.appointments.filter((row) => !this.filterClient || row.clientId === this.filterClient); }
   get draftAppointments() { return this.appointments.filter((row) => (!this.draft.clientId || row.clientId === this.draft.clientId) && !['cancelled', 'canceled', 'no-show', 'no_show'].includes(row.status.toLowerCase())); }
   get availableServices() {
@@ -113,24 +116,28 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
     return 'Product consumption accountability';
   }
   availableItemsFor(inventoryItemId = '') {
-    const service = this.services.find((row) => row.id === this.draft.serviceId);
-    if (!service) return this.items;
-    const ids = new Set(service.productConsumption.map((line) => String(line.productId ?? line.itemId ?? line.inventoryItemId ?? '')));
+    const recipe = this.selectedRecipe();
+    if (!recipe) return this.items;
+    const ids = new Set(recipe.map((line) => String(line.productId ?? line.itemId ?? line.inventoryItemId ?? '')));
     const rows = this.items.filter((item) => ids.has(item.id));
     return inventoryItemId && !rows.some((item) => item.id === inventoryItemId)
       ? [...rows, ...this.items.filter((item) => item.id === inventoryItemId)] : rows;
   }
   expectedQuantity(inventoryItemId: string) {
-    const service = this.services.find((row) => row.id === this.draft.serviceId);
-    const line = service?.productConsumption.find((entry) => String(entry.productId ?? entry.itemId ?? entry.inventoryItemId ?? '') === inventoryItemId);
+    const line = this.selectedRecipe()?.find((entry) => String(entry.productId ?? entry.itemId ?? entry.inventoryItemId ?? '') === inventoryItemId);
     return Number(line?.standardQty ?? line?.quantity ?? line?.qty ?? 0);
   }
   usageRange(inventoryItemId: string) {
-    const service = this.services.find((row) => row.id === this.draft.serviceId);
-    const line = service?.productConsumption.find((entry) => String(entry.productId ?? entry.itemId ?? entry.inventoryItemId ?? '') === inventoryItemId);
+    const line = this.selectedRecipe()?.find((entry) => String(entry.productId ?? entry.itemId ?? entry.inventoryItemId ?? '') === inventoryItemId);
     if (!line) return '—';
     const target = Number(line.standardQty ?? line.quantity ?? line.qty ?? 0);
     return `${Number(line.minQty ?? 0)} / ${target} / ${Number(line.maxQty ?? 0) || target}`;
+  }
+
+  private selectedRecipe() {
+    const appointment=this.appointments.find((row)=>row.id===this.draft.appointmentId);
+    return appointment?.recipeSnapshots.find((row)=>row.serviceId===this.draft.serviceId)?.recipe
+      ?? this.services.find((row)=>row.id===this.draft.serviceId)?.productConsumption;
   }
 
   async load() {
@@ -151,8 +158,8 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   private async loadFormOptions() {
     this.formError = '';
     try {
-      [this.items, this.services, this.clients, this.appointments, this.containers] = await Promise.all([
-        this.backbar.items(), this.backbar.services(), this.backbar.clients(), this.backbar.appointments(), this.backbar.containers(),
+      [this.items, this.services, this.clients, this.appointments, this.containers, this.batches] = await Promise.all([
+        this.backbar.items(), this.backbar.services(), this.backbar.clients(), this.backbar.appointments(), this.backbar.containers(), this.backbar.batches(),
       ]);
     } catch (error) { this.formError = this.message(error, 'Form options could not be loaded'); }
   }
@@ -235,10 +242,16 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
     const rows = this.containers.filter((row) => row.inventoryItemId === inventoryItemId);
     const open = rows.find((row) => row.status === 'open');
     const sealed = rows.filter((row) => row.status === 'sealed');
-    if (open) return `Open ${open.remainingQuantity} ${open.unit} · Sealed ${sealed.length}`;
+    if (open) {
+      const batch=this.batches.find((row)=>row.id===open.batchId);
+      return `Open ${open.remainingQuantity} ${open.unit} · Sealed ${sealed.length}${batch ? ` · Batch ${batch.batchNumber}${batch.expiryDate ? ` expires ${this.date(batch.expiryDate)}` : ''}` : ''}`;
+    }
     if (sealed.length) return `${sealed.length} sealed · open a tube first`;
     const item = this.items.find((row) => row.id === inventoryItemId);
-    return item ? `Unified stock ${item.stockQuantity} ${item.unit}` : '';
+    const nextBatch = this.batches.filter((row) => row.inventoryItemId === inventoryItemId && row.quantity > 0)
+      .sort((left, right) => String(left.expiryDate || '9999').localeCompare(String(right.expiryDate || '9999')))[0];
+    const guidance = nextBatch ? ` · FEFO ${nextBatch.batchNumber}${nextBatch.expiryDate ? ` expires ${this.date(nextBatch.expiryDate)}` : ''}` : '';
+    return item ? `Unified stock ${item.stockQuantity} ${item.unit}${guidance}` : '';
   }
   staffName(row: Staff) { return row.appointmentDisplayName || `${row.firstName} ${row.lastName}`.trim(); }
   clientName(row: Client) { return `${row.firstName} ${row.lastName}`.trim() || row.phone || row.id; }
@@ -293,7 +306,17 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
     finally { this.saving = false; }
   }
 
+  async reverse(row: Usage) {
+    const reason = window.prompt('Reversal reason')?.trim();
+    if (!reason) return;
+    this.saving = true; this.clearFeedback();
+    try { await this.backbar.reverseUsage(row.id, reason); await this.load(); this.notice = 'Usage reversed'; }
+    catch (error) { this.error = this.message(error, 'Usage could not be reversed'); }
+    finally { this.saving = false; }
+  }
+
   exportCsv() {
+    if (!this.canExportReports) { this.error = 'Report export permission is required'; return; }
     const rows = this.visibleUsage.map((row) => [this.date(row.createdAt), this.appointmentReference(row.appointmentId), row.itemName, row.itemBrand, row.source, row.serviceName, row.staffName, row.clientName, row.expectedQuantity, row.actualQuantity, row.varianceQuantity, row.unit, row.status]);
     const csv = [['Date', 'Appointment', 'Product', 'Brand', 'Invoice / Source', 'Service', 'Staff', 'Client', 'Expected', 'Actual', 'Variance', 'Unit', 'Status'].map((value) => this.language.textValue(value)), ...rows]
       .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');

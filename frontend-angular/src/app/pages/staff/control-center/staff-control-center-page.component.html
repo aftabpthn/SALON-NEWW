@@ -41,6 +41,7 @@
       @if (canManage('staff.development.manage', 'staff.manage')) { <button type="button" (click)="createReview()">Add review</button> }
       @if (canManage('staff.development.manage', 'staff.app.tasks.manage')) { <button type="button" (click)="assignTraining()">Assign training</button> }
       @if (canManage('staff.development.manage', 'staff.app.tasks.manage')) { <button type="button" (click)="createCoachingGoal()">Add coaching goal</button> }
+      @if (canManage('staff.development.manage', 'staff.manage')) { <button type="button" (click)="addCustomPerformanceMetric()">Add custom metric</button><button class="primary" type="button" [disabled]="loading" (click)="savePerformanceSettings()">Save metric visibility</button> }
     </section>
   }
   @if (activeTab === 'hrms') {
@@ -75,7 +76,7 @@
   }
   @if (activeTab === 'content') {
     <section class="command-strip" aria-label="Content actions">
-      @if (canManage('staff.governance.manage', 'staff.manage')) { <button type="button" (click)="openRuleEditor()">New rule/SOP</button> }
+      @if (canManage('staff.governance.manage', 'staff.manage')) { <button type="button" (click)="openRuleEditor()">New company content</button> }
       @if (canManage('staff.app.tasks.manage', 'staff.manage')) { <button type="button" (click)="createContentTask()">Add task</button> }
       @if (canManage('marketing.offers.manage', 'marketing.manage')) { <button type="button" (click)="createContentOffer()">Add offer</button> }
       @if (canManage('staff.payroll.manage', 'payroll.manage')) { <button type="button" (click)="createPenaltyRule()">Add penalty/payroll rule</button> }
@@ -85,7 +86,7 @@
   @if (activeTab === 'hrms') {
     <section class="summary-strip"><div><span>Openings</span><strong>{{ arrayValue(hrms['jobOpenings']).length }}</strong></div><div><span>Candidates</span><strong>{{ arrayValue(hrms['applications']).length }}</strong></div><div><span>Lifecycle cases</span><strong>{{ arrayValue(hrms['lifecycleCases']).length }}</strong></div><div><span>Appraisal cycles</span><strong>{{ arrayValue(hrms['appraisalCycles']).length }}</strong></div><div><span>Appraisal reviews</span><strong>{{ arrayValue(hrms['appraisalReviews']).length }}</strong></div><div><span>Succession plans</span><strong>{{ arrayValue(hrms['successionPlans']).length }}</strong></div></section>
     <section class="data-card"><header><div><h2>HR operations intelligence</h2><span>{{ formatDate(hrms['operationsIntelligence']?.['dateFrom']) }} – {{ formatDate(hrms['operationsIntelligence']?.['dateTo']) }}</span></div></header><div class="key-list">
-      <div><span>HR health score</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['hrHealthScore']) }}%</strong></div>
+      <div><span>HR health score</span><strong>{{ healthLabel(hrms['operationsIntelligence']?.['summary']) }}</strong><small>{{ text(hrms['operationsIntelligence']?.['summary']?.['evidenceCoveragePercent']) }}% evidence</small></div>
       <div><span>Expiry alerts</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['expiryAlertCount']) }}</strong></div>
       <div><span>Onboarding overdue</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['onboardingOverdueCount']) }}</strong></div>
       <div><span>Missed tasks</span><strong>{{ text(hrms['operationsIntelligence']?.['summary']?.['missedTaskCount']) }}</strong></div>
@@ -117,12 +118,12 @@
         <div><span>Training completion</span><strong>{{ text(hrms['operationsIntelligence']?.['completion']?.['training']?.['completionPercent']) }}%</strong></div>
       </div></section>
     </div>
-    <section class="data-card"><header><div><h2>Branch and staff HR-health benchmark</h2><span>Branch {{ text(hrms['operationsIntelligence']?.['benchmarks']?.['branch']?.['healthScore']) }}%</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">Staff</th><th scope="col">Attendance</th><th scope="col">Appraisal</th><th scope="col">Training</th><th scope="col">Operations</th><th scope="col">HR health</th><th scope="col">Evidence</th></tr></thead><tbody>@for (row of arrayValue(hrms['operationsIntelligence']?.['benchmarks']?.['staff']); track row['staffId']) {
-      <tr><td><strong>{{ row['staffName'] }}</strong><small>{{ row['employeeCode'] }} · {{ row['jobTitle'] }}</small></td><td>{{ text(row['attendancePercent']) }}%</td><td>{{ text(row['appraisalPercent']) }}%</td><td>{{ text(row['trainingPercent']) }}%</td><td>{{ text(row['operationsPercent']) }}%</td><td><strong>{{ text(row['healthScore']) }}%</strong></td><td>{{ text(row['coveragePercent']) }}%</td></tr>
+    <section class="data-card"><header><div><h2>Branch and staff HR-health benchmark</h2><span>Branch {{ healthLabel(hrms['operationsIntelligence']?.['benchmarks']?.['branch']) }} · {{ text(hrms['operationsIntelligence']?.['benchmarks']?.['branch']?.['evidenceCoveragePercent']) }}% evidence</span></div></header><div class="table-wrap"><table><thead><tr><th scope="col">Staff</th><th scope="col">Attendance</th><th scope="col">Appraisal</th><th scope="col">Training</th><th scope="col">Operations</th><th scope="col">HR health</th><th scope="col">Evidence</th></tr></thead><tbody>@for (row of arrayValue(hrms['operationsIntelligence']?.['benchmarks']?.['staff']); track row['staffId']) {
+      <tr><td><strong>{{ row['staffName'] }}</strong><small>{{ row['employeeCode'] }} · {{ row['jobTitle'] }}</small></td><td>{{ text(row['attendancePercent']) }}%</td><td>{{ text(row['appraisalPercent']) }}%</td><td>{{ text(row['trainingPercent']) }}%</td><td>{{ text(row['operationsPercent']) }}%</td><td><strong>{{ healthLabel(row) }}</strong></td><td>{{ text(row['coveragePercent']) }}%</td></tr>
     }</tbody></table></div>@if (arrayValue(hrms['operationsIntelligence']?.['benchmarks']?.['staff']).length === 0) { <div class="empty">No benchmark records</div> }</section>
     <section class="data-card"><header><div><h2>Monthly owner summary</h2><span>Idempotent notification outbox</span></div></header><div class="key-list">
       <div><span>Period</span><strong>{{ formatDate(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['periodStart']) }} – {{ formatDate(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['periodEnd']) }}</strong></div>
-      <div><span>HR health</span><strong>{{ text(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['hrHealthScore']) }}%</strong></div>
+      <div><span>HR health</span><strong>{{ healthLabel(hrms['operationsIntelligence']?.['monthlyOwnerSummary']) }}</strong><small>{{ text(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['evidenceCoveragePercent']) }}% evidence</small></div>
       <div><span>Requires attention</span><strong>{{ text(hrms['operationsIntelligence']?.['monthlyOwnerSummary']?.['requiresAttention']) }}</strong></div>
     </div></section>
     <div class="two-column">
@@ -294,6 +295,7 @@
 
 @if (activeTab === 'development') {
   <section class="summary-strip"><div><span>{{ 'staff.ui.9fc3434f6a' | translate }}</span><strong>{{ skillMatrix.length }}</strong></div><div><span>{{ 'staff.ui.613aec30d2' | translate }}</span><strong>{{ licenses.length }}</strong></div><div><span>{{ 'staff.ui.b83c4cdafe' | translate }}</span><strong>{{ reviews.length }}</strong></div><div><span>{{ 'staff.ui.46a67467c8' | translate }}</span><strong>{{ coachingGoals.length }}</strong></div><div><span>{{ 'staff.ui.8407ece508' | translate }}</span><strong>{{ training.length }}</strong></div></section>
+  <section class="data-card"><header><div><h2>Staff App performance metrics</h2><span>Organization-controlled visibility · Version {{ performanceSettings['version'] || 0 }}</span></div></header><div class="metric-choice-grid">@for (metric of performanceMetrics; track metric[0]) { <label><input type="checkbox" [checked]="metricEnabled(metric[0])" [disabled]="!canManage('staff.development.manage', 'staff.manage')" (change)="togglePerformanceMetric(metric[0], $any($event.target).checked)" />{{ metric[1] }}</label> }</div>@for (metric of arrayValue(performanceSettings['customMetrics']); track metric['key']) { <article class="record"><div><strong>{{ metric['label'] }}</strong><small>Custom alias of {{ label(metric['sourceMetricKey']) }}</small></div><button type="button" [disabled]="!canManage('staff.development.manage', 'staff.manage')" (click)="removeCustomPerformanceMetric(metric['key'])">Remove</button></article> }</section>
   <div class="two-column"><section class="data-card"><header><div><h2>Course catalogue</h2><span>Published SOP versions and learning evidence</span></div><button type="button" (click)="assignCourse()">Assign course</button></header>@for (row of arrayValue(lms['courses']); track row['id']) {
     <article class="record"><div><strong>{{ row['title'] }}</strong><small>v{{ row['documentVersion'] }} · {{ row['skillName'] || 'General SOP' }} · {{ row['quizQuestionCount'] }} questions · {{ row['completedCount'] }}/{{ row['assignedCount'] }} complete</small></div><div class="row-actions"><button type="button" (click)="configureCourse(row)">Configure</button><button class="primary" type="button" (click)="assignCourse(row)">Assign</button></div></article>
   }@if (arrayValue(lms['courses']).length === 0) { <div class="empty">No published SOP courses</div> }</section>
@@ -450,10 +452,10 @@
   <section class="summary-strip"><div><span>Published rules/SOP</span><strong>{{ publishedRuleCount() }}</strong></div><div><span>Acknowledgements due</span><strong>{{ outstandingRuleCount() }}</strong></div><div><span>Open violations</span><strong>{{ openRuleViolationCount() }}</strong></div><div><span>Tasks</span><strong>{{ contentTasks.length }}</strong></div><div><span>Offers</span><strong>{{ contentOffers.length }}</strong></div></section>
   @if (ruleEditorOpen) {
     <section class="data-card rule-editor">
-      <header><div><h2>{{ ruleDraft['documentKey'] ? 'New version' : 'New rule/SOP' }}</h2><span>Saved as draft until published</span></div><button type="button" (click)="closeRuleEditor()">Close</button></header>
+      <header><div><h2>{{ ruleDraft['documentKey'] ? 'New version' : 'New company content' }}</h2><span>Saved as draft until published</span></div><button type="button" (click)="closeRuleEditor()">Close</button></header>
       <div class="rule-form">
-        <label>Type<select [(ngModel)]="ruleDraft['documentType']"><option value="sop">SOP</option><option value="rule">Rule</option></select></label>
-        <label>Category<select [(ngModel)]="ruleDraft['category']"><option value="service">Service</option><option value="hygiene">Hygiene</option><option value="attendance">Attendance</option><option value="behavior">Behavior</option><option value="safety">Safety</option></select></label>
+        <label>Type<select [(ngModel)]="ruleDraft['documentType']"><option value="sop">SOP</option><option value="rule">Rule</option><option value="policy">Policy</option><option value="course">Course</option><option value="document">Company document</option><option value="announcement">Announcement</option></select></label>
+        <label>Category<select [(ngModel)]="ruleDraft['category']"><option value="service">Service</option><option value="hygiene">Hygiene</option><option value="attendance">Attendance</option><option value="behavior">Behavior</option><option value="safety">Safety</option><option value="company">Company</option><option value="training">Training</option></select></label>
         <label>Effective date<as-date-picker ariaLabel="Rule effective date" [(value)]="ruleDraft['effectiveDate']"></as-date-picker></label>
         <label>Expiry<as-date-picker ariaLabel="Rule expiry date" [(value)]="ruleDraft['expiresOn']"></as-date-picker></label>
         <label class="wide">Title<input [(ngModel)]="ruleDraft['title']" /></label>
@@ -470,10 +472,16 @@
   }
   <section class="content-grid">
     <article class="data-card content-card rules-card">
-      <header><div><h2>Rules & SOP</h2><span>{{ arrayValue(rulesCenter['documents']).length }} versions</span></div><button type="button" (click)="openRuleEditor()">New</button></header>
+      <header><div><h2>Rules, training & company content</h2><span>{{ arrayValue(rulesCenter['documents']).length }} versions</span></div><button type="button" (click)="openRuleEditor()">New</button></header>
       @for (row of arrayValue(rulesCenter['documents']); track trackById($index, row)) {
         <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ label(row['documentType']) }} · {{ label(row['category']) }} · v{{ row['documentVersion'] }} · {{ row['acknowledgedCount'] || 0 }}/{{ row['activeStaff'] || 0 }} acknowledged</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="row-actions">@if (row['status'] === 'draft') { <button class="primary" type="button" (click)="publishRule(row)">Publish</button> }@if (row['status'] === 'published') { <button type="button" (click)="unpublishRule(row)">Unpublish</button> }<button type="button" (click)="openRuleEditor(row)">New version</button><button type="button" (click)="recordRuleViolation(row)">Violation</button></div></article>
       }@if (arrayValue(rulesCenter['documents']).length === 0) { <div class="empty">No rules or SOPs yet</div> }
+    </article>
+    <article class="data-card content-card">
+      <header><div><h2>Employee surveys</h2><span>{{ surveys.length }} surveys</span></div><button type="button" (click)="createSurvey()">New</button></header>
+      @for (row of surveys; track trackById($index, row)) {
+        <article class="record"><div><strong>{{ row['title'] }}</strong><small>{{ row['responseCount'] || 0 }} responses · {{ label(row['status']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span><div class="row-actions">@if (row['status'] === 'draft') { <button class="primary" type="button" (click)="updateSurveyStatus(row, 'published')">Publish</button> }@if (row['status'] === 'published') { <button type="button" (click)="updateSurveyStatus(row, 'closed')">Close</button> }</div></article>
+      } @empty { <div class="empty">No employee surveys yet</div> }
     </article>
     <article class="data-card content-card">
       <header><div><h2>Task</h2><span>{{ contentTasks.length }} records</span></div></header>
@@ -506,5 +514,33 @@
   <section class="data-card"><header><div><h2>Rule violations</h2><span>{{ arrayValue(rulesCenter['violations']).length }} records</span></div></header>
     @for (row of arrayValue(rulesCenter['violations']); track trackById($index, row)) { <article class="record"><div><strong>{{ row['staffName'] }} · {{ row['documentTitle'] }}</strong><small>{{ row['details'] }} · {{ formatDateTime(row['occurredAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['status'])">{{ row['status'] }}</span>@if (row['status'] === 'open') { <div class="row-actions"><button class="primary" type="button" (click)="resolveRuleViolation(row)">Resolve</button></div> }</article> }@if (arrayValue(rulesCenter['violations']).length === 0) { <div class="empty">No rule violations</div> }
   </section>
+}
+
+@if (hrmsEditorKind) {
+  <div class="hrms-drawer-backdrop" role="presentation">
+    <aside class="hrms-drawer" role="dialog" aria-modal="true" [attr.aria-label]="hrmsEditorTitle">
+      <header><div><h2>{{ hrmsEditorTitle }}</h2><span>HRMS workflow</span></div><button type="button" (click)="closeHrmsEditor()">Close</button></header>
+      <div class="hrms-drawer-body">
+        @for (field of hrmsEditorFields; track field.key) {
+          <label [class.wide]="field.type === 'textarea' || field.type === 'multiselect'">
+            <span>{{ field.label }}@if (field.required) { <b aria-hidden="true"> *</b> }</span>
+            @if (field.type === 'date') {
+              <as-date-picker [ariaLabel]="field.label" [(value)]="hrmsDraft[field.key]"></as-date-picker>
+            } @else if (field.type === 'textarea') {
+              <textarea rows="4" [(ngModel)]="hrmsDraft[field.key]"></textarea>
+            } @else if (field.type === 'select' || field.type === 'multiselect') {
+              <select [multiple]="field.type === 'multiselect'" [size]="field.type === 'multiselect' ? 6 : 1" [(ngModel)]="hrmsDraft[field.key]">
+                @if (field.type === 'select') { <option value="">Select</option> }
+                @for (option of field.options || []; track option.value) { <option [value]="option.value">{{ option.label }}</option> }
+              </select>
+            } @else {
+              <input [type]="field.type === 'number' ? 'number' : 'text'" [(ngModel)]="hrmsDraft[field.key]" />
+            }
+          </label>
+        }
+      </div>
+      <footer><button type="button" (click)="closeHrmsEditor()">Cancel</button><button class="primary" type="button" [disabled]="loading" (click)="saveHrmsEditor()">Save</button></footer>
+    </aside>
+  </div>
 }
 </section>

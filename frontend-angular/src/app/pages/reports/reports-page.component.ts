@@ -269,6 +269,7 @@ export class ReportsPageComponent implements OnInit, OnDestroy {
     if (report.id === 'staff-performance') { void this.router.navigateByUrl('/reports/staff-bookings'); return; }
     if (report.id === 'cash-drawer-eod') { void this.router.navigateByUrl('/pos/cash-drawer'); return; }
     if (report.id === 'outgoing-funds') { void this.router.navigateByUrl('/finance/outgoing-funds'); return; }
+    if (report.path.startsWith('/inventory')) { void this.router.navigateByUrl(report.path); return; }
     if (report.path.startsWith('/reports/')) void this.openLiveReport(report);
   }
 

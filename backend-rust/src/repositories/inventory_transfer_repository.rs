@@ -125,6 +125,7 @@ pub struct TransferCenterSettings {
     pub center_role: String,
     pub default_retail_warehouse_branch_id: Option<String>,
     pub default_consumable_warehouse_branch_id: Option<String>,
+    pub default_returns_warehouse_branch_id: Option<String>,
     pub auto_checkout_transfers: bool,
     pub cannot_raise_transfer: bool,
 }
@@ -585,7 +586,7 @@ pub async fn setting(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Option<TransferCenterSettings>, sqlx::Error> {
-    sqlx::query_as("SELECT branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer FROM inventory_transfer_center_settings WHERE tenant_id=$1 AND branch_id=$2")
+    sqlx::query_as("SELECT branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,default_returns_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer FROM inventory_transfer_center_settings WHERE tenant_id=$1 AND branch_id=$2")
         .bind(tenant_id).bind(branch_id).fetch_optional(db).await
 }
 
@@ -597,12 +598,13 @@ pub async fn save_setting(
     role: &str,
     retail: Option<&str>,
     consumable: Option<&str>,
+    returns: Option<&str>,
     auto_checkout: bool,
     cannot_raise: bool,
     actor: &str,
 ) -> Result<TransferCenterSettings, sqlx::Error> {
-    sqlx::query_as("INSERT INTO inventory_transfer_center_settings(tenant_id,branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET center_role=EXCLUDED.center_role,default_retail_warehouse_branch_id=EXCLUDED.default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id=EXCLUDED.default_consumable_warehouse_branch_id,auto_checkout_transfers=EXCLUDED.auto_checkout_transfers,cannot_raise_transfer=EXCLUDED.cannot_raise_transfer,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer")
-        .bind(tenant_id).bind(branch_id).bind(role).bind(retail).bind(consumable).bind(auto_checkout).bind(cannot_raise).bind(actor).fetch_one(&mut **tx).await
+    sqlx::query_as("INSERT INTO inventory_transfer_center_settings(tenant_id,branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,default_returns_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET center_role=EXCLUDED.center_role,default_retail_warehouse_branch_id=EXCLUDED.default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id=EXCLUDED.default_consumable_warehouse_branch_id,default_returns_warehouse_branch_id=EXCLUDED.default_returns_warehouse_branch_id,auto_checkout_transfers=EXCLUDED.auto_checkout_transfers,cannot_raise_transfer=EXCLUDED.cannot_raise_transfer,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING branch_id,center_role,default_retail_warehouse_branch_id,default_consumable_warehouse_branch_id,default_returns_warehouse_branch_id,auto_checkout_transfers,cannot_raise_transfer")
+        .bind(tenant_id).bind(branch_id).bind(role).bind(retail).bind(consumable).bind(returns).bind(auto_checkout).bind(cannot_raise).bind(actor).fetch_one(&mut **tx).await
 }
 
 pub async fn center_role(

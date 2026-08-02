@@ -4,13 +4,13 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
     models::common::{ApiResponse, ApiResult},
-    routes::context::tenant_branch,
+    routes::context::{current_business_date, tenant_branch},
     services::{auth_service::AuthClaims, stock_audit_service as service},
     state::AppState,
 };
@@ -21,12 +21,17 @@ pub fn router() -> Router<AppState> {
         .route("/inventory/stock-audits/:id", get(details))
         .route("/inventory/stock-audits/:id/counts", post(count))
         .route(
+            "/inventory/stock-audits/:id/counts/import",
+            post(import_counts),
+        )
+        .route(
             "/inventory/stock-audits/:id/close-counting",
             post(close_counting),
         )
         .route("/inventory/stock-audits/:id/submit", post(submit))
         .route("/inventory/stock-audits/:id/approve", post(approve))
         .route("/inventory/stock-audits/:id/reject", post(reject))
+        .route("/inventory/stock-audits/:id/resubmit", post(resubmit))
         .route(
             "/inventory/stock-audits/:id/items/:item_id/reason",
             axum::routing::patch(reason),
@@ -34,6 +39,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/inventory/stock-audits/:id/items/:item_id/findings",
             post(finding),
+        )
+        .route(
+            "/inventory/stock-audits/:id/items/:item_id/reconciliation",
+            axum::routing::patch(reconciliation),
         )
         .route("/inventory/scanner-events", get(scanner_events).post(scan))
         .route("/inventory/barcode-aliases", get(aliases).post(save_alias))
@@ -46,6 +55,24 @@ struct CreateRequest {
     blind_counting: bool,
     required_counters: i32,
     recount_threshold: i32,
+    business_date: Option<NaiveDate>,
+    #[serde(default = "default_full")]
+    audit_scope: String,
+    #[serde(default = "default_all")]
+    product_scope: String,
+    #[serde(default = "default_require_count")]
+    unaudited_policy: String,
+    #[serde(default)]
+    item_ids: Vec<String>,
+}
+fn default_full() -> String {
+    "full".into()
+}
+fn default_all() -> String {
+    "all".into()
+}
+fn default_require_count() -> String {
+    "require_count".into()
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -57,8 +84,30 @@ struct CountRequest {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CountImportRequest {
+    device_id: String,
+    idempotency_key: String,
+    rows: Vec<CountImportRow>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CountImportRow {
+    inventory_item_id: String,
+    counted_quantity: i32,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReasonRequest {
     reason: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReconciliationRequest {
+    reconciled_quantity: i32,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    notes: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -115,6 +164,11 @@ async fn create(
     Json(p): Json<CreateRequest>,
 ) -> ApiResult<service::SessionDetails> {
     let (t, b) = tenant_branch(&headers)?;
+    let elevated = matches!(claims.role.as_str(), "owner" | "admin")
+        || claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "inventory.approve");
     Ok(Json(ApiResponse::ok(
         service::create(
             &state,
@@ -125,6 +179,38 @@ async fn create(
             p.blind_counting,
             p.required_counters,
             p.recount_threshold,
+            p.business_date.unwrap_or_else(current_business_date),
+            &p.audit_scope,
+            &p.product_scope,
+            &p.unaudited_policy,
+            p.item_ids,
+            elevated,
+            elevated,
+        )
+        .await?,
+    )))
+}
+async fn import_counts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
+    Path(id): Path<String>,
+    Json(p): Json<CountImportRequest>,
+) -> ApiResult<service::SessionDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        service::import_counts(
+            &state,
+            &t,
+            &b,
+            &claims.sub,
+            &id,
+            &p.device_id,
+            &p.idempotency_key,
+            p.rows
+                .into_iter()
+                .map(|row| (row.inventory_item_id, row.counted_quantity))
+                .collect(),
         )
         .await?,
     )))
@@ -166,12 +252,36 @@ async fn close_counting(
 async fn reason(
     State(state): State<AppState>,
     headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
     Path((id, item)): Path<(String, String)>,
     Json(p): Json<ReasonRequest>,
 ) -> ApiResult<service::SessionDetails> {
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        service::set_variance_reason(&state, &t, &b, &id, &item, &p.reason).await?,
+        service::set_variance_reason(&state, &t, &b, &claims.sub, &id, &item, &p.reason).await?,
+    )))
+}
+async fn reconciliation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
+    Path((id, item)): Path<(String, String)>,
+    Json(p): Json<ReconciliationRequest>,
+) -> ApiResult<service::SessionDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        service::save_reconciliation(
+            &state,
+            &t,
+            &b,
+            &claims.sub,
+            &id,
+            &item,
+            p.reconciled_quantity,
+            &p.reason,
+            &p.notes,
+        )
+        .await?,
     )))
 }
 async fn finding(
@@ -229,6 +339,17 @@ async fn reject(
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         service::reject(&state, &t, &b, &claims.sub, &id, &p.reason).await?,
+    )))
+}
+async fn resubmit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(claims): Extension<AuthClaims>,
+    Path(id): Path<String>,
+) -> ApiResult<service::SessionDetails> {
+    let (t, b) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        service::resubmit(&state, &t, &b, &claims.sub, &id).await?,
     )))
 }
 async fn scan(

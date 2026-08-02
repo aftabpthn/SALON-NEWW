@@ -61,6 +61,7 @@ interface AccessClaims {
   role?: string;
   role_id?: string;
   permissions?: string[];
+  masked_fields?: string[];
   token_type?: string;
   exp?: number;
   mfa_enrollment_required?: boolean;
@@ -137,6 +138,11 @@ export class AuthService {
   hasPermission(...permissions: string[]): boolean {
     const granted = this.accessToken ? this.tokenClaims(this.accessToken)?.permissions ?? [] : [];
     return permissions.some((required) => granted.includes(required));
+  }
+
+  hasFieldMask(...fields: string[]): boolean {
+    const masks = this.accessToken ? this.tokenClaims(this.accessToken)?.masked_fields ?? [] : [];
+    return fields.some((field) => masks.includes(field));
   }
 
   hasAccess(roles: readonly string[] = [], permissions: readonly string[] = []): boolean {
@@ -412,6 +418,7 @@ export class AuthService {
     if (normalized === 'frontdesk') return 'front-desk';
     if (normalized === 'inventorymanager') return 'inventory-manager';
     if (normalized === 'marketinglead') return 'marketing-lead';
+    if (normalized === 'salon owner' || normalized === 'salon-owner') return 'owner';
     return normalized;
   }
 }

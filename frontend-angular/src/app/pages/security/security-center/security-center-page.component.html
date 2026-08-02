@@ -856,7 +856,12 @@
         <form class="policy-form" (ngSubmit)="savePolicy()">
           <label>Audit retention days<input name="auditRetentionDays" type="number" min="1" max="3650" required [disabled]="!canManageSecurity" [(ngModel)]="policy.auditRetentionDays" /></label>
           <label>Audit page size<input name="auditPageSize" type="number" min="10" max="250" required [disabled]="!canManageSecurity" [(ngModel)]="policy.auditPageSize" /></label>
+          <label>Staff App inactivity minutes<input name="staffAppInactivityMinutes" type="number" min="1" max="480" required [disabled]="!canManageSecurity" [(ngModel)]="policy.staffAppInactivityMinutes" /></label>
+          <label>Staff App geofence mode<select name="staffAppGeofenceMode" [disabled]="!canManageSecurity" [(ngModel)]="policy.staffAppGeofenceMode"><option value="full_access">Full access</option><option value="read_only">Read-only outside geofence</option><option value="blocked">Completely blocked outside geofence</option></select></label>
+          <label>Geofence radius (meters)<input name="staffAppGeofenceRadiusMeters" type="number" min="25" max="5000" required [disabled]="!canManageSecurity" [(ngModel)]="policy.staffAppGeofenceRadiusMeters" /></label>
+          <label>Geofence-exempt roles<input name="staffGeofenceExemptRoles" type="text" [disabled]="!canManageSecurity" [(ngModel)]="staffGeofenceExemptRoles" /></label>
           <label class="check-field"><input name="sessionRevocationEnabled" type="checkbox" [disabled]="!canManageSecurity" [(ngModel)]="policy.sessionRevocationEnabled" /><span>Session revocation enabled</span></label>
+          <label class="check-field"><input name="staffContactVerificationRequired" type="checkbox" [disabled]="!canManageSecurity" [(ngModel)]="policy.staffContactVerificationRequired" /><span>Require identity verification before contact changes</span></label>
           @if (canManageSecurity) {
             <div class="form-actions"><button class="primary-button" type="submit" [disabled]="saving">{{ saving ? 'Saving...' : 'Save policy' }}</button></div>
           }

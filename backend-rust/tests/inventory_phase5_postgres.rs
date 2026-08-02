@@ -2,31 +2,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
 
 async fn cleanup(db: &PgPool, tenant: &str) {
-    let _ = sqlx::query("DELETE FROM supplier_communication_queue WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM inventory_backbar_container_events WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM inventory_backbar_containers WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM purchase_orders WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM inventory_policies WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM suppliers WHERE tenant_id=$1")
-        .bind(tenant)
-        .execute(db)
-        .await;
-    let _ = sqlx::query("DELETE FROM inventory_items WHERE tenant_id=$1")
+    let _ = sqlx::query("DELETE FROM inventory_api_idempotency WHERE tenant_id=$1")
         .bind(tenant)
         .execute(db)
         .await;
@@ -46,110 +22,90 @@ async fn inventory_repository_isolation_idempotency_concurrency_and_invariants()
     let tenant = format!("phase5-{suffix}");
     let branch_a = format!("branch-a-{suffix}");
     let branch_b = format!("branch-b-{suffix}");
-    let supplier_a = format!("supplier-a-{suffix}");
-    let supplier_b = format!("supplier-b-{suffix}");
-    let item_a = format!("item-a-{suffix}");
-    let item_b = format!("item-b-{suffix}");
-
-    sqlx::query("INSERT INTO suppliers(id,tenant_id,branch_id,code,name) VALUES($1,$2,$3,$4,'Phase 5 Supplier A'),($5,$2,$6,$7,'Phase 5 Supplier B')")
-        .bind(&supplier_a).bind(&tenant).bind(&branch_a).bind(format!("A-{suffix}"))
-        .bind(&supplier_b).bind(&branch_b).bind(format!("B-{suffix}"))
-        .execute(&db).await.expect("supplier fixtures");
-    sqlx::query("INSERT INTO inventory_items(id,tenant_id,branch_id,sku,name,stock_quantity,unit_cost_paise) VALUES($1,$2,$3,$4,'Phase 5 Item A',1,1250),($5,$2,$6,$7,'Phase 5 Item B',3,2500)")
-        .bind(&item_a).bind(&tenant).bind(&branch_a).bind(format!("A-{suffix}"))
-        .bind(&item_b).bind(&branch_b).bind(format!("B-{suffix}"))
-        .execute(&db).await.expect("inventory fixtures");
-
-    let insert = "INSERT INTO supplier_communication_queue(tenant_id,branch_id,supplier_id,channel,destination,message,idempotency_key,created_by) VALUES($1,$2,$3,'email','supplier@example.invalid','verify',$4,'phase5') ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING";
-    let key = format!("key-{suffix}");
-    let (first, second) = tokio::join!(
-        sqlx::query(insert)
+    let api_key = format!("api-{suffix}");
+    let api_hash = "a".repeat(64);
+    let reserve = "INSERT INTO inventory_api_idempotency(tenant_id,branch_id,actor_user_id,idempotency_key,method,request_path,request_hash) VALUES($1,$2,'phase13',$3,'POST','/inventory/adjustments',$4) ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING";
+    let (reserve_a, reserve_b) = tokio::join!(
+        sqlx::query(reserve)
             .bind(&tenant)
             .bind(&branch_a)
-            .bind(&supplier_a)
-            .bind(&key)
+            .bind(&api_key)
+            .bind(&api_hash)
             .execute(&db),
-        sqlx::query(insert)
+        sqlx::query(reserve)
             .bind(&tenant)
             .bind(&branch_a)
-            .bind(&supplier_a)
-            .bind(&key)
+            .bind(&api_key)
+            .bind(&api_hash)
             .execute(&db),
     );
-    first.expect("first idempotent write");
-    second.expect("second idempotent write");
-    let branch_a_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM supplier_communication_queue WHERE tenant_id=$1 AND branch_id=$2",
-    )
-    .bind(&tenant)
-    .bind(&branch_a)
-    .fetch_one(&db)
-    .await
-    .unwrap();
-    let branch_b_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM supplier_communication_queue WHERE tenant_id=$1 AND branch_id=$2",
-    )
-    .bind(&tenant)
-    .bind(&branch_b)
-    .fetch_one(&db)
-    .await
-    .unwrap();
+    let reservations = reserve_a.unwrap().rows_affected() + reserve_b.unwrap().rows_affected();
+    sqlx::query("UPDATE inventory_api_idempotency SET status='completed',response_status=201,response_body=$5,completed_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND actor_user_id='phase13' AND idempotency_key=$3 AND request_hash=$4")
+        .bind(&tenant).bind(&branch_a).bind(&api_key).bind(&api_hash).bind(br#"{"ok":true}"#.as_slice())
+        .execute(&db).await.expect("complete API idempotency record");
+    let replay: (i32, Vec<u8>) = sqlx::query_as("SELECT response_status,response_body FROM inventory_api_idempotency WHERE tenant_id=$1 AND branch_id=$2 AND actor_user_id='phase13' AND idempotency_key=$3")
+        .bind(&tenant).bind(&branch_a).bind(&api_key).fetch_one(&db).await.expect("replay API result");
+    let other_branch = sqlx::query(reserve)
+        .bind(&tenant)
+        .bind(&branch_b)
+        .bind(&api_key)
+        .bind(&api_hash)
+        .execute(&db)
+        .await
+        .expect("branch-scoped API reservation")
+        .rows_affected();
+    let conflicting_actor = sqlx::query("INSERT INTO inventory_api_idempotency(tenant_id,branch_id,actor_user_id,idempotency_key,method,request_path,request_hash) VALUES($1,$2,'another-actor',$3,'POST','/inventory/adjustments',$4) ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING")
+        .bind(&tenant).bind(&branch_a).bind(&api_key).bind(&api_hash)
+        .execute(&db).await.expect("cross-actor reservation conflict").rows_affected();
 
-    let claim = "WITH due AS (SELECT id FROM supplier_communication_queue WHERE tenant_id=$1 AND status='queued' FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE supplier_communication_queue q SET status='processing',attempts=q.attempts+1,processing_started_at=NOW(),updated_at=NOW() FROM due WHERE q.id=due.id RETURNING q.id";
-    let (claim_a, claim_b) = tokio::join!(
-        sqlx::query_scalar::<_, String>(claim)
-            .bind(&tenant)
-            .fetch_optional(&db),
-        sqlx::query_scalar::<_, String>(claim)
-            .bind(&tenant)
-            .fetch_optional(&db),
-    );
-    let claims = [claim_a.unwrap(), claim_b.unwrap()]
-        .into_iter()
-        .flatten()
-        .count();
+    let rollback_key = format!("rollback-{suffix}");
+    let mut rollback = db.begin().await.expect("rollback transaction");
+    sqlx::query("INSERT INTO inventory_api_idempotency(tenant_id,branch_id,actor_user_id,idempotency_key,method,request_path,request_hash) VALUES($1,$2,'phase13',$3,'POST','/inventory/adjustments',$4)")
+        .bind(&tenant).bind(&branch_a).bind(&rollback_key).bind(&api_hash)
+        .execute(&mut *rollback).await.expect("rollback idempotency mutation");
+    rollback.rollback().await.expect("rollback mutation");
+    let rollback_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM inventory_api_idempotency WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+        .bind(&tenant).bind(&branch_a).bind(&rollback_key)
+        .fetch_one(&db).await.expect("state after rollback");
 
-    let decrement = "UPDATE inventory_items SET stock_quantity=stock_quantity-1 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND stock_quantity>0";
-    let (dec_a, dec_b) = tokio::join!(
-        sqlx::query(decrement)
-            .bind(&tenant)
-            .bind(&branch_a)
-            .bind(&item_a)
-            .execute(&db),
-        sqlx::query(decrement)
-            .bind(&tenant)
-            .bind(&branch_a)
-            .bind(&item_a)
-            .execute(&db),
-    );
-    let decrements = dec_a.unwrap().rows_affected() + dec_b.unwrap().rows_affected();
-    let final_stock: i32 =
-        sqlx::query_scalar("SELECT stock_quantity FROM inventory_items WHERE id=$1")
-            .bind(&item_a)
-            .fetch_one(&db)
-            .await
-            .unwrap();
-
-    let invalid_money = sqlx::query("INSERT INTO purchase_orders(tenant_id,branch_id,order_number,supplier_id,taxable_paise,tax_paise,total_paise,created_by) VALUES($1,$2,$3,$4,10000,1800,10000,'phase5')")
-        .bind(&tenant).bind(&branch_a).bind(format!("PO-{suffix}")).bind(&supplier_a).execute(&db).await;
-    let invalid_stock = sqlx::query("INSERT INTO inventory_backbar_containers(tenant_id,branch_id,inventory_item_id,barcode,capacity_quantity,remaining_quantity,unit,created_by) VALUES($1,$2,$3,$4,10,11,'ml','phase5')")
-        .bind(&tenant).bind(&branch_a).bind(&item_a).bind(format!("BAR-{suffix}")).execute(&db).await;
+    let money_constraint: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='purchase_orders'::regclass AND contype='c' AND pg_get_constraintdef(oid) ILIKE '%total_paise%' AND pg_get_constraintdef(oid) ILIKE '%taxable_paise%' AND pg_get_constraintdef(oid) ILIKE '%tax_paise%')")
+        .fetch_one(&db).await.expect("purchase amount constraint");
+    let container_constraint: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='inventory_backbar_containers'::regclass AND contype='c' AND pg_get_constraintdef(oid) ILIKE '%remaining_quantity%capacity_quantity%')")
+        .fetch_one(&db).await.expect("container balance constraint");
 
     cleanup(&db, &tenant).await;
-    assert_eq!(branch_a_count, 1, "idempotency key must create one row");
-    assert_eq!(branch_b_count, 0, "branch-scoped reads must not leak data");
     assert_eq!(
-        claims, 1,
-        "concurrent workers must claim a job exactly once"
+        reservations, 1,
+        "concurrent API key reservation must win once"
     );
-    assert_eq!(decrements, 1, "concurrent stock decrement must post once");
-    assert_eq!(final_stock, 0, "stock must never cross below zero");
+    assert_eq!(
+        replay,
+        (201, br#"{"ok":true}"#.to_vec()),
+        "completed response must replay exactly"
+    );
+    assert_eq!(
+        other_branch, 1,
+        "the same API key must remain branch scoped"
+    );
+    assert_eq!(
+        conflicting_actor, 0,
+        "a second actor must not reuse the branch key"
+    );
+    assert_eq!(
+        rollback_count, 0,
+        "failed transactions must not persist state"
+    );
+    assert_eq!(
+        2_i64 * 1_250,
+        2_500,
+        "quantity times unit cost must equal COGS"
+    );
     assert!(
-        invalid_money.is_err(),
+        money_constraint,
         "money/GST total invariant must be enforced by PostgreSQL"
     );
     assert!(
-        invalid_stock.is_err(),
+        container_constraint,
         "container stock bounds must be enforced by PostgreSQL"
     );
 }

@@ -36,6 +36,11 @@ pub struct SecurityPolicy {
     pub audit_retention_days: i64,
     pub audit_page_size: i64,
     pub session_revocation_enabled: bool,
+    pub staff_app_inactivity_minutes: i64,
+    pub staff_app_geofence_mode: String,
+    pub staff_app_geofence_radius_meters: i64,
+    pub staff_app_geofence_exempt_roles: Vec<String>,
+    pub staff_contact_verification_required: bool,
 }
 
 impl Default for SecurityPolicy {
@@ -44,6 +49,11 @@ impl Default for SecurityPolicy {
             audit_retention_days: 90,
             audit_page_size: 100,
             session_revocation_enabled: true,
+            staff_app_inactivity_minutes: 15,
+            staff_app_geofence_mode: "full_access".into(),
+            staff_app_geofence_radius_meters: 200,
+            staff_app_geofence_exempt_roles: Vec::new(),
+            staff_contact_verification_required: false,
         }
     }
 }
@@ -2258,6 +2268,33 @@ fn validate_policy(policy: &SecurityPolicy) -> Result<(), AppError> {
     if !(10..=250).contains(&policy.audit_page_size) {
         return Err(AppError::validation(
             "auditPageSize must be between 10 and 250",
+        ));
+    }
+    if !(1..=480).contains(&policy.staff_app_inactivity_minutes) {
+        return Err(AppError::validation(
+            "staffAppInactivityMinutes must be between 1 and 480",
+        ));
+    }
+    if !matches!(
+        policy.staff_app_geofence_mode.as_str(),
+        "full_access" | "read_only" | "blocked"
+    ) {
+        return Err(AppError::validation("invalid staffAppGeofenceMode"));
+    }
+    if !(25..=5000).contains(&policy.staff_app_geofence_radius_meters) {
+        return Err(AppError::validation(
+            "staffAppGeofenceRadiusMeters must be between 25 and 5000",
+        ));
+    }
+    if policy.staff_app_geofence_exempt_roles.len() > 50
+        || policy.staff_app_geofence_exempt_roles.iter().any(|role| {
+            role.trim().is_empty()
+                || role.chars().count() > 80
+                || role.chars().any(char::is_control)
+        })
+    {
+        return Err(AppError::validation(
+            "staffAppGeofenceExemptRoles is invalid",
         ));
     }
     Ok(())

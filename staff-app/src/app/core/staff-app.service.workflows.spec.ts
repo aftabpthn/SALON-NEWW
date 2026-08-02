@@ -1,4 +1,5 @@
 import "@angular/compiler";
+import { IDBFactory } from "fake-indexeddb";
 import { HttpClient, HttpErrorResponse, HttpHeaders } from "@angular/common/http";
 import { Observable, of, throwError } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -61,6 +62,7 @@ async function login(service: StaffAppService): Promise<void> {
 
 describe("StaffAppService staff workflows", () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: new IDBFactory() });
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: new MemoryStorage() });
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
@@ -178,7 +180,7 @@ describe("StaffAppService staff workflows", () => {
       localization: { timezone: "Asia/Kolkata", locale: "en-IN" },
       dateTime: { dateFormat: "DD/MM/YYYY", timeFormat: "HH:mm", businessDayStartHour: 0, weekStartsOn: "monday" },
       interface: { compactMode },
-      defaults: { staffHints: false }
+      defaults: { staffHints: false, calendarSyncEnabled: false }
     });
     const { service, http } = createService(({ method, url, body }) => {
       if (method === "GET" && url.endsWith("/staff-self/workspace-preferences")) return of(preferences());
@@ -285,5 +287,66 @@ describe("StaffAppService staff workflows", () => {
     expect(actions.map((call) => call.url.split("/staff-self/appointments/")[1])).toEqual(["appointment%20%2F1/reschedule", "appointment%20%2F1/cancel"]);
     expect(actions[0]?.body).toEqual({ start_at: "2026-08-01T04:30:00.000Z", reason: "Client requested" });
     expect(actions[1]?.body).toEqual({ reason: "Client unavailable" });
+  });
+
+  it("keeps Appointment Book quote, idempotent save, and status on self routes", async () => {
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "GET" && url.endsWith("/staff-self/appointment-book")) return of({ appointments: [] });
+      if (method === "POST" && url.endsWith("/staff-self/appointment-book/quote")) return of({ lines: [], totalPaise: 10000, eligibility: null });
+      if (method === "POST" && url.endsWith("/staff-self/appointments/batch")) return of([]);
+      if (method === "POST" && url.endsWith("/staff-self/appointments/appointment-1/status")) return of({ id: "appointment-1" });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+
+    await service.appointmentBook({ from: "2026-08-02", to: "2026-08-08", view: "own" });
+    await service.quoteAppointment({ client_id: "client-1", lines: [] });
+    await service.saveAppointmentBooking({ client_id: "client-1", idempotency_key: "staff-app:key-1", lines: [] });
+    await service.setAppointmentStatus("appointment-1", "confirmed");
+
+    expect(http.calls.find((call) => call.url.endsWith("/staff-self/appointment-book"))?.options.params).toMatchObject({ view: "own" });
+    expect(http.calls.find((call) => call.url.endsWith("/staff-self/appointments/batch"))?.body).toMatchObject({ idempotency_key: "staff-app:key-1" });
+    expect(http.calls.find((call) => call.url.endsWith("/staff-self/appointments/appointment-1/status"))?.body).toEqual({ status: "confirmed", reason: "" });
+  });
+
+  it("keeps advanced appointment execution, inbox, and waitlist conversion on scoped routes", async () => {
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "GET" && url.endsWith("/staff-self/appointments/appointment-1/operations")) return of({ appointment: { id: "appointment-1" }, activity: [], adjacentVisits: [], forms: {}, consumables: {}, checkout: null, permissions: {} });
+      if (method === "POST" && url.includes("/staff-self/appointments/appointment-1/operations")) return of({ appointments: [] });
+      if (method === "POST" && url.includes("/staff-self/online-booking-requests/request-1/decision")) return of({ id: "request-1", status: "approved" });
+      if (method === "POST" && url.includes("/staff-self/waitlist/wait-1/convert")) return of([]);
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+
+    await service.appointmentOperations("appointment-1");
+    await service.runAppointmentOperation("appointment-1", "handoff", { handoffStaffId: "staff-2", reason: "Shift change" });
+    await service.decideOnlineBookingRequest("request-1", "approved", "Slot confirmed");
+    await service.convertWaitlist("wait-1", { idempotency_key: "waitlist:key-1", lines: [] });
+
+    expect(http.calls.find((call) => call.url.endsWith("/appointment-1/operations") && call.method === "POST")?.body).toEqual({ action: "handoff", handoffStaffId: "staff-2", reason: "Shift change" });
+    expect(http.calls.find((call) => call.url.endsWith("/request-1/decision"))?.body).toEqual({ decision: "approved", reason: "Slot confirmed" });
+    expect(http.calls.find((call) => call.url.endsWith("/wait-1/convert"))?.body).toMatchObject({ idempotency_key: "waitlist:key-1" });
+  });
+
+  it("keeps Guest 360 reads and evidence writes appointment-scoped", async () => {
+    const { service, http } = createService(({ method, url }) => {
+      if (method === "GET" && url.endsWith("/staff-self/appointments/appointment%20%2F1/guest-360")) return of({ appointmentId: "appointment /1", guest: { formDefinitions: [], formSubmissions: [] }, relationships: {}, timeline: [], formStatuses: [], profilePhotoId: "", permissions: {} });
+      if (method === "POST" && url.endsWith("/guest-360/notes")) return of({ id: "note-1" });
+      if (method === "POST" && url.endsWith("/guest-360/forms")) return of({ id: "form-1", status: "draft" });
+      if (method === "PATCH" && url.endsWith("/guest-360/contact-preferences")) return of({ preferredCommunicationChannel: "none" });
+      return throwError(() => new Error(`Unexpected request: ${method} ${url}`));
+    });
+    await login(service);
+
+    await service.appointmentGuest360("appointment /1");
+    await service.saveAppointmentGuestNote("appointment /1", { noteType: "general", note: "Scoped note", visibility: "assigned_staff" });
+    await service.saveAppointmentGuestForm("appointment /1", { definitionId: "definition-1", status: "draft", responses: {} });
+    await service.saveAppointmentGuestPreferences("appointment /1", { preferredCommunicationChannel: "none", reason: "Guest request" });
+
+    const guestCalls = http.calls.filter((call) => call.url.includes("/appointment%20%2F1/guest-360"));
+    expect(guestCalls.map((call) => call.method)).toEqual(["GET", "POST", "POST", "PATCH"]);
+    expect(guestCalls[1]?.body).toMatchObject({ visibility: "assigned_staff" });
+    expect(guestCalls[2]?.body).toMatchObject({ status: "draft" });
   });
 });

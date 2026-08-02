@@ -117,6 +117,27 @@ pub async fn list_documents(
     .await
 }
 
+pub async fn get_document(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    document_id: &str,
+) -> Result<Option<StaffDocumentRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT id,staff_id,document_type,document_name,document_url,verification_status,
+                  expiry_date,notes,created_by,created_at,updated_at
+           FROM staff_documents
+           WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(document_id)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn save_file(
     db: &PgPool,
     tenant_id: &str,

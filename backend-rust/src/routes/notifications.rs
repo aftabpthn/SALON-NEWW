@@ -1,6 +1,7 @@
 use axum::{
+    body::{Body, Bytes},
     extract::{Path, Query, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, Response},
     Extension, Json, Router,
 };
 use chrono::{DateTime, Utc};
@@ -13,8 +14,9 @@ use crate::{
     repositories::benefit_notification_repository::{self, NewBenefitDelivery},
     routes::context::tenant_branch,
     services::{
-        auth_service::AuthClaims, client_service, security_service, sms_center_service,
-        team_chat_service,
+        auth_service::{self, AuthClaims},
+        client_service, migration_file_service, security_service, sms_center_service,
+        staff_notification_service, team_chat_service,
     },
     state::{AppState, TeamChatEvent},
 };
@@ -36,7 +38,11 @@ pub fn router() -> Router<AppState> {
         )
         .route(
             "/team-chat/conversations",
-            axum::routing::get(list_staff_chat_conversations),
+            axum::routing::get(list_staff_chat_conversations).post(create_staff_chat_conversation),
+        )
+        .route(
+            "/team-chat/participants",
+            axum::routing::get(list_staff_chat_participants),
         )
         .route(
             "/team-chat/private-owner",
@@ -46,6 +52,22 @@ pub fn router() -> Router<AppState> {
             "/team-chat/conversations/:id/messages",
             axum::routing::get(list_staff_conversation_messages)
                 .post(send_staff_conversation_message),
+        )
+        .route(
+            "/team-chat/conversations/:id/read",
+            axum::routing::post(mark_staff_conversation_read),
+        )
+        .route(
+            "/team-chat/attachments",
+            axum::routing::post(upload_staff_chat_attachment),
+        )
+        .route(
+            "/team-chat/attachments/:id/content",
+            axum::routing::get(get_staff_chat_attachment),
+        )
+        .route(
+            "/team-chat/share/:share_type/:share_id",
+            axum::routing::get(resolve_staff_chat_share),
         )
         .route(
             "/notifications/inbox/:client_id/reply",
@@ -94,6 +116,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/staff-self/notifications/:id",
             axum::routing::patch(update_self_notification),
+        )
+        .route(
+            "/staff-self/notification-center",
+            axum::routing::get(self_notification_center),
+        )
+        .route(
+            "/staff-self/notification-preferences",
+            axum::routing::put(save_self_notification_preferences),
         )
 }
 
@@ -177,8 +207,18 @@ struct TeamChatQuery {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StaffConversationMessageRequest {
     body: String,
+    share_type: Option<String>,
+    share_id: Option<String>,
+    attachment_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffChatAttachmentQuery {
+    file_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -237,6 +277,7 @@ async fn send_team_chat(
     let _ = state.team_chat_events.send(TeamChatEvent {
         tenant_id,
         branch_id,
+        event_type: "team_chat.created".into(),
         message_id: row.id.clone(),
         sender_user_id: row.sender_user_id.clone(),
     });
@@ -252,6 +293,51 @@ async fn list_staff_chat_conversations(
     let rows =
         team_chat_service::conversations(&state.db, &tenant_id, &branch_id, &claims.sub).await?;
     Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn list_staff_chat_participants(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<team_chat_service::StaffChatParticipant>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        team_chat_service::participants(&state.db, &tenant_id, &branch_id, &claims.sub).await?,
+    )))
+}
+
+async fn create_staff_chat_conversation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<team_chat_service::ConversationCreateRequest>,
+) -> ApiResult<team_chat_service::StaffChatConversation> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if payload.conversation_type.eq_ignore_ascii_case("broadcast")
+        && !auth_service::staff_app_permission_allowed(
+            &claims,
+            "staff.app.chat.manage",
+            &["owner", "admin", "manager"],
+            &["staff.manage", "management.write"],
+        )
+    {
+        return Err(AppError::forbidden(
+            "manager broadcast permission is required",
+        ));
+    }
+    let idempotency_key = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok());
+    let row = team_chat_service::create_conversation(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+        idempotency_key,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 async fn start_private_owner_chat(
@@ -302,16 +388,146 @@ async fn send_staff_conversation_message(
         &claims.sub,
         &conversation_id,
         &payload.body,
+        payload.share_type.as_deref(),
+        payload.share_id.as_deref(),
+        payload.attachment_id.as_deref(),
         idempotency_key,
     )
     .await?;
     let _ = state.team_chat_events.send(TeamChatEvent {
         tenant_id,
         branch_id,
+        event_type: "team_chat.created".into(),
         message_id: row.id.clone(),
         sender_user_id: row.sender_user_id.clone(),
     });
     Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn mark_staff_conversation_read(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(conversation_id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    team_chat_service::mark_read(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &conversation_id,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(json!({"read":true}))))
+}
+
+async fn upload_staff_chat_attachment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffChatAttachmentQuery>,
+    bytes: Bytes,
+) -> ApiResult<team_chat_service::StaffChatAttachment> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let file_name = query.file_name.trim();
+    if !team_chat_service::valid_attachment(file_name, &content_type, &bytes) {
+        return Err(AppError::validation(
+            "attachment must be a valid image, PDF, Word, or Excel file up to 10 MB",
+        ));
+    }
+    let scanner_required = !matches!(
+        state.settings.app_env.trim().to_ascii_lowercase().as_str(),
+        "local" | "development" | "test"
+    );
+    migration_file_service::scan_upload_bytes(&bytes, scanner_required).await?;
+    let row = team_chat_service::save_attachment(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        file_name,
+        &content_type,
+        bytes.to_vec(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn get_staff_chat_attachment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(attachment_id): Path<String>,
+) -> Result<Response<Body>, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = team_chat_service::attachment_content(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &attachment_id,
+    )
+    .await?;
+    Response::builder()
+        .header(header::CONTENT_TYPE, row.content_type)
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(header::CONTENT_DISPOSITION, "attachment")
+        .body(Body::from(row.content))
+        .map_err(|_| AppError::internal("failed to stream chat attachment"))
+}
+
+async fn resolve_staff_chat_share(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((share_type, share_id)): Path<(String, String)>,
+) -> ApiResult<Value> {
+    let (permission, legacy) = match share_type.as_str() {
+        "appointment" => (
+            "staff.app.appointments.read",
+            &["appointments.read", "read:appointments"][..],
+        ),
+        "invoice" => ("staff.app.pos.read", &["pos.read", "read:pos"][..]),
+        "guest" => (
+            "staff.app.guest.read",
+            &["clients.read", "read:clients"][..],
+        ),
+        _ => return Err(AppError::validation("Smart Share record type is invalid")),
+    };
+    if !auth_service::staff_app_permission_allowed(
+        &claims,
+        permission,
+        &["owner", "admin", "manager", "staff"],
+        legacy,
+    ) {
+        return Err(AppError::forbidden(format!(
+            "Missing permission: {permission}"
+        )));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let unrestricted = ["owner", "admin", "manager", "superadmin"]
+        .iter()
+        .any(|role| role.eq_ignore_ascii_case(&claims.role));
+    Ok(Json(ApiResponse::ok(
+        team_chat_service::resolve_share(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            unrestricted,
+            &share_type,
+            &share_id,
+        )
+        .await?,
+    )))
 }
 
 #[derive(Debug, Serialize)]
@@ -822,6 +1038,7 @@ async fn list_notifications(
         FROM notifications
         WHERE tenant_id = $1
           AND branch_id = $2
+          AND archived_at IS NULL
           AND ($3 = '' OR notification_type = $3)
           AND ($4 = false OR is_read = false)
           AND ($5 = '' OR LOWER(title) LIKE '%' || $5 || '%' OR LOWER(body) LIKE '%' || $5 || '%')
@@ -843,7 +1060,7 @@ async fn list_notifications(
     .map_err(|_| AppError::internal("failed to list notifications"))?;
 
     let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND (user_id='' OR user_id=$3)",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND archived_at IS NULL AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -853,7 +1070,7 @@ async fn list_notifications(
     .unwrap_or(0);
 
     let unread = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read = false AND (user_id='' OR user_id=$3)",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND archived_at IS NULL AND is_read = false AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -1110,7 +1327,7 @@ async fn update_self_notification(
         return Err(AppError::validation("notification status is invalid"));
     }
     let updated = sqlx::query_scalar::<_, String>(
-        r#"UPDATE notifications SET is_read=$5,updated_at=NOW()
+        r#"UPDATE notifications SET is_read=$5,archived_at=CASE WHEN $6 THEN NOW() ELSE NULL END,updated_at=NOW()
             WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND (user_id='' OR user_id=$4)
             RETURNING id"#,
     )
@@ -1119,11 +1336,88 @@ async fn update_self_notification(
     .bind(&branch_id)
     .bind(&claims.sub)
     .bind(status != "unread")
+    .bind(status == "archived")
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to update staff notification"))?
     .ok_or_else(|| AppError::not_found("notification was not found"))?;
     Ok(Json(ApiResponse::ok(json!({"id":updated,"status":status}))))
+}
+
+async fn self_notification_center(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_self_notification_permission(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_notification_service::center(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            state.settings.mobile_push_provider_enabled(),
+        )
+        .await?,
+    )))
+}
+
+async fn save_self_notification_preferences(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_notification_service::SelfNotificationPreferenceRequest>,
+) -> ApiResult<Value> {
+    require_self_notification_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let value = staff_notification_service::save_preferences(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "staff.notification.preferences.updated",
+        json!({}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(value)))
+}
+
+fn require_self_notification_permission(claims: &AuthClaims, write: bool) -> Result<(), AppError> {
+    let permission = if write {
+        "staff.app.notifications.manage"
+    } else {
+        "staff.app.notifications.read"
+    };
+    let legacy = if write {
+        &[
+            "notifications.manage",
+            "staff.self_manage",
+            "staff_self.write",
+        ][..]
+    } else {
+        &["notifications.read", "staff.self_manage", "read:staff"][..]
+    };
+    if auth_service::staff_app_permission_allowed(
+        claims,
+        permission,
+        &["owner", "admin", "manager", "staff"],
+        legacy,
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::forbidden(format!(
+            "Missing permission: {permission}"
+        )))
+    }
 }
 
 async fn count_unread_notifications(
@@ -1134,7 +1428,7 @@ async fn count_unread_notifications(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
 
     let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND (user_id='' OR user_id=$3)",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND archived_at IS NULL AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -1144,7 +1438,7 @@ async fn count_unread_notifications(
     .unwrap_or(0);
 
     let unread = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND is_read=false AND (user_id='' OR user_id=$3)",
+        "SELECT COUNT(*) FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND archived_at IS NULL AND is_read=false AND (user_id='' OR user_id=$3)",
     )
     .bind(&tenant_id)
     .bind(&branch_id)

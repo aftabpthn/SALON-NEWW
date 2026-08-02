@@ -1,18 +1,23 @@
+use std::net::SocketAddr;
+
 use axum::{
-    body::Body,
-    extract::{Request, State},
-    http::Method,
+    body::{to_bytes, Body},
+    extract::{ConnectInfo, Request, State},
+    http::{header, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::Response,
 };
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 #[allow(dead_code)]
 use crate::{
+    middleware::security_headers,
     models::common::AppError,
     repositories::auth_repository::{self, AuthAuditInput},
     services::{
         auth_service::{self, AuthClaims},
-        entitlement_service,
+        entitlement_service, security_service,
     },
     state::AppState,
 };
@@ -253,13 +258,52 @@ pub async fn require_route_role(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
+    let audit_ip_address = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|peer| security_headers::resolved_source_ip(peer.0.ip(), req.headers()));
+    let audit_user_agent = header_text(req.headers(), header::USER_AGENT.as_str());
+    let audit_device_id = header_text(req.headers(), "x-device-id");
+    let audit_request_id =
+        header_text(req.headers(), "x-request-id").unwrap_or_else(|| Uuid::new_v4().to_string());
+    let audit_idempotency_key = header_text(req.headers(), "idempotency-key");
+    let geofence_path = normalize_route_path(req.uri().path()).to_owned();
+    let geofence_method = req.method().clone();
+    let is_staff_app = req
+        .headers()
+        .get("x-staff-app")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == "1");
+    let location = match (
+        header_f64(&req, "x-staff-latitude"),
+        header_f64(&req, "x-staff-longitude"),
+    ) {
+        (Some(latitude), Some(longitude))
+            if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) =>
+        {
+            Some((latitude, longitude))
+        }
+        _ => None,
+    };
+    let geofence_claims = req.extensions().get::<AuthClaims>().cloned();
+    let geofence_result = enforce_staff_app_geofence(
+        &state,
+        is_staff_app,
+        location,
+        geofence_claims.as_ref(),
+        &geofence_path,
+        &geofence_method,
+    )
+    .await;
     let path = normalize_route_path(req.uri().path());
     let method = req.method();
     let audit_path = path.to_string();
     let audit_method = method.to_string();
     let audit_claims = req.extensions().get::<AuthClaims>().cloned();
 
-    let result = if requires_platform_access(path, method) {
+    let result = if let Err(error) = geofence_result {
+        Err(error)
+    } else if requires_platform_access(path, method) {
         require_platform_admin(req, next).await
     } else if path_starts_with(path, "/auth") {
         require_authenticated_user(req, next).await
@@ -293,7 +337,7 @@ pub async fn require_route_role(
 
     if result.is_err() {
         if let Some(claims) = audit_claims {
-            let _ = auth_repository::audit(
+            if auth_repository::audit(
                 &state.db,
                 AuthAuditInput {
                     tenant_id: &claims.tenant_id,
@@ -304,17 +348,27 @@ pub async fn require_route_role(
                     identity: None,
                     event_type: "permission.denied",
                     outcome: "denied",
-                    ip_address: None,
-                    user_agent: None,
-                    details: serde_json::json!({ "method": audit_method, "path": audit_path }),
+                    ip_address: audit_ip_address.as_deref(),
+                    user_agent: audit_user_agent.as_deref(),
+                    details: serde_json::json!({
+                        "method": audit_method,
+                        "path": audit_path,
+                        "deviceId": audit_device_id,
+                        "requestId": audit_request_id,
+                        "idempotencyKey": audit_idempotency_key
+                    }),
                 },
             )
-            .await;
+            .await
+            .is_err()
+            {
+                tracing::warn!("failed to persist permission denial audit event");
+            }
         }
     } else if is_mutation_method(&audit_method) {
         if let (Ok(response), Some(claims)) = (&result, audit_claims.as_ref()) {
             if response.status().is_success() {
-                let _ = auth_repository::audit(
+                if auth_repository::audit(
                     &state.db,
                     AuthAuditInput {
                         tenant_id: &claims.tenant_id,
@@ -323,22 +377,291 @@ pub async fn require_route_role(
                             .then_some(claims.session_id.as_str()),
                         branch_id: claims.branch_id.as_deref(),
                         identity: None,
-                        event_type: "api.mutation",
+                        event_type: if path_starts_with(&audit_path, "/inventory")
+                            || path_starts_with(&audit_path, "/purchases")
+                        {
+                            "inventory.api.mutation"
+                        } else {
+                            "api.mutation"
+                        },
                         outcome: "success",
-                        ip_address: None,
-                        user_agent: None,
+                        ip_address: audit_ip_address.as_deref(),
+                        user_agent: audit_user_agent.as_deref(),
                         details: serde_json::json!({
                             "method": audit_method,
                             "path": audit_path,
-                            "status": response.status().as_u16()
+                            "status": response.status().as_u16(),
+                            "deviceId": audit_device_id,
+                            "requestId": audit_request_id,
+                            "idempotencyKey": audit_idempotency_key
                         }),
                     },
                 )
-                .await;
+                .await
+                .is_err()
+                {
+                    tracing::warn!("failed to persist API mutation audit event");
+                }
             }
         }
     }
     result
+}
+
+pub async fn require_inventory_idempotency(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, AppError> {
+    let method = req.method().clone();
+    let route_path = normalize_route_path(req.uri().path()).to_string();
+    if is_read_method(&method)
+        || !(path_starts_with(&route_path, "/inventory")
+            || path_starts_with(&route_path, "/purchases"))
+    {
+        return Ok(next.run(req).await);
+    }
+    let claims = req
+        .extensions()
+        .get::<AuthClaims>()
+        .cloned()
+        .ok_or_else(|| AppError::unauthenticated("missing auth claims"))?;
+    let branch_id = claims
+        .branch_id
+        .as_deref()
+        .ok_or_else(|| AppError::forbidden("branch-scoped session is required"))?;
+    let request_path = req
+        .uri()
+        .path_and_query()
+        .map(|value| value.as_str())
+        .unwrap_or(req.uri().path())
+        .to_string();
+    let (parts, body) = req.into_parts();
+    let body = to_bytes(body, 32 * 1024 * 1024)
+        .await
+        .map_err(|_| AppError::validation("inventory request body is too large"))?;
+    let key = parts
+        .headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| body_idempotency_key(&body))
+        .ok_or_else(|| {
+            AppError::validation("Idempotency-Key is required for inventory mutations")
+        })?;
+    if !valid_idempotency_key(&key) {
+        return Err(AppError::validation(
+            "Idempotency-Key must be 8 to 160 letters, numbers, dots, colons, hyphens, or underscores",
+        ));
+    }
+    let mut request_hasher = Sha256::new();
+    request_hasher.update(method.as_str().as_bytes());
+    request_hasher.update([0]);
+    request_hasher.update(request_path.as_bytes());
+    request_hasher.update([0]);
+    request_hasher.update(&body);
+    let request_hash = format!("{:x}", request_hasher.finalize());
+    let (created, saved) = auth_repository::begin_inventory_api_request(
+        &state.db,
+        &claims.tenant_id,
+        branch_id,
+        &claims.sub,
+        &key,
+        method.as_str(),
+        &request_path,
+        &request_hash,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reserve inventory request"))?;
+    if saved.actor_user_id != claims.sub {
+        return Err(AppError::conflict(
+            "Idempotency-Key was already used by another inventory actor",
+        ));
+    }
+    if saved.request_hash != request_hash {
+        return Err(AppError::conflict(
+            "Idempotency-Key was already used for a different inventory request",
+        ));
+    }
+    if !created {
+        if saved.status != "completed" {
+            return Err(AppError::conflict(
+                "an inventory request with this Idempotency-Key is still processing",
+            ));
+        }
+        let status = saved
+            .response_status
+            .and_then(|value| u16::try_from(value).ok())
+            .and_then(|value| StatusCode::from_u16(value).ok())
+            .ok_or_else(|| AppError::internal("saved inventory response is invalid"))?;
+        let mut response = Response::builder()
+            .status(status)
+            .header(header::CONTENT_TYPE, saved.response_content_type)
+            .header("x-idempotency-replayed", "true")
+            .body(Body::from(saved.response_body.unwrap_or_default()))
+            .map_err(|_| AppError::internal("failed to replay inventory response"))?;
+        response.headers_mut().insert(
+            "x-request-id",
+            HeaderValue::from_str(
+                parts
+                    .headers
+                    .get("x-request-id")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("replayed"),
+            )
+            .unwrap_or_else(|_| HeaderValue::from_static("replayed")),
+        );
+        return Ok(response);
+    }
+    let request = Request::from_parts(parts, Body::from(body));
+    let response = next.run(request).await;
+    let (mut response_parts, response_body) = response.into_parts();
+    let response_body = to_bytes(response_body, 32 * 1024 * 1024)
+        .await
+        .map_err(|_| AppError::internal("inventory response body is too large"))?;
+    let content_type = response_parts
+        .headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("application/json")
+        .to_string();
+    if auth_repository::complete_inventory_api_request(
+        &state.db,
+        &claims.tenant_id,
+        branch_id,
+        &claims.sub,
+        &key,
+        &request_hash,
+        i32::from(response_parts.status.as_u16()),
+        &content_type,
+        &response_body,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to persist inventory request result"))?
+    {
+        response_parts
+            .headers
+            .insert("x-idempotency-replayed", HeaderValue::from_static("false"));
+    }
+    Ok(Response::from_parts(
+        response_parts,
+        Body::from(response_body),
+    ))
+}
+
+fn header_text(headers: &axum::http::HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn body_idempotency_key(body: &[u8]) -> Option<String> {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()?
+        .get("idempotencyKey")?
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn valid_idempotency_key(value: &str) -> bool {
+    (8..=160).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b':' | b'-' | b'_'))
+}
+
+async fn enforce_staff_app_geofence(
+    state: &AppState,
+    is_staff_app: bool,
+    location: Option<(f64, f64)>,
+    claims: Option<&AuthClaims>,
+    path: &str,
+    method: &Method,
+) -> Result<(), AppError> {
+    if !is_staff_app || staff_geofence_bypass(path) {
+        return Ok(());
+    }
+    let claims = claims.ok_or_else(|| AppError::unauthenticated("missing auth claims"))?;
+    let branch_id = claims
+        .branch_id
+        .as_deref()
+        .ok_or_else(|| AppError::forbidden("branch-scoped session is required"))?;
+    let policy = security_service::get_policy(&state.db, &claims.tenant_id, branch_id)
+        .await?
+        .settings;
+    if policy.staff_app_geofence_mode == "full_access"
+        || policy
+            .staff_app_geofence_exempt_roles
+            .iter()
+            .any(|role| role.eq_ignore_ascii_case(&claims.role))
+    {
+        return Ok(());
+    }
+    let branch_location = sqlx::query_as::<_, (Option<f64>, Option<f64>)>(
+        "SELECT latitude,longitude FROM branches WHERE tenant_id=$1 AND id=$2 AND active=TRUE",
+    )
+    .bind(&claims.tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to verify Staff App geofence"))?;
+    let inside = match (location, branch_location) {
+        (Some((latitude, longitude)), Some((Some(branch_latitude), Some(branch_longitude)))) => {
+            distance_meters(latitude, longitude, branch_latitude, branch_longitude)
+                <= policy.staff_app_geofence_radius_meters as f64
+        }
+        _ => false,
+    };
+    if inside || policy.staff_app_geofence_mode == "read_only" && is_read_method(method) {
+        return Ok(());
+    }
+    if policy.staff_app_geofence_mode == "read_only" {
+        Err(AppError::forbidden(
+            "Outside geofence: your Staff App access is read-only",
+        ))
+    } else {
+        Err(AppError::forbidden(
+            "Staff App access is blocked outside the configured geofence",
+        ))
+    }
+}
+
+fn staff_geofence_bypass(path: &str) -> bool {
+    matches!(
+        path,
+        "/auth/logout" | "/auth/switch-branch" | "/staff/self/preferred-branch"
+    ) || path.starts_with("/staff/self/security")
+}
+
+fn header_f64(req: &Request<Body>, name: &str) -> Option<f64> {
+    req.headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+}
+
+fn distance_meters(
+    latitude: f64,
+    longitude: f64,
+    other_latitude: f64,
+    other_longitude: f64,
+) -> f64 {
+    let radius = 6_371_000.0_f64;
+    let latitude_delta = (other_latitude - latitude).to_radians();
+    let longitude_delta = (other_longitude - longitude).to_radians();
+    let a = (latitude_delta / 2.0).sin().powi(2)
+        + latitude.to_radians().cos()
+            * other_latitude.to_radians().cos()
+            * (longitude_delta / 2.0).sin().powi(2);
+    2.0 * radius * a.sqrt().atan2((1.0 - a).sqrt())
 }
 
 fn is_mutation_method(method: &str) -> bool {
@@ -404,6 +727,47 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     if path_starts_with(path, "/operations") {
         return Some(access(MANAGEMENT_ROLES, &["management.write"]));
     }
+    if path_starts_with(path, "/staff/self/profile") {
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.profile.read",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        } else {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &[
+                    "staff.app.profile.manage",
+                    "staff.self_manage",
+                    "staff_self.write",
+                ],
+            )
+        });
+    }
+    if path == "/staff/self/security-context" || path == "/staff/self/security/pin/verify" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.settings.read",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
+    if path_starts_with(path, "/staff/self/security") || path == "/staff/self/preferred-branch" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.settings.manage",
+                "staff.self_manage",
+                "staff_self.write",
+            ],
+        ));
+    }
     if path == "/staff/self/roster" {
         return Some(access(
             STAFF_SELF_WRITE_ROLES,
@@ -457,6 +821,16 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
                 "staff.app.reports.read",
                 "staff.self_manage",
                 "staff_self.write",
+            ],
+        ));
+    }
+    if path == "/staff-self/performance" {
+        return Some(access(
+            STAFF_SELF_WRITE_ROLES,
+            &[
+                "staff.app.performance.read",
+                "staff.analytics.read",
+                "staff.self_manage",
             ],
         ));
     }
@@ -676,7 +1050,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
     if matches_route_prefix(path, REPORT_PREFIXES) {
         return Some(
             if path == "/reports/custom/preview"
-                || (path_starts_with(path, "/reports/custom/") && path.ends_with("/run"))
+                || (path_starts_with(path, "/reports/custom") && path.ends_with("/run"))
             {
                 access(
                     REPORT_READ_ROLES,
@@ -894,6 +1268,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         if (((path_starts_with(path, "/inventory/backbar-usage")
             || path_starts_with(path, "/inventory/backbar-overrides")
             || path_starts_with(path, "/inventory/floor-closings")
+            || path_starts_with(path, "/inventory/adjustments")
             || path_starts_with(path, "/inventory/negative-stock-requests")
             || path_starts_with(path, "/inventory/exception-recommendations")
             || path_starts_with(path, "/inventory/autonomous-operations/actions"))
@@ -904,7 +1279,7 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
         {
             return Some(access(OWNER_ROLES, &["inventory.approve"]));
         }
-        if path_starts_with(path, "/inventory/transfers/")
+        if path_starts_with(path, "/inventory/transfers")
             && (path.ends_with("/approve") || path.ends_with("/reject"))
             && !is_read_method(method)
         {
@@ -1387,11 +1762,52 @@ pub async fn require_platform_admin(req: Request<Body>, next: Next) -> Result<Re
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_route_path, requires_platform_access, role_matches_tenant_context,
-        role_or_permissions_allowed, route_access, MANAGEMENT_ROLES, TENANT_ROLES,
+        body_idempotency_key, distance_meters, normalize_route_path, requires_platform_access,
+        role_matches_tenant_context, role_or_permissions_allowed, route_access,
+        staff_geofence_bypass, valid_idempotency_key, MANAGEMENT_ROLES, TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
+
+    #[test]
+    fn phase1_staff_geofence_distance_and_recovery_paths_are_safe() {
+        assert!(distance_meters(28.6139, 77.2090, 28.6139, 77.2090) < 0.01);
+        assert!(distance_meters(28.6139, 77.2090, 28.6148, 77.2090) > 90.0);
+        assert!(staff_geofence_bypass("/auth/logout"));
+        assert!(staff_geofence_bypass(
+            "/staff/self/security/sessions/1/revoke"
+        ));
+        assert!(!staff_geofence_bypass("/staff/self/profile"));
+    }
+
+    #[test]
+    fn phase13_inventory_idempotency_keys_are_strict_and_body_compatible() {
+        assert!(valid_idempotency_key("inventory:request-123"));
+        assert!(!valid_idempotency_key("short"));
+        assert!(!valid_idempotency_key("inventory request 123"));
+        assert_eq!(
+            body_idempotency_key(br#"{"idempotencyKey":"inventory:request-123"}"#).as_deref(),
+            Some("inventory:request-123")
+        );
+    }
+
+    #[test]
+    fn phase13_inventory_review_routes_require_approver_permission() {
+        for path in [
+            "/inventory/transfers/transfer-1/approve",
+            "/inventory/stock-audits/audit-1/approve",
+            "/inventory/stock-audits/audit-1/reject",
+            "/inventory/backbar-usage/usage-1/review",
+            "/inventory/backbar-overrides/override-1/review",
+            "/inventory/floor-closings/closing-1/review",
+            "/inventory/adjustments/adjustment-1/review",
+            "/inventory/negative-stock-requests/request-1/review",
+            "/inventory/autonomous-operations/actions/action-1/review",
+        ] {
+            let access = route_access(path, &Method::POST).expect("inventory route is mapped");
+            assert!(access.permissions.contains(&"inventory.approve"), "{path}");
+        }
+    }
 
     #[test]
     fn salon_onboarding_requires_platform_admin() {
@@ -1451,6 +1867,11 @@ mod tests {
             ),
             (
                 "/api/v1/inventory/negative-stock-requests/1/review",
+                Method::POST,
+                "inventory.approve",
+            ),
+            (
+                "/api/v1/inventory/adjustments/1/review",
                 Method::POST,
                 "inventory.approve",
             ),
@@ -1637,6 +2058,23 @@ mod tests {
             .permissions
             .contains(&"staff.app.settings.read"));
         assert!(settings_write
+            .permissions
+            .contains(&"staff.app.settings.manage"));
+
+        let profile_read = route_access("/staff/self/profile", &Method::GET)
+            .expect("profile read route is mapped");
+        let profile_write = route_access(
+            "/staff/self/profile/contact-verification/request",
+            &Method::POST,
+        )
+        .expect("profile verification route is mapped");
+        let security_write = route_access("/staff/self/security/pin", &Method::POST)
+            .expect("security write route is mapped");
+        assert!(profile_read.permissions.contains(&"staff.app.profile.read"));
+        assert!(profile_write
+            .permissions
+            .contains(&"staff.app.profile.manage"));
+        assert!(security_write
             .permissions
             .contains(&"staff.app.settings.manage"));
     }

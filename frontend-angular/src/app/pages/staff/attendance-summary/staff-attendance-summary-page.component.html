@@ -36,6 +36,19 @@
   <p class="error">{{ error }}</p>
 }
 
+@if (correctionRequests.length) {
+  <section class="summary-card correction-requests">
+    <header><h2>Attendance correction requests</h2><span>{{ correctionRequests.length }} pending</span></header>
+    @for (request of correctionRequests; track request.id) {
+      <article>
+        <div><strong>{{ request.staffName }} · {{ displayDate(request.businessDate) }}</strong><small>{{ displayTime(request.requestedClockInAt) }} - {{ displayTime(request.requestedClockOutAt) }} · {{ request.workTaskName || 'Default task' }}</small><p>{{ request.reason }}</p></div>
+        <label>Decision note<input maxlength="500" [(ngModel)]="correctionDecisionNotes[request.id]" /></label>
+        <div class="row-actions"><button type="button" [disabled]="decidingCorrectionId === request.id" (click)="decideCorrectionRequest(request, 'rejected')">Reject</button><button class="primary" type="button" [disabled]="decidingCorrectionId === request.id" (click)="decideCorrectionRequest(request, 'approved')">Approve</button></div>
+      </article>
+    }
+  </section>
+}
+
 <section class="summary-card">
   <div class="table-scroll">
     <table>

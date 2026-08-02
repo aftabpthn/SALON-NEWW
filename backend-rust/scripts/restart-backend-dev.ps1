@@ -114,7 +114,7 @@ for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
         if ($response.StatusCode -eq 200) {
             Write-Output "Backend ready: $healthUrl (PID $($backend.Id))"
-            exit 0
+            return
         }
     }
     catch { }

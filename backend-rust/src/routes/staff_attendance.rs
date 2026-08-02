@@ -38,6 +38,11 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff-attendance/:staff_id/details", get(get_details))
         .route("/staff-attendance/clock-in", post(clock_in))
+        .route("/staff-attendance/clock-options", get(clock_options))
+        .route(
+            "/staff-attendance/passkey/begin",
+            post(begin_biometric_clock_in),
+        )
         .route(
             "/staff-attendance/biometric/begin",
             post(begin_biometric_clock_in),
@@ -65,6 +70,14 @@ pub fn router() -> Router<AppState> {
         .route("/staff-attendance/clock-out", post(clock_out))
         .route("/staff-attendance/break-start", post(start_break))
         .route("/staff-attendance/break-end", post(end_break))
+        .route(
+            "/staff-attendance/correction-requests",
+            get(list_correction_requests).post(create_correction_request),
+        )
+        .route(
+            "/staff-attendance/correction-requests/:id/decision",
+            post(decide_correction_request),
+        )
         .route(
             "/staff-attendance/:staff_id/:business_date/correction",
             axum::routing::patch(correct_attendance),
@@ -112,6 +125,7 @@ struct ClockInRequest {
     comments: Option<String>,
     presence: Option<AttendancePresenceEvidence>,
     face_scan: Option<FaceScanEvidence>,
+    work_task_rate_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -235,6 +249,7 @@ struct ClockOutRequest {
     comments: Option<String>,
     source: Option<String>,
     presence: Option<AttendancePresenceEvidence>,
+    cash_tip_paise: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,6 +278,32 @@ struct AttendanceBreakRequest {
     started_at: DateTime<Utc>,
     ended_at: DateTime<Utc>,
     comments: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CorrectionRequestQuery {
+    staff_id: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateCorrectionRequest {
+    staff_id: Option<String>,
+    business_date: NaiveDate,
+    clock_in_at: Option<DateTime<Utc>>,
+    clock_out_at: Option<DateTime<Utc>>,
+    work_task_rate_id: Option<String>,
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CorrectionDecisionRequest {
+    version: i32,
+    decision: String,
+    review_note: Option<String>,
 }
 
 async fn get_summary(
@@ -875,6 +916,7 @@ async fn approve_face_exception(
         Some(row.created_at),
         "staff-app-face-approved",
         "approved from face attendance exception",
+        None,
     )
     .await?;
     sqlx::query("UPDATE staff_face_attendance_exceptions SET status='approved',reviewed_by=$4,reviewed_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
@@ -1023,6 +1065,11 @@ async fn clock_in(
         },
         source,
         payload.comments.as_deref().unwrap_or("").trim(),
+        payload
+            .work_task_rate_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
     )
     .await?;
     let _ = auth_repository::audit(
@@ -1094,6 +1141,7 @@ async fn clock_out(
         } else {
             payload.penalty_paise.unwrap_or(0)
         },
+        payload.cash_tip_paise.unwrap_or(0),
         payload.comments.as_deref().unwrap_or("").trim(),
     )
     .await?;
@@ -1114,6 +1162,35 @@ async fn clock_out(
     )
     .await;
     Ok(Json(ApiResponse::ok(row)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClockOptionsQuery {
+    business_date: NaiveDate,
+}
+
+async fn clock_options(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<ClockOptionsQuery>,
+) -> ApiResult<staff_attendance_service::AttendanceClockOptions> {
+    ensure_attendance_read(&claims)?;
+    ensure_self_business_date(&claims, query.business_date)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let data = staff_attendance_service::clock_options(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        query.business_date,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(data)))
 }
 
 async fn start_break(
@@ -1170,6 +1247,118 @@ async fn end_break(
         payload.business_date,
     )
     .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_correction_requests(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<CorrectionRequestQuery>,
+) -> ApiResult<
+    Vec<crate::repositories::staff_attendance_repository::AttendanceCorrectionRequestRecord>,
+> {
+    ensure_attendance_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = if is_attendance_manager(&claims) {
+        query.staff_id.as_deref().unwrap_or("").trim().to_string()
+    } else {
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?
+    };
+    let rows = staff_attendance_service::list_correction_requests(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        query.status.as_deref().unwrap_or("").trim(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_correction_request(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<CreateCorrectionRequest>,
+) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceCorrectionRequestRecord>
+{
+    ensure_attendance_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = self_scoped_staff_id(
+        &state,
+        &claims,
+        &tenant_id,
+        &branch_id,
+        payload.staff_id.as_deref().unwrap_or("").trim(),
+    )
+    .await?;
+    let row = staff_attendance_service::request_correction(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        payload.business_date,
+        payload.clock_in_at,
+        payload.clock_out_at,
+        payload
+            .work_task_rate_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
+        &payload.reason,
+        &claims.sub,
+    )
+    .await?;
+    let _ = auth_repository::audit(&state.db, AuthAuditInput {
+        tenant_id: &tenant_id, user_id: Some(&claims.sub), session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+        branch_id: Some(&branch_id), identity: None, event_type: "staff.attendance.correction_requested", outcome: "success",
+        ip_address: None, user_agent: None, details: json!({"requestId":row.id,"staffId":staff_id,"businessDate":payload.business_date}),
+    }).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn decide_correction_request(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<CorrectionDecisionRequest>,
+) -> ApiResult<crate::repositories::staff_attendance_repository::AttendanceCorrectionRequestRecord>
+{
+    ensure_attendance_manage(&claims)?;
+    if !is_attendance_manager(&claims) {
+        return Err(AppError::forbidden("Attendance manager access is required"));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_attendance_service::decide_correction_request(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        id.trim(),
+        payload.version,
+        &payload.decision,
+        payload.review_note.as_deref().unwrap_or(""),
+        &claims.sub,
+    )
+    .await?;
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(&branch_id),
+            identity: None,
+            event_type: "staff.attendance.correction_decided",
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"requestId":row.id,"status":row.status,"staffId":row.staff_id}),
+        },
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -1278,6 +1467,7 @@ async fn correct_attendance(
             comments: payload.comments.unwrap_or_default().trim().to_string(),
             correction_reason: payload.correction_reason.trim().to_string(),
             corrected_by: claims.sub.clone(),
+            work_task_rate_id: None,
             breaks: payload
                 .breaks
                 .into_iter()

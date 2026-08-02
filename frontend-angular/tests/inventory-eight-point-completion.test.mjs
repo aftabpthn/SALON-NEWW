@@ -24,7 +24,10 @@ test('all eight inventory completion contracts are wired to real persistence and
 
   assert.match(migration, /reorder_history_days[\s\S]*DEFAULT 60/);
   assert.match(migration, /reorder_coverage_days[\s\S]*DEFAULT 30/);
-  assert.match(reorder, /seasonal-demand-v3/);
+  assert.match(reorder, /seasonal-demand-v4/);
+  assert.match(reorder, /pending_po_quantity[\s\S]*pending_transfer_quantity/);
+  assert.match(reorder, /desired[\s\S]*stock_quantity[\s\S]*undelivered/);
+  assert.match(reorder, /effective_minimum_order[\s\S]*pack/);
 
   assert.match(inventoryRepo, /'branchStocks'/);
   assert.match(inventoryRepo, /'clientUsage'/);
@@ -71,7 +74,7 @@ test('autonomous inventory stays budgeted, scheduled and approval controlled', (
   assert.match(controls, /"transfer_draft" \| "expiry_rescue"[\s\S]*execute_approved_transfer/);
   assert.match(controls, /expiry rescue is stale; the batch, demand, safety, quantity, or cost changed/);
   assert.match(controls, /"reconciliation" => \{[\s\S]*gl_reconciliation[\s\S]*issue_count > 0[\s\S]*still has unresolved GL or Digital Twin exceptions/);
-  assert.match(controls, /inventory_transfer_service::dispatch/);
+  assert.match(controls, /inventory_transfer_service::create[\s\S]*inventory_transfer_service::raise[\s\S]*inventory_transfer_service::approve/);
   assert.match(controls, /purchase_service::transition_order/);
   assert.match(repository, /recover_stale_automation_actions/);
   assert.match(worker, /process_due_automation/);

@@ -17,8 +17,9 @@ test('shared all-page loader uses bounded parallel pagination when total is know
 test('inventory route loaders render primary data before secondary references', () => {
   const inventory = read('inventory/inventory-page.component.ts');
   const reload = block(inventory, 'async reload()', 'selectTab(');
-  assert.match(reload, /tab === 'products'\) await references/);
+  assert.match(reload, /\['products','suppliers','orders','grn','transfers'\]\.includes\(tab\)\) await references/);
   assert.match(reload, /else await this\.loadOperationalTab/);
+  assert.match(reload, /tab === 'products'[\s\S]*this\.loadOperationalTab/);
   assert.match(inventory, /private defer<T>/);
 
   const cases = [

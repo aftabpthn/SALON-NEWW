@@ -80,6 +80,9 @@
       <label>Status<select [(ngModel)]="editorDraft.status">@for (option of statusOptions; track option) {
         <option [value]="option.value">{{ option.label }}</option>
       }</select></label>
+      <label>Room / chair<select [(ngModel)]="editorDraft.roomId"><option value="">Unassigned</option>@for (room of rooms; track room.id) { <option [value]="room.id">{{ room.name }} · {{ room.kind }}</option> }</select></label>
+      <label>Role<select [(ngModel)]="editorDraft.roleId"><option value="">Default role</option>@for (role of roles; track role.id) { <option [value]="role.id">{{ role.name }}</option> }</select></label>
+      <label>Job<select [(ngModel)]="editorDraft.jobTitle"><option value="">Default job</option>@for (item of jobs; track item) { <option [value]="item">{{ item }}</option> }</select></label>
       <label>Notes<textarea rows="4" maxlength="1000" [(ngModel)]="editorDraft.notes"></textarea></label>
     </div>
     <footer><button type="button" (click)="closeEditor()">Cancel</button><button class="primary" type="button" (click)="applyEditor()">Apply</button></footer>

@@ -3,7 +3,7 @@ use crate::{
     repositories::auth_repository::{self, AuthAuditInput},
     routes::context::tenant_branch,
     services::{
-        auth_service::AuthClaims,
+        auth_service::{self, AuthClaims},
         staff_hrms_service::{self, *},
     },
     state::AppState,
@@ -450,24 +450,24 @@ async fn promotion_readiness_report(
 }
 
 fn read(c: &AuthClaims) -> Result<(), AppError> {
-    if ["owner", "admin", "manager", "accountant"]
-        .iter()
-        .any(|role| role.eq_ignore_ascii_case(&c.role))
-        || c.permissions
-            .iter()
-            .any(|p| matches!(p.as_str(), "staff.read" | "staff.manage"))
-    {
+    if auth_service::staff_app_permission_allowed(
+        c,
+        "staff.hrms.read",
+        &["owner", "admin", "manager"],
+        &["staff.hrms.manage", "staff.manage"],
+    ) {
         Ok(())
     } else {
         Err(AppError::forbidden("HRMS access is restricted"))
     }
 }
 fn manage(c: &AuthClaims) -> Result<(), AppError> {
-    if ["owner", "admin", "manager"]
-        .iter()
-        .any(|role| role.eq_ignore_ascii_case(&c.role))
-        || c.permissions.iter().any(|p| p == "staff.manage")
-    {
+    if auth_service::staff_app_permission_allowed(
+        c,
+        "staff.hrms.manage",
+        &["owner", "admin", "manager"],
+        &["staff.manage"],
+    ) {
         Ok(())
     } else {
         Err(AppError::forbidden("HRMS management access is restricted"))
@@ -541,11 +541,16 @@ mod tests {
             assert!(manage(&claims).is_ok());
         }
         let accountant = claims("accountant", &[]);
-        assert!(read(&accountant).is_ok());
+        assert!(read(&accountant).is_err());
         assert!(manage(&accountant).is_err());
-        let reader = claims("staff", &["staff.read"]);
+        let reader = claims("staff", &["staff.hrms.read"]);
         assert!(read(&reader).is_ok());
         assert!(manage(&reader).is_err());
+        assert!(read(&claims("staff", &["staff.read"])).is_err());
+        assert!(manage(&claims("staff", &["staff.hrms.manage"])).is_ok());
+        let mut denied = claims("owner", &[]);
+        denied.denied_permissions = vec!["staff.hrms.read".into()];
+        assert!(read(&denied).is_err());
         let denied = claims("staff", &[]);
         assert!(read(&denied).is_err());
         assert!(manage(&denied).is_err());

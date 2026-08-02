@@ -18,6 +18,11 @@ interface SecurityPolicy {
   auditRetentionDays: number;
   auditPageSize: number;
   sessionRevocationEnabled: boolean;
+  staffAppInactivityMinutes: number;
+  staffAppGeofenceMode: 'full_access' | 'read_only' | 'blocked';
+  staffAppGeofenceRadiusMeters: number;
+  staffAppGeofenceExemptRoles: string[];
+  staffContactVerificationRequired: boolean;
 }
 
 interface SecurityPolicyView {
@@ -344,6 +349,14 @@ export class SecurityCenterPageComponent implements OnInit {
   disclosureReports: DisclosureReport[] = [];
   disclosureDraft = { reporterName: '', reporterContact: '', summary: '', details: '', severity: 'warning' };
   policy?: SecurityPolicy;
+
+  get staffGeofenceExemptRoles(): string {
+    return this.policy?.staffAppGeofenceExemptRoles.join(', ') || '';
+  }
+
+  set staffGeofenceExemptRoles(value: string) {
+    if (this.policy) this.policy.staffAppGeofenceExemptRoles = value.split(',').map((role) => role.trim()).filter(Boolean);
+  }
   mfaStatus?: MfaStatus;
   mfaSetup?: MfaSetup;
   mfaCode = '';

@@ -65,6 +65,10 @@ pub struct ProductConsumptionLine {
     pub hit_limit: i64,
     #[serde(default = "default_usage_profile")]
     pub usage_profile: String,
+    #[serde(default = "default_true")]
+    pub track_automatically: bool,
+    #[serde(default = "default_true")]
+    pub allow_manual_override: bool,
 }
 
 fn default_usage_profile() -> String {
@@ -930,6 +934,8 @@ mod tests {
             owner_approval_percent: 20.0,
             hit_limit: 3,
             usage_profile: "root_touch_up".into(),
+            track_automatically: true,
+            allow_manual_override: true,
         }
     }
 

@@ -76,6 +76,9 @@ pub struct BackbarUsageRequest {
     pub client_id: Option<String>,
     pub appointment_id: Option<String>,
     pub actual_quantity: i32,
+    #[serde(default)]
+    pub wasted_quantity: i32,
+    pub selected_batch_id: Option<String>,
     pub waste_reason: Option<String>,
     pub notes: Option<String>,
     pub idempotency_key: String,
@@ -133,6 +136,13 @@ pub struct FormulaRecommendationQuery {
 pub struct BackbarReviewRequest {
     pub decision: String,
     pub review_note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BackbarReversalRequest {
+    pub reason: String,
+    pub idempotency_key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,6 +208,7 @@ pub struct InventoryWriteRequest {
     pub order_level: Option<i32>,
     pub safety_stock_level: Option<i32>,
     pub unit_cost_paise: Option<i64>,
+    pub retail_price_paise: Option<i64>,
     pub hsn_code: Option<String>,
     pub gst_percent: Option<i32>,
     pub barcode: Option<String>,
@@ -207,6 +218,8 @@ pub struct InventoryWriteRequest {
     pub center_available: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<String>,
+    pub adjustment_evidence_reference: Option<String>,
+    pub adjustment_business_date: Option<String>,
     pub idempotency_key: Option<String>,
 }
 
@@ -221,6 +234,7 @@ pub struct KitComponentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct KitRequest {
     pub components: Vec<KitComponentRequest>,
+    pub auto_unbundle_on_receive: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -228,6 +242,7 @@ pub struct KitRequest {
 pub struct KitAssemblyRequest {
     pub quantity: i32,
     pub idempotency_key: String,
+    pub comments: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -252,6 +267,7 @@ pub struct InventoryResponse {
     pub order_level: i32,
     pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
+    pub retail_price_paise: i64,
     pub hsn_code: String,
     pub gst_percent: i32,
     pub barcode: String,
@@ -282,6 +298,8 @@ pub struct Product360Response {
     pub physical_total_quantity: i64,
     pub open_container_unit: Option<String>,
     pub kit_components: Vec<inventory_repository::InventoryKitComponentRecord>,
+    pub kit_auto_unbundle_on_receive: bool,
+    pub kit_history: Vec<inventory_repository::InventoryKitOperationRecord>,
     pub branch_stocks: serde_json::Value,
     pub expiry_timeline: serde_json::Value,
     pub client_usage: serde_json::Value,
@@ -340,6 +358,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::patch(review_backbar_usage),
         )
         .route(
+            "/inventory/backbar-usage/:id/reverse",
+            axum::routing::post(reverse_backbar_usage),
+        )
+        .route(
             "/inventory/color-bowls",
             axum::routing::get(list_color_bowls).post(record_color_bowl),
         )
@@ -366,6 +388,7 @@ pub fn router() -> Router<AppState> {
         .route("/inventory/:id/360", axum::routing::get(product_360))
         .route("/inventory/:id/kit", get(get_kit).put(save_kit))
         .route("/inventory/:id/assemble", post(assemble_kit))
+        .route("/inventory/:id/unbundle", post(unbundle_kit))
         .route("/inventory/:id", axum::routing::get(get_inventory))
         .route("/inventory/:id", axum::routing::patch(update_inventory))
         .route("/inventory/:id", axum::routing::delete(delete_inventory))
@@ -402,6 +425,7 @@ async fn save_kit(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Extension(claims): Extension<AuthClaims>,
     Json(payload): Json<KitRequest>,
 ) -> ApiResult<Vec<inventory_repository::InventoryKitComponentRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
@@ -418,6 +442,8 @@ async fn save_kit(
                 quantity: row.quantity,
             })
             .collect(),
+        payload.auto_unbundle_on_receive,
+        &claims.sub,
     )
     .await?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -439,6 +465,31 @@ async fn assemble_kit(
         payload.quantity,
         &payload.idempotency_key,
         &claims.sub,
+        payload.comments.as_deref().unwrap_or_default(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn unbundle_kit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(payload): Json<KitAssemblyRequest>,
+) -> ApiResult<inventory_adjustment_service::KitAssemblyResult> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = inventory_adjustment_service::unbundle_kit(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        inventory_adjustment_service::KitOperationInput {
+            quantity: payload.quantity,
+            idempotency_key: &payload.idempotency_key,
+            actor_user_id: &claims.sub,
+            comments: payload.comments.as_deref().unwrap_or_default(),
+        },
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
@@ -483,10 +534,17 @@ async fn record_backbar_usage(
             client_id: payload.client_id.as_deref(),
             appointment_id: payload.appointment_id.as_deref(),
             actual_quantity: payload.actual_quantity,
+            wasted_quantity: payload.wasted_quantity,
+            selected_batch_id: payload.selected_batch_id.as_deref(),
             waste_reason: payload.waste_reason.as_deref().unwrap_or_default(),
             notes: payload.notes.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
             idempotency_key: &payload.idempotency_key,
+            override_authorized: claims.role.eq_ignore_ascii_case("owner")
+                || claims
+                    .permissions
+                    .iter()
+                    .any(|permission| permission == "inventory.approve"),
         },
     )
     .await?;
@@ -520,6 +578,39 @@ async fn review_backbar_usage(
             decision: payload.decision.trim(),
             review_note: payload.review_note.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
+        },
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn reverse_backbar_usage(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(payload): Json<BackbarReversalRequest>,
+) -> ApiResult<inventory_repository::BackbarUsageRecord> {
+    if !claims.role.eq_ignore_ascii_case("owner")
+        && !claims
+            .permissions
+            .iter()
+            .any(|permission| permission == "inventory.approve")
+    {
+        return Err(AppError::forbidden(
+            "manager approval is required to reverse usage",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = inventory_adjustment_service::reverse_backbar_usage(
+        &state,
+        inventory_adjustment_service::BackbarReversalInput {
+            tenant_id: &tenant_id,
+            branch_id: &branch_id,
+            usage_id: &id,
+            reason: &payload.reason,
+            actor_user_id: &claims.sub,
+            idempotency_key: &payload.idempotency_key,
         },
     )
     .await?;
@@ -565,6 +656,11 @@ async fn record_color_bowl(
             notes: &payload.notes,
             actor_user_id: &claims.sub,
             idempotency_key: &payload.idempotency_key,
+            override_authorized: claims.role.eq_ignore_ascii_case("owner")
+                || claims
+                    .permissions
+                    .iter()
+                    .any(|permission| permission == "inventory.approve"),
             lines: payload
                 .lines
                 .into_iter()
@@ -869,9 +965,10 @@ async fn gl_reconciliation(
         return Err(AppError::validation("asOf cannot be in the future"));
     }
     let all_branches = query.all_branches.unwrap_or(false);
+    let role = claims.role.trim().to_ascii_lowercase();
     if all_branches
         && !matches!(
-            claims.role.as_str(),
+            role.as_str(),
             "owner" | "admin" | "manager" | "analyst" | "accountant"
         )
     {
@@ -912,6 +1009,8 @@ async fn stock_ledger(
         "consumption",
         "kit_component_out",
         "kit_assembly_in",
+        "kit_unbundle_out",
+        "kit_component_in",
     ];
     if !movement.is_empty() && !MOVEMENTS.contains(&movement.as_str()) {
         return Err(AppError::validation("movement is not supported"));
@@ -1040,13 +1139,16 @@ async fn product_360(
     Path(id): Path<String>,
 ) -> ApiResult<Product360Response> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let (product, summary, kit_components, extended) = tokio::try_join!(
-        inventory_repository::get(&state.db, &tenant_id, &branch_id, &id),
-        inventory_repository::product_360_summary(&state.db, &tenant_id, &branch_id, &id),
-        inventory_repository::kit_components(&state.db, &tenant_id, &branch_id, &id),
-        inventory_repository::product_360_extended(&state.db, &tenant_id, &branch_id, &id),
-    )
-    .map_err(|_| AppError::internal("failed to load product details"))?;
+    let (product, summary, kit_components, kit_auto_unbundle_on_receive, kit_history, extended) =
+        tokio::try_join!(
+            inventory_repository::get(&state.db, &tenant_id, &branch_id, &id),
+            inventory_repository::product_360_summary(&state.db, &tenant_id, &branch_id, &id),
+            inventory_repository::kit_components(&state.db, &tenant_id, &branch_id, &id),
+            inventory_repository::kit_auto_unbundle_value(&state.db, &tenant_id, &branch_id, &id),
+            inventory_repository::kit_history(&state.db, &tenant_id, &branch_id, &id),
+            inventory_repository::product_360_extended(&state.db, &tenant_id, &branch_id, &id),
+        )
+        .map_err(|_| AppError::internal("failed to load product details"))?;
     let product = product.ok_or_else(|| AppError::not_found("inventory item was not found"))?;
 
     Ok(Json(ApiResponse::ok(Product360Response {
@@ -1065,6 +1167,8 @@ async fn product_360(
         physical_total_quantity: summary.physical_total_quantity,
         open_container_unit: summary.open_container_unit,
         kit_components,
+        kit_auto_unbundle_on_receive,
+        kit_history,
         branch_stocks: extended["branchStocks"].clone(),
         expiry_timeline: extended["expiryTimeline"].clone(),
         client_usage: extended["clientUsage"].clone(),
@@ -1093,6 +1197,11 @@ async fn create_inventory(
     Json(payload): Json<InventoryWriteRequest>,
 ) -> ApiResult<InventoryResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if inventory_cost_hidden(&claims) && payload.unit_cost_paise.unwrap_or_default() != 0 {
+        return Err(AppError::forbidden(
+            "product cost visibility permission is required to set inventory cost",
+        ));
+    }
     let name = required_text(payload.name, "name is required")?;
     let product_usage =
         inventory_product_usage(payload.product_usage.as_deref().unwrap_or_else(|| {
@@ -1155,6 +1264,7 @@ async fn create_inventory(
             })?,
             safety_stock_level: non_negative_i32(payload.safety_stock_level, "safetyStockLevel")?,
             unit_cost_paise: non_negative_i64(payload.unit_cost_paise, "unitCostPaise")?,
+            retail_price_paise: non_negative_i64(payload.retail_price_paise, "retailPricePaise")?,
             hsn_code: &hsn_code,
             gst_percent: non_negative_i32(payload.gst_percent, "gstPercent")?,
             barcode: &barcode,
@@ -1219,6 +1329,11 @@ async fn update_inventory(
     Json(payload): Json<InventoryWriteRequest>,
 ) -> ApiResult<InventoryResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if inventory_cost_hidden(&claims) && payload.unit_cost_paise.is_some() {
+        return Err(AppError::forbidden(
+            "product cost visibility permission is required to change inventory cost",
+        ));
+    }
     let unit = payload.unit.as_deref().map(inventory_unit).transpose()?;
     let package_unit = payload
         .package_unit
@@ -1275,6 +1390,10 @@ async fn update_inventory(
             order_level: payload.order_level,
             safety_stock_level: payload.safety_stock_level,
             unit_cost_paise: payload.unit_cost_paise,
+            retail_price_paise: payload
+                .retail_price_paise
+                .map(|value| non_negative_i64(Some(value), "retailPricePaise"))
+                .transpose()?,
             hsn_code: hsn_code.as_deref(),
             gst_percent: payload.gst_percent.map(|value| value.max(0)),
             barcode: barcode.as_deref(),
@@ -1287,6 +1406,8 @@ async fn update_inventory(
             center_available: payload.center_available,
             active: payload.active,
             adjustment_reason: payload.adjustment_reason.as_deref(),
+            adjustment_evidence_reference: payload.adjustment_evidence_reference.as_deref(),
+            adjustment_business_date: payload.adjustment_business_date.as_deref(),
             idempotency_key: payload.idempotency_key.as_deref(),
             actor_user_id: &claims.sub,
         },
@@ -1321,6 +1442,10 @@ fn required_text(value: Option<String>, message: &'static str) -> Result<String,
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| AppError::validation(message))
+}
+
+fn inventory_cost_hidden(claims: &AuthClaims) -> bool {
+    claims.has_field_mask("inventory.cost")
 }
 
 fn inventory_unit(value: &str) -> Result<String, AppError> {
@@ -1466,6 +1591,7 @@ impl From<InventoryRecord> for InventoryResponse {
             order_level: record.order_level,
             safety_stock_level: record.safety_stock_level,
             unit_cost_paise: record.unit_cost_paise,
+            retail_price_paise: record.retail_price_paise,
             hsn_code: record.hsn_code,
             gst_percent: record.gst_percent,
             barcode: record.barcode,

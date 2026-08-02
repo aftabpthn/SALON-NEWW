@@ -1,0 +1,62 @@
+{
+  "baselineVersion": "2026.08.02-baseline.1",
+  "generatedAt": "2026-08-02T12:00:21.197Z",
+  "routeClaims": 177,
+  "routeClassifications": {
+    "mounted": 49,
+    "future": 124,
+    "external": 3,
+    "retired": 1
+  },
+  "knownRouteContradictions": 0,
+  "missingDocumentReferences": [],
+  "canonicalPorts": {
+    "frontend4200": true,
+    "backend8082": true,
+    "proxy8082": true,
+    "staleLocal8080": false
+  },
+  "migrations": {
+    "sourceCount": 383,
+    "first": 1,
+    "latest": 389,
+    "duplicates": [],
+    "gaps": [
+      69,
+      75,
+      96,
+      100,
+      181,
+      291
+    ]
+  },
+  "databaseMigrations": {
+    "appliedCount": 383,
+    "latestApplied": 389,
+    "missingSource": [],
+    "failed": [],
+    "checksumMismatch": [],
+    "unapplied": []
+  },
+  "executable": {
+    "fresh": true,
+    "executable": "C:\\Users\\Aftab Ahamad\\AuraShine CRM Rust\\backend-rust\\target\\debug\\aura-shine-backend.exe",
+    "inputMtime": "2026-08-02T11:58:17.130Z",
+    "executableMtime": "2026-08-02T11:59:57.805Z"
+  },
+  "health": [
+    {
+      "url": "http://127.0.0.1:8082/health",
+      "status": 200,
+      "ok": true,
+      "body": "{\"success\":true,\"data\":{\"status\":\"ok\",\"service\":\"aura-shine-backend\",\"environment\":\"development\",\"dependencies\":{\"postgres\":\"ok\",\"redis\":\"ok\"}},\"meta\":{\"request_id\":\"3a883969-8f75-4ab6-802e-2782a68f01ab\",\"version\":\"v1\",\"timestamp\":\"2026-08-02T12:00:21.542231500+00:00\"}}"
+    },
+    {
+      "url": "http://127.0.0.1:4200/api/v1/health",
+      "status": 200,
+      "ok": true,
+      "body": "{\"success\":true,\"data\":{\"status\":\"ok\",\"service\":\"aura-shine-backend\",\"environment\":\"development\",\"dependencies\":{\"postgres\":\"ok\",\"redis\":\"ok\"}},\"meta\":{\"request_id\":\"93919c77-d42b-4959-8ff7-d571b09b7593\",\"version\":\"v1\",\"timestamp\":\"2026-08-02T12:00:21.545632900+00:00\"}}"
+    }
+  ],
+  "errors": []
+}

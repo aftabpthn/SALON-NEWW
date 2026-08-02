@@ -82,6 +82,16 @@ pub struct AuthAuditInput<'a> {
     pub details: Value,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct InventoryApiRequestRecord {
+    pub actor_user_id: String,
+    pub request_hash: String,
+    pub status: String,
+    pub response_status: Option<i32>,
+    pub response_content_type: String,
+    pub response_body: Option<Vec<u8>>,
+}
+
 const AUTH_USER_COLUMNS: &str = "id, tenant_id, branch_id, role_id, role_name, login_id, email, password_hash, locked_until, permission_version, must_change_password";
 const EXPLICIT_BRANCH_ACCESS_SQL: &str = r#"
     SELECT b.id::text AS branch_id,
@@ -428,6 +438,75 @@ pub async fn audit_tx(
     input: AuthAuditInput<'_>,
 ) -> Result<(), sqlx::Error> {
     insert_audit(&mut **tx, input).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn begin_inventory_api_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    idempotency_key: &str,
+    method: &str,
+    request_path: &str,
+    request_hash: &str,
+) -> Result<(bool, InventoryApiRequestRecord), sqlx::Error> {
+    let columns =
+        "actor_user_id,request_hash,status,response_status,response_content_type,response_body";
+    if let Some(row) = sqlx::query_as::<_, InventoryApiRequestRecord>(&format!(
+        "INSERT INTO inventory_api_idempotency(tenant_id,branch_id,actor_user_id,idempotency_key,method,request_path,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING RETURNING {columns}"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(actor_user_id)
+    .bind(idempotency_key)
+    .bind(method)
+    .bind(request_path)
+    .bind(request_hash)
+    .fetch_optional(db)
+    .await?
+    {
+        return Ok((true, row));
+    }
+    let row = sqlx::query_as::<_, InventoryApiRequestRecord>(&format!(
+        "SELECT {columns} FROM inventory_api_idempotency WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3"
+    ))
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(idempotency_key)
+    .fetch_one(db)
+    .await?;
+    Ok((false, row))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn complete_inventory_api_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    idempotency_key: &str,
+    request_hash: &str,
+    response_status: i32,
+    response_content_type: &str,
+    response_body: &[u8],
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query(
+        "UPDATE inventory_api_idempotency SET status='completed',response_status=$7,response_content_type=$8,response_body=$9,completed_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND actor_user_id=$3 AND idempotency_key=$4 AND request_hash=$5 AND status=$6",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(actor_user_id)
+    .bind(idempotency_key)
+    .bind(request_hash)
+    .bind("processing")
+    .bind(response_status)
+    .bind(response_content_type)
+    .bind(response_body)
+    .execute(db)
+    .await?
+    .rows_affected()
+        == 1)
 }
 
 async fn insert_audit<'e, E>(executor: E, input: AuthAuditInput<'_>) -> Result<(), sqlx::Error>

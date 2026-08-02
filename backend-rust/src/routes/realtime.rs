@@ -40,6 +40,18 @@ async fn realtime_claims(state: &AppState, headers: &HeaderMap) -> Result<AuthCl
     if claims.token_type != "access" {
         return Err(AppError::unauthenticated("invalid realtime token type"));
     }
+    if !claims.session_id.is_empty()
+        && !auth_repository::is_session_active(
+            &state.db,
+            &claims.tenant_id,
+            &claims.sub,
+            &claims.session_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate realtime session"))?
+    {
+        return Err(AppError::unauthenticated("staff session was revoked"));
+    }
     if !(is_local_env(&state.settings.app_env)
         && state.settings.enable_dev_session
         && claims.sub == "dev-admin")
@@ -156,7 +168,7 @@ async fn send_team_chat_events(
             continue;
         }
         let body = serde_json::json!({
-            "type": "team_chat.created",
+            "type": event.event_type,
             "messageId": event.message_id,
             "senderUserId": event.sender_user_id,
         });
@@ -220,6 +232,7 @@ mod tests {
         let event = TeamChatEvent {
             tenant_id: "tenant-a".into(),
             branch_id: "branch-a".into(),
+            event_type: "team_chat.created".into(),
             message_id: "message-a".into(),
             sender_user_id: "user-a".into(),
         };

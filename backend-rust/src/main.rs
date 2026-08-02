@@ -67,6 +67,29 @@ async fn main() -> Result<()> {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
                 interval.tick().await;
+                if services::staff_attendance_service::schedule_forgot_clock_out_reminders(
+                    &worker_state.db,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("forgot-clock-out reminder cycle failed");
+                }
+                if services::staff_notification_service::process_automation(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("staff notification automation cycle failed");
+                }
+            }
+        });
+    }
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                interval.tick().await;
                 if services::saas_service::escalate_due_tickets(&worker_state.db)
                     .await
                     .is_err()
@@ -135,6 +158,24 @@ async fn main() -> Result<()> {
                     .is_err()
                 {
                     tracing::warn!("AI transcript retention cycle failed");
+                }
+            }
+        });
+    }
+
+    {
+        let worker_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
+            loop {
+                interval.tick().await;
+                if services::staff_hrms_service::run_scheduled_operations_intelligence(
+                    &worker_state.db,
+                )
+                .await
+                .is_err()
+                {
+                    tracing::warn!("scheduled HRMS owner-summary cycle failed");
                 }
             }
         });

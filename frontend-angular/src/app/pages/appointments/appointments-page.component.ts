@@ -98,6 +98,7 @@ type AppointmentRecord = {
   bookingNumber: string;
   bookingGroupId: string;
   activityLines: AppointmentActivityLine[];
+  inventoryConsumptionStatus: string;
 };
 
 type AppointmentActivityLine = {
@@ -133,6 +134,7 @@ type AppointmentCard = {
   bookingGroupId: string;
   activityLines: AppointmentActivityLine[];
   detailRows: Array<{ label: string; value: string }>;
+  inventoryConsumptionStatus: string;
 };
 
 type CalendarColumn = {
@@ -182,6 +184,7 @@ type ResourceBooking = {
   service: string;
   time: string;
   status: string;
+  inventoryConsumptionStatus: string;
 };
 
 type StatusBoardColumn = {
@@ -2165,6 +2168,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           bookingNumber: item.bookingNumber,
           bookingGroupId: item.bookingGroupId,
           activityLines: item.activityLines,
+          inventoryConsumptionStatus: item.inventoryConsumptionStatus,
           detailRows: [],
         };
         card.detailRows = this.appointmentDetailRows(card);
@@ -2234,6 +2238,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       service: item.serviceIds.map((serviceId) => this.serviceName(serviceId)).filter(Boolean)[0] || 'Service',
       time: `${this.timeText(item.startAt)} - ${this.timeText(item.endAt)}`,
       status: this.statusLabel(item.status),
+      inventoryConsumptionStatus: item.inventoryConsumptionStatus,
     };
   }
 
@@ -2300,7 +2305,16 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       bookingNumber: this.firstText(item.bookingNo, item.booking_no, item.bookingNumber, item.booking_number, item.appointmentNo, item.appointment_no, item.invoiceNo, item.invoice_no, item.id),
       bookingGroupId: String(item.booking_group_id || item.bookingGroupId || ''),
       activityLines: this.activityLines(item),
+      inventoryConsumptionStatus: String(item.inventory_consumption_status || item.inventoryConsumptionStatus || 'not_required'),
     };
+  }
+
+  consumptionStatusLabel(status: string) {
+    if (status === 'missing_recipe') return 'Recipe missing';
+    if (status === 'pending_usage') return 'Usage required';
+    if (status === 'pending_approval') return 'Usage approval';
+    if (status === 'posted') return 'Usage posted';
+    return '';
   }
 
   private bookingGroupRows(card: AppointmentCard) {

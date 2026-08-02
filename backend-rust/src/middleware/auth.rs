@@ -19,7 +19,7 @@ use crate::{
     repositories::auth_repository::{self, AuthAuditInput},
     services::{
         auth_service::{self, AuthClaims},
-        entitlement_service, security_service,
+        entitlement_service, security_service, staff_advanced_service,
     },
     state::{AppSessionCacheEntry, AppState},
 };
@@ -47,6 +47,11 @@ pub async fn require_auth(
         return Err(AppError::unauthenticated("invalid token type"));
     }
 
+    let is_staff_app = req
+        .headers()
+        .get("x-staff-app")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == "1");
     let is_local_dev_admin = is_local_env(&state.settings.app_env)
         && state.settings.enable_dev_session
         && claims.sub == "dev-admin";
@@ -59,7 +64,7 @@ pub async fn require_auth(
             &claims.session_id,
             claims.branch_id.as_deref(),
         );
-        let used_cache = if !claims.session_id.is_empty() {
+        let used_cache = if should_use_auth_cache(&claims.session_id, is_staff_app) {
             apply_auth_cache(&state, &mut claims, req.uri().path(), &cache_key).await?
         } else {
             false
@@ -166,6 +171,31 @@ pub async fn require_auth(
     if let Some((reason, message)) = scope_header_mismatch(req.headers(), &claims) {
         audit_denied(&state, &claims, reason).await;
         return Err(AppError::forbidden(message));
+    }
+
+    if is_staff_app
+        && state.settings.staff_app_force_update_enabled
+        && !req
+            .uri()
+            .path()
+            .ends_with("/staff/self/mobile/release-policy")
+    {
+        let version = req
+            .headers()
+            .get("x-staff-app-version")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        if !staff_advanced_service::staff_app_version_is_supported(&state.settings, version) {
+            return Err(
+                AppError::forbidden("Staff App update is required").with_details(
+                    serde_json::json!({
+                        "forceUpdate":true,
+                        "minimumVersion":state.settings.staff_app_minimum_version.clone(),
+                        "updateUrl":state.settings.staff_app_update_url.clone()
+                    }),
+                ),
+            );
+        }
     }
 
     if request_mutates_data(req.method()) {
@@ -505,6 +535,10 @@ fn mfa_enrollment_required(path: &str, required: bool) -> bool {
     required && !path.contains("/auth/mfa/") && !path.ends_with("/auth/change-password")
 }
 
+fn should_use_auth_cache(session_id: &str, is_staff_app: bool) -> bool {
+    !session_id.is_empty() && !is_staff_app
+}
+
 fn scope_header_mismatch(
     headers: &axum::http::HeaderMap,
     claims: &AuthClaims,
@@ -576,7 +610,7 @@ mod tests {
 
     use super::{
         mask_value, masked_export_blocked, mfa_enrollment_required, password_change_required,
-        request_mutates_data, scope_header_mismatch,
+        request_mutates_data, scope_header_mismatch, should_use_auth_cache,
     };
     use crate::services::auth_service::AuthClaims;
 
@@ -619,6 +653,13 @@ mod tests {
         assert!(!request_mutates_data(&axum::http::Method::HEAD));
         assert!(request_mutates_data(&axum::http::Method::POST));
         assert!(request_mutates_data(&axum::http::Method::PATCH));
+    }
+
+    #[test]
+    fn phase1_staff_app_sessions_always_use_authoritative_revocation_state() {
+        assert!(!should_use_auth_cache("session-1", true));
+        assert!(should_use_auth_cache("session-1", false));
+        assert!(!should_use_auth_cache("", false));
     }
 
     #[test]

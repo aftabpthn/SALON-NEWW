@@ -7,9 +7,11 @@ use axum::{
     Extension, Json, Router,
 };
 use serde::Deserialize;
+use serde_json::json;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
+    repositories::auth_repository::{self, AuthAuditInput},
     routes::context::tenant_branch,
     services::{
         auth_service::AuthClaims,
@@ -58,6 +60,10 @@ pub fn router() -> Router<AppState> {
             get(list_shift_swaps).post(create_shift_swap),
         )
         .route("/staff/shift-swaps/:id/decision", post(decide_shift_swap))
+        .route(
+            "/staff/shift-swaps/:id/employee-decision",
+            post(decide_shift_swap_target),
+        )
         .route(
             "/staff/branch-transfers",
             get(list_branch_transfers).post(create_branch_transfer),
@@ -365,11 +371,23 @@ async fn list_shift_swaps(
 ) -> ApiResult<Vec<crate::repositories::staff_operations_repository::ShiftSwapRecord>> {
     ensure_staff_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = if is_staff_manager(&claims) {
+        String::new()
+    } else {
+        crate::services::staff_enterprise_service::self_staff_id(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+        )
+        .await?
+    };
     let rows = staff_operations_service::list_shift_swaps(
         &state.db,
         &tenant_id,
         &branch_id,
         query.status.as_deref().unwrap_or(""),
+        &staff_id,
     )
     .await?;
     Ok(Json(ApiResponse::ok(rows)))
@@ -383,14 +401,71 @@ async fn create_shift_swap(
 ) -> ApiResult<crate::repositories::staff_operations_repository::ShiftSwapRecord> {
     ensure_staff_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let source_staff_id = if is_staff_manager(&claims) {
+        String::new()
+    } else {
+        crate::services::staff_enterprise_service::self_staff_id(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+        )
+        .await?
+    };
     let row = staff_operations_service::create_shift_swap(
         &state.db,
         &tenant_id,
         &branch_id,
         &claims.sub,
+        &source_staff_id,
         payload,
     )
     .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.shift_swap.requested",
+        &row.id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn decide_shift_swap_target(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<DecisionRequest>,
+) -> ApiResult<crate::repositories::staff_operations_repository::ShiftSwapRecord> {
+    ensure_staff_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id = crate::services::staff_enterprise_service::self_staff_id(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+    )
+    .await?;
+    let row = staff_operations_service::decide_shift_swap_target(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.shift_swap.employee_decided",
+        &row.id,
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -412,6 +487,14 @@ async fn decide_shift_swap(
         payload,
     )
     .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.shift_swap.manager_decided",
+        &row.id,
+    )
+    .await;
     Ok(Json(ApiResponse::ok(row)))
 }
 
@@ -583,4 +666,29 @@ fn ensure_staff_manage(claims: &AuthClaims) -> Result<(), AppError> {
     } else {
         Err(AppError::forbidden("staff management access is restricted"))
     }
+}
+
+async fn audit(
+    state: &AppState,
+    claims: &AuthClaims,
+    branch_id: &str,
+    event_type: &str,
+    entity_id: &str,
+) {
+    let _ = auth_repository::audit(
+        &state.db,
+        AuthAuditInput {
+            tenant_id: &claims.tenant_id,
+            user_id: Some(&claims.sub),
+            session_id: (!claims.session_id.is_empty()).then_some(claims.session_id.as_str()),
+            branch_id: Some(branch_id),
+            identity: None,
+            event_type,
+            outcome: "success",
+            ip_address: None,
+            user_agent: None,
+            details: json!({"entityId":entity_id}),
+        },
+    )
+    .await;
 }

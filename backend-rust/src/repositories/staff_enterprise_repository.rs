@@ -875,6 +875,7 @@ pub async fn self_dashboard(
         'absenceDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'absenceDeductionPaise')::BIGINT,0),
         'fineDeductionPaise',COALESCE((i.calculation_json->'salaryRow'->>'fineDeductionPaise')::BIGINT,(i.calculation_json->'salaryRow'->>'ruleFinePaise')::BIGINT,0),
         'statutoryEmployeePaise',COALESCE((i.calculation_json->'salaryRow'->>'statutoryEmployeePaise')::BIGINT,0),
+        'statutoryEmployerPaise',COALESCE((i.calculation_json->'salaryRow'->>'statutoryEmployerPaise')::BIGINT,0),
         'advanceRecoveryPaise',COALESCE((i.calculation_json->'salaryRow'->>'advanceRecoveryPaise')::BIGINT,0),
         'adjustmentPaise',i.adjustment_paise,'grossPaise',i.gross_paise,'deductionsPaise',i.deductions_paise,'netPaise',i.net_paise,
         'paymentMethod',COALESCE(p.payment_method,''),'reference',COALESCE(p.reference,''),'paidAt',p.paid_at,'finalizedAt',r.finalized_at,
@@ -914,7 +915,29 @@ pub async fn list_tips(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<StaffTipRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT ps.id sale_id,ps.invoice_number,ps.staff_id,COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) staff_name,COALESCE(ps.business_date,ps.created_at::DATE) business_date,ps.tip_paise amount_paise,pi.payout_id FROM pos_sales ps JOIN staff s ON s.id=ps.staff_id AND s.tenant_id=ps.tenant_id AND s.branch_id=ps.branch_id LEFT JOIN staff_tip_payout_items pi ON pi.tenant_id=ps.tenant_id AND pi.branch_id=ps.branch_id AND pi.sale_id=ps.id WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.tip_paise>0 AND ps.status NOT IN ('draft','voided','cancelled','refunded') AND ($3='' OR ps.staff_id=$3) AND COALESCE(ps.business_date,ps.created_at::DATE) BETWEEN $4 AND $5 ORDER BY business_date DESC,ps.created_at DESC")
+    sqlx::query_as(r#"WITH allocated AS (
+      SELECT ps.id sale_id,ps.invoice_number,COALESCE(ps.business_date,ps.created_at::DATE) business_date,
+             ps.created_at,tip.staff_id,tip.amount_paise
+      FROM pos_sales ps
+      CROSS JOIN LATERAL (
+        SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+        FROM jsonb_array_elements(COALESCE(ps.tip_splits,'[]'::JSONB)) split
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))>0
+        UNION ALL
+        SELECT ps.staff_id,ps.tip_paise
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))=0
+      ) tip
+      WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.tip_paise>0
+        AND LOWER(ps.status) NOT IN ('draft','void','voided','cancelled','refunded')
+    )
+    SELECT a.sale_id,a.invoice_number,a.staff_id,
+           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) staff_name,
+           a.business_date,a.amount_paise,pi.payout_id
+    FROM allocated a
+    JOIN staff s ON s.tenant_id=$1 AND s.branch_id=$2 AND s.id=a.staff_id
+    LEFT JOIN staff_tip_payout_items pi ON pi.tenant_id=$1 AND pi.branch_id=$2 AND pi.sale_id=a.sale_id AND pi.staff_id=a.staff_id
+    WHERE ($3='' OR a.staff_id=$3) AND a.business_date BETWEEN $4 AND $5
+    ORDER BY a.business_date DESC,a.created_at DESC"#)
       .bind(tenant).bind(branch).bind(staff).bind(from).bind(to).fetch_all(db).await
 }
 
@@ -925,7 +948,27 @@ pub async fn tip_summary(
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<Vec<StaffTipSummary>, sqlx::Error> {
-    sqlx::query_as("SELECT ps.staff_id,COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) staff_name,COUNT(*)::BIGINT tip_count,COALESCE(SUM(ps.tip_paise),0)::BIGINT total_paise,COALESCE(SUM(CASE WHEN pi.payout_id IS NOT NULL THEN ps.tip_paise ELSE 0 END),0)::BIGINT paid_paise,COALESCE(SUM(CASE WHEN pi.payout_id IS NULL THEN ps.tip_paise ELSE 0 END),0)::BIGINT unpaid_paise FROM pos_sales ps JOIN staff s ON s.id=ps.staff_id AND s.tenant_id=ps.tenant_id AND s.branch_id=ps.branch_id LEFT JOIN staff_tip_payout_items pi ON pi.tenant_id=ps.tenant_id AND pi.branch_id=ps.branch_id AND pi.sale_id=ps.id WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.tip_paise>0 AND ps.status NOT IN ('draft','voided','cancelled','refunded') AND COALESCE(ps.business_date,ps.created_at::DATE) BETWEEN $3 AND $4 GROUP BY ps.staff_id,s.appointment_display_name,s.first_name,s.last_name ORDER BY staff_name")
+    sqlx::query_as(r#"WITH allocated AS (
+      SELECT ps.id sale_id,COALESCE(ps.business_date,ps.created_at::DATE) business_date,tip.staff_id,tip.amount_paise
+      FROM pos_sales ps
+      CROSS JOIN LATERAL (
+        SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+        FROM jsonb_array_elements(COALESCE(ps.tip_splits,'[]'::JSONB)) split
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))>0
+        UNION ALL SELECT ps.staff_id,ps.tip_paise
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))=0
+      ) tip
+      WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.tip_paise>0
+        AND LOWER(ps.status) NOT IN ('draft','void','voided','cancelled','refunded')
+    )
+    SELECT a.staff_id,COALESCE(NULLIF(s.appointment_display_name,''),TRIM(CONCAT_WS(' ',s.first_name,s.last_name))) staff_name,
+           COUNT(*)::BIGINT tip_count,COALESCE(SUM(a.amount_paise),0)::BIGINT total_paise,
+           COALESCE(SUM(CASE WHEN pi.payout_id IS NOT NULL THEN a.amount_paise ELSE 0 END),0)::BIGINT paid_paise,
+           COALESCE(SUM(CASE WHEN pi.payout_id IS NULL THEN a.amount_paise ELSE 0 END),0)::BIGINT unpaid_paise
+    FROM allocated a JOIN staff s ON s.tenant_id=$1 AND s.branch_id=$2 AND s.id=a.staff_id
+    LEFT JOIN staff_tip_payout_items pi ON pi.tenant_id=$1 AND pi.branch_id=$2 AND pi.sale_id=a.sale_id AND pi.staff_id=a.staff_id
+    WHERE a.business_date BETWEEN $3 AND $4
+    GROUP BY a.staff_id,s.appointment_display_name,s.first_name,s.last_name ORDER BY staff_name"#)
         .bind(tenant).bind(branch).bind(from).bind(to).fetch_all(db).await
 }
 
@@ -937,24 +980,220 @@ pub async fn record_tip_payout(
     from: NaiveDate,
     to: NaiveDate,
     reference: &str,
+    payout_method: &str,
+    status: &str,
+    provider_reference: &str,
     actor: &str,
     sale_ids: &[String],
 ) -> Result<String, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let rows:Vec<(String,i64)>=sqlx::query_as("SELECT ps.id,ps.tip_paise FROM pos_sales ps WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND ps.staff_id=$3 AND ps.id=ANY($4) AND ps.tip_paise>0 AND COALESCE(ps.business_date,ps.created_at::DATE) BETWEEN $5 AND $6 AND NOT EXISTS(SELECT 1 FROM staff_tip_payout_items i WHERE i.tenant_id=ps.tenant_id AND i.branch_id=ps.branch_id AND i.sale_id=ps.id) FOR UPDATE")
+    let rows:Vec<(String,i64)>=sqlx::query_as(r#"SELECT ps.id,tip.amount_paise
+      FROM pos_sales ps
+      CROSS JOIN LATERAL (
+        SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+        FROM jsonb_array_elements(COALESCE(ps.tip_splits,'[]'::JSONB)) split
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))>0
+        UNION ALL SELECT ps.staff_id,ps.tip_paise
+        WHERE jsonb_array_length(COALESCE(ps.tip_splits,'[]'::JSONB))=0
+      ) tip
+      WHERE ps.tenant_id=$1 AND ps.branch_id=$2 AND tip.staff_id=$3 AND ps.id=ANY($4)
+        AND tip.amount_paise>0 AND COALESCE(ps.business_date,ps.created_at::DATE) BETWEEN $5 AND $6
+        AND NOT EXISTS(SELECT 1 FROM staff_tip_payout_items i WHERE i.tenant_id=ps.tenant_id AND i.branch_id=ps.branch_id AND i.sale_id=ps.id AND i.staff_id=$3)
+      FOR UPDATE OF ps"#)
       .bind(tenant).bind(branch).bind(staff).bind(sale_ids).bind(from).bind(to).fetch_all(&mut *tx).await?;
     if rows.len() != sale_ids.len() {
         tx.rollback().await?;
         return Err(sqlx::Error::RowNotFound);
     }
     let total = rows.iter().map(|r| r.1).sum::<i64>();
-    let id:String=sqlx::query_scalar("INSERT INTO staff_tip_payouts(tenant_id,branch_id,staff_id,period_start,period_end,amount_paise,payout_reference,recorded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id")
-      .bind(tenant).bind(branch).bind(staff).bind(from).bind(to).bind(total).bind(reference).bind(actor).fetch_one(&mut *tx).await?;
+    let id:String=sqlx::query_scalar("INSERT INTO staff_tip_payouts(tenant_id,branch_id,staff_id,period_start,period_end,amount_paise,payout_reference,payout_method,status,provider_reference,reconciled_at,recorded_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CASE WHEN $9='paid' THEN NOW() END,$11) RETURNING id")
+      .bind(tenant).bind(branch).bind(staff).bind(from).bind(to).bind(total).bind(reference).bind(payout_method).bind(status).bind(provider_reference).bind(actor).fetch_one(&mut *tx).await?;
     for (sale, amount) in rows {
-        sqlx::query("INSERT INTO staff_tip_payout_items(tenant_id,branch_id,payout_id,sale_id,amount_paise) VALUES($1,$2,$3,$4,$5)").bind(tenant).bind(branch).bind(&id).bind(sale).bind(amount).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO staff_tip_payout_items(tenant_id,branch_id,payout_id,sale_id,staff_id,amount_paise) VALUES($1,$2,$3,$4,$5,$6)").bind(tenant).bind(branch).bind(&id).bind(sale).bind(staff).bind(amount).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(id)
+}
+
+pub async fn reconcile_tip_payout(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    expected_status: &str,
+    status: &str,
+    provider_reference: &str,
+    actor: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(r#"UPDATE staff_tip_payouts SET status=$5,
+      provider_reference=CASE WHEN $6='' THEN provider_reference ELSE $6 END,
+      reconciled_at=CASE WHEN $5='paid' THEN NOW() WHEN $5 IN ('processing','failed') THEN NULL ELSE reconciled_at END,
+      recorded_by=$7
+      WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status=$4 AND (
+        ($4='pending' AND $5 IN ('processing','paid','failed')) OR
+        ($4='processing' AND $5 IN ('paid','failed')) OR
+        ($4='failed' AND $5='processing') OR ($4='paid' AND $5='reversed') OR
+        ($4='reversed' AND $5='processing'))
+      RETURNING jsonb_build_object('id',id,'status',status,'payoutMethod',payout_method,
+        'payoutReference',payout_reference,'providerReference',provider_reference,'reconciledAt',reconciled_at)"#)
+      .bind(tenant).bind(branch).bind(id).bind(expected_status).bind(status).bind(provider_reference).bind(actor)
+      .fetch_one(db).await
+}
+
+pub async fn self_earnings_details(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    basis: &str,
+) -> Result<Value, sqlx::Error> {
+    let commissions = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'id',snap.id,'saleId',snap.sale_id,'saleLineId',snap.sale_line_id,
+        'invoiceNumber',sale.invoice_number,'itemType',snap.line_type,
+        'itemName',COALESCE(line.item_name,''),'basePaise',snap.base_paise,
+        'commissionPaise',snap.commission_paise,'ratePercent',snap.rate_percent,
+        'splitBps',snap.split_bps,'ruleName',snap.rule_name,
+        'saleDate',COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE),
+        'closeDate',(COALESCE(sale.finalized_at,sale.updated_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE,
+        'status',sale.status,'freeService',(snap.line_type='service' AND snap.base_paise=0),
+        'noShowOrCancellation',(LOWER(sale.status) IN ('no_show','no-show','cancelled','canceled'))
+      ) ORDER BY CASE WHEN $6='close_date' THEN COALESCE(sale.finalized_at,sale.updated_at,sale.created_at) ELSE sale.created_at END DESC,snap.id),'[]'::JSONB)
+      FROM pos_staff_commission_snapshots snap
+      JOIN pos_sales sale ON sale.tenant_id=snap.tenant_id AND sale.branch_id=snap.branch_id AND sale.id=snap.sale_id
+      LEFT JOIN pos_sale_lines line ON line.tenant_id=snap.tenant_id AND line.branch_id=snap.branch_id AND line.id=snap.sale_line_id
+      WHERE snap.tenant_id=$1 AND snap.branch_id=$2 AND snap.staff_id=$3
+        AND (CASE WHEN $6='close_date' THEN (COALESCE(sale.finalized_at,sale.updated_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE ELSE snap.business_date END) BETWEEN $4 AND $5
+    "#)
+    .bind(tenant).bind(branch).bind(staff).bind(from).bind(to).bind(basis)
+    .fetch_one(db).await?;
+
+    let calculated_up_to = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(r#"
+      SELECT MAX(snap.created_at)
+      FROM pos_staff_commission_snapshots snap
+      JOIN pos_sales sale ON sale.tenant_id=snap.tenant_id AND sale.branch_id=snap.branch_id AND sale.id=snap.sale_id
+      WHERE snap.tenant_id=$1 AND snap.branch_id=$2 AND snap.staff_id=$3
+        AND (CASE WHEN $6='close_date' THEN (COALESCE(sale.finalized_at,sale.updated_at,sale.created_at) AT TIME ZONE 'Asia/Kolkata')::DATE ELSE snap.business_date END) BETWEEN $4 AND $5
+    "#)
+    .bind(tenant).bind(branch).bind(staff).bind(from).bind(to).bind(basis)
+    .fetch_one(db).await?;
+
+    let tips = sqlx::query_scalar::<_, Value>(r#"
+      WITH allocated AS (
+        SELECT sale.id sale_id,sale.invoice_number,COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) business_date,
+               tip.staff_id,tip.amount_paise,
+               CASE WHEN NOT EXISTS(SELECT 1 FROM pos_payments p WHERE p.tenant_id=sale.tenant_id AND p.branch_id=sale.branch_id AND p.sale_id=sale.id) THEN 'other'
+                    WHEN NOT EXISTS(SELECT 1 FROM pos_payments p WHERE p.tenant_id=sale.tenant_id AND p.branch_id=sale.branch_id AND p.sale_id=sale.id AND LOWER(p.method)<>'cash') THEN 'cash'
+                    WHEN EXISTS(SELECT 1 FROM pos_payments p WHERE p.tenant_id=sale.tenant_id AND p.branch_id=sale.branch_id AND p.sale_id=sale.id AND LOWER(p.method)='cash') THEN 'mixed'
+                    ELSE 'card' END source
+        FROM pos_sales sale
+        CROSS JOIN LATERAL (
+          SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+          FROM jsonb_array_elements(COALESCE(sale.tip_splits,'[]'::JSONB)) split
+          WHERE jsonb_array_length(COALESCE(sale.tip_splits,'[]'::JSONB))>0
+          UNION ALL SELECT sale.staff_id,sale.tip_paise
+          WHERE jsonb_array_length(COALESCE(sale.tip_splits,'[]'::JSONB))=0
+        ) tip
+        WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND tip.staff_id=$3 AND tip.amount_paise>0
+          AND LOWER(sale.status) NOT IN ('draft','void','voided','refunded','cancelled')
+          AND COALESCE(sale.business_date,(sale.created_at AT TIME ZONE 'Asia/Kolkata')::DATE) BETWEEN $4 AND $5
+      )
+      SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'saleId',a.sale_id,'invoiceNumber',a.invoice_number,'businessDate',a.business_date,
+        'source',a.source,'amountPaise',a.amount_paise,'payoutId',item.payout_id,
+        'payoutStatus',COALESCE(payout.status,'pending'),'payoutMethod',COALESCE(payout.payout_method,''),
+        'payoutReference',COALESCE(payout.payout_reference,''),'reconciledAt',payout.reconciled_at
+      ) ORDER BY a.business_date DESC,a.sale_id),'[]'::JSONB)
+      FROM allocated a
+      LEFT JOIN staff_tip_payout_items item ON item.tenant_id=$1 AND item.branch_id=$2 AND item.sale_id=a.sale_id AND item.staff_id=a.staff_id
+      LEFT JOIN staff_tip_payouts payout ON payout.tenant_id=$1 AND payout.branch_id=$2 AND payout.id=item.payout_id
+    "#)
+    .bind(tenant).bind(branch).bind(staff).bind(from).bind(to)
+    .fetch_one(db).await?;
+
+    let declared_tips = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('sessionId',session.id,'businessDate',session.business_date,
+        'amountPaise',session.cash_tip_paise,'declaredAt',COALESCE(session.clock_out_at,session.updated_at,session.created_at))
+        ORDER BY session.business_date DESC,session.created_at DESC),'[]'::JSONB)
+      FROM staff_attendance_sessions session
+      WHERE session.tenant_id=$1 AND session.branch_id=$2 AND session.staff_id=$3
+        AND session.business_date BETWEEN $4 AND $5 AND session.cash_tip_paise>0 AND session.superseded_at IS NULL
+    "#).bind(tenant).bind(branch).bind(staff).bind(from).bind(to).fetch_one(db).await?;
+
+    let payouts = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'periodStart',period_start,'periodEnd',period_end,
+        'amountPaise',amount_paise,'payoutReference',payout_reference,'payoutMethod',payout_method,
+        'status',status,'providerReference',provider_reference,'recordedAt',recorded_at,'reconciledAt',reconciled_at)
+        ORDER BY recorded_at DESC),'[]'::JSONB)
+      FROM staff_tip_payouts WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
+        AND period_end>=$4 AND period_start<=$5
+    "#).bind(tenant).bind(branch).bind(staff).bind(from).bind(to).fetch_one(db).await?;
+
+    let disputes = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'saleId',sale_id,'payoutId',payout_id,
+        'reason',reason,'status',status,'resolutionNote',resolution_note,'createdAt',created_at,'resolvedAt',resolved_at)
+        ORDER BY created_at DESC),'[]'::JSONB)
+      FROM staff_tip_disputes WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3
+    "#).bind(tenant).bind(branch).bind(staff).fetch_one(db).await?;
+
+    let advances = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('id',advance.id,'requestedAmountPaise',advance.requested_amount_paise,
+        'approvedAmountPaise',advance.approved_amount_paise,'disbursedAmountPaise',advance.disbursed_amount_paise,
+        'outstandingPaise',advance.outstanding_paise,'installmentAmountPaise',advance.installment_amount_paise,
+        'status',advance.status,'recoveryStartPeriod',advance.recovery_start_period,'reason',advance.reason,
+        'disbursementMethod',advance.disbursement_method,'disbursementReference',advance.disbursement_reference,
+        'createdAt',advance.created_at,'disbursedAt',advance.disbursed_at,
+        'recoveries',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',recovery.id,'payrollRunId',recovery.payroll_run_id,
+          'periodStart',recovery.period_start,'periodEnd',recovery.period_end,'scheduledPaise',recovery.scheduled_paise,
+          'recoveredPaise',recovery.recovered_paise,'carriedForwardPaise',recovery.carried_forward_paise,
+          'outstandingAfterPaise',recovery.outstanding_after_paise,'applied',recovery.applied,'recordedAt',recovery.recorded_at)
+          ORDER BY recovery.period_end DESC) FROM staff_advance_recoveries recovery
+          WHERE recovery.tenant_id=advance.tenant_id AND recovery.branch_id=advance.branch_id AND recovery.advance_id=advance.id),'[]'::JSONB)
+      ) ORDER BY advance.created_at DESC),'[]'::JSONB)
+      FROM staff_salary_advances advance WHERE advance.tenant_id=$1 AND advance.branch_id=$2 AND advance.staff_id=$3
+    "#).bind(tenant).bind(branch).bind(staff).fetch_one(db).await?;
+
+    let reimbursements = sqlx::query_scalar::<_, Value>(r#"
+      SELECT COALESCE(jsonb_agg(jsonb_build_object('id',line.id,'voucherId',voucher.id,'voucherNumber',voucher.voucher_number,
+        'businessDate',voucher.business_date,'amountPaise',line.amount_paise,'status',voucher.status,
+        'paymentMode',voucher.payment_mode,'reference',COALESCE(voucher.reference_number,''),'remarks',COALESCE(line.remarks,''))
+        ORDER BY voucher.business_date DESC,line.line_number),'[]'::JSONB)
+      FROM outgoing_fund_lines line JOIN outgoing_fund_vouchers voucher
+        ON voucher.tenant_id=line.tenant_id AND voucher.branch_id=line.branch_id AND voucher.id=line.voucher_id
+      WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.reimbursement=TRUE
+        AND line.line_party_type='staff' AND line.line_party_id=$3 AND voucher.business_date BETWEEN $4 AND $5
+    "#).bind(tenant).bind(branch).bind(staff).bind(from).bind(to).fetch_one(db).await?;
+
+    Ok(
+        json!({"calculatedUpTo":calculated_up_to,"commissions":commissions,"tips":tips,"declaredTips":declared_tips,"tipPayouts":payouts,
+      "tipDisputes":disputes,"advances":advances,"reimbursements":reimbursements}),
+    )
+}
+
+pub async fn create_tip_dispute(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff: &str,
+    actor: &str,
+    sale_id: Option<&str>,
+    payout_id: Option<&str>,
+    reason: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(r#"INSERT INTO staff_tip_disputes(tenant_id,branch_id,staff_id,sale_id,payout_id,reason,requested_by)
+      SELECT $1,$2,$3,$4,$5,$6,$7
+      WHERE ($4::TEXT IS NULL OR EXISTS(
+          SELECT 1 FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.id=$4
+            AND (CASE WHEN jsonb_array_length(COALESCE(sale.tip_splits,'[]'::JSONB))=0 THEN sale.staff_id=$3
+              ELSE EXISTS(SELECT 1 FROM jsonb_array_elements(sale.tip_splits) split WHERE split->>'staffId'=$3) END)
+        ))
+        AND ($5::TEXT IS NULL OR EXISTS(SELECT 1 FROM staff_tip_payouts payout WHERE payout.tenant_id=$1 AND payout.branch_id=$2 AND payout.id=$5 AND payout.staff_id=$3))
+        AND NOT EXISTS(SELECT 1 FROM staff_tip_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2
+          AND dispute.staff_id=$3 AND dispute.status='pending' AND dispute.sale_id IS NOT DISTINCT FROM $4 AND dispute.payout_id IS NOT DISTINCT FROM $5)
+      RETURNING jsonb_build_object('id',id,'saleId',sale_id,'payoutId',payout_id,'reason',reason,'status',status,'createdAt',created_at)"#)
+      .bind(tenant).bind(branch).bind(staff).bind(sale_id).bind(payout_id).bind(reason).bind(actor).fetch_one(db).await
 }
 
 pub async fn list_statutory_rules(

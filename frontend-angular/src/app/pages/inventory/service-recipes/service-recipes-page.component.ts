@@ -23,8 +23,10 @@ type RecipeLine = {
   ownerApprovalPercent?: number;
   hitLimit?: number;
   usageProfile?: 'root_touch_up' | 'full_colour' | 'custom';
+  trackAutomatically?: boolean;
+  allowManualOverride?: boolean;
 };
-type RecipeDraftLine = { productId: string; productName: string; unit: string; usageProfile: 'root_touch_up' | 'full_colour' | 'custom'; minQty: number | null; standardQty: number | null; maxQty: number | null; wastePercent: number | null; ownerApprovalPercent: number | null; hitLimit: number | null };
+type RecipeDraftLine = { productId: string; productName: string; unit: string; usageProfile: 'root_touch_up' | 'full_colour' | 'custom'; minQty: number | null; standardQty: number | null; maxQty: number | null; wastePercent: number | null; ownerApprovalPercent: number | null; hitLimit: number | null; trackAutomatically: boolean; allowManualOverride: boolean };
 type Service = { id: string; name: string; category: string; pricePaise: number; active: boolean; productConsumption: RecipeLine[] };
 type Item = { id: string; name: string; sku: string; unit: string; unitCostPaise: number; active: boolean };
 type Usage = { id: string; inventoryItemId: string; itemName: string; serviceId?: string; serviceName: string; staffName: string; expectedQuantity: number; actualQuantity: number; varianceQuantity: number; approvalThresholdPercent: number; status: string; unit: string; createdAt: string };
@@ -142,13 +144,15 @@ export class ServiceRecipesPageComponent implements OnInit {
         minQty: this.savedNumber(line.minQty), standardQty: this.savedNumber(line.standardQty ?? line.quantity ?? line.qty),
         maxQty: this.savedNumber(line.maxQty), wastePercent: this.savedNumber(line.wastePercent),
         ownerApprovalPercent: this.savedNumber(line.ownerApprovalPercent), hitLimit: this.savedNumber(line.hitLimit),
+        trackAutomatically: line.trackAutomatically !== false,
+        allowManualOverride: line.allowManualOverride !== false,
       };
     });
     this.originalLineCount = this.lines.length;
     void this.loadRecipeVersions(service.id);
     if (clear) this.clearFeedback();
   }
-  addLine() { if (this.selectedServiceId) this.lines.push({ productId: '', productName: '', unit: '', usageProfile: 'custom', minQty: null, standardQty: null, maxQty: null, wastePercent: null, ownerApprovalPercent: null, hitLimit: null }); }
+  addLine() { if (this.selectedServiceId) this.lines.push({ productId: '', productName: '', unit: '', usageProfile: 'custom', minQty: null, standardQty: null, maxQty: null, wastePercent: null, ownerApprovalPercent: null, hitLimit: null, trackAutomatically: true, allowManualOverride: true }); }
   removeLine(index: number) { this.lines.splice(index, 1); }
   selectItem(line: RecipeDraftLine) {
     const item = this.items.find((row) => row.id === line.productId);
@@ -192,6 +196,8 @@ export class ServiceRecipesPageComponent implements OnInit {
       usageProfile: line.usageProfile,
       minQty: this.number(line.minQty), standardQty: this.number(line.standardQty), maxQty: this.number(line.maxQty),
       wastePercent: this.number(line.wastePercent), ownerApprovalPercent: this.number(line.ownerApprovalPercent), hitLimit: Math.trunc(this.number(line.hitLimit)),
+      trackAutomatically: line.trackAutomatically,
+      allowManualOverride: line.allowManualOverride,
     }));
     this.saving = true; this.clearFeedback();
     try {

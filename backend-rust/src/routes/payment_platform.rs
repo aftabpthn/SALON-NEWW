@@ -64,13 +64,13 @@ struct OnboardingPayload {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OperationPayload<T> {
-    provider: String,
-    idempotency_key: String,
-    sale_id: Option<String>,
-    client_id: Option<String>,
-    mfa_code: Option<String>,
-    request: T,
+pub(crate) struct OperationPayload<T> {
+    pub provider: String,
+    pub idempotency_key: String,
+    pub sale_id: Option<String>,
+    pub client_id: Option<String>,
+    pub mfa_code: Option<String>,
+    pub request: T,
 }
 
 #[derive(Deserialize)]
@@ -315,7 +315,7 @@ async fn set_provider_status(
     }))))
 }
 
-async fn create_payment(
+pub(crate) async fn create_payment(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,

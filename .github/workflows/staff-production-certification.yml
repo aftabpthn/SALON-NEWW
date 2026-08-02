@@ -1,0 +1,62 @@
+name: Staff production certification
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staff-production-certification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  row-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/verify-staff-parity-certification.mjs --write
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staff-phase14-row-matrix-${{ github.run_attempt }}
+          path: docs/evidence/staff-app-phase14-matrix.md
+          retention-days: 90
+
+  three-persona-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: frontend-angular
+    env:
+      E2E_STAFF_BASE_URL: ${{ vars.E2E_STAFF_BASE_URL }}
+      E2E_STAFF_PERSONAS: ${{ secrets.E2E_STAFF_PERSONAS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend-angular/package-lock.json
+      - name: Validate protected staging inputs
+        shell: bash
+        run: |
+          test -n "$E2E_STAFF_BASE_URL" || { echo "E2E_STAFF_BASE_URL is required"; exit 1; }
+          case "$E2E_STAFF_BASE_URL" in https://*) ;; *) echo "E2E_STAFF_BASE_URL must use HTTPS"; exit 1 ;; esac
+          test -n "$E2E_STAFF_PERSONAS" || { echo "E2E_STAFF_PERSONAS is required"; exit 1; }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright test --config=staff-app.playwright.config.ts
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staff-certification-browser-${{ github.run_attempt }}
+          path: |
+            frontend-angular/staff-app-playwright-report
+            frontend-angular/staff-app-test-results
+          if-no-files-found: ignore
+          retention-days: 30

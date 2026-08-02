@@ -449,6 +449,7 @@ pub struct PosSalePayload {
     pub reward_discount_paise: Option<i64>,
     pub tip_paise: Option<i64>,
     pub tip_total: Option<f64>,
+    pub tip_splits: Option<Value>,
     #[serde(alias = "roundTotal", alias = "round_total")]
     pub round_to_nearest_rupee: Option<bool>,
     pub status: Option<String>,
@@ -473,8 +474,8 @@ struct OfflineCheckoutRequest {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FinalizeRequest {
-    cash_drawer_till_id: Option<String>,
+pub(crate) struct FinalizeRequest {
+    pub cash_drawer_till_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -909,6 +910,7 @@ pub struct InvoiceLifecycleRequest {
     pub idempotency_key: Option<String>,
     pub lines: Option<Vec<InvoiceRefundLineInput>>,
     pub restock: Option<bool>,
+    pub evidence_reference: Option<String>,
     pub mfa_code: Option<String>,
     pub refund_method: Option<String>,
     pub cash_drawer_till_id: Option<String>,
@@ -997,6 +999,8 @@ struct InvoiceCorrectionRequestRow {
 pub struct InvoiceRefundLineInput {
     pub sale_line_id: String,
     pub quantity: i64,
+    pub restock_quantity: Option<i64>,
+    pub discard_quantity: Option<i64>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1193,7 +1197,7 @@ pub struct PosSaleResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PosSaleDetailsResponse {
+pub(crate) struct PosSaleDetailsResponse {
     pub sale: PosSaleResponse,
     pub invoice: PosSaleResponse,
     pub lines: Vec<PosSaleLineResponse>,
@@ -1603,7 +1607,7 @@ struct PosCheckoutResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PosInvoicePrintResponse {
+pub(crate) struct PosInvoicePrintResponse {
     pub invoice: PosSaleResponse,
     pub lines: Vec<PosSaleLineResponse>,
     pub payments: Vec<PosPaymentResponse>,
@@ -2126,6 +2130,7 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         reward_discount_paise: None,
         tip_paise: Some(sale.tip_paise),
         tip_total: None,
+        tip_splits: None,
         round_to_nearest_rupee: Some(sale.round_off_paise != 0),
         status: Some(sale.status.clone()),
         force_unpaid: None,
@@ -2632,7 +2637,7 @@ fn client_kpi_response(row: PosClientKpiRow) -> PosClientKpiResponse {
     }
 }
 
-async fn read_client_kpi(
+pub(crate) async fn read_client_kpi(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -3041,9 +3046,54 @@ fn normalize_staff_splits(raw: Value, fallback_staff_id: &str) -> Result<Value, 
     Ok(Value::Array(rows))
 }
 
+fn normalize_tip_splits(raw: Value, expected_tip_paise: i64) -> Result<Value, AppError> {
+    let Some(items) = raw.as_array() else {
+        return Err(AppError::validation("tipSplits must be an array"));
+    };
+    if items.len() > 25 {
+        return Err(AppError::validation("tipSplits supports up to 25 staff"));
+    }
+
+    let mut total = 0i64;
+    let mut staff_ids = HashSet::new();
+    let mut rows = Vec::with_capacity(items.len());
+    for item in items {
+        let staff_id = item
+            .get("staffId")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let amount_paise = item
+            .get("amountPaise")
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
+        if staff_id.is_empty() || amount_paise <= 0 {
+            return Err(AppError::validation(
+                "each tip split needs staffId and positive amountPaise",
+            ));
+        }
+        if !staff_ids.insert(staff_id) {
+            return Err(AppError::validation(
+                "tipSplits cannot contain duplicate staff",
+            ));
+        }
+        total = total
+            .checked_add(amount_paise)
+            .ok_or_else(|| AppError::validation("tip split total is too large"))?;
+        rows.push(serde_json::json!({
+            "staffId": staff_id,
+            "amountPaise": amount_paise
+        }));
+    }
+    if !rows.is_empty() && total != expected_tip_paise {
+        return Err(AppError::validation("tip split total must equal tipPaise"));
+    }
+    Ok(Value::Array(rows))
+}
+
 #[cfg(test)]
 mod staff_split_tests {
-    use super::normalize_staff_splits;
+    use super::{normalize_staff_splits, normalize_tip_splits};
 
     #[test]
     fn staff_splits_reject_duplicate_staff() {
@@ -3053,6 +3103,31 @@ mod staff_split_tests {
                 {"staffId": "staff-1", "percent": 50}
             ]),
             "",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn tip_splits_require_unique_staff_and_exact_total() {
+        assert!(normalize_tip_splits(
+            serde_json::json!([
+                {"staffId": "staff-1", "amountPaise": 400},
+                {"staffId": "staff-2", "amountPaise": 600}
+            ]),
+            1000,
+        )
+        .is_ok());
+        assert!(normalize_tip_splits(
+            serde_json::json!([
+                {"staffId": "staff-1", "amountPaise": 500},
+                {"staffId": "staff-1", "amountPaise": 500}
+            ]),
+            1000,
+        )
+        .is_err());
+        assert!(normalize_tip_splits(
+            serde_json::json!([{"staffId": "staff-1", "amountPaise": 999}]),
+            1000,
         )
         .is_err());
     }
@@ -4637,7 +4712,7 @@ async fn receive_pos_client_unpaid(
     Ok(Json(ApiResponse::ok(client_due_receipt_response(receipt)?)))
 }
 
-async fn get_pos_invoice_print(
+pub(crate) async fn get_pos_invoice_print(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -5444,7 +5519,7 @@ async fn list_pos_invoice_action_history(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
-async fn record_pos_invoice_action(
+pub(crate) async fn record_pos_invoice_action(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -7836,6 +7911,49 @@ pub(crate) async fn create_or_resume_appointment_draft(
     })
 }
 
+pub(crate) async fn append_appointment_draft_line(
+    state: &AppState,
+    headers: &HeaderMap,
+    sale_id: &str,
+    reference_id: &str,
+    line: PosSaleLineInput,
+    max_discount_paise: Option<i64>,
+) -> Result<AppointmentPosDraft, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(headers)?;
+    let sale = load_pos_sale(state, &tenant_id, &branch_id, sale_id).await?;
+    if sale.source != "appointment" || sale.reference_id != reference_id {
+        return Err(AppError::forbidden(
+            "invoice does not belong to this appointment",
+        ));
+    }
+    if !sale_is_line_editable(&sale.status) {
+        return Err(AppError::validation(
+            "only an appointment draft can receive recommendations",
+        ));
+    }
+    let mut drafts = read_line_drafts(state, &tenant_id, &branch_id, sale_id).await?;
+    drafts.push(LineDraft {
+        id: None,
+        input: line,
+    });
+    replace_invoice_lines(
+        state,
+        &tenant_id,
+        &branch_id,
+        &sale,
+        drafts,
+        "appointment.recommendation_added",
+        max_discount_paise,
+    )
+    .await?;
+    let saved = load_pos_sale(state, &tenant_id, &branch_id, sale_id).await?;
+    Ok(AppointmentPosDraft {
+        sale_id: saved.id,
+        total_paise: saved.total_paise,
+        status: saved.status,
+    })
+}
+
 pub(crate) async fn create_auto_renew_sale(
     state: &AppState,
     tenant_id: &str,
@@ -8594,7 +8712,7 @@ async fn persist_pos_sale(
     })
 }
 
-async fn replace_pos_invoice_draft(
+pub(crate) async fn replace_pos_invoice_draft(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -8630,6 +8748,19 @@ async fn replace_pos_invoice_draft(
         &gst_context,
         payload.round_to_nearest_rupee.unwrap_or(false),
     );
+    let existing_tip_splits = sqlx::query_scalar::<_, Value>(
+        "SELECT tip_splits FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load invoice tip splits"))?;
+    let tip_splits = normalize_tip_splits(
+        payload.tip_splits.take().unwrap_or(existing_tip_splits),
+        calculation.tip_paise,
+    )?;
     enforce_discount_rules(
         &state,
         &tenant_id,
@@ -8683,7 +8814,7 @@ async fn replace_pos_invoice_draft(
         .await
         .map_err(|_| AppError::internal("failed to start draft update transaction"))?;
     let sale = sqlx::query_as::<_, PosSaleRow>(
-        "UPDATE pos_sales SET client_id=$4, staff_id=$5, subtotal_paise=$6, bill_discount_paise=$7, coupon_code=$8, coupon_discount_paise=$9, discount_paise=$10, tax_paise=$11, tip_paise=$12, round_off_paise=$13, total_paise=$14, paid_paise=$15, source=$16, reference_id=$17, package_redemptions=$18::jsonb, seller_gstin=$19, seller_state_code=$20, buyer_gstin=$21, place_of_supply_state_code=$22, tax_mode=$23, reverse_charge=$24, cgst_paise=$25, sgst_paise=$26, igst_paise=$27, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='draft' RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number, subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise, tip_paise, round_off_paise, total_paise, paid_paise, status, source, reference_id, package_redemptions, invoice_type, finalized_at, created_at, updated_at",
+        "UPDATE pos_sales SET client_id=$4, staff_id=$5, subtotal_paise=$6, bill_discount_paise=$7, coupon_code=$8, coupon_discount_paise=$9, discount_paise=$10, tax_paise=$11, tip_paise=$12, round_off_paise=$13, total_paise=$14, paid_paise=$15, source=$16, reference_id=$17, package_redemptions=$18::jsonb, seller_gstin=$19, seller_state_code=$20, buyer_gstin=$21, place_of_supply_state_code=$22, tax_mode=$23, reverse_charge=$24, cgst_paise=$25, sgst_paise=$26, igst_paise=$27, tip_splits=$28::jsonb, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='draft' RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number, subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise, tip_paise, round_off_paise, total_paise, paid_paise, status, source, reference_id, package_redemptions, invoice_type, finalized_at, created_at, updated_at",
     )
     .bind(&id).bind(&tenant_id).bind(&branch_id).bind(client_id.trim()).bind(staff_id.trim())
     .bind(calculation.subtotal_paise).bind(calculation.bill_discount_paise).bind(&calculation.coupon_code).bind(calculation.coupon_discount_paise)
@@ -8692,6 +8823,7 @@ async fn replace_pos_invoice_draft(
     .bind(&gst_context.seller_gstin).bind(&gst_context.seller_state_code).bind(&gst_context.buyer_gstin)
     .bind(&gst_context.place_of_supply_state_code).bind(&gst_context.tax_mode).bind(gst_context.reverse_charge)
     .bind(calculation.cgst_paise).bind(calculation.sgst_paise).bind(calculation.igst_paise)
+    .bind(&tip_splits)
     .fetch_optional(&mut *tx).await.map_err(|_| AppError::internal("failed to update held invoice"))?
     .ok_or_else(|| AppError::not_found("held invoice was not found"))?;
 
@@ -11399,7 +11531,7 @@ async fn apply_pos_payment_effects(
     Ok((new_paid, new_status, appointment_events))
 }
 
-async fn finalize_pos_invoice(
+pub(crate) async fn finalize_pos_invoice(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -11698,7 +11830,7 @@ async fn finalize_pos_invoice(
     })))
 }
 
-async fn void_pos_invoice(
+pub(crate) async fn void_pos_invoice(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -11778,7 +11910,8 @@ struct ResolvedRefundLine {
     item_id: String,
     quantity: i64,
     amount_paise: i64,
-    restock: bool,
+    restock_quantity: i64,
+    discard_quantity: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -11918,13 +12051,21 @@ async fn resolve_refund_lines(
             remaining_quantity,
             returned_amount,
         );
+        let (restock_quantity, discard_quantity) = refund_disposition(
+            &line_type,
+            requested.quantity,
+            requested.restock_quantity,
+            requested.discard_quantity,
+            restock_requested,
+        )?;
         resolved.push(ResolvedRefundLine {
             sale_line_id,
             line_type: line_type.clone(),
             item_id,
             quantity: requested.quantity,
             amount_paise,
-            restock: restock_requested && line_type == "product",
+            restock_quantity,
+            discard_quantity,
         });
     }
     Ok(resolved)
@@ -11942,6 +12083,30 @@ fn proportional_refund_amount(
     } else {
         line_total_paise.saturating_mul(refund_quantity) / sold_quantity
     }
+}
+
+fn refund_disposition(
+    line_type: &str,
+    quantity: i64,
+    restock_quantity: Option<i64>,
+    discard_quantity: Option<i64>,
+    legacy_restock: bool,
+) -> Result<(i64, i64), AppError> {
+    let split = match (restock_quantity, discard_quantity) {
+        (None, None) if legacy_restock && line_type == "product" => (quantity, 0),
+        (None, None) => (0, quantity),
+        (restock, discard) => (restock.unwrap_or(0), discard.unwrap_or(0)),
+    };
+    if split.0 < 0
+        || split.1 < 0
+        || split.0.saturating_add(split.1) != quantity
+        || (line_type != "product" && split.0 != 0)
+    {
+        return Err(AppError::validation(
+            "each return line must split its full quantity into valid restock and discard quantities",
+        ));
+    }
+    Ok(split)
 }
 
 async fn razorpay_refund_candidates(
@@ -11986,7 +12151,8 @@ async fn create_refund_credit_note(
 #[cfg(test)]
 mod item_return_tests {
     use super::{
-        plan_manual_refund_allocations, proportional_refund_amount, RefundPaymentAvailability,
+        plan_manual_refund_allocations, proportional_refund_amount, refund_disposition,
+        RefundPaymentAvailability,
     };
 
     #[test]
@@ -12017,9 +12183,23 @@ mod item_return_tests {
         assert_eq!(allocations[0].pos_payment_id, "cash-payment");
         assert_eq!(allocations[0].amount_paise, 2_000);
     }
+
+    #[test]
+    fn return_disposition_requires_a_complete_product_split() {
+        assert_eq!(
+            refund_disposition("product", 4, Some(3), Some(1), false).unwrap(),
+            (3, 1)
+        );
+        assert!(refund_disposition("product", 4, Some(2), Some(1), false).is_err());
+        assert!(refund_disposition("service", 1, Some(1), Some(0), false).is_err());
+        assert_eq!(
+            refund_disposition("product", 2, None, None, true).unwrap(),
+            (2, 0)
+        );
+    }
 }
 
-async fn refund_pos_invoice(
+pub(crate) async fn refund_pos_invoice(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -12063,12 +12243,51 @@ async fn refund_pos_invoice(
         .to_string();
     let requested_lines = payload.lines.unwrap_or_default();
     let restock_requested = payload.restock.unwrap_or(false);
+    let evidence_reference = payload
+        .evidence_reference
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if !requested_lines.is_empty() && evidence_reference.is_empty() {
+        return Err(AppError::validation(
+            "evidenceReference is required for item returns",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start refund transaction"))?;
     let sale = load_sale_for_update(&mut tx, &tenant_id, &branch_id, &id).await?;
+    let inventory_policy = crate::repositories::purchase_repository::inventory_receipt_policy(
+        &mut tx, &tenant_id, &branch_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load inventory lock policy"))?;
+    let inventory_date = current_business_date();
+    if inventory_policy
+        .financial_lock_date
+        .is_some_and(|lock| inventory_date <= lock)
+    {
+        return Err(AppError::conflict(
+            "return date is inside the inventory financial lock period",
+        ));
+    }
+    let sale_business_date = sqlx::query_scalar::<_, NaiveDate>(
+        "SELECT COALESCE(business_date,created_at::DATE) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_one(&mut *tx).await
+    .map_err(|_| AppError::internal("failed to load invoice business date"))?;
+    if inventory_policy.edit_lock_days > 0
+        && inventory_date
+            .signed_duration_since(sale_business_date)
+            .num_days()
+            > i64::from(inventory_policy.edit_lock_days)
+    {
+        return Err(AppError::conflict(
+            "invoice is outside the inventory edit window; post an approved correction entry",
+        ));
+    }
     if matches!(sale.status.as_str(), "draft" | "voided" | "cancelled") || sale.paid_paise <= 0 {
         return Err(AppError::validation(
             "only paid or partially paid invoices can be refunded",
@@ -12246,10 +12465,10 @@ async fn refund_pos_invoice(
             .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save refund payment allocation"))?;
     }
     for line in &refund_lines {
-        sqlx::query("INSERT INTO pos_invoice_refund_lines (tenant_id, branch_id, refund_id, sale_id, sale_line_id, quantity, amount_paise, restock_requested) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(&tenant_id).bind(&branch_id).bind(&refund_id).bind(&id).bind(&line.sale_line_id).bind(line.quantity).bind(line.amount_paise).bind(line.restock)
+        sqlx::query("INSERT INTO pos_invoice_refund_lines (tenant_id, branch_id, refund_id, sale_id, sale_line_id, quantity, amount_paise, restock_requested, restock_quantity, discard_quantity, evidence_reference) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+            .bind(&tenant_id).bind(&branch_id).bind(&refund_id).bind(&id).bind(&line.sale_line_id).bind(line.quantity).bind(line.amount_paise).bind(line.restock_quantity>0).bind(line.restock_quantity).bind(line.discard_quantity).bind(&evidence_reference)
             .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save returned invoice line"))?;
-        if line.restock {
+        if line.restock_quantity > 0 {
             inventory_adjustment_service::restock_pos_product_return(
                 &mut tx,
                 &tenant_id,
@@ -12259,7 +12478,8 @@ async fn refund_pos_invoice(
                 &line.sale_line_id,
                 &line.line_type,
                 &line.item_id,
-                line.quantity,
+                line.restock_quantity,
+                &claims.sub,
             )
             .await?;
         }
@@ -12307,7 +12527,7 @@ async fn refund_pos_invoice(
     accounting_service::post_refund(&mut tx, &tenant_id, &branch_id, &refund_id, &settlements)
         .await?;
     reverse_happy_hour_lock(&mut tx, &tenant_id, &branch_id, &id, amount).await?;
-    insert_pos_event_with_actor(&mut tx, &tenant_id, &branch_id, &id, &claims.sub, "invoice.refunded", serde_json::json!({ "invoiceNumber": sale.invoice_number, "amountPaise": amount, "creditNoteNumber": credit_note_number, "gatewayRefundPaise": amount.saturating_sub(gateway_remaining), "manualSettlementPaise": gateway_remaining, "returnedLineCount": refund_lines.len(), "restockedLineCount": refund_lines.iter().filter(|line| line.restock).count(), "status": next_status, "reason": reason })).await?;
+    insert_pos_event_with_actor(&mut tx, &tenant_id, &branch_id, &id, &claims.sub, "invoice.refunded", serde_json::json!({ "invoiceNumber": sale.invoice_number, "amountPaise": amount, "creditNoteNumber": credit_note_number, "gatewayRefundPaise": amount.saturating_sub(gateway_remaining), "manualSettlementPaise": gateway_remaining, "returnedLineCount": refund_lines.len(), "restockedQuantity": refund_lines.iter().map(|line|line.restock_quantity).sum::<i64>(), "discardedQuantity": refund_lines.iter().map(|line|line.discard_quantity).sum::<i64>(), "evidenceReference": evidence_reference, "status": next_status, "reason": reason })).await?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice refund"))?;
@@ -13262,7 +13482,7 @@ fn lifecycle_amount(
     Ok(amount)
 }
 
-async fn load_pos_sale_details(
+pub(crate) async fn load_pos_sale_details(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,

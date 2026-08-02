@@ -1,0 +1,2178 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "commit": "",
+    "backendImage": "",
+    "staffAppVersion": "",
+    "environment": "",
+    "deployedAt": ""
+  },
+  "personas": {
+    "restrictedProvider": {
+      "status": "PENDING",
+      "evidence": ""
+    },
+    "seniorProviderFrontDesk": {
+      "status": "PENDING",
+      "evidence": ""
+    },
+    "manager": {
+      "status": "PENDING",
+      "evidence": ""
+    }
+  },
+  "defaults": {
+    "api": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "database": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "permission": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "browser": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "android": {
+      "status": "BLOCKED",
+      "evidence": "Signed real-device evidence is not available.",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "ios": {
+      "status": "BLOCKED",
+      "evidence": "Signed real-device evidence is not available.",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "offline": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "errorRetry": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    },
+    "audit": {
+      "status": "PENDING",
+      "evidence": "",
+      "verifiedAt": "",
+      "verifier": ""
+    }
+  },
+  "rows": {
+    "A01": {
+      "workflow": "Employer/account and employee sign-in",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A01: `/auth/csrf`, `/auth/login`, tenant header, `staff-login.page.ts`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A02": {
+      "workflow": "Secure token refresh without exposing access token to durable browser storage",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A02: `/auth/refresh`, in-memory access token, credentialed refresh flow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A03": {
+      "workflow": "Logout and session invalidation",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A03: `/auth/logout`, active session/device list, self-revoke, Staff App authoritative session check, termination refresh-session revocation and offline queue purge",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A04": {
+      "workflow": "Restore session and employee identity",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A04: `/auth/me`, `/staff/self/dashboard`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A05": {
+      "workflow": "Per-screen and per-action mobile permissions",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A05: `staffPermissionGuard`, granular `staff.app.*`, Rust fail-closed mapping",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A06": {
+      "workflow": "Employee-only self-scope",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A06: JWT-linked staff profile, tenant/branch/self-scoped Rust handlers",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A07": {
+      "workflow": "Device biometric/PIN application unlock",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A07: WebAuthn register/login plus server-hashed per-device PIN with retry lockout; no PIN/token/password is stored in browser storage",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A08": {
+      "workflow": "Change password",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A08: `/auth/change-password`, Staff Settings",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A09": {
+      "workflow": "MFA enrollment and use",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A09: Existing setup/enable/challenge flow preserved; Staff App enrollment and challenge remain part of the three-role live certification gate",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A10": {
+      "workflow": "Edit employee phone/email/profile image",
+      "registerStatus": "SOURCE READY; PROVIDER/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A10: Self-scoped contact edit, real email/SMS verification challenge, JPG/PNG validation, production malware scan, secure image read/upload and automatic reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A11": {
+      "workflow": "Switch authorized center/branch in app",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A11: Backend-authoritative `/auth/switch-branch`, active assignment validation, optional preferred branch and session/context reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A12": {
+      "workflow": "Automatic logout/inactivity policy",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A12: Branch security policy drives PIN lock with logout grace or immediate logout; security recovery actions remain available",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A13": {
+      "workflow": "Geofence-limited application access",
+      "registerStatus": "SOURCE READY; GPS/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A13: Whole Staff App supports full access, read-only outside, blocked outside, configurable radius and case-insensitive role exceptions",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A14": {
+      "workflow": "Guest and financial field masking",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A14: Business response has fine-grained name/invoice/discount/GST/value/commission permissions",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A15": {
+      "workflow": "Mobile-first loading, retry, empty, denied, and API-error states",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A15: Shared page state plus loading-first dashboard architecture",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "A16": {
+      "workflow": "Configurable workspace/preferences",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row A16: Persisted compact/time/date preferences, locale selection aligned with existing English/Hindi/Hinglish catalog codes, calendar-sync preference and authorized branch selection",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B01": {
+      "workflow": "Useful employee dashboard",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B01: `/staff/self/dashboard`, `staff-dashboard.page.ts`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B02": {
+      "workflow": "Load core dashboard before optional metrics/preferences",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B02: Core-first render with background hydration",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B03": {
+      "workflow": "View own weekly schedule and time sheet",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B03: Roster and Calendar pages, `/staff/self/roster`, `/staff/self/calendar`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B04": {
+      "workflow": "Employee adds own available schedule",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B04: `/staff-self/calendar` validates self-scope, permission, future date, overlap and PostgreSQL persistence; Roster auto-reloads",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B05": {
+      "workflow": "Reschedule/update assigned shift",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B05: `/staff-self/calendar/:id`, optimistic version and reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B06": {
+      "workflow": "Accept/reject shift or substitution request",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B06: Self-scoped employee decision inbox, accept/reject reason, optimistic version and manager-only final approval are wired",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B07": {
+      "workflow": "Sync work calendar to iCal/Google/Outlook",
+      "registerStatus": "SOURCE READY; CLIENT/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B07: Revocable hashed private calendar-feed token and standards-based ICS response exposed in Roster",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B08": {
+      "workflow": "Clock in and clock out",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B08: `/staff-attendance/clock-in`, `/clock-out`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B09": {
+      "workflow": "Start and end breaks",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B09: `/staff-attendance/break-start`, `/break-end`, transport-only offline queue",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B10": {
+      "workflow": "Biometric attendance with physical identity and liveness",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "WebAuthn attendance is correctly labelled passkey verification; true face/fingerprint gateway, consent and retention are separate, while real provider/device certification remains unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B10: WebAuthn attendance is correctly labelled passkey verification; true face/fingerprint gateway, consent and retention are separate, while real provider/device certification remains unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B11": {
+      "workflow": "Attendance history and worked/overtime breakdown",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B11: Self-scoped attendance detail and 30-day UI",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B12": {
+      "workflow": "Early departure request and status",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B12: `/staff-attendance/early-departure-requests`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B13": {
+      "workflow": "Request correction to past clock-in/out with work task and reason",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B13: Staff App self-request, pending history, manager approve/reject with reason, optimistic version, immutable superseded sessions and audit",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B14": {
+      "workflow": "Declare cash tips during clock-out",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B14: Staff App rupee input posts integer paise; session and daily attendance records persist declared tips",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B15": {
+      "workflow": "View leave balances",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B15: `/staff-leave/balances` self-scope",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B16": {
+      "workflow": "Request leave",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B16: `/staff-leave/requests`, offline transport queue, idempotency",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B17": {
+      "workflow": "Withdraw pending leave",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B17: `/staff-leave/requests/:id/withdraw`, optimistic version",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B18": {
+      "workflow": "Receive approval/rejection status and notification",
+      "registerStatus": "SOURCE READY; PUSH/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B18: Persisted approval status and notification automation are wired; provider delivery proof remains deployment UAT",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B19": {
+      "workflow": "Weekly off, holiday, special leave, half day, late and absent states",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B19: Migration/status model and attendance services support these states",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B20": {
+      "workflow": "Multiple shifts and clock sessions per business date",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B20: Two shift slots remain in the schedule contract; attendance sessions preserve every clock-in/out and aggregate daily worked/break/tip totals",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B21": {
+      "workflow": "Work task selection and approved task pay rate",
+      "registerStatus": "SOURCE READY; PAYROLL UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B21: Active staff work-task rates are selected at clock-in and snapshotted on the immutable attendance session for payroll input",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B22": {
+      "workflow": "Schedule room/job/role, manager editing, overwrite prevention and change notice",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B22: Manager schedule carries associations, locks current rows, rejects stale versions and queues staff notifications",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B23": {
+      "workflow": "Scheduled/unscheduled clock policy, early threshold, break warning and forgot-clock reminder",
+      "registerStatus": "SOURCE READY; REMINDER DELIVERY UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B23: Attendance clock options are policy-backed and enforce block/warn/early thresholds; mandatory-break and forgot-clock controls persist in PostgreSQL",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B24": {
+      "workflow": "Overnight attendance and payroll lock protection",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B24: Business date remains explicit across midnight; clock/correction service rejects locked payroll periods",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B25": {
+      "workflow": "Full-day and partial-day leave with per-day times",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B25: Leave request-day rows store exact time windows and requested fractions; appointment availability blocks only overlapping partial leave",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B26": {
+      "workflow": "Cancel approved leave and restore appointment availability",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B26: Exact leave-linked future schedule backup/restore prevents unrelated schedule deletion; cancellation is versioned and audited",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B27": {
+      "workflow": "Unified balance, accrual, negative/cap/carry configuration and manager on behalf",
+      "registerStatus": "SOURCE READY; POLICY/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B27: Same-user multi-branch balance, accrual ledger, limits and manager-scoped request contract are database-backed",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "B28": {
+      "workflow": "Personal block-out create/edit/delete",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row B28: Versioned, self/manager-scoped block-outs are available through Roster and schedule APIs",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C01": {
+      "workflow": "View own today/upcoming/live/completed/cancelled appointments",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C01: Dashboard plus Staff App appointment views",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C02": {
+      "workflow": "Search and filter full self appointment history",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C02: `/staff-self/business` filters and pagination",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C03": {
+      "workflow": "View appointment client, services, chair, duration, and history",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C03: Appointment details drawer and enterprise timeline",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C04": {
+      "workflow": "Reschedule own appointment with validation",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C04: `/staff-self/appointments/:id/reschedule` and automatic reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C05": {
+      "workflow": "Cancel own appointment with reason",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C05: `/staff-self/appointments/:id/cancel` and automatic reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C06": {
+      "workflow": "Book a new appointment from provider calendar",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C06: Existing client/service/resource contracts feed the Staff Appointment Book; transactional batch save validates availability and refreshes automatically",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C07": {
+      "workflow": "Rebook a completed appointment",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C07: Appointment drawer reuses the existing booking editor for same-provider or another-provider rebooking and refreshes the real Appointment Book after save",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C08": {
+      "workflow": "Move appointment by drag/list action",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C08: Provider/date/time/duration/room move is complete through the list/drawer action with authoritative conflict validation and reload; drag is interaction polish, not a separate business workflow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C09": {
+      "workflow": "Check in guest",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C09: Permission-scoped Staff App status action persists `arrived`, audits and reloads",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C10": {
+      "workflow": "Start, complete, undo, confirm, or no-show service",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C10: Confirm, check-in, reasoned no-show, start, pause/resume and complete are wired; completion is blocked for missing manual recipe usage or pending approval",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C11": {
+      "workflow": "Edit service duration",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C11: Booking drawer edits exact start/end duration with conflict validation and optimistic version protection",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C12": {
+      "workflow": "Add/remove service and zero-duration add-on",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C12: Multi-line service/add-on editor uses real service variants/add-ons, authoritative quote and transactional batch save",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C13": {
+      "workflow": "Group/parallel appointment handling",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C13: Staff App supports couple, 2–6 guest group, large-group and parallel/manual-time booking through the transactional batch engine",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C14": {
+      "workflow": "Create/manage provider block-out time",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C14: Versioned provider block-out API and Staff App Roster create/delete workflow auto-reload real data",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C15": {
+      "workflow": "View permission-masked guest profile and indicators",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C15: Appointment-scoped Guest 360 returns masked contact by permission plus visits, benefits, activity, occasions and operational alerts",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C16": {
+      "workflow": "View/add guest and appointment notes",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C16: Visibility-scoped assigned/branch/management notes persist with appointment association and audit history",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C17": {
+      "workflow": "Open, fill, sign, and submit guest/service forms",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C17: One versioned engine supports guest/service/membership/package/tag scope, conditional fields, drafts, signatures, immutable final evidence, corrections, expiry and review",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C18": {
+      "workflow": "Capture before/after photos with consent",
+      "registerStatus": "SOURCE READY; DEVICE/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C18: Camera/gallery upload validates type/magic/size, requires consent, scans files and streams private no-store content without public URLs",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C19": {
+      "workflow": "Record consultation/clinical notes",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C19: Optimistic-version clinical allergies/preferences editor is permission-scoped and audited",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C20": {
+      "workflow": "View prior service and contraindication/allergy alerts",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C20: Existing Client 360 service history and protected clinical profile now render in the appointment drawer",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C21": {
+      "workflow": "Track service consumables against appointment",
+      "registerStatus": "SOURCE READY; DATABASE/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C21: Service workspace records planned versus actual and wasted quantity through `/staff-self/business/product-usage`; appointment, service, staff and client remain ledger-attributed and the frontend never changes stock directly",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C22": {
+      "workflow": "FEFO/recipe/variance/approval behavior for consumption",
+      "registerStatus": "SOURCE READY; DATABASE/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C22: Transactional inventory service validates selected current FEFO batch, stock, expiry, waste reason and recipe limits; abnormal usage enters maker-checker review and the idempotency key prevents a second movement",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C23": {
+      "workflow": "Upsell retail item or service add-on",
+      "registerStatus": "SOURCE READY; AUTHENTICATED POS UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C23: Barcode/search uses real available retail stock and configured selling price; product, service, membership and package recommendations append seller-attributed lines to the existing appointment POS draft without automatic discount, sale or payment",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C40": {
+      "workflow": "Service workspace summary and handoff",
+      "registerStatus": "SOURCE READY; DEVICE/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C40: Existing appointment drawer now shows guest risk/consent context, selected services/add-ons, provider instructions, room/equipment, execution/forms state, usage history, checkout draft and audited handoff notes",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C28": {
+      "workflow": "My Day plus own 1/3/7-day calendar",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C28: Existing My Day queue and API-backed 1/3/7-day own calendar with past/future navigation",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C29": {
+      "workflow": "Read team calendar and room/equipment calendar",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C29: Separate explicit-deny-aware team read permission; one-day provider/resource views show schedules and non-working time",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C30": {
+      "workflow": "Provider-specific request, pricing and eligibility review",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C30: Any/preferred/required provider request, provider quote, conflict check and membership/package/wallet visibility before save",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C31": {
+      "workflow": "Idempotent, audited, optimistic booking mutation",
+      "registerStatus": "SOURCE READY; DATABASE/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C31: PostgreSQL advisory serialization, durable mutation key replay, stale-version rejection, audit activity and automatic reload",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C32": {
+      "workflow": "Permission-aware team edit and price override",
+      "registerStatus": "SOURCE READY; DENIAL/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C32: Self/team mutation boundaries are separate; manual price requires exact permission and a persisted audit reason",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C33": {
+      "workflow": "Couples, 2-6 guest groups, large groups and day packages",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C33: Existing atomic batch engine now accepts per-line guests, typed group shape, validated/persisted real day-package ID and service membership, host/group notes and durable booking-group membership",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C34": {
+      "workflow": "Gaps, parallel, segmented, recurring, surprise and virtual appointments",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C34: Per-service flow metadata, manual time windows, 1-52 recurrence validation, surprise flag and validated HTTPS meeting link persist in PostgreSQL",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C35": {
+      "workflow": "Waitlist, arrival queue and online reschedule/cancellation inbox",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C35: Team-scoped waitlist conversion, arrived/waiting start action, and approve/reject inbox reuse the booking/reschedule/cancel engines",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C36": {
+      "workflow": "Provider substitution, capacity/resource conflict and block time",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C36: Manager handoff uses authoritative provider availability; booking reuses staff/resource/blackout conflicts; Appointment Book reuses schedule block-outs",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C37": {
+      "workflow": "Start, pause, resume and complete individual/group service",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C37: Durable execution state/timestamps/pause accumulation with self/team scope and immutable appointment activity",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C38": {
+      "workflow": "Rebook, adjacent visits, activity, forms and consumables",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C38: Same/other-provider rebook, immediate visits, full activity ledger and database-derived form/consumable indicators are visible in the existing detail drawer",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C39": {
+      "workflow": "Checkout-ready handoff without page refresh",
+      "registerStatus": "SOURCE READY; AUTHENTICATED POS UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C39: Existing canonical appointment/group POS draft is created idempotently, appointments complete, and Staff App auto-refetches through the shared update event",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C24": {
+      "workflow": "View closed invoice and receipt",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C24: Self-scoped appointment checkout returns the canonical POS invoice, lines, payments, printable HTML and audited delivery actions",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C25": {
+      "workflow": "Launch POS and collect payment",
+      "registerStatus": "SOURCE READY; PROVIDER/AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C25: Existing Appointment drawer opens the canonical invoice and supports cash/manual methods, provider card token, India UPI link, partial/split payment, durable multi-staff tip allocation, finalize, receipt, refund and void",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C26": {
+      "workflow": "Split/group bill and apply eligible benefits",
+      "registerStatus": "SOURCE READY; DATABASE/AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C26: Group appointment reference is preserved; server validates and consumes package/membership credits and blocks pricing edits after payment",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C27": {
+      "workflow": "Tap/contactless payment from staff device",
+      "registerStatus": "SOURCE READY; REAL TERMINAL/TAP DEVICE EXTERNAL BLOCKED",
+      "businessReason": "Staff App accepts only an opaque token from the approved provider/device SDK; raw card/UPI manual recording is rejected and duplicate protection is provider/idempotency based",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C27: Staff App accepts only an opaque token from the approved provider/device SDK; raw card/UPI manual recording is rejected and duplicate protection is provider/idempotency based",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C41": {
+      "workflow": "Product/service/liability sale and no-show fee",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C41: Existing product/service/membership/package adapters are reused; gift/prepaid card finalization issues the real liability ledger and permission-gated no-show fee uses the existing payment-link engine",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C42": {
+      "workflow": "Drawer/session, cash movement, blind close and manager approval",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C42: Existing cash-drawer engine is exposed through explicit-deny-aware Staff App wrappers and the Business screen never reveals expected cash before close",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "C43": {
+      "workflow": "Provider settlement reconciliation",
+      "registerStatus": "SOURCE READY; PROVIDER STATEMENT UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row C43: Existing Razorpay/Cashfree/PhonePe reconciliation, MFA and review workflow is exposed to register approvers without duplicating settlement logic",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D01": {
+      "workflow": "View earnings and commission summary",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D01: Payroll and Business pages use real dashboard/business data",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D02": {
+      "workflow": "Invoice-level commission explanation",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D02: `/staff-self/earnings` returns sale, invoice, item, rule, base and exact-paise commission detail",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D03": {
+      "workflow": "Smart same-day commission refresh and calculated-through timestamp",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D03: Safe GET refresh preserves the selected period/basis; `calculatedUpTo` is the latest persisted commission-snapshot timestamp, never request time",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D04": {
+      "workflow": "Service, product, membership, package, free-service, cancellation, and no-show commissions",
+      "registerStatus": "SOURCE READY; REAL-DATA UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D04: Staff Payroll exposes canonical commission snapshots by item type and flags free-service and cancellation/no-show cases",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D05": {
+      "workflow": "Hourly versus commission, overtime, bonuses, and deductions",
+      "registerStatus": "SOURCE READY; FINALIZED-RUN UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D05: Existing finalized payroll breakdown is retained; cost and deduction sections are separately permission-controlled",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D06": {
+      "workflow": "View payroll history and payslip",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D06: Payroll page and payslip path mapping exist",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D07": {
+      "workflow": "View tax, deduction, employer, and year-to-date paystub detail",
+      "registerStatus": "SOURCE READY; FINALIZED PAYROLL UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D07: Staff payroll shows gross, deduction, net, employer statutory contribution, YTD totals, item drill-down and protected payslip PDF",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D08": {
+      "workflow": "Download employee and business HR/payroll documents",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D08: Verified payroll, tax, statutory, policy, handbook and employment documents stream through self-scoped `/staff-self/payroll-documents/:id/content`; raw file URLs are not returned",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D09": {
+      "workflow": "Same-day tips payout",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Card/cash allocation, declared tips, payout status/method/history, reconciliation state and dispute request are Staff-visible; real payout-provider certification is unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D09: Card/cash allocation, declared tips, payout status/method/history, reconciliation state and dispute request are Staff-visible; real payout-provider certification is unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D10": {
+      "workflow": "Employee wallet, physical/virtual card, direct deposit, card controls",
+      "registerStatus": "NOT APPLICABLE (INDIA)",
+      "businessReason": "India decision: Zenoti US Wallet/card is `NOT APPLICABLE`; AuraShine retains employer-controlled INR bank/UPI payout and reconciliation",
+      "regionDecision": {
+        "status": "PENDING",
+        "reason": "India decision: Zenoti US Wallet/card is `NOT APPLICABLE`; AuraShine retains employer-controlled INR bank/UPI payout and reconciliation",
+        "approvedBy": "",
+        "approvedAt": ""
+      },
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D10: India decision: Zenoti US Wallet/card is `NOT APPLICABLE`; AuraShine retains employer-controlled INR bank/UPI payout and reconciliation",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D20": {
+      "workflow": "Salary advance, recovery and reimbursement history",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D20: Canonical salary advances/recoveries and staff-linked outgoing-fund reimbursements are exposed self-scoped",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D21": {
+      "workflow": "Tip allocation follows multi-staff split ownership",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D21: Earnings and payroll tip sources read canonical `tip_splits`; payout uniqueness is per sale and staff",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D22": {
+      "workflow": "Inactive employee document access",
+      "registerStatus": "NOT APPLICABLE BY DEFAULT",
+      "businessReason": "Disabled by default because self-document handlers require an active linked staff identity; enable only after an approved business/legal requirement",
+      "regionDecision": {
+        "status": "PENDING",
+        "reason": "Disabled by default because self-document handlers require an active linked staff identity; enable only after an approved business/legal requirement",
+        "approvedBy": "",
+        "approvedAt": ""
+      },
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D22: Disabled by default because self-document handlers require an active linked staff identity; enable only after an approved business/legal requirement",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D11": {
+      "workflow": "View configurable performance metrics by period",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D11: `/staff-self/performance` and the existing Performance page support day, week, month, payroll period and custom dates; Staff Control Center persists branch metric visibility and safe custom aliases",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D12": {
+      "workflow": "Choose sale-date versus close-date/revenue basis",
+      "registerStatus": "SOURCE READY; REAL-DATA RECONCILIATION PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D12: Performance has an explicit basis selector; the backend applies business date or finalized close date to attributed POS facts",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D13": {
+      "workflow": "Revenue, guest, retention, rebooking, product/service, utilization and rating KPIs",
+      "registerStatus": "SOURCE READY; REAL-DATA RECONCILIATION PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D13: All Phase 9 metrics expose value, numerator, denominator, formula, source and freshness; 90-day retention excludes cohorts too recent for an outcome",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D14": {
+      "workflow": "Leaderboard and ranking",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D14: Dedicated leaderboard remains branch-scoped and now exposes every component, weight and evidence source; ranking is advisory and non-punitive",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D15": {
+      "workflow": "Goals, coaching, skills and training",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D15: Persisted coaching goals, progress, self-scoped skill matrix, training recommendations and evidence-based coaching are integrated; workload safeguards are excluded from score",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D16": {
+      "workflow": "Appraisals, self-review, key results, and acknowledgement",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D16: Existing `/staff-self/appraisals` workflows remain on Performance and load after the core KPI state",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D17": {
+      "workflow": "View guest feedback",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D17: Self-scoped feedback page",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D18": {
+      "workflow": "Submit internal feedback/request",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D18: `/staff-self/feedback` create workflow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "D19": {
+      "workflow": "Manager resolution visible to employee",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row D19: Manager note/status are returned in the self-scoped feedback API and realtime update reloads the employee page",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E01": {
+      "workflow": "View assigned tasks",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E01: `/staff/self/tasks` and Tasks kanban",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E02": {
+      "workflow": "Move/complete task with optimistic version and reload",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E02: Task status API and transport-only offline queue",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E03": {
+      "workflow": "Work-task-aware field jobs",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E03: Field job status, GPS, and customer-confirmed proof",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E04": {
+      "workflow": "Read policies/SOPs",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E04: `/staff-self/rules`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E05": {
+      "workflow": "Mandatory acknowledgement and server-scored quiz",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E05: Read/ack endpoints, quiz answer hiding and server score",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E06": {
+      "workflow": "Assigned training/course completion",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E06: Versioned course profiles, enrolment tasks, server-scored completion and certification issuance reuse the Rules/LMS flow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E07": {
+      "workflow": "Employee and company documents",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E07: Secure payroll files plus published company document/policy/announcement content are permission-scoped; full inactive-employee retention policy remains approval-gated",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E08": {
+      "workflow": "Team chat",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E08: `/team-chat/conversations`, realtime WebSocket updates and 15-second polling fallback",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E09": {
+      "workflow": "Private employee-to-owner conversation",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E09: `/team-chat/private-owner` with persisted participant access",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E10": {
+      "workflow": "Message retries, unread/read state and attachments",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E10: Idempotency keys, persisted read cursors, scanned 10 MB attachments and 30-day access expiry are wired; message search remains a later need",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E11": {
+      "workflow": "Staff notifications inbox and read/archive state",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E11: Staff Notifications page and `/staff-self/notifications/:id`",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E12": {
+      "workflow": "Foreground/background/closed-app push",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Encrypted registration and queue exist; live provider/device evidence pending",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E12: Encrypted registration and queue exist; live provider/device evidence pending",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E13": {
+      "workflow": "Check-in/out and schedule reminders",
+      "registerStatus": "SOURCE READY; PROVIDER/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E13: Persisted notification automation, retry log, badge/read/archive and clock/schedule triggers are wired",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E14": {
+      "workflow": "Leave, appraisal, task, payroll, rule, and chat event notifications",
+      "registerStatus": "SOURCE READY; PROVIDER/LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E14: Domain events persist permission-scoped notifications and realtime/polling reload; provider delivery matrix remains deployment UAT",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E15": {
+      "workflow": "Self-scoped staff reports",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E15: Reports page and permission-filtered business/enterprise data",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E16": {
+      "workflow": "Current approved offers and eligible services",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E16: `/staff-self/offers` reads published, active Staff App offers",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E17": {
+      "workflow": "Direct, group and manager broadcast chat",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E17: Persisted participant lists and broadcast write restriction reuse the existing chat tables",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E18": {
+      "workflow": "Smart Share appointment, invoice and guest",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E18: Shared IDs disclose no record payload; opening rechecks current permission plus manager/self scope",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E19": {
+      "workflow": "Employee surveys and issue resolution",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E19: Versioned manager survey lifecycle, validated self response, existing feedback submission and manager resolution",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "E20": {
+      "workflow": "Guest/appointment-linked tasks and realtime Kanban",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row E20: Optional links validate branch-owned records; task changes publish realtime events with polling fallback",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F01": {
+      "workflow": "Installable web/PWA shell",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F01: Manifest and shell-only service worker",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F02": {
+      "workflow": "Safe offline mutations",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F02: Online-first queue for transport status `0`, idempotency retained",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F03": {
+      "workflow": "Do not queue validation, authorization, conflict, or server errors",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F03: `queueableMutation` restricts fallback to transport failure",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F04": {
+      "workflow": "Reconnect and replay exactly once",
+      "registerStatus": "SOURCE READY; SIGNED-DEVICE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F04: User/tenant/branch/device-bound queue, idempotency, conflict UI, reconnect and polling fallback are source-complete",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F05": {
+      "workflow": "Android native project",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F05: Capacitor Android project exists",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F06": {
+      "workflow": "iOS native project",
+      "registerStatus": "SOURCE READY",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F06: Capacitor iOS project exists",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F07": {
+      "workflow": "Signed Android and iOS builds",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Keystore, Apple profile, signing and install evidence unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F07: Keystore, Apple profile, signing and install evidence unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F08": {
+      "workflow": "App Store and Play Store distribution",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Store accounts/listings/review evidence unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F08: Store accounts/listings/review evidence unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F09": {
+      "workflow": "Crash, telemetry, app-version, and forced-upgrade controls",
+      "registerStatus": "SOURCE READY; DEPLOYMENT/MONITORING UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F09: Deduplicated scoped crash reports plus server-authoritative minimum/latest version policy, rollback switch and blocking update shell are wired",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F10": {
+      "workflow": "AI Scribe recording with consent",
+      "registerStatus": "MISSING",
+      "businessReason": "No complete Staff App recording/consent workflow",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "FAIL",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F10: No complete Staff App recording/consent workflow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F11": {
+      "workflow": "Transcription and structured clinical summary",
+      "registerStatus": "MISSING",
+      "businessReason": "AI foundations exist outside app; Staff App Scribe workflow missing",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "FAIL",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F11: AI foundations exist outside app; Staff App Scribe workflow missing",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F12": {
+      "workflow": "AI-assisted form fill with staff review/edit",
+      "registerStatus": "MISSING",
+      "businessReason": "No complete Staff App form-fill workflow",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "FAIL",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F12: No complete Staff App form-fill workflow",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F13": {
+      "workflow": "Permission/license/model/audit governance for Scribe",
+      "registerStatus": "PARTIAL",
+      "businessReason": "Governed AI patterns exist; Scribe-specific controls are missing",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F13: Governed AI patterns exist; Scribe-specific controls are missing",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F14": {
+      "workflow": "Staff copilot for schedule, performance, tasks, and SOP questions",
+      "registerStatus": "SOURCE READY; LIVE UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F14: Staff App Copilot uses the existing allow-listed, permission-scoped, audited read-only Rust tools and shows calculations, confidence and approval-gated recommendations",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F15": {
+      "workflow": "Authenticated browser UAT",
+      "registerStatus": "SOURCE READY; AUTHENTICATED UAT PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F15: Three-persona Playwright certification matrix and evidence ledger are source-ready; authenticated environment execution remains pending",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F16": {
+      "workflow": "Real Android/iOS critical-flow UAT",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "No signed real-device evidence",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F16: No signed real-device evidence",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F17": {
+      "workflow": "Real push-provider certification",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Required provider secrets and delivery evidence unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F17: Required provider secrets and delivery evidence unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F18": {
+      "workflow": "Payroll payout provider certification",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Provider sandbox/credentials and reconciled transfer evidence unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F18: Provider sandbox/credentials and reconciled transfer evidence unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F19": {
+      "workflow": "Biometric/liveness provider certification",
+      "registerStatus": "EXTERNAL BLOCKED",
+      "businessReason": "Face Liveness integration/provider/device evidence unavailable",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F19: Face Liveness integration/provider/device evidence unavailable",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    },
+    "F20": {
+      "workflow": "Load, security, backup/restore, monitoring, and release runbooks",
+      "registerStatus": "SOURCE READY; DEPLOYMENT CERTIFICATION PENDING",
+      "businessReason": "",
+      "regionDecision": null,
+      "evidence": {
+        "source": {
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F20: Production certification workflow, evidence ledger, AWS Terraform checks, backup/restore, monitoring, rollback and release-note diff runbooks are source-ready",
+          "verifiedAt": "",
+          "verifier": ""
+        }
+      }
+    }
+  }
+}

@@ -9,6 +9,10 @@ pub struct DemandInput {
     pub sku: String,
     pub stock_quantity: i32,
     pub reorder_point: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
     pub gst_percent: i32,
     pub supplier_id: String,
@@ -24,7 +28,8 @@ pub struct DemandInput {
     pub demand_history: i64,
     pub demand_7: i64,
     pub consumption_history: i64,
-    pub pending_quantity: i64,
+    pub pending_po_quantity: i64,
+    pub pending_transfer_quantity: i64,
     pub expiring_quantity: i64,
     pub inactive_days: i64,
 }
@@ -71,11 +76,12 @@ pub async fn demand_inputs(
     branch: &str,
     history_days: i32,
 ) -> Result<Vec<DemandInput>, sqlx::Error> {
-    sqlx::query_as(r#"SELECT item.id inventory_item_id,item.name product_name,item.sku,item.stock_quantity,item.reorder_point,selected.unit_cost_paise,item.gst_percent,selected.supplier_id,selected.lead_time_days,selected.supplier_score_bps,selected.on_time_rate_bps,selected.fill_rate_bps,selected.return_rate_bps,selected.expiry_risk_bps,selected.minimum_order_quantity,selected.pack_size,selected.safety_stock_days,
+    sqlx::query_as(r#"SELECT item.id inventory_item_id,item.name product_name,item.sku,item.stock_quantity,item.reorder_point,item.alert_level,item.desired_level,item.order_level,item.safety_stock_level,selected.unit_cost_paise,item.gst_percent,selected.supplier_id,selected.lead_time_days,selected.supplier_score_bps,selected.on_time_rate_bps,selected.fill_rate_bps,selected.return_rate_bps,selected.expiry_risk_bps,selected.minimum_order_quantity,selected.pack_size,selected.safety_stock_days,
  COALESCE((SELECT SUM(ABS(l.quantity_delta)) FROM inventory_stock_ledger l WHERE l.tenant_id=item.tenant_id AND l.branch_id=item.branch_id AND l.inventory_item_id=item.id AND l.quantity_delta<0 AND l.movement_type IN ('sale','consumption') AND l.created_at>=NOW()-($3::INT*INTERVAL '1 day')),0)::BIGINT demand_history,
  COALESCE((SELECT SUM(ABS(l.quantity_delta)) FROM inventory_stock_ledger l WHERE l.tenant_id=item.tenant_id AND l.branch_id=item.branch_id AND l.inventory_item_id=item.id AND l.quantity_delta<0 AND l.movement_type IN ('sale','consumption') AND l.created_at>=NOW()-INTERVAL '7 days'),0)::BIGINT demand_7,
  COALESCE((SELECT SUM(actual_quantity) FROM inventory_backbar_usage u WHERE u.tenant_id=item.tenant_id AND u.branch_id=item.branch_id AND u.inventory_item_id=item.id AND u.status='recorded' AND u.created_at>=NOW()-($3::INT*INTERVAL '1 day')),0)::BIGINT consumption_history,
- COALESCE((SELECT SUM(line.quantity-line.received_quantity) FROM purchase_order_lines line JOIN purchase_orders po ON po.id=line.purchase_order_id AND po.tenant_id=line.tenant_id AND po.branch_id=line.branch_id WHERE line.tenant_id=item.tenant_id AND line.branch_id=item.branch_id AND line.inventory_item_id=item.id AND po.status IN ('pending_approval','approved','partially_received')),0)::BIGINT pending_quantity,
+ COALESCE((SELECT SUM(line.quantity-line.received_quantity) FROM purchase_order_lines line JOIN purchase_orders po ON po.id=line.purchase_order_id AND po.tenant_id=line.tenant_id AND po.branch_id=line.branch_id WHERE line.tenant_id=item.tenant_id AND line.branch_id=item.branch_id AND line.inventory_item_id=item.id AND po.status IN ('pending_approval','approved','partially_received')),0)::BIGINT pending_po_quantity,
+ COALESCE((SELECT SUM(GREATEST(line.quantity-line.received_retail_quantity-line.received_consumable_quantity-line.damaged_quantity-line.expired_quantity-line.short_quantity,0)) FROM inventory_transfer_lines line JOIN inventory_transfers transfer ON transfer.id=line.transfer_id AND transfer.tenant_id=line.tenant_id WHERE line.tenant_id=item.tenant_id AND transfer.destination_branch_id=item.branch_id AND line.destination_inventory_item_id=item.id AND transfer.status IN ('raised','approved','dispatched','in_transit','partially_received')),0)::BIGINT pending_transfer_quantity,
  COALESCE((SELECT SUM(batch.quantity) FROM inventory_batches batch WHERE batch.tenant_id=item.tenant_id AND batch.branch_id=item.branch_id AND batch.inventory_item_id=item.id AND batch.quantity>0 AND batch.expiry_date<=CURRENT_DATE+30),0)::BIGINT expiring_quantity,
  COALESCE((SELECT EXTRACT(DAY FROM NOW()-MAX(l.created_at)) FROM inventory_stock_ledger l WHERE l.tenant_id=item.tenant_id AND l.branch_id=item.branch_id AND l.inventory_item_id=item.id AND l.quantity_delta<0 AND l.movement_type IN ('sale','consumption')),999)::BIGINT inactive_days
  FROM inventory_items item
@@ -176,7 +182,7 @@ pub async fn create_run(
     history_days: i32,
     evidence: &Value,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO inventory_reorder_forecast_runs(tenant_id,branch_id,model_version,history_start,history_end,created_by,evidence_snapshot) VALUES($1,$2,'seasonal-demand-v3',CURRENT_DATE-$3,CURRENT_DATE,$4,$5) RETURNING id").bind(tenant).bind(branch).bind(history_days).bind(actor).bind(evidence).fetch_one(&mut **tx).await
+    sqlx::query_scalar("INSERT INTO inventory_reorder_forecast_runs(tenant_id,branch_id,model_version,history_start,history_end,created_by,evidence_snapshot) VALUES($1,$2,'seasonal-demand-v4',CURRENT_DATE-$3,CURRENT_DATE,$4,$5) RETURNING id").bind(tenant).bind(branch).bind(history_days).bind(actor).bind(evidence).fetch_one(&mut **tx).await
 }
 pub async fn insert_recommendation(
     tx: &mut Transaction<'_, Postgres>,

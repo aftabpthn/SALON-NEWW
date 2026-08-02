@@ -1,7 +1,7 @@
 import { DatePipe } from "@angular/common";
 import { Component, HostListener, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { StaffAppService, StaffFeedback } from "../../core/staff-app.service";
+import { StaffAppService, StaffFeedback, StaffSurvey } from "../../core/staff-app.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
 @Component({
@@ -22,6 +22,27 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
 
       @if (canReadFeedback()) {
+        @if (canReadSurveys()) {
+          <section class="panel survey-panel">
+            <div class="panel-title"><h2>Employee surveys</h2><span>{{ surveys().length }}</span></div>
+            @for (survey of surveys(); track survey.id) {
+              <article class="survey-card">
+                <div><strong>{{ survey.title }}</strong>@if (survey.description) { <p>{{ survey.description }}</p> }</div>
+                @if (survey.answered) { <span class="badge green">Submitted</span> }
+                @else {
+                  @for (question of survey.questions; track question.id) {
+                    <fieldset><legend>{{ question.prompt }}</legend>
+                      @if (question.type === 'text') { <textarea rows="3" maxlength="2000" [ngModel]="surveyAnswer(survey.id, question.id)" (ngModelChange)="setSurveyAnswer(survey.id, question.id, $event)"></textarea> }
+                      @if (question.type === 'rating') { <select [ngModel]="surveyAnswer(survey.id, question.id)" (ngModelChange)="setSurveyAnswer(survey.id, question.id, +$event)"><option value="">Select</option>@for (rating of ratings; track rating) { <option [value]="rating">{{ rating }}</option> }</select> }
+                      @if (question.type === 'single_choice') { @for (option of question.options || []; track option) { <label class="survey-choice"><input type="radio" [name]="survey.id + '-' + question.id" [value]="option" [ngModel]="surveyAnswer(survey.id, question.id)" (ngModelChange)="setSurveyAnswer(survey.id, question.id, $event)" />{{ option }}</label> } }
+                    </fieldset>
+                  }
+                  <button class="link-button primary" type="button" [disabled]="surveySaving() === survey.id || !canSubmitSurvey(survey)" (click)="submitSurvey(survey)">{{ surveySaving() === survey.id ? 'Submitting...' : 'Submit survey' }}</button>
+                }
+              </article>
+            } @empty { <div class="feedback-empty"><p>No active surveys.</p></div> }
+          </section>
+        }
         <section class="grid two feedback-layout">
           <article class="panel feedback-form-panel">
             <div class="panel-title"><h2>Send feedback</h2><span>{{ saving() ? 'Saving...' : (canSubmitFeedback() ? 'Open' : 'Read-only') }}</span></div>
@@ -73,6 +94,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     .feedback-empty { display: grid; justify-items: center; gap: 5px; padding: 26px 10px; color: var(--staff-text-secondary); font-weight: 600; text-align: center; }
     .feedback-empty p { margin: 0; }
     .feedback-empty small { font-weight: 600; line-height: 1.4; }
+    .survey-panel { margin-bottom: 14px; }.survey-card { display:grid;gap:10px;padding:12px 0;border-top:1px solid var(--staff-border); }.survey-card p { margin:4px 0 0;color:var(--staff-text-secondary); }.survey-card fieldset { display:grid;gap:8px;margin:0;padding:10px;border:1px solid var(--staff-border);border-radius:8px; }.survey-choice { display:flex;gap:8px;align-items:center; }
     @media (max-width: 700px) {
       .feedback-error, .feedback-form-footer { align-items: stretch; flex-direction: column; }
       .feedback-error button, .feedback-form-footer .link-button { width: 100%; }
@@ -83,6 +105,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
 })
 export class StaffFeedbackPage implements OnInit {
   readonly feedback = signal<StaffFeedback[]>([]);
+  readonly surveys = signal<StaffSurvey[]>([]);
+  readonly surveySaving = signal("");
   readonly loading = signal(false);
   readonly loadError = signal("");
   readonly saving = signal(false);
@@ -91,6 +115,8 @@ export class StaffFeedbackPage implements OnInit {
   readonly titleTouched = signal(false);
   readonly bodyTouched = signal(false);
   readonly categories = ["opinion", "suggestion", "training", "complaint", "difficulty"];
+  readonly ratings = [1, 2, 3, 4, 5];
+  readonly surveyAnswers: Record<string, Record<string, string | number>> = {};
   category = "suggestion";
   title = "";
   body = "";
@@ -107,7 +133,11 @@ export class StaffFeedbackPage implements OnInit {
     this.loading.set(true);
     this.loadError.set("");
     try {
-      this.feedback.set(await this.staff.feedback());
+      const [feedback, surveys] = await Promise.all([
+        this.staff.feedback(),
+        this.canReadSurveys() ? this.staff.surveys() : Promise.resolve([])
+      ]);
+      this.feedback.set(feedback); this.surveys.set(surveys);
     } catch {
       this.loadError.set(this.staff.error() || "Unable to load feedback.");
     } finally {
@@ -120,6 +150,11 @@ export class StaffFeedbackPage implements OnInit {
 
   canReadFeedback(): boolean { return this.staff.hasPermission("staff.app.feedback.read"); }
   canSubmitFeedback(): boolean { return this.staff.hasPermission("staff.app.feedback.manage"); }
+  canReadSurveys(): boolean { return this.staff.hasPermission("staff.app.surveys.read"); }
+  canManageSurveys(): boolean { return this.staff.hasPermission("staff.app.surveys.manage"); }
+  surveyAnswer(surveyId: string, questionId: string): string | number { return this.surveyAnswers[surveyId]?.[questionId] ?? ""; }
+  setSurveyAnswer(surveyId: string, questionId: string, value: string | number): void { (this.surveyAnswers[surveyId] ||= {})[questionId] = value; }
+  canSubmitSurvey(survey: StaffSurvey): boolean { return this.canManageSurveys() && survey.questions.every((question) => String(this.surveyAnswer(survey.id, question.id)).trim()); }
   canSubmit(): boolean { return !!this.title.trim() && !!this.body.trim() && this.body.trim().length <= 2000 && this.title.trim().length <= 160; }
   label(value: string): string { return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
@@ -148,5 +183,15 @@ export class StaffFeedbackPage implements OnInit {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  async submitSurvey(survey: StaffSurvey): Promise<void> {
+    if (!this.canSubmitSurvey(survey) || this.surveySaving()) return;
+    this.surveySaving.set(survey.id); this.localError.set(""); this.message.set("");
+    try {
+      await this.staff.submitSurveyResponse(survey.id, this.surveyAnswers[survey.id] || {}, crypto.randomUUID());
+      this.message.set("Survey submitted."); await this.load();
+    } catch { this.localError.set(this.staff.error() || "Unable to submit survey."); }
+    finally { this.surveySaving.set(""); }
   }
 }

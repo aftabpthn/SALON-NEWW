@@ -89,6 +89,7 @@ pub fn build_router(state: AppState) -> Router {
             axum::routing::post(invoice_webhooks::receive_razorpay_webhook),
         )
         .merge(staff_advanced::public_router())
+        .merge(staff_schedule::public_router())
         .merge(membership_enterprise::public_router())
         .merge(booking_extensions::public_router())
         .merge(pos_enterprise::public_router())
@@ -148,6 +149,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(notifications::router())
         .merge(operations::router())
         .merge(whatsapp::router())
+        .route_layer(from_fn_with_state(
+            with_state.clone(),
+            tenant_middleware::require_inventory_idempotency,
+        ))
         .route_layer(from_fn_with_state(
             with_state.clone(),
             tenant_middleware::require_route_role,
@@ -213,6 +218,9 @@ fn cors_layer(state: &AppState) -> CorsLayer {
             HeaderName::from_static("x-branch-id"),
             HeaderName::from_static("x-public-booking-token"),
             HeaderName::from_static("x-api-key"),
+            HeaderName::from_static("x-device-id"),
+            HeaderName::from_static("x-request-id"),
+            HeaderName::from_static("idempotency-key"),
         ])
         .allow_credentials(true)
 }

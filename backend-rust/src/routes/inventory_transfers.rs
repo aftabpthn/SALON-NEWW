@@ -157,6 +157,7 @@ struct SettingsRequest {
     center_role: String,
     default_retail_warehouse_branch_id: Option<String>,
     default_consumable_warehouse_branch_id: Option<String>,
+    default_returns_warehouse_branch_id: Option<String>,
     auto_checkout_transfers: bool,
     cannot_raise_transfer: bool,
 }
@@ -237,6 +238,7 @@ async fn save_settings(
         &payload.center_role,
         clean(payload.default_retail_warehouse_branch_id.as_deref()),
         clean(payload.default_consumable_warehouse_branch_id.as_deref()),
+        clean(payload.default_returns_warehouse_branch_id.as_deref()),
         payload.auto_checkout_transfers,
         payload.cannot_raise_transfer,
     )
@@ -262,6 +264,16 @@ async fn create(
     Json(payload): Json<TransferRequest>,
 ) -> ApiResult<inventory_transfer_service::TransferDetails> {
     require_manage(&claims)?;
+    if claims.has_field_mask("inventory.cost")
+        && payload
+            .lines
+            .iter()
+            .any(|line| line.transfer_unit_price_paise.is_some() || line.discount_bps != 0)
+    {
+        return Err(AppError::forbidden(
+            "product cost visibility permission is required to set transfer prices",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = TransferInput {
         mode: payload.mode,
@@ -349,6 +361,15 @@ async fn dispatch(
     Json(payload): Json<ShipmentRequest>,
 ) -> ApiResult<inventory_transfer_service::TransferDetails> {
     require_manage(&claims)?;
+    if claims.has_field_mask("inventory.cost")
+        && (payload.shipping_paise != 0
+            || payload.handling_paise != 0
+            || payload.other_charges_paise != 0)
+    {
+        return Err(AppError::forbidden(
+            "product cost visibility permission is required to set transfer charges",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = ShipmentInput {
         shipping_paise: payload.shipping_paise,

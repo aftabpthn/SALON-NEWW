@@ -12,6 +12,7 @@ import { AuthService } from '../../../core/services/auth.service';
 type WorkspaceTab = 'command' | 'workforce' | 'hrms' | 'development' | 'systems' | 'governance' | 'content';
 type Row = Record<string, any>;
 type SectionRequest = { label: string; run: Promise<void> };
+type HrmsField = { key: string; label: string; type?: 'text' | 'number' | 'date' | 'textarea' | 'select' | 'multiselect'; required?: boolean; options?: Array<{ value: string; label: string }> };
 
 @Component({
     selector: 'page-staff-control-center',
@@ -54,6 +55,17 @@ export class StaffControlCenterPageComponent implements OnInit {
   reviews: Row[] = [];
   coachingGoals: Row[] = [];
   training: Row[] = [];
+  performanceSettings: Row = { visibleMetricKeys: [], customMetrics: [], version: 0 };
+  readonly performanceMetrics = [
+    ['product_service_percent', 'Product / service %'], ['repeat_guests_retained', 'Repeat guests retained'],
+    ['new_guests_retained', 'New guests retained'], ['requested_count', 'Requested count'],
+    ['service_sales', 'Service sales'], ['rebook_count', 'Rebook count'], ['rebook_rate', 'Rebook rate'],
+    ['new_service_guests', 'New service guests'], ['service_invoices_with_product_percent', 'Invoices with product %'],
+    ['average_feedback', 'Average feedback'], ['guest_count', 'Guest count'], ['average_invoice_value', 'Average invoice value'],
+    ['service_revenue', 'Service revenue'], ['free_service_revenue', 'Free-service revenue'], ['product_revenue', 'Product revenue'],
+    ['membership_revenue', 'Membership revenue'], ['package_revenue', 'Package revenue'], ['utilization', 'Utilization'],
+    ['attendance', 'Attendance'], ['tips', 'Tips'], ['commissions', 'Commissions']
+  ];
   lms: Row = { courses: [], enrolments: [], requirements: [], skillMatrix: [], recommendations: [] };
   devices: Row[] = [];
   gateways: Row[] = [];
@@ -78,9 +90,15 @@ export class StaffControlCenterPageComponent implements OnInit {
   contentOffers: Row[] = [];
   penaltyRules: Row[] = [];
   rulesCenter: Row = { documents: [], violations: [] };
+  surveys: Row[] = [];
   ruleEditorOpen = false;
   ruleDraft: Row = this.emptyRuleDraft();
   ruleQuiz: Row[] = [];
+  hrmsEditorKind = '';
+  hrmsEditorTitle = '';
+  hrmsEditorFields: HrmsField[] = [];
+  hrmsEditorRow: Row | null = null;
+  hrmsDraft: Row = {};
 
   async ngOnInit() {
     const tab = this.route.snapshot.queryParamMap.get('tab');
@@ -122,6 +140,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       this.section('performance reviews', this.loadList('/staff/performance-reviews', (value) => this.reviews = value)),
       this.section('coaching goals', this.loadList('/staff/coach/goals', (value) => this.coachingGoals = value)),
       this.section('training', this.loadList('/staff-enterprise/training', (value) => this.training = value)),
+      this.section('performance metric settings', this.loadOne('/staff/performance-settings', (value) => this.performanceSettings = value)),
     ];
     if (tab === 'hrms') return [
       this.section('enterprise HRMS', this.loadOne('/staff/hrms', (value) => this.hrms = value)),
@@ -143,6 +162,7 @@ export class StaffControlCenterPageComponent implements OnInit {
     ];
     if (tab === 'content') return [
       this.section('rules and SOP', this.loadOne('/staff/rules', (value) => this.rulesCenter = value)),
+      this.section('employee surveys', this.loadList('/staff/surveys', (value) => this.surveys = value)),
       this.section('tasks', this.loadList('/staff/tasks', (value) => this.contentTasks = value)),
       this.section('offers', this.loadList('/marketing/offers', (value) => this.contentOffers = value)),
       this.section('payroll rules', this.loadList('/staff/payroll-adjustment-rules', (value) => this.penaltyRules = value)),
@@ -161,7 +181,36 @@ export class StaffControlCenterPageComponent implements OnInit {
   private section(label: string, run: Promise<void>): SectionRequest { return { label, run }; }
 
   canManage(...permissions: string[]) {
-    return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission(...permissions);
+    return this.auth.hasRole('owner', 'admin', 'manager')
+      || this.auth.hasPermission(...permissions)
+      || (this.activeTab === 'hrms' && this.auth.hasPermission('staff.hrms.manage'));
+  }
+
+  performanceMetricKeys(): string[] { const value = this.performanceSettings['visibleMetricKeys']; return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []; }
+  metricEnabled(key: string) { return this.performanceMetricKeys().includes(key); }
+  togglePerformanceMetric(key: string, enabled: boolean) {
+    const keys = new Set(this.performanceMetricKeys());
+    enabled ? keys.add(key) : keys.delete(key);
+    this.performanceSettings['visibleMetricKeys'] = [...keys];
+  }
+  addCustomPerformanceMetric() {
+    const sourceMetricKey = this.askChoice('Source metric', this.performanceMetrics.map(([key]) => key));
+    if (!sourceMetricKey) return;
+    const label = this.ask('Custom metric label');
+    if (!label) return;
+    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 64);
+    if (!key) return;
+    const rows = this.arrayValue(this.performanceSettings['customMetrics']);
+    if (rows.some((row) => row['key'] === key)) { this.error = 'Custom metric key already exists'; return; }
+    this.performanceSettings['customMetrics'] = [...rows, { key, label, sourceMetricKey }];
+  }
+  removeCustomPerformanceMetric(key: string) { this.performanceSettings['customMetrics'] = this.arrayValue(this.performanceSettings['customMetrics']).filter((row) => row['key'] !== key); }
+  async savePerformanceSettings() {
+    await this.action('/staff/performance-settings', {
+      visibleMetricKeys: this.performanceMetricKeys(),
+      customMetrics: this.arrayValue(this.performanceSettings['customMetrics']),
+      version: Number(this.performanceSettings['version'] || 0)
+    }, true, 'put');
   }
 
   async decideSwap(row: Row, decision: 'approved' | 'rejected') {
@@ -547,121 +596,91 @@ export class StaffControlCenterPageComponent implements OnInit {
     });
   }
 
-  async createJobOpening() {
-    const title = this.ask('Job title');
-    const employmentType = this.askChoice('Employment type', ['full_time', 'part_time', 'contract', 'intern']);
-    if (!title || !employmentType) return;
-    await this.action('/staff/hrms/job-openings', { title, employmentType, department: this.askOptional('Department'), openingsCount: Number(this.askOptional('Openings')) || 1, description: this.askOptional('Description') });
+  createJobOpening() {
+    this.openHrmsEditor('job-opening', 'New job opening', [
+      this.field('title', 'Job title', 'text', true), this.field('department', 'Department'),
+      this.choice('employmentType', 'Employment type', ['full_time', 'part_time', 'contract', 'intern'], true),
+      this.field('openingsCount', 'Openings', 'number'), this.field('description', 'Description', 'textarea'),
+    ], { employmentType: 'full_time', openingsCount: '' });
   }
 
-  async updateJobOpening(row: Row) {
-    const status = this.askChoice('Status', row['status'] === 'open' ? ['paused', 'closed'] : row['status'] === 'paused' ? ['open', 'closed'] : ['open', 'closed']);
-    if (status) await this.action(`/staff/hrms/job-openings/${row['id']}`, { status, version: row['version'] }, true, 'patch');
+  updateJobOpening(row: Row) {
+    const options = row['status'] === 'open' ? ['paused', 'closed'] : row['status'] === 'paused' ? ['open', 'closed'] : ['open', 'closed'];
+    this.openHrmsEditor('opening-status', 'Update job opening', [this.choice('status', 'Status', options, true)], { status: options[0] }, row);
   }
 
-  async createApplication(row?: Row) {
-    const jobOpeningId = String(row?.['id'] || this.ask('Job opening ID') || '');
-    const firstName = this.ask('Candidate first name');
-    if (!jobOpeningId || !firstName) return;
-    await this.action('/staff/hrms/applications', { jobOpeningId, firstName, lastName: this.askOptional('Last name'), email: this.askOptional('Email'), phone: this.askOptional('Phone'), source: this.askOptional('Source'), resumeUrl: this.askOptional('Resume URL'), notes: this.askOptional('Notes') });
+  createApplication(row?: Row) {
+    this.openHrmsEditor('application', 'Add candidate', [
+      this.optionField('jobOpeningId', 'Job opening', this.arrayValue(this.hrms['jobOpenings']), 'id', 'title', true),
+      this.field('firstName', 'First name', 'text', true), this.field('lastName', 'Last name'),
+      this.field('email', 'Email'), this.field('phone', 'Phone'), this.field('source', 'Source'),
+      this.field('resumeUrl', 'Resume URL'), this.field('notes', 'Notes', 'textarea'),
+    ], { jobOpeningId: row?.['id'] || '' });
   }
 
-  async updateApplication(row: Row) {
+  updateApplication(row: Row) {
     const next: Record<string, string[]> = { applied: ['screening', 'rejected', 'withdrawn'], screening: ['interview', 'rejected', 'withdrawn'], interview: ['offer', 'rejected'], offer: ['hired', 'rejected', 'withdrawn'] };
-    const stage = this.askChoice('Stage', next[row['stage']] || []);
-    if (!stage) return;
-    const linkedStaffId = stage === 'hired' ? this.ask('Existing Staff ID') : '';
-    if (stage === 'hired' && !linkedStaffId) return;
-    const probationEndDate = stage === 'hired' ? this.askOptional('Probation end date YYYY-MM-DD') : '';
-    await this.action(`/staff/hrms/applications/${row['id']}`, { stage, linkedStaffId, probationEndDate: probationEndDate || null, version: row['version'] }, true, 'patch');
+    this.openHrmsEditor('application-stage', 'Move candidate', [
+      this.choice('stage', 'Stage', next[row['stage']] || [], true),
+      this.optionField('linkedStaffId', 'Link employee when hired', this.arrayValue(this.hrms['orgChart']), 'staffId', 'staffName'),
+      this.field('probationEndDate', 'Probation end date', 'date'),
+    ], { stage: next[row['stage']]?.[0] || '', linkedStaffId: '', probationEndDate: '' }, row);
   }
 
-  async createLifecycleCase(caseType: 'onboarding' | 'offboarding') {
-    const staffId = this.askOptional('Staff ID');
-    const applicationId = caseType === 'onboarding' ? this.askOptional('Application ID') : '';
-    if (!staffId && !applicationId) return;
-    const checklist = this.csv(this.ask('Checklist tasks, comma separated'));
-    if (!checklist.length) return;
-    const effectiveDate = this.ask('Effective date YYYY-MM-DD', this.periodEnd);
-    if (!effectiveDate) return;
-    await this.action('/staff/hrms/lifecycle-cases', { staffId, applicationId, caseType, effectiveDate, checklist });
+  createLifecycleCase(caseType: 'onboarding' | 'offboarding') {
+    const fields = [
+      this.optionField('staffId', 'Employee', this.arrayValue(this.hrms['orgChart']), 'staffId', 'staffName'),
+      this.field('effectiveDate', 'Effective date', 'date', true), this.field('checklist', 'Checklist, one task per line', 'textarea', true),
+    ];
+    if (caseType === 'onboarding') fields.splice(1, 0, this.optionField('applicationId', 'Hired candidate', this.arrayValue(this.hrms['applications']).filter((item) => item['stage'] === 'hired'), 'id', 'firstName'));
+    this.openHrmsEditor('lifecycle-case', caseType === 'onboarding' ? 'Start onboarding' : 'Start offboarding', fields, { caseType, staffId: '', applicationId: '', effectiveDate: this.periodEnd, checklist: '' });
   }
 
   async updateLifecycleTask(row: Row, task: Row) {
     await this.action(`/staff/hrms/lifecycle-cases/${row['id']}/tasks/${task['id']}`, { completed: !task['completed'], version: row['version'] }, true, 'patch');
   }
 
-  async completeSettlement(row: Row) {
-    const reference = this.ask('Final settlement reference');
-    if (!reference) return;
-    const payrollRunId = this.askOptional('Paid payroll run ID (optional)');
-    await this.action(`/staff/hrms/lifecycle-cases/${row['id']}/settlement`, { reference, payrollRunId: payrollRunId || null, version: row['version'] }, true, 'patch');
+  completeSettlement(row: Row) {
+    this.openHrmsEditor('settlement', 'Complete final settlement', [this.field('reference', 'Settlement reference', 'text', true), this.field('payrollRunId', 'Paid payroll run ID')], {}, row);
   }
 
-  async updateEmployment(row: Row) {
+  updateEmployment(row: Row) {
     const current = String(row['employmentStatus'] || 'confirmed');
-    const status = this.askChoice('Employment status', current === 'probation' ? ['confirmed', 'notice_period'] : ['notice_period']);
-    if (!status) return;
-    const effectiveDate = this.ask('Effective date YYYY-MM-DD', this.periodEnd);
-    if (!effectiveDate) return;
-    await this.action(`/staff/hrms/employees/${row['staffId']}/employment`, { status, effectiveDate, version: row['employmentVersion'] }, true, 'patch');
+    const statuses = current === 'probation' ? ['confirmed', 'notice_period'] : ['notice_period'];
+    this.openHrmsEditor('employment', 'Update employment lifecycle', [this.choice('status', 'Status', statuses, true), this.field('effectiveDate', 'Effective date', 'date', true)], { status: statuses[0], effectiveDate: this.periodEnd }, row);
   }
 
-  async createAppraisalCycle() {
-    const name = this.ask('Cycle name');
-    if (name) await this.action('/staff/hrms/appraisal-cycles', { name, periodStart: this.periodStart, periodEnd: this.periodEnd });
+  createAppraisalCycle() {
+    this.openHrmsEditor('appraisal-cycle', 'New appraisal cycle', [this.field('name', 'Cycle name', 'text', true), this.field('periodStart', 'Period start', 'date', true), this.field('periodEnd', 'Period end', 'date', true)], { periodStart: this.periodStart, periodEnd: this.periodEnd });
   }
 
-  async updateAppraisalCycle(row: Row) {
+  updateAppraisalCycle(row: Row) {
     const next: Record<string, string[]> = { draft: ['active'], active: ['review'], review: ['calibration'], calibration: ['closed'] };
-    const status = this.askChoice('Status', next[row['status']] || []);
-    if (status) await this.action(`/staff/hrms/appraisal-cycles/${row['id']}`, { status, version: row['version'] }, true, 'patch');
+    this.openHrmsEditor('appraisal-status', 'Advance appraisal cycle', [this.choice('status', 'Status', next[row['status']] || [], true)], { status: next[row['status']]?.[0] || '' }, row);
   }
 
-  async createGoalTemplate() {
-    const name = this.ask('OKR template name');
-    const raw = this.ask('Key results: Title|unit|target|weight bps; separate each with semicolon');
-    if (!name || !raw) return;
-    const keyResults = raw.split(';').map((entry) => {
-      const [title, metricUnit, targetValue, weightBasisPoints] = entry.split('|').map((value) => value.trim());
-      return { title, metricUnit, targetValue: Number(targetValue), weightBasisPoints: Number(weightBasisPoints) };
-    });
-    if (keyResults.some((item) => !item.title || !['count', 'percent', 'minutes', 'paise'].includes(item.metricUnit) || !Number.isInteger(item.targetValue) || !Number.isInteger(item.weightBasisPoints))) {
-      this.error = 'Use Title|count/percent/minutes/paise|target|weight bps.';
-      return;
-    }
-    await this.action('/staff/hrms/goal-templates', { name, description: this.askOptional('Description'), keyResults });
+  createGoalTemplate() {
+    this.openHrmsEditor('goal-template', 'New OKR template', [this.field('name', 'Template name', 'text', true), this.field('description', 'Description', 'textarea'), this.field('keyResults', 'Key results: title | unit | target | weight bps, one per line', 'textarea', true)], {});
   }
 
-  async populateAppraisalCycle(row: Row) {
-    const templateId = this.ask('Goal template ID');
-    const staffIds = this.csv(this.ask('Employee IDs, comma separated'));
-    if (!templateId || !staffIds.length) return;
-    await this.action(`/staff/hrms/appraisal-cycles/${row['id']}/populate`, { templateId, staffIds });
+  populateAppraisalCycle(row: Row) {
+    this.openHrmsEditor('populate-cycle', 'Assign appraisal employees', [
+      this.optionField('templateId', 'Goal template', this.arrayValue(this.hrms['goalTemplates']), 'id', 'name', true),
+      this.optionField('staffIds', 'Employees', this.arrayValue(this.hrms['orgChart']).filter((item) => item['active']), 'staffId', 'staffName', true, true),
+    ], { staffIds: [] }, row);
   }
 
-  async submitManagerAppraisal(row: Row) {
-    const score = Number(this.ask('Manager score 0-100'));
-    if (!Number.isInteger(score)) return;
-    const incentiveAmountPaise = this.contentRupeesToPaise(this.askOptional('Incentive amount in rupees (optional)')) || 0;
-    await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/manager`, {
-      score,
-      strengths: this.askOptional('Strengths'),
-      improvementAreas: this.askOptional('Improvement areas'),
-      goals: this.askOptional('Manager goals'),
-      comments: this.askOptional('Manager comments'),
-      coachingGoalId: this.askOptional('Existing coaching goal ID (optional)') || null,
-      incentiveAmountPaise,
-      incentiveEvidence: this.csv(this.askOptional('Incentive evidence, comma separated')),
-      version: row['version'],
-    }, true, 'patch');
+  submitManagerAppraisal(row: Row) {
+    this.openHrmsEditor('manager-review', 'Manager appraisal', [
+      this.field('score', 'Manager score (0–100)', 'number', true), this.field('strengths', 'Strengths', 'textarea'),
+      this.field('improvementAreas', 'Improvement areas', 'textarea'), this.field('goals', 'Goals', 'textarea'),
+      this.field('comments', 'Comments', 'textarea'), this.field('incentiveAmount', 'Incentive amount INR', 'number'),
+      this.field('incentiveEvidence', 'Incentive evidence, one item per line', 'textarea'),
+    ], {}, row);
   }
 
-  async calibrateAppraisal(row: Row) {
-    const score = Number(this.ask('Calibrated score 0-100', row['managerScore']));
-    const comments = this.ask('Calibration comments');
-    if (!Number.isInteger(score) || !comments) return;
-    await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/calibrate`, { score, comments, version: row['version'] }, true, 'patch');
+  calibrateAppraisal(row: Row) {
+    this.openHrmsEditor('calibration', 'Calibrate appraisal', [this.field('score', 'Calibrated score (0–100)', 'number', true), this.field('comments', 'Calibration comments', 'textarea', true)], { score: row['managerScore'] ?? '' }, row);
   }
 
   async approveAppraisal(row: Row) {
@@ -669,39 +688,90 @@ export class StaffControlCenterPageComponent implements OnInit {
     await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/approve`, { version: row['version'] }, true, 'patch');
   }
 
-  async createSuccessionPlan() {
-    const roleTitle = this.ask('Critical role title');
-    if (!roleTitle) return;
-    await this.action('/staff/hrms/succession-plans', { roleTitle, targetRoleId: this.askOptional('Target Role ID (optional)') || null, criticalRole: true, incumbentStaffId: this.askOptional('Incumbent Staff ID'), targetDate: this.askOptional('Target date YYYY-MM-DD') || null, notes: this.askOptional('Notes') });
+  createSuccessionPlan() {
+    this.openHrmsEditor('succession-plan', 'New succession plan', [this.field('roleTitle', 'Critical role title', 'text', true), this.optionField('incumbentStaffId', 'Incumbent employee', this.arrayValue(this.hrms['orgChart']), 'staffId', 'staffName'), this.field('targetDate', 'Target date', 'date'), this.field('notes', 'Notes', 'textarea')], {});
   }
 
-  async addSuccessionCandidate(plan: Row) {
-    const staffId = this.ask('Candidate Staff ID');
-    if (!staffId) return;
-    await this.action(`/staff/hrms/succession-plans/${plan['id']}/candidates`, { staffId, evidence: this.csv(this.askOptional('Additional evidence, comma separated')), developmentActions: this.csv(this.askOptional('Development actions, comma separated')) });
+  addSuccessionCandidate(plan: Row) {
+    this.openHrmsEditor('succession-candidate', 'Nominate succession candidate', [this.optionField('staffId', 'Employee', this.arrayValue(this.hrms['orgChart']).filter((item) => item['active']), 'staffId', 'staffName', true), this.field('evidence', 'Additional evidence, one item per line', 'textarea'), this.field('developmentActions', 'Development actions, one per line', 'textarea')], {}, plan);
   }
 
-  async closeSuccessionPlan(plan: Row) {
-    if (!window.confirm('Close this plan after all nominations are resolved?')) return;
-    await this.action(`/staff/hrms/succession-plans/${plan['id']}`, { status: 'closed', closureNote: this.askOptional('Closure note'), version: plan['version'] }, true, 'patch');
+  closeSuccessionPlan(plan: Row) {
+    this.openHrmsEditor('succession-close', 'Close succession plan', [this.field('closureNote', 'Closure note', 'textarea', true)], {}, plan);
   }
 
-  async updateSuccessionCandidate(row: Row) {
-    const status = this.askChoice('Action', ['proposed', 'removed']);
-    if (!status) return;
-    await this.action(`/staff/hrms/succession-candidates/${row['id']}`, {
-      status,
-      evidence: this.csv(this.askOptional('Additional evidence, comma separated', this.arrayValue(row['evidence']).join(', '))),
-      developmentActions: this.csv(this.askOptional('Development actions, comma separated', this.arrayValue(row['developmentActions']).join(', '))),
-      version: row['version'],
-    }, true, 'patch');
+  updateSuccessionCandidate(row: Row) {
+    this.openHrmsEditor('succession-update', 'Update succession candidate', [this.choice('status', 'Action', ['proposed', 'removed'], true), this.field('evidence', 'Additional evidence, one item per line', 'textarea'), this.field('developmentActions', 'Development actions, one per line', 'textarea')], { status: 'proposed', evidence: this.arrayValue(row['evidence']).join('\n'), developmentActions: this.arrayValue(row['developmentActions']).join('\n') }, row);
   }
 
-  async decideSuccessionCandidate(row: Row, decision: 'approved' | 'rejected') {
-    const note = this.ask(`${decision === 'approved' ? 'Approval' : 'Rejection'} note`);
-    if (!note) return;
-    await this.action(`/staff/hrms/succession-candidates/${row['candidateId']}/decision`, { decision, note, version: row['version'] });
+  decideSuccessionCandidate(row: Row, decision: 'approved' | 'rejected') {
+    this.openHrmsEditor('succession-decision', decision === 'approved' ? 'Approve promotion readiness' : 'Reject promotion readiness', [this.field('note', 'Decision note', 'textarea', true)], { decision }, row);
   }
+
+  closeHrmsEditor() {
+    this.hrmsEditorKind = '';
+    this.hrmsEditorRow = null;
+    this.hrmsEditorFields = [];
+    this.hrmsDraft = {};
+  }
+
+  async saveHrmsEditor() {
+    const missing = this.hrmsEditorFields.find((field) => field.required && (Array.isArray(this.hrmsDraft[field.key]) ? !this.hrmsDraft[field.key].length : !String(this.hrmsDraft[field.key] ?? '').trim()));
+    if (missing) { this.error = `${missing.label} is required`; return; }
+    const row = this.hrmsEditorRow || {};
+    const draft = this.hrmsDraft;
+    let result: Row | null = null;
+    if (this.hrmsEditorKind === 'job-opening') result = await this.action('/staff/hrms/job-openings', { ...draft, openingsCount: Number(draft['openingsCount']) || 1 });
+    else if (this.hrmsEditorKind === 'opening-status') result = await this.action(`/staff/hrms/job-openings/${row['id']}`, { status: draft['status'], version: row['version'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'application') result = await this.action('/staff/hrms/applications', draft);
+    else if (this.hrmsEditorKind === 'application-stage') {
+      if (draft['stage'] === 'hired' && !draft['linkedStaffId']) { this.error = 'Link employee is required when hiring'; return; }
+      result = await this.action(`/staff/hrms/applications/${row['id']}`, { stage: draft['stage'], linkedStaffId: draft['linkedStaffId'] || null, probationEndDate: draft['probationEndDate'] || null, version: row['version'] }, true, 'patch');
+    } else if (this.hrmsEditorKind === 'lifecycle-case') {
+      if (!draft['staffId'] && !draft['applicationId']) { this.error = 'Select an employee or hired candidate'; return; }
+      result = await this.action('/staff/hrms/lifecycle-cases', { ...draft, checklist: this.lines(draft['checklist']) });
+    } else if (this.hrmsEditorKind === 'settlement') result = await this.action(`/staff/hrms/lifecycle-cases/${row['id']}/settlement`, { reference: draft['reference'], payrollRunId: draft['payrollRunId'] || null, version: row['version'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'employment') result = await this.action(`/staff/hrms/employees/${row['staffId']}/employment`, { ...draft, version: row['employmentVersion'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'appraisal-cycle') result = await this.action('/staff/hrms/appraisal-cycles', draft);
+    else if (this.hrmsEditorKind === 'appraisal-status') result = await this.action(`/staff/hrms/appraisal-cycles/${row['id']}`, { status: draft['status'], version: row['version'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'goal-template') {
+      const keyResults = this.lines(draft['keyResults']).map((line) => { const [title, metricUnit, targetValue, weightBasisPoints] = line.split('|').map((value) => value.trim()); return { title, metricUnit, targetValue: Number(targetValue), weightBasisPoints: Number(weightBasisPoints) }; });
+      if (keyResults.some((item) => !item.title || !['count', 'percent', 'minutes', 'paise'].includes(item.metricUnit) || !Number.isInteger(item.targetValue) || !Number.isInteger(item.weightBasisPoints))) { this.error = 'Each key result must use: title | count/percent/minutes/paise | target | weight bps'; return; }
+      result = await this.action('/staff/hrms/goal-templates', { name: draft['name'], description: draft['description'] || '', keyResults });
+    } else if (this.hrmsEditorKind === 'populate-cycle') result = await this.action(`/staff/hrms/appraisal-cycles/${row['id']}/populate`, { templateId: draft['templateId'], staffIds: draft['staffIds'] });
+    else if (this.hrmsEditorKind === 'manager-review') {
+      const score = Number(draft['score']);
+      if (!Number.isInteger(score) || score < 0 || score > 100) { this.error = 'Manager score must be an integer from 0 to 100'; return; }
+      result = await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/manager`, { score, strengths: draft['strengths'] || '', improvementAreas: draft['improvementAreas'] || '', goals: draft['goals'] || '', comments: draft['comments'] || '', coachingGoalId: null, incentiveAmountPaise: this.contentRupeesToPaise(String(draft['incentiveAmount'] || '')) || 0, incentiveEvidence: this.lines(draft['incentiveEvidence']), version: row['version'] }, true, 'patch');
+    } else if (this.hrmsEditorKind === 'calibration') {
+      const score = Number(draft['score']);
+      if (!Number.isInteger(score) || score < 0 || score > 100) { this.error = 'Calibrated score must be an integer from 0 to 100'; return; }
+      result = await this.action(`/staff/hrms/appraisal-reviews/${row['id']}/calibrate`, { score, comments: draft['comments'], version: row['version'] }, true, 'patch');
+    } else if (this.hrmsEditorKind === 'succession-plan') result = await this.action('/staff/hrms/succession-plans', { ...draft, targetRoleId: null, criticalRole: true, incumbentStaffId: draft['incumbentStaffId'] || null, targetDate: draft['targetDate'] || null });
+    else if (this.hrmsEditorKind === 'succession-candidate') result = await this.action(`/staff/hrms/succession-plans/${row['id']}/candidates`, { staffId: draft['staffId'], evidence: this.lines(draft['evidence']), developmentActions: this.lines(draft['developmentActions']) });
+    else if (this.hrmsEditorKind === 'succession-close') result = await this.action(`/staff/hrms/succession-plans/${row['id']}`, { status: 'closed', closureNote: draft['closureNote'], version: row['version'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'succession-update') result = await this.action(`/staff/hrms/succession-candidates/${row['id']}`, { status: draft['status'], evidence: this.lines(draft['evidence']), developmentActions: this.lines(draft['developmentActions']), version: row['version'] }, true, 'patch');
+    else if (this.hrmsEditorKind === 'succession-decision') result = await this.action(`/staff/hrms/succession-candidates/${row['candidateId']}/decision`, { decision: draft['decision'], note: draft['note'], version: row['version'] });
+    if (result) this.closeHrmsEditor();
+  }
+
+  private openHrmsEditor(kind: string, title: string, fields: HrmsField[], draft: Row, row: Row | null = null) {
+    this.error = '';
+    this.hrmsEditorKind = kind;
+    this.hrmsEditorTitle = title;
+    this.hrmsEditorFields = fields;
+    this.hrmsEditorDraft(draft, row);
+  }
+
+  private hrmsEditorDraft(draft: Row, row: Row | null) {
+    this.hrmsDraft = { ...draft };
+    this.hrmsEditorRow = row;
+  }
+
+  private field(key: string, label: string, type: HrmsField['type'] = 'text', required = false): HrmsField { return { key, label, type, required }; }
+  private choice(key: string, label: string, values: string[], required = false): HrmsField { return { key, label, type: 'select', required, options: values.map((value) => ({ value, label: this.label(value) })) }; }
+  private optionField(key: string, label: string, rows: Row[], valueKey: string, labelKey: string, required = false, multiple = false): HrmsField { return { key, label, type: multiple ? 'multiselect' : 'select', required, options: rows.map((row) => ({ value: String(row[valueKey] || ''), label: String(row[labelKey] || row[valueKey] || '') })).filter((item) => item.value) }; }
+  private lines(value: unknown) { return String(value || '').split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean); }
 
   async runHrOperationsAutomations() {
     await this.action('/staff/hrms/operations-intelligence/automations/run', { from: this.periodStart, to: this.periodEnd });
@@ -775,6 +845,20 @@ export class StaffControlCenterPageComponent implements OnInit {
 
   async publishRule(row: Row) { await this.action(`/staff/rules/${row['id']}/publish`, { version: row['version'] }); }
   async unpublishRule(row: Row) { await this.action(`/staff/rules/${row['id']}/unpublish`, { version: row['version'] }); }
+
+  async createSurvey() {
+    const title = prompt('Survey title')?.trim(); if (!title) return;
+    const question = prompt('Survey question')?.trim(); if (!question) return;
+    const kind = (prompt('Question type: rating, text, or single_choice', 'rating') || '').trim();
+    if (!['rating', 'text', 'single_choice'].includes(kind)) { this.error = 'Survey question type is invalid.'; return; }
+    const options = kind === 'single_choice' ? (prompt('Choices separated by commas') || '').split(',').map((value) => value.trim()).filter(Boolean) : undefined;
+    if (kind === 'single_choice' && (!options || options.length < 2)) { this.error = 'A choice survey needs at least two choices.'; return; }
+    await this.action('/staff/surveys', { title, questions: [{ id: crypto.randomUUID(), prompt: question, type: kind, options }] });
+  }
+
+  async updateSurveyStatus(row: Row, status: 'published' | 'closed') {
+    await this.action(`/staff/surveys/${row['id']}/status`, { status, version: row['version'] }, true, 'patch');
+  }
 
   async recordRuleViolation(row: Row) {
     const staffId = this.ask('Staff ID');
@@ -949,6 +1033,10 @@ export class StaffControlCenterPageComponent implements OnInit {
     ].map(([label, key]) => ({ key, label, result: this.staffAi?.[key] || {} }));
   }
   text(value: unknown) { return value === null || value === undefined || value === '' ? '—' : String(value); }
+  healthLabel(value: Row | null | undefined) {
+    const score = value?.['hrHealthScore'] ?? value?.['healthScore'];
+    return typeof score === 'number' ? `${score}%` : 'Insufficient evidence';
+  }
   label(value: string) { return value.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
   money(value: unknown) {
     const amount = Number(value ?? 0);

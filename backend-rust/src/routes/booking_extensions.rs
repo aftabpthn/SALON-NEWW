@@ -1943,6 +1943,7 @@ async fn appointment_deposits_multi_service_bookings(
         );
         lines.push(appointments::AppointmentBatchLinePayload {
             appointment_id: line.appointment_id.trim().to_string(),
+            expected_version: None,
             client_id: payload.client_id.trim().to_string(),
             staff_id: staff_id.to_string(),
             requested_staff_id: String::new(),
@@ -1962,6 +1963,11 @@ async fn appointment_deposits_multi_service_bookings(
             },
             variant_id: line.variant_id.trim().to_string(),
             addon_ids: line.addon_ids.clone(),
+            price_override_paise: None,
+            price_override_reason: String::new(),
+            service_mode: "sequential".to_string(),
+            segment_label: String::new(),
+            sequence_no: None,
         });
     }
     let quote = booking_service::deposit_quote(&state.db, &tenant_id, &branch_id, total_paise)
@@ -1998,6 +2004,14 @@ async fn appointment_deposits_multi_service_bookings(
             recurrence_interval_days: None,
             lines,
             advance_payment: None,
+            idempotency_key: String::new(),
+            booking_type: "standard".to_string(),
+            day_package_id: String::new(),
+            host_client_id: payload.client_id.trim().to_string(),
+            group_name: String::new(),
+            group_notes: String::new(),
+            is_surprise: false,
+            virtual_meeting_url: String::new(),
         }),
     )
     .await?

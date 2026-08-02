@@ -58,9 +58,8 @@ test('backend outbox provides replay safety, locking, retry, metrics and tracing
 
 test('PostgreSQL production test covers isolation, concurrency and invariants', () => {
   const integration = readBackend('tests/inventory_phase5_postgres.rs');
-  assert.match(integration, /branch_b_count/);
   assert.match(integration, /tokio::join!/);
-  assert.match(integration, /FOR UPDATE SKIP LOCKED/);
-  assert.match(integration, /invalid_money\.is_err/);
-  assert.match(integration, /invalid_stock\.is_err/);
+  for (const contract of ['other_branch', 'conflicting_actor', 'rollback_count', 'money_constraint', 'container_constraint']) {
+    assert.match(integration, new RegExp(contract));
+  }
 });

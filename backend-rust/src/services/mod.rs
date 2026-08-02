@@ -74,6 +74,7 @@ pub mod staff_attendance_service;
 pub mod staff_enterprise_service;
 pub mod staff_hrms_service;
 pub mod staff_leave_service;
+pub mod staff_notification_service;
 pub mod staff_operations_service;
 pub mod staff_payroll_service;
 pub mod staff_schedule_service;

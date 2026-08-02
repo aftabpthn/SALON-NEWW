@@ -27,6 +27,7 @@ pub struct PosEvent {
 pub struct TeamChatEvent {
     pub tenant_id: String,
     pub branch_id: String,
+    pub event_type: String,
     pub message_id: String,
     pub sender_user_id: String,
 }

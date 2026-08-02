@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::{
+    config::is_local_env,
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::clients_repository::{
         self, ClientAppointmentHistoryRecord, ClientAuditRecord, ClientClinicalProfileRecord,
@@ -26,7 +27,10 @@ use crate::{
         CreateClient, UpdateClient,
     },
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, client_service},
+    services::{
+        auth_service::{self, AuthClaims},
+        client_service, migration_file_service, staff_enterprise_service,
+    },
     state::{AppState, AppointmentEvent},
 };
 
@@ -149,6 +153,42 @@ pub fn router() -> Router<AppState> {
         .route(
             "/clients/:id/treatment-photos/:photo_id/content",
             get(get_treatment_photo),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360",
+            get(staff_guest_360),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/notes",
+            axum::routing::post(staff_guest_note),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/clinical-profile",
+            axum::routing::put(staff_guest_clinical_profile),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/forms",
+            axum::routing::post(staff_guest_form),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/forms/:submission_id/reviews",
+            axum::routing::post(staff_guest_form_review),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/photos",
+            axum::routing::post(staff_guest_photo),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/photos/:photo_id/content",
+            get(staff_guest_photo_content),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/photos/:photo_id",
+            axum::routing::delete(staff_guest_photo_delete),
+        )
+        .route(
+            "/staff-self/appointments/:appointment_id/guest-360/contact-preferences",
+            axum::routing::patch(staff_guest_contact_preferences),
         )
 }
 
@@ -366,6 +406,8 @@ struct ClientTimelineResponse {
 struct ClientNoteRequest {
     note_type: Option<String>,
     note: String,
+    appointment_id: Option<String>,
+    visibility: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -377,6 +419,13 @@ struct ClientFormDefinitionRequest {
     body: Option<String>,
     fields: Value,
     requires_signature: Option<bool>,
+    scope_type: Option<String>,
+    scope_ids: Option<Vec<String>>,
+    required: Option<bool>,
+    valid_for_days: Option<i32>,
+    review_required: Option<bool>,
+    staff_mode_allowed: Option<bool>,
+    guest_mode_allowed: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -422,6 +471,58 @@ struct TreatmentPhotoQuery {
 struct TreatmentPhotoUpdateRequest {
     caption: Option<String>,
     photo_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffGuestNoteRequest {
+    note_type: Option<String>,
+    note: String,
+    visibility: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffGuestFormRequest {
+    submission_id: Option<String>,
+    definition_id: String,
+    responses: Value,
+    service_id: Option<String>,
+    membership_id: Option<String>,
+    package_id: Option<String>,
+    mode: Option<String>,
+    status: String,
+    corrects_submission_id: Option<String>,
+    correction_reason: Option<String>,
+    signature_name: Option<String>,
+    consent_accepted: Option<bool>,
+    expected_version: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffGuestFormReviewRequest {
+    decision: String,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffGuestPhotoQuery {
+    file_name: String,
+    caption: Option<String>,
+    service_id: Option<String>,
+    photo_type: Option<String>,
+    consent_confirmed: Option<bool>,
+    consent_reason: Option<String>,
+}
+
+struct StaffGuestScope {
+    tenant_id: String,
+    branch_id: String,
+    client_id: String,
+    service_ids: Vec<String>,
+    own_appointment: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1180,6 +1281,17 @@ async fn get_client(
     Path(id): Path<String>,
 ) -> ApiResult<Client360Response> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        load_client_360(&state, &tenant_id, &branch_id, &id).await?,
+    )))
+}
+
+async fn load_client_360(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Client360Response, AppError> {
     let row = clients_repository::get(&state.db, &tenant_id, &branch_id, &id)
         .await
         .map_err(|_| AppError::internal("failed to load client"))?
@@ -1220,7 +1332,7 @@ async fn get_client(
     )
     .map_err(|_| AppError::internal("failed to load client 360 history"))?;
 
-    Ok(Json(ApiResponse::ok(Client360Response {
+    Ok(Client360Response {
         client: ClientResponse::from(row),
         summary,
         appointments,
@@ -1237,7 +1349,7 @@ async fn get_client(
         consent_history,
         communications,
         reviews,
-    })))
+    })
 }
 
 async fn get_client_timeline(
@@ -1513,6 +1625,11 @@ async fn create_client_note(
         ));
     }
     let note_type = payload.note_type.as_deref().unwrap_or("general").trim();
+    let visibility = payload
+        .visibility
+        .as_deref()
+        .unwrap_or("branch_staff")
+        .trim();
     if !matches!(
         note_type,
         "general"
@@ -1522,7 +1639,8 @@ async fn create_client_note(
             | "follow_up"
             | "complaint"
             | "service-recovery"
-    ) {
+    ) || !matches!(visibility, "assigned_staff" | "branch_staff" | "management")
+    {
         return Err(AppError::validation("invalid noteType"));
     }
     let record = clients_repository::create_note(
@@ -1530,8 +1648,14 @@ async fn create_client_note(
         &tenant_id,
         &branch_id,
         &id,
+        payload
+            .appointment_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty()),
         note_type,
         note,
+        visibility,
         &claims.sub,
     )
     .await
@@ -1571,6 +1695,16 @@ async fn create_form_definition(
     let form_key = payload.form_key.trim().to_lowercase();
     let name = payload.name.trim();
     let form_type = payload.form_type.trim().to_lowercase();
+    let scope_type = payload.scope_type.as_deref().unwrap_or("guest").trim();
+    let scope_ids = payload.scope_ids.unwrap_or_default();
+    let scope_ids_valid = scope_ids.len() <= 100
+        && scope_ids.iter().all(|value| {
+            let value = value.trim();
+            !value.is_empty() && value.chars().count() <= 120
+        })
+        && scope_ids.iter().collect::<HashSet<_>>().len() == scope_ids.len();
+    let staff_mode_allowed = payload.staff_mode_allowed.unwrap_or(true);
+    let guest_mode_allowed = payload.guest_mode_allowed.unwrap_or(true);
     let body = payload.body.as_deref().unwrap_or("").trim();
     if form_key.is_empty()
         || form_key.len() > 80
@@ -1582,6 +1716,15 @@ async fn create_form_definition(
         || name.is_empty()
         || name.chars().count() > 120
         || !matches!(form_type.as_str(), "consent" | "intake" | "treatment")
+        || !matches!(
+            scope_type,
+            "guest" | "service" | "membership" | "package" | "tag"
+        )
+        || !scope_ids_valid
+        || payload
+            .valid_for_days
+            .is_some_and(|days| !(1..=3650).contains(&days))
+        || (!staff_mode_allowed && !guest_mode_allowed)
         || body.chars().count() > 10_000
     {
         return Err(AppError::validation("invalid client form definition"));
@@ -1597,6 +1740,13 @@ async fn create_form_definition(
         body,
         &payload.fields,
         payload.requires_signature.unwrap_or(false),
+        scope_type,
+        &json!(scope_ids),
+        payload.required.unwrap_or(false),
+        payload.valid_for_days,
+        payload.review_required.unwrap_or(false),
+        staff_mode_allowed,
+        guest_mode_allowed,
         &claims.sub,
     )
     .await
@@ -1873,7 +2023,7 @@ async fn upload_treatment_photo(
         || file_name.chars().count() > 180
         || file_name.chars().any(char::is_control)
         || caption.chars().count() > 500
-        || !matches!(photo_type, "before" | "after" | "other")
+        || !matches!(photo_type, "profile" | "before" | "after" | "other")
         || bytes.is_empty()
         || bytes.len() > 5 * 1024 * 1024
         || !matches!(
@@ -1894,11 +2044,13 @@ async fn upload_treatment_photo(
             .appointment_id
             .as_deref()
             .filter(|value| !value.trim().is_empty()),
+        "",
         caption,
         file_name,
         &content_type,
         &sha256,
         photo_type,
+        None,
         bytes.to_vec(),
         &claims.sub,
     )
@@ -1927,7 +2079,8 @@ async fn update_treatment_photo(
     let caption = payload.caption.as_deref().map(str::trim);
     let photo_type = payload.photo_type.as_deref().map(str::trim);
     if caption.is_some_and(|value| value.chars().count() > 500)
-        || photo_type.is_some_and(|value| !matches!(value, "before" | "after" | "other"))
+        || photo_type
+            .is_some_and(|value| !matches!(value, "profile" | "before" | "after" | "other"))
     {
         return Err(AppError::validation("invalid treatment photo update"));
     }
@@ -2016,6 +2169,861 @@ async fn get_treatment_photo(
         )
         .body(Body::from(row.content))
         .map_err(|_| AppError::internal("failed to stream treatment photo"))
+}
+
+fn staff_guest_permission(claims: &AuthClaims, permission: &str, legacy: &[&str]) -> bool {
+    auth_service::staff_app_permission_allowed(
+        claims,
+        permission,
+        &["owner", "admin", "manager"],
+        legacy,
+    )
+}
+
+async fn staff_guest_scope(
+    state: &AppState,
+    claims: &AuthClaims,
+    headers: &HeaderMap,
+    appointment_id: &str,
+) -> Result<StaffGuestScope, AppError> {
+    if !auth_service::staff_app_permission_allowed(
+        claims,
+        "staff.app.guest.read",
+        &["owner", "admin", "manager", "staff"],
+        &["clients.read"],
+    ) {
+        return Err(AppError::forbidden("Guest 360 permission is required"));
+    }
+    let (tenant_id, branch_id) = tenant_branch(headers)?;
+    let self_staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row: Option<(String, String, Value)> = sqlx::query_as(
+        "SELECT client_id,staff_id,service_ids_json FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(appointment_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load appointment guest"))?;
+    let (client_id, staff_id, service_ids_json) =
+        row.ok_or_else(|| AppError::not_found("appointment was not found"))?;
+    let own_appointment = staff_id == self_staff_id;
+    if !own_appointment
+        && !auth_service::staff_app_permission_allowed(
+            claims,
+            "staff.app.appointments.team.read",
+            &["owner", "admin", "manager"],
+            &[],
+        )
+    {
+        return Err(AppError::not_found("appointment was not found"));
+    }
+    Ok(StaffGuestScope {
+        tenant_id,
+        branch_id,
+        client_id,
+        service_ids: service_ids_json
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect(),
+        own_appointment,
+    })
+}
+
+fn require_staff_guest_action(
+    claims: &AuthClaims,
+    scope: &StaffGuestScope,
+    permission: &str,
+    legacy: &[&str],
+) -> Result<(), AppError> {
+    if !staff_guest_permission(claims, permission, legacy) {
+        return Err(AppError::forbidden(
+            "Guest 360 action permission is required",
+        ));
+    }
+    if !scope.own_appointment
+        && !auth_service::staff_app_permission_allowed(
+            claims,
+            "staff.app.appointments.team.manage",
+            &["owner", "admin", "manager"],
+            &[],
+        )
+    {
+        return Err(AppError::not_found("appointment was not found"));
+    }
+    Ok(())
+}
+
+fn masked_phone(value: &str) -> String {
+    let suffix = value
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>();
+    if suffix.is_empty() {
+        String::new()
+    } else {
+        format!("••••••{suffix}")
+    }
+}
+
+fn masked_email(value: &str) -> String {
+    let Some((name, domain)) = value.split_once('@') else {
+        return if value.is_empty() {
+            String::new()
+        } else {
+            "••••".to_owned()
+        };
+    };
+    format!("{}•••@{domain}", name.chars().next().unwrap_or('•'))
+}
+
+fn string_set(value: &Value, pointer: &str, key: &str) -> HashSet<String> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row.get(key).and_then(Value::as_str))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn form_scope_applies(
+    definition: &ClientFormDefinitionRecord,
+    service_ids: &[String],
+    relationships: &Value,
+) -> bool {
+    let scoped = definition
+        .scope_ids_json
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<HashSet<_>>();
+    let matches = |available: HashSet<String>| {
+        !available.is_empty()
+            && (scoped.is_empty()
+                || available
+                    .iter()
+                    .any(|value| scoped.contains(value.as_str())))
+    };
+    match definition.scope_type.as_str() {
+        "guest" => true,
+        "service" => matches(service_ids.iter().cloned().collect()),
+        "membership" => matches(string_set(relationships, "/memberships", "membershipId")),
+        "package" => matches(string_set(relationships, "/packages", "packageId")),
+        "tag" => relationships
+            .pointer("/preferences/categories")
+            .and_then(Value::as_array)
+            .is_some_and(|values| {
+                !values.is_empty()
+                    && (scoped.is_empty()
+                        || values
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .any(|value| scoped.contains(value)))
+            }),
+        _ => false,
+    }
+}
+
+fn guest_form_statuses(
+    definitions: &[ClientFormDefinitionRecord],
+    submissions: &[ClientFormSubmissionRecord],
+    appointment_id: &str,
+) -> Value {
+    Value::Array(
+        definitions
+            .iter()
+            .map(|definition| {
+                let latest = submissions.iter().find(|submission| {
+                    submission.form_key == definition.form_key
+                        && (submission.appointment_id.as_deref() == Some(appointment_id)
+                            || submission.appointment_id.is_none())
+                });
+                let status = match latest {
+                    None => "pending",
+                    Some(row) if row.status == "draft" => "draft",
+                    Some(row) if row.expires_at.is_some_and(|expires| expires < Utc::now()) => {
+                        "expired"
+                    }
+                    Some(row) if row.form_version < definition.version => "outdated",
+                    Some(row) if row.review_status == "correction_required" => {
+                        "correction_required"
+                    }
+                    Some(row) if row.review_status == "pending" => "review_required",
+                    Some(_) => "completed",
+                };
+                json!({
+                    "definitionId":definition.id,"formKey":definition.form_key,"name":definition.name,
+                    "required":definition.required,"status":status,"latestSubmissionId":latest.map(|row|row.id.as_str()).unwrap_or(""),
+                    "latestVersion":latest.map(|row|row.version).unwrap_or(0)
+                })
+            })
+            .collect(),
+    )
+}
+
+async fn staff_guest_360(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+) -> ApiResult<Value> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    let (mut guest, relationships, timeline, photo_consent) = tokio::try_join!(
+        load_client_360(&state, &scope.tenant_id, &scope.branch_id, &scope.client_id),
+        async {
+            clients_repository::memory_relationships(
+                &state.db,
+                &scope.tenant_id,
+                &scope.branch_id,
+                &scope.client_id,
+            )
+            .await
+            .map(|value| value.unwrap_or_else(|| json!({})))
+            .map_err(|_| AppError::internal("failed to load guest benefits"))
+        },
+        async {
+            clients_repository::timeline(
+                &state.db,
+                &scope.tenant_id,
+                &scope.branch_id,
+                &scope.client_id,
+                None,
+                "",
+                200,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to load guest history"))
+        },
+        async {
+            clients_repository::latest_photo_consent(
+                &state.db,
+                &scope.tenant_id,
+                &scope.branch_id,
+                &scope.client_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to load photo consent"))
+        }
+    )?;
+    let contact_read = staff_guest_permission(&claims, "staff.app.guest.contact.read", &[]);
+    let clinical_read = staff_guest_permission(&claims, "staff.app.guest.clinical.read", &[]);
+    let forms_read = staff_guest_permission(
+        &claims,
+        "staff.app.guest.forms.read",
+        &["clients.forms.manage"],
+    );
+    let photos_read = staff_guest_permission(&claims, "staff.app.guest.photos.read", &[]);
+    let management_notes = staff_guest_permission(&claims, "staff.app.guest.forms.review", &[])
+        || staff_guest_permission(&claims, "staff.app.guest.contact.read", &[]);
+    if !contact_read {
+        guest.client.phone = masked_phone(&guest.client.phone);
+        guest.client.normalized_phone = masked_phone(&guest.client.normalized_phone);
+        guest.client.email = masked_email(&guest.client.email);
+        guest.communications.clear();
+        guest.duplicates.clear();
+    }
+    guest
+        .client_notes
+        .retain(|note| note.visibility != "management" || management_notes);
+    if !clinical_read {
+        guest.clinical_profile = None;
+        guest.soap_notes.clear();
+    }
+    if forms_read {
+        guest.form_definitions.retain(|definition| {
+            definition.active && form_scope_applies(definition, &scope.service_ids, &relationships)
+        });
+    } else {
+        guest.form_definitions.clear();
+        guest.form_submissions.clear();
+    }
+    if !photos_read {
+        guest.treatment_photos.clear();
+    }
+    let form_statuses = guest_form_statuses(
+        &guest.form_definitions,
+        &guest.form_submissions,
+        &appointment_id,
+    );
+    let profile_photo_id = guest
+        .treatment_photos
+        .iter()
+        .find(|row| row.photo_type == "profile")
+        .map(|row| row.id.as_str())
+        .unwrap_or("");
+    let permissions = json!({
+        "contactRead":contact_read,"notesManage":staff_guest_permission(&claims,"staff.app.guest.notes.manage", &["clients.manage"]),
+        "clinicalRead":clinical_read,"clinicalManage":staff_guest_permission(&claims,"staff.app.guest.clinical.manage", &["clients.manage"]),
+        "formsRead":forms_read,"formsManage":staff_guest_permission(&claims,"staff.app.guest.forms.manage", &["clients.forms.manage"]),
+        "formsReview":staff_guest_permission(&claims,"staff.app.guest.forms.review", &[]),
+        "photosRead":photos_read,"photosManage":staff_guest_permission(&claims,"staff.app.guest.photos.manage", &["clients.manage"]),
+        "consentManage":staff_guest_permission(&claims,"staff.app.guest.consent.manage", &["clients.consent.manage"])
+    });
+    Ok(Json(ApiResponse::ok(json!({
+        "appointmentId":appointment_id,"guest":guest,"relationships":relationships,"timeline":timeline,
+        "formStatuses":form_statuses,"photoConsent":photo_consent,"profilePhotoId":profile_photo_id,"permissions":permissions
+    }))))
+}
+
+async fn staff_guest_note(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+    Json(payload): Json<StaffGuestNoteRequest>,
+) -> ApiResult<ClientNoteRecord> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.notes.manage",
+        &["clients.manage"],
+    )?;
+    let note = payload.note.trim();
+    let note_type = payload.note_type.as_deref().unwrap_or("general").trim();
+    let visibility = payload
+        .visibility
+        .as_deref()
+        .unwrap_or("assigned_staff")
+        .trim();
+    if note.is_empty()
+        || note.chars().count() > 2000
+        || !matches!(
+            note_type,
+            "general"
+                | "preference"
+                | "allergy"
+                | "service"
+                | "follow_up"
+                | "complaint"
+                | "service-recovery"
+        )
+        || !matches!(visibility, "assigned_staff" | "branch_staff" | "management")
+    {
+        return Err(AppError::validation("invalid guest note"));
+    }
+    if visibility == "management"
+        && !staff_guest_permission(&claims, "staff.app.guest.forms.review", &[])
+    {
+        return Err(AppError::forbidden(
+            "management note permission is required",
+        ));
+    }
+    let row = clients_repository::create_note(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        Some(&appointment_id),
+        note_type,
+        note,
+        visibility,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save guest note"))?
+    .ok_or_else(|| AppError::not_found("guest was not found"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "note",
+        &row.id,
+        "note.created",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn staff_guest_clinical_profile(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+    Json(payload): Json<ClientClinicalProfileRequest>,
+) -> ApiResult<ClientClinicalProfileRecord> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.clinical.manage",
+        &["clients.manage"],
+    )?;
+    let allergies = payload.allergies.as_deref().unwrap_or("").trim();
+    let preferences = payload.preferences.as_deref().unwrap_or("").trim();
+    let version = payload.expected_version.unwrap_or(0);
+    if allergies.chars().count() > 5000 || preferences.chars().count() > 5000 || version < 0 {
+        return Err(AppError::validation("invalid clinical profile"));
+    }
+    let row = clients_repository::save_clinical_profile(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        allergies,
+        preferences,
+        version,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save clinical profile"))?
+    .ok_or_else(|| AppError::conflict("clinical profile changed; reload and try again"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "clinical_profile",
+        &scope.client_id,
+        "clinical_profile.updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn staff_guest_form(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+    Json(payload): Json<StaffGuestFormRequest>,
+) -> ApiResult<ClientFormSubmissionRecord> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.forms.manage",
+        &["clients.forms.manage"],
+    )?;
+    let definition = clients_repository::get_form_definition(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        payload.definition_id.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load guest form"))?
+    .filter(|row| row.active)
+    .ok_or_else(|| AppError::not_found("guest form was not found"))?;
+    let relationships = clients_repository::memory_relationships(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate form scope"))?
+    .unwrap_or_else(|| json!({}));
+    if !form_scope_applies(&definition, &scope.service_ids, &relationships) {
+        return Err(AppError::not_found("guest form was not found"));
+    }
+    let status = payload.status.trim();
+    let mode = payload.mode.as_deref().unwrap_or("staff").trim();
+    if !matches!(status, "draft" | "submitted")
+        || !matches!(mode, "staff" | "guest")
+        || (mode == "staff" && !definition.staff_mode_allowed)
+        || (mode == "guest" && !definition.guest_mode_allowed)
+    {
+        return Err(AppError::validation("invalid form mode or status"));
+    }
+    if status == "draft" {
+        validate_form_draft_responses(&definition.fields_json, &payload.responses)?;
+    } else {
+        validate_form_responses(&definition.fields_json, &payload.responses)?;
+    }
+    let service_id = payload.service_id.as_deref().unwrap_or("").trim();
+    let membership_id = payload.membership_id.as_deref().unwrap_or("").trim();
+    let package_id = payload.package_id.as_deref().unwrap_or("").trim();
+    if (!service_id.is_empty() && !scope.service_ids.iter().any(|value| value == service_id))
+        || (definition.scope_type == "service" && service_id.is_empty())
+        || (definition.scope_type == "membership"
+            && !string_set(&relationships, "/memberships", "membershipId").contains(membership_id))
+        || (definition.scope_type == "package"
+            && !string_set(&relationships, "/packages", "packageId").contains(package_id))
+    {
+        return Err(AppError::validation("form association is invalid"));
+    }
+    let signature_name = payload.signature_name.as_deref().unwrap_or("").trim();
+    let consent_accepted = payload.consent_accepted.unwrap_or(false);
+    if status == "submitted"
+        && definition.requires_signature
+        && (!consent_accepted || signature_name.chars().count() < 2)
+    {
+        return Err(AppError::validation("consent and signature are required"));
+    }
+    if signature_name.chars().count() > 500 || (!signature_name.is_empty() && !consent_accepted) {
+        return Err(AppError::validation("invalid signature evidence"));
+    }
+    let corrects = payload
+        .corrects_submission_id
+        .as_deref()
+        .unwrap_or("")
+        .trim();
+    let correction_reason = payload.correction_reason.as_deref().unwrap_or("").trim();
+    if !corrects.is_empty() && !(3..=500).contains(&correction_reason.chars().count()) {
+        return Err(AppError::validation(
+            "correction reason must be 3 to 500 characters",
+        ));
+    }
+    let signature_sha256 = if signature_name.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "{}:{}:{}:{}",
+                    scope.client_id, definition.id, definition.version, signature_name
+                )
+                .as_bytes()
+            )
+        )
+    };
+    let row = clients_repository::save_staff_form_submission(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        clients_repository::StaffFormSubmissionWrite {
+            submission_id: payload.submission_id.as_deref().unwrap_or("").trim(),
+            definition_id: &definition.id,
+            responses_json: &payload.responses,
+            appointment_id: &appointment_id,
+            service_id,
+            membership_id,
+            package_id,
+            mode,
+            status,
+            corrects_submission_id: corrects,
+            correction_reason,
+            signature_name,
+            signature_sha256: &signature_sha256,
+            expected_version: payload.expected_version.unwrap_or(0),
+            actor: &claims.sub,
+        },
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save guest form"))?
+    .ok_or_else(|| AppError::conflict("form draft changed or submitted evidence is immutable"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "form",
+        &row.id,
+        if status == "draft" {
+            "form.draft_saved"
+        } else {
+            "form.submitted"
+        },
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn staff_guest_form_review(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((appointment_id, submission_id)): Path<(String, String)>,
+    Json(payload): Json<StaffGuestFormReviewRequest>,
+) -> ApiResult<Value> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(&claims, &scope, "staff.app.guest.forms.review", &[])?;
+    let decision = payload.decision.trim();
+    let note = payload.note.as_deref().unwrap_or("").trim();
+    if !matches!(decision, "approved" | "correction_required")
+        || note.chars().count() > 1000
+        || (decision == "correction_required" && note.chars().count() < 3)
+    {
+        return Err(AppError::validation("invalid form review"));
+    }
+    let row = clients_repository::create_form_review_event(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        &submission_id,
+        decision,
+        note,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to review guest form"))?
+    .ok_or_else(|| AppError::not_found("submitted review-required form was not found"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "form_review",
+        &submission_id,
+        "form.reviewed",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn staff_guest_photo(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+    Query(query): Query<StaffGuestPhotoQuery>,
+    bytes: Bytes,
+) -> ApiResult<ClientTreatmentPhotoRecord> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.photos.manage",
+        &["clients.manage"],
+    )?;
+    let file_name = query.file_name.trim();
+    let caption = query.caption.as_deref().unwrap_or("").trim();
+    let service_id = query.service_id.as_deref().unwrap_or("").trim();
+    let photo_type = query.photo_type.as_deref().unwrap_or("other").trim();
+    let reason = query.consent_reason.as_deref().unwrap_or("").trim();
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    if file_name.is_empty()
+        || file_name.chars().count() > 180
+        || file_name.chars().any(char::is_control)
+        || caption.chars().count() > 500
+        || !matches!(photo_type, "profile" | "before" | "after" | "other")
+        || (!service_id.is_empty() && !scope.service_ids.iter().any(|value| value == service_id))
+        || bytes.is_empty()
+        || bytes.len() > 5 * 1024 * 1024
+        || !matches!(
+            content_type.as_str(),
+            "image/jpeg" | "image/png" | "image/webp"
+        )
+        || !photo_content_matches_type(&bytes, &content_type)
+    {
+        return Err(AppError::validation("invalid guest photo"));
+    }
+    migration_file_service::scan_upload_bytes(&bytes, !is_local_env(&state.settings.app_env))
+        .await?;
+    let consent = if query.consent_confirmed.unwrap_or(false) {
+        if !(3..=500).contains(&reason.chars().count()) {
+            return Err(AppError::validation(
+                "photo consent reason must be 3 to 500 characters",
+            ));
+        }
+        clients_repository::record_photo_consent(
+            &state.db,
+            &scope.tenant_id,
+            &scope.branch_id,
+            &scope.client_id,
+            true,
+            reason,
+            &claims.sub,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to record photo consent"))?
+    } else {
+        clients_repository::latest_photo_consent(
+            &state.db,
+            &scope.tenant_id,
+            &scope.branch_id,
+            &scope.client_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate photo consent"))?
+    };
+    let consent = consent
+        .filter(|row| row.opted_in)
+        .ok_or_else(|| AppError::validation("guest photo consent is required"))?;
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let row = clients_repository::save_treatment_photo(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        Some(&appointment_id),
+        service_id,
+        caption,
+        file_name,
+        &content_type,
+        &sha256,
+        photo_type,
+        Some(&consent.id),
+        bytes.to_vec(),
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to upload guest photo"))?
+    .ok_or_else(|| AppError::not_found("guest or appointment was not found"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "photo",
+        &row.id,
+        "photo.uploaded",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn staff_guest_photo_content(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((appointment_id, photo_id)): Path<(String, String)>,
+) -> Result<Response<Body>, AppError> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    if !staff_guest_permission(&claims, "staff.app.guest.photos.read", &[]) {
+        return Err(AppError::forbidden(
+            "guest photo read permission is required",
+        ));
+    }
+    let row = clients_repository::get_treatment_photo(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        &photo_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load guest photo"))?
+    .ok_or_else(|| AppError::not_found("guest photo was not found"))?;
+    let safe_name = row
+        .file_name
+        .chars()
+        .map(|value| {
+            if value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-') {
+                value
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    Response::builder()
+        .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(&row.content_type)
+                .map_err(|_| AppError::internal("invalid stored photo type"))?,
+        )
+        .header(header::CACHE_CONTROL, "private, no-store")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("inline; filename=\"{safe_name}\""),
+        )
+        .body(Body::from(row.content))
+        .map_err(|_| AppError::internal("failed to stream guest photo"))
+}
+
+async fn staff_guest_photo_delete(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((appointment_id, photo_id)): Path<(String, String)>,
+) -> ApiResult<()> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.photos.manage",
+        &["clients.manage"],
+    )?;
+    if !clients_repository::delete_treatment_photo(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        &photo_id,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to delete guest photo"))?
+    {
+        return Err(AppError::not_found("guest photo was not found"));
+    }
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "photo",
+        &photo_id,
+        "photo.deleted",
+    );
+    Ok(Json(ApiResponse::ok(())))
+}
+
+async fn staff_guest_contact_preferences(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(appointment_id): Path<String>,
+    Json(payload): Json<ContactPreferencesRequest>,
+) -> ApiResult<ClientContactPreferencesRecord> {
+    let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
+    require_staff_guest_action(
+        &claims,
+        &scope,
+        "staff.app.guest.consent.manage",
+        &["clients.consent.manage"],
+    )?;
+    let channel = payload
+        .preferred_communication_channel
+        .trim()
+        .to_lowercase();
+    let reason = payload.reason.as_deref().unwrap_or("").trim();
+    if !matches!(
+        channel.as_str(),
+        "none" | "whatsapp" | "sms" | "email" | "phone"
+    ) || reason.chars().count() > 500
+    {
+        return Err(AppError::validation("invalid communication preferences"));
+    }
+    let preferred_staff_id = payload
+        .preferred_staff_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let row = clients_repository::save_contact_preferences(
+        &state.db,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        preferred_staff_id,
+        &channel,
+        payload.whatsapp_opt_in,
+        payload.sms_opt_in,
+        payload.email_opt_in,
+        reason,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save communication preferences"))?
+    .ok_or_else(|| AppError::not_found("guest or preferred staff was not found"))?;
+    publish_client_timeline(
+        &state,
+        &scope.tenant_id,
+        &scope.branch_id,
+        &scope.client_id,
+        "preferences",
+        &scope.client_id,
+        "preferences.updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 async fn create_client(
@@ -2845,11 +3853,25 @@ fn validate_form_fields(fields: &Value) -> Result<(), AppError> {
             || label.chars().count() > 160
             || !matches!(
                 field_type,
-                "text" | "textarea" | "boolean" | "date" | "select"
+                "text"
+                    | "textarea"
+                    | "boolean"
+                    | "date"
+                    | "number"
+                    | "select"
+                    | "signature"
+                    | "table"
+                    | "clinical"
+                    | "section"
             )
             || object
                 .get("required")
                 .is_some_and(|value| !value.is_boolean())
+            || (field_type == "section"
+                && object
+                    .get("required")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false))
         {
             return Err(AppError::validation("invalid client form field"));
         }
@@ -2867,8 +3889,58 @@ fn validate_form_fields(fields: &Value) -> Result<(), AppError> {
                 return Err(AppError::validation("invalid select field options"));
             }
         }
+        if field_type == "number"
+            && (object.get("min").is_some_and(|value| !value.is_number())
+                || object.get("max").is_some_and(|value| !value.is_number())
+                || object
+                    .get("min")
+                    .and_then(Value::as_f64)
+                    .zip(object.get("max").and_then(Value::as_f64))
+                    .is_some_and(|(min, max)| min > max))
+        {
+            return Err(AppError::validation("invalid number field range"));
+        }
+        if field_type == "table" {
+            let columns = object
+                .get("columns")
+                .and_then(Value::as_array)
+                .filter(|columns| !columns.is_empty() && columns.len() <= 20)
+                .ok_or_else(|| AppError::validation("table fields require columns"))?;
+            let mut column_keys = HashSet::new();
+            if columns.iter().any(|column| {
+                let Some(column) = column.as_object() else {
+                    return true;
+                };
+                let key = column.get("key").and_then(Value::as_str).unwrap_or("");
+                let label = column.get("label").and_then(Value::as_str).unwrap_or("");
+                let kind = column.get("type").and_then(Value::as_str).unwrap_or("text");
+                key.is_empty()
+                    || !key.chars().all(|character| {
+                        character.is_ascii_lowercase()
+                            || character.is_ascii_digit()
+                            || character == '_'
+                    })
+                    || !column_keys.insert(key)
+                    || label.trim().is_empty()
+                    || label.chars().count() > 120
+                    || !matches!(kind, "text" | "number" | "date" | "boolean")
+            }) {
+                return Err(AppError::validation("invalid table field columns"));
+            }
+        }
     }
     for field in fields {
+        let current_key = field.get("key").and_then(Value::as_str).unwrap_or("");
+        if let Some(section_key) = field.get("sectionKey").and_then(Value::as_str) {
+            if section_key == current_key
+                || !fields.iter().any(|candidate| {
+                    candidate.get("key").and_then(Value::as_str) == Some(section_key)
+                        && candidate.get("type").and_then(Value::as_str) == Some("section")
+                })
+            {
+                return Err(AppError::validation("invalid sectionKey"));
+            }
+        }
         let Some(condition) = field.get("visibleWhen") else {
             continue;
         };
@@ -2879,7 +3951,6 @@ fn validate_form_fields(fields: &Value) -> Result<(), AppError> {
             .get("fieldKey")
             .and_then(Value::as_str)
             .unwrap_or("");
-        let current_key = field.get("key").and_then(Value::as_str).unwrap_or("");
         let equals = condition.get("equals");
         if field_key.is_empty()
             || field_key == current_key
@@ -2893,7 +3964,7 @@ fn validate_form_fields(fields: &Value) -> Result<(), AppError> {
     Ok(())
 }
 
-fn form_field_is_visible(field: &Value, responses: &serde_json::Map<String, Value>) -> bool {
+fn field_condition_is_visible(field: &Value, responses: &serde_json::Map<String, Value>) -> bool {
     let Some(condition) = field.get("visibleWhen").and_then(Value::as_object) else {
         return true;
     };
@@ -2903,7 +3974,36 @@ fn form_field_is_visible(field: &Value, responses: &serde_json::Map<String, Valu
     responses.get(field_key) == condition.get("equals")
 }
 
+fn form_field_is_visible(
+    field: &Value,
+    fields: &[Value],
+    responses: &serde_json::Map<String, Value>,
+) -> bool {
+    if !field_condition_is_visible(field, responses) {
+        return false;
+    }
+    let Some(section_key) = field.get("sectionKey").and_then(Value::as_str) else {
+        return true;
+    };
+    fields
+        .iter()
+        .find(|candidate| candidate.get("key").and_then(Value::as_str) == Some(section_key))
+        .is_some_and(|section| field_condition_is_visible(section, responses))
+}
+
 pub(crate) fn validate_form_responses(fields: &Value, responses: &Value) -> Result<(), AppError> {
+    validate_form_responses_mode(fields, responses, true)
+}
+
+fn validate_form_draft_responses(fields: &Value, responses: &Value) -> Result<(), AppError> {
+    validate_form_responses_mode(fields, responses, false)
+}
+
+fn validate_form_responses_mode(
+    fields: &Value,
+    responses: &Value,
+    enforce_required: bool,
+) -> Result<(), AppError> {
     let responses = responses
         .as_object()
         .ok_or_else(|| AppError::validation("responses must be an object"))?;
@@ -2927,7 +4027,7 @@ pub(crate) fn validate_form_responses(fields: &Value, responses: &Value) -> Resu
         ));
     }
     for field in fields {
-        if !form_field_is_visible(field, responses) {
+        if !form_field_is_visible(field, fields, responses) {
             continue;
         }
         let key = field.get("key").and_then(Value::as_str).unwrap_or("");
@@ -2937,12 +4037,15 @@ pub(crate) fn validate_form_responses(fields: &Value, responses: &Value) -> Resu
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let value = responses.get(key);
+        if field_type == "section" {
+            continue;
+        }
         let missing = match value {
             None | Some(Value::Null) => true,
             Some(Value::String(value)) => value.trim().is_empty(),
             _ => false,
         };
-        if required && missing {
+        if enforce_required && required && missing {
             return Err(AppError::validation(format!("{key} is required")));
         }
         if missing {
@@ -2954,10 +4057,62 @@ pub(crate) fn validate_form_responses(fields: &Value, responses: &Value) -> Resu
             ("date", Some(Value::String(value))) => {
                 NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
             }
+            ("number", Some(Value::Number(value))) => value.as_f64().is_some_and(|number| {
+                field
+                    .get("min")
+                    .and_then(Value::as_f64)
+                    .is_none_or(|min| number >= min)
+                    && field
+                        .get("max")
+                        .and_then(Value::as_f64)
+                        .is_none_or(|max| number <= max)
+            }),
             ("select", Some(Value::String(value))) => field
                 .get("options")
                 .and_then(Value::as_array)
                 .is_some_and(|options| options.iter().any(|option| option.as_str() == Some(value))),
+            ("signature", Some(Value::String(value))) => {
+                (2..=500).contains(&value.trim().chars().count())
+            }
+            ("clinical", Some(Value::String(value))) => value.chars().count() <= 10_000,
+            ("table", Some(Value::Array(rows))) => {
+                let columns = field.get("columns").and_then(Value::as_array);
+                rows.len() <= 50
+                    && columns.is_some_and(|columns| {
+                        let allowed = columns
+                            .iter()
+                            .filter_map(|column| column.get("key").and_then(Value::as_str))
+                            .collect::<HashSet<_>>();
+                        rows.iter().all(|row| {
+                            row.as_object().is_some_and(|row| {
+                                row.len() <= allowed.len()
+                                    && row.keys().all(|key| allowed.contains(key.as_str()))
+                                    && columns.iter().all(|column| {
+                                        let key =
+                                            column.get("key").and_then(Value::as_str).unwrap_or("");
+                                        let Some(value) = row.get(key) else {
+                                            return true;
+                                        };
+                                        match column
+                                            .get("type")
+                                            .and_then(Value::as_str)
+                                            .unwrap_or("text")
+                                        {
+                                            "text" => value
+                                                .as_str()
+                                                .is_some_and(|value| value.chars().count() <= 500),
+                                            "number" => value.is_number(),
+                                            "date" => value.as_str().is_some_and(|value| {
+                                                NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+                                            }),
+                                            "boolean" => value.is_boolean(),
+                                            _ => false,
+                                        }
+                                    })
+                            })
+                        })
+                    })
+            }
             _ => false,
         };
         if !valid {

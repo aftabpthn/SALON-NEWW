@@ -140,6 +140,9 @@
               <span>
                 <b>{{ item.client }}</b>
                 <small>{{ item.service }}</small>
+                @if (consumptionStatusLabel(item.inventoryConsumptionStatus)) {
+                  <small class="consumption-badge">{{ consumptionStatusLabel(item.inventoryConsumptionStatus) }}</small>
+                }
               </span>
               <strong>{{ item.time }}</strong>
               <em>{{ item.status }}</em>
@@ -163,6 +166,9 @@
                     <b>{{ appointment.client }}</b>
                     <span>{{ appointment.service }}</span>
                     <small>{{ appointment.status }}</small>
+                    @if (consumptionStatusLabel(appointment.inventoryConsumptionStatus)) {
+                      <small class="consumption-badge">{{ consumptionStatusLabel(appointment.inventoryConsumptionStatus) }}</small>
+                    }
                   </div>
                 }
                 @if (!resource.appointments.length) {
@@ -185,6 +191,9 @@
                       <strong>{{ appointment.time }}</strong>
                       <b>{{ appointment.client }}</b>
                       <span>{{ appointment.service }}</span>
+                      @if (consumptionStatusLabel(appointment.inventoryConsumptionStatus)) {
+                        <small class="consumption-badge">{{ consumptionStatusLabel(appointment.inventoryConsumptionStatus) }}</small>
+                      }
                     </button>
                   }
                   @if (!column.appointments.length) {
@@ -335,6 +344,9 @@
                               <span>{{ item.service }}</span>
                               @if (item.staffPreference !== 'any' && item.requestedStaffId) {
                                 <em class="staff-request-badge">♥ {{ requestedStaffLabel(item) }} requested</em>
+                              }
+                              @if (consumptionStatusLabel(item.inventoryConsumptionStatus)) {
+                                <em class="consumption-badge">{{ consumptionStatusLabel(item.inventoryConsumptionStatus) }}</em>
                               }
                               <small>{{ statusLabel(item.status) }}</small>
                             </button>

@@ -8,6 +8,7 @@ import {
   StaffBusinessInvoiceDetail,
   StaffBusinessQuery,
   StaffBusinessServiceInvoice,
+  StaffCashDrawer,
 } from "../../core/staff-app.service";
 import { businessDate, displayBusinessDate, parseDisplayBusinessDate } from "../../core/business-date";
 import { formatPaiseInr } from "../../core/paise-inr.pipe";
@@ -37,6 +38,27 @@ type SearchSuggestion = { type: "Service" | "Invoice"; value: string };
       }
       @if (loadError()) { <section staffPageState class="notice business-error"><span>{{ loadError() }}</span><button class="link-button" type="button" [disabled]="loading()" (click)="load(true)">Retry</button></section> }
       @if (staff.error() && !loadError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
+
+      @if (canReadRegister()) {
+        <details class="panel" open>
+          <summary>Cash register</summary>
+          <div class="guest-section-body">
+            @if (!staff.isOnline()) { <section staffPageState class="notice">Register and payment actions are blocked offline.</section> }
+            @if (registerLoading()) { <small>Loading register...</small> }
+            @if (registerError()) { <section staffPageState class="notice business-error"><span>{{ registerError() }}</span><button class="link-button" type="button" (click)="loadRegister()">Retry</button></section> }
+            @if (drawer(); as session) {
+              <section class="grid four business-kpi-grid"><article class="kpi"><span>Status</span><strong>{{ session.status }}</strong></article><article class="kpi"><span>Opening cash</span><strong>{{ formatMoney(session.openingCashPaise) }}</strong></article><article class="kpi"><span>Expected</span><strong>{{ session.expectedCashPaise === null || session.expectedCashPaise === undefined ? 'Blind until close' : formatMoney(session.expectedCashPaise) }}</strong></article><article class="kpi"><span>Variance</span><strong>{{ session.variancePaise === null || session.variancePaise === undefined ? '-' : formatMoney(session.variancePaise) }}</strong></article></section>
+              @if (session.status === 'open' && canManageRegister()) { <section class="action-form"><h3>Cash movement</h3><div class="form-grid compact-grid"><label>Type<select [(ngModel)]="registerMovementType"><option value="cash_in">Cash in</option><option value="cash_out">Cash out</option><option value="refund_cash">Cash refund</option></select></label><label>Amount (₹)<input type="number" min="0.01" step="0.01" [(ngModel)]="registerMovementAmount" /></label><label>Reference ID<input maxlength="120" [(ngModel)]="registerReference" /></label><label>MFA code<input inputmode="numeric" autocomplete="one-time-code" maxlength="12" [(ngModel)]="registerMfa" /></label></div><label>Notes<input maxlength="1000" [(ngModel)]="registerNotes" /></label><button class="button" type="button" [disabled]="registerSaving() || !staff.isOnline()" (click)="saveMovement()">Record movement</button></section>
+              <section class="action-form"><h3>Blind close</h3><label>Counted cash (₹)<input type="number" min="0" step="0.01" [(ngModel)]="registerCountedCash" /></label><label>Close notes<input maxlength="1000" [(ngModel)]="registerNotes" /></label><button class="button primary" type="button" [disabled]="registerSaving() || !staff.isOnline()" (click)="closeRegister()">Submit register close</button></section> }
+              @if (session.status === 'pending_approval' && canApproveRegister()) { <section class="action-form"><h3>Manager approval</h3><label>Approval note<input maxlength="1000" [(ngModel)]="registerApprovalNote" /></label><label>MFA code<input inputmode="numeric" autocomplete="one-time-code" maxlength="12" [(ngModel)]="registerMfa" /></label><button class="button primary" type="button" [disabled]="registerSaving() || !staff.isOnline()" (click)="approveRegister()">Approve and close</button></section> }
+              <div class="list">@for (movement of registerMovements(); track movement['id']) { <div class="row"><div><strong>{{ movement['movementType'] }}</strong><small>{{ movement['notes'] }}@if (movement['referenceId']) { · {{ movement['referenceId'] }} }</small></div><span>{{ formatMoney(registerMovementPaise(movement)) }}</span></div> } @empty { <small>No manual cash movements.</small> }</div>
+            } @else if (!registerLoading() && canManageRegister()) {
+              <section class="action-form"><h3>Open drawer</h3><label>Opening cash (₹)<input type="number" min="0" step="0.01" [(ngModel)]="registerOpeningCash" /></label><label>Notes<input maxlength="1000" [(ngModel)]="registerNotes" /></label><button class="button primary" type="button" [disabled]="registerSaving() || !staff.isOnline()" (click)="openRegister()">Open register</button></section>
+            } @else if (!registerLoading()) { <small>No register session for today.</small> }
+            @if (canApproveRegister()) { <section class="action-form"><h3>Provider settlement reconciliation</h3><div class="form-grid compact-grid"><label>Provider<select [(ngModel)]="settlementProvider"><option value="razorpay">Razorpay</option><option value="cashfree">Cashfree</option><option value="phonepe">PhonePe</option></select></label><label>Statement reference<input maxlength="120" [(ngModel)]="settlementReference" /></label><label>Gross (₹)<input type="number" min="0" step="0.01" [(ngModel)]="settlementGross" /></label><label>Fee (₹)<input type="number" min="0" step="0.01" [(ngModel)]="settlementFee" /></label><label>Bank net (₹)<input type="number" min="0" step="0.01" [(ngModel)]="settlementNet" /></label><label>MFA code<input inputmode="numeric" autocomplete="one-time-code" maxlength="12" [(ngModel)]="registerMfa" /></label></div><button class="button" type="button" [disabled]="registerSaving() || !staff.isOnline()" (click)="reconcileProvider()">Reconcile settlement</button></section><div class="list">@for (run of reconciliations(); track run['id']) { <div class="row"><div><strong>{{ run['provider'] }} · {{ run['status'] }}</strong><small>{{ run['statementReference'] }} · {{ run['settlementDate'] }}</small></div><div class="row-actions"><span>{{ formatMoney(reconciliationNet(run)) }}</span>@if (run['status'] !== 'reviewed') { <button class="link-button" type="button" [disabled]="registerSaving()" (click)="reviewReconciliation(run)">Review</button> }</div></div> } @empty { <small>No provider settlements for today.</small> }</div> }
+          </div>
+        </details>
+      }
 
       @if (canReadBusiness()) {
         <section class="panel">
@@ -462,6 +484,25 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   readonly productSaving = signal(false);
   readonly productNotice = signal("");
   readonly productError = signal("");
+  readonly drawer = signal<StaffCashDrawer | null>(null);
+  readonly registerMovements = signal<Array<Record<string, unknown>>>([]);
+  readonly registerLoading = signal(false);
+  readonly registerSaving = signal(false);
+  readonly registerError = signal("");
+  readonly reconciliations = signal<Array<Record<string, unknown>>>([]);
+  registerOpeningCash: number | null = null;
+  registerMovementAmount: number | null = null;
+  registerCountedCash: number | null = null;
+  registerMovementType = "cash_in";
+  registerReference = "";
+  registerNotes = "";
+  registerMfa = "";
+  registerApprovalNote = "";
+  settlementProvider = "razorpay";
+  settlementReference = "";
+  settlementGross: number | null = null;
+  settlementFee: number | null = null;
+  settlementNet: number | null = null;
   usageDraft = { appointmentId: "", serviceId: "", inventoryItemId: "", actualQuantity: null as number | null, notes: "" };
   readonly activeFilterCount = computed(() =>
     Number(Boolean(this.search().trim())) + Number(this.status() !== "all") + Number(this.sort() !== "desc")
@@ -511,6 +552,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
   ngOnInit() {
     this.clockTimer = setInterval(() => this.clock.set(Date.now()), 60_000);
     if (this.canReadBusiness()) void this.load(true);
+    if (this.canReadRegister()) void this.loadRegister();
   }
 
   ngOnDestroy() {
@@ -579,6 +621,62 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     const appointment = data.appointments.find((item) => item.id === this.usageDraft.appointmentId);
     return appointment ? data.services.filter((service) => appointment.serviceIds.includes(service.id) && (service.productConsumption || []).length > 0) : [];
   }
+
+  canReadRegister(): boolean { return this.isRegisterRole("owner","admin") || this.staff.hasPermission("staff.app.register.read"); }
+  canManageRegister(): boolean { return this.isRegisterRole("owner","admin") || this.staff.hasPermission("staff.app.register.manage"); }
+  canApproveRegister(): boolean { return this.isRegisterRole("owner","admin","manager") || this.staff.hasPermission("staff.app.register.approve"); }
+  registerMovementPaise(row: Record<string, unknown>): number { const value=Number(row["amountPaise"]); return Number.isFinite(value) ? value : 0; }
+
+  async loadRegister() {
+    this.registerLoading.set(true); this.registerError.set("");
+    try { const [drawer,movements,reconciliations]=await Promise.all([this.staff.cashDrawerCurrent(this.todayDate),this.staff.cashDrawerMovements(this.todayDate),this.canApproveRegister() ? this.staff.providerReconciliations(this.todayDate) : Promise.resolve([])]); this.drawer.set(drawer); this.registerMovements.set(movements); this.reconciliations.set(reconciliations); }
+    catch { this.registerError.set(this.staff.error() || "Unable to load cash register."); }
+    finally { this.registerLoading.set(false); }
+  }
+
+  async openRegister() {
+    const amount=this.moneyPaise(this.registerOpeningCash,true); if (amount === null) { this.registerError.set("Enter a valid opening cash amount."); return; }
+    await this.runRegisterAction(()=>this.staff.openCashDrawer(amount,this.todayDate,this.registerNotes.trim()),"Register opened.");
+  }
+
+  async saveMovement() {
+    const amount=this.moneyPaise(this.registerMovementAmount,false); if (amount === null || !this.registerNotes.trim() || (this.registerMovementType === "refund_cash" && !this.registerReference.trim())) { this.registerError.set("Enter amount and notes; cash refunds also require a reference."); return; }
+    await this.runRegisterAction(()=>this.staff.recordCashMovement({ movementType:this.registerMovementType,amountPaise:amount,businessDate:this.todayDate,referenceType:this.registerReference.trim() ? "staff_app" : "",referenceId:this.registerReference.trim(),notes:this.registerNotes.trim(),mfaCode:this.registerMfa.trim(),cashDrawerTillId:"",idempotencyKey:crypto.randomUUID() }),"Cash movement recorded.");
+  }
+
+  async closeRegister() {
+    const amount=this.moneyPaise(this.registerCountedCash,true); if (amount === null) { this.registerError.set("Enter valid counted cash."); return; }
+    await this.runRegisterAction(()=>this.staff.closeCashDrawer(amount,this.todayDate,this.registerNotes.trim()),"Register close submitted for reconciliation.");
+  }
+
+  async approveRegister() {
+    const session=this.drawer(); if (!session || this.registerApprovalNote.trim().length < 3) { this.registerError.set("Enter an approval note of at least 3 characters."); return; }
+    await this.runRegisterAction(()=>this.staff.approveCashDrawer(session.id,this.registerApprovalNote.trim(),this.registerMfa.trim()),"Register approved and closed.");
+  }
+
+  reconciliationNet(row: Record<string, unknown>): number { const value=Number(row["bankNetPaise"]); return Number.isFinite(value) ? value : 0; }
+
+  async reconcileProvider() {
+    const gross=this.moneyPaise(this.settlementGross,true), fee=this.moneyPaise(this.settlementFee,true), net=this.moneyPaise(this.settlementNet,true);
+    if (gross === null || fee === null || net === null || fee > gross || !this.settlementReference.trim()) { this.registerError.set("Enter valid settlement totals and statement reference."); return; }
+    await this.runRegisterAction(()=>this.staff.createProviderReconciliation({ provider:this.settlementProvider,settlementDate:this.todayDate,statementReference:this.settlementReference.trim(),statementGrossPaise:gross,feePaise:fee,bankNetPaise:net,notes:"Staff App settlement",mfaCode:this.registerMfa.trim() }),"Provider settlement reconciled.");
+    this.settlementReference=""; this.settlementGross=null; this.settlementFee=null; this.settlementNet=null;
+  }
+
+  async reviewReconciliation(row: Record<string, unknown>) {
+    const id=String(row["id"] || ""), note=globalThis.prompt("Reconciliation review note"); if (!id || !note?.trim()) return;
+    await this.runRegisterAction(()=>this.staff.reviewProviderReconciliation(id,note.trim(),this.registerMfa.trim()),"Provider reconciliation reviewed.");
+  }
+
+  private async runRegisterAction(action:()=>Promise<unknown>, success: string) {
+    this.registerSaving.set(true); this.registerError.set("");
+    try { await action(); this.message.set(success); this.registerOpeningCash=null; this.registerMovementAmount=null; this.registerCountedCash=null; this.registerReference=""; this.registerNotes=""; this.registerMfa=""; await this.loadRegister(); }
+    catch { this.registerError.set(this.staff.error() || "Unable to update cash register."); }
+    finally { this.registerSaving.set(false); }
+  }
+
+  private moneyPaise(value: number | null, allowZero: boolean): number | null { const amount=Number(value); return value !== null && Number.isFinite(amount) && (allowZero ? amount >= 0 : amount > 0) ? Math.round(amount*100) : null; }
+  private isRegisterRole(...roles: string[]): boolean { const role=(this.staff.user()?.role || "").toLowerCase(); return roles.includes(role); }
   usageProducts(data: StaffBusiness) {
     const service = data.services.find((item) => item.id === this.usageDraft.serviceId);
     const ids = new Set((service?.productConsumption || []).map((line) => String(line.productId ?? line.itemId ?? line.inventoryItemId ?? "")));

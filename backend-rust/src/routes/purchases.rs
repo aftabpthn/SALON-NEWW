@@ -79,6 +79,11 @@ pub fn router() -> Router<AppState> {
             axum::routing::post(review_price_update),
         )
         .route("/purchases/returns", get(list_returns).post(create_return))
+        .route("/purchases/quarantine", get(list_quarantine))
+        .route(
+            "/purchases/quarantine/:id/dispositions",
+            axum::routing::post(dispose_quarantine),
+        )
         .route("/purchases/payables", get(list_payables))
         .route("/purchases/payment-summary", get(payment_summary))
         .route("/purchases/payments", axum::routing::post(create_payment))
@@ -196,6 +201,10 @@ struct ReceiptLineRequest {
 #[serde(rename_all = "camelCase")]
 struct ReturnRequest {
     purchase_receipt_id: String,
+    return_date: String,
+    credit_note_number: String,
+    credit_note_date: String,
+    evidence_reference: String,
     reason: String,
     idempotency_key: String,
     lines: Vec<ReturnLineRequest>,
@@ -206,6 +215,17 @@ struct ReturnRequest {
 struct ReturnLineRequest {
     purchase_receipt_line_id: String,
     quantity: i32,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QuarantineDispositionRequest {
+    action: String,
+    quantity: i32,
+    reason: String,
+    evidence_reference: String,
+    credit_note_number: Option<String>,
+    idempotency_key: String,
 }
 
 #[derive(Deserialize)]
@@ -341,6 +361,7 @@ async fn create_order(
     headers: HeaderMap,
     Json(payload): Json<OrderRequest>,
 ) -> ApiResult<OrderDetails> {
+    require_cost_visibility(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = OrderInput {
         supplier_id: payload.supplier_id,
@@ -374,6 +395,7 @@ async fn import_order(
     Json(payload): Json<PurchaseOrderImportRequest>,
 ) -> ApiResult<purchase_service::PurchaseOrderImportResult> {
     require_purchase_import(&claims)?;
+    require_cost_visibility(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         purchase_service::import_order_csv(
@@ -578,6 +600,7 @@ async fn review_price_update(
     Json(payload): Json<PriceUpdateReviewRequest>,
 ) -> ApiResult<purchase_service::PriceUpdateReviewResult> {
     require_approver(&claims)?;
+    require_cost_visibility(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         purchase_service::review_price_update(
@@ -599,6 +622,7 @@ async fn receive(
     headers: HeaderMap,
     Json(payload): Json<ReceiptRequest>,
 ) -> ApiResult<ReceiptDetails> {
+    require_cost_visibility(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = ReceiptInput {
         supplier_id: payload.supplier_id,
@@ -676,6 +700,10 @@ async fn create_return(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let input = ReturnInput {
         purchase_receipt_id: payload.purchase_receipt_id,
+        return_date: payload.return_date,
+        credit_note_number: payload.credit_note_number,
+        credit_note_date: payload.credit_note_date,
+        evidence_reference: payload.evidence_reference,
         reason: payload.reason,
         idempotency_key: payload.idempotency_key,
         lines: payload
@@ -689,6 +717,44 @@ async fn create_return(
     };
     Ok(Json(ApiResponse::ok(
         purchase_service::create_return(&state, &tenant_id, &branch_id, &claims.sub, input).await?,
+    )))
+}
+
+async fn list_quarantine(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<purchase_repository::ReceivingQuarantineRecord>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_service::list_quarantine(&state, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn dispose_quarantine(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<QuarantineDispositionRequest>,
+) -> ApiResult<purchase_repository::ReceivingQuarantineRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        purchase_service::dispose_quarantine(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &id,
+            purchase_service::QuarantineDispositionInput {
+                action: payload.action,
+                quantity: payload.quantity,
+                reason: payload.reason,
+                evidence_reference: payload.evidence_reference,
+                credit_note_number: payload.credit_note_number.unwrap_or_default(),
+                idempotency_key: payload.idempotency_key,
+            },
+        )
+        .await?,
     )))
 }
 
@@ -841,6 +907,16 @@ fn require_approver(claims: &AuthClaims) -> Result<(), AppError> {
         Err(AppError::forbidden(
             "purchase order approval permission is required",
         ))
+    }
+}
+
+fn require_cost_visibility(claims: &AuthClaims) -> Result<(), AppError> {
+    if claims.has_field_mask("inventory.cost") {
+        Err(AppError::forbidden(
+            "product cost visibility permission is required for this purchase action",
+        ))
+    } else {
+        Ok(())
     }
 }
 

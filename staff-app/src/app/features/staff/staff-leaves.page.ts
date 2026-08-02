@@ -1,6 +1,6 @@
 import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { isQueuedMutation, StaffAppService, StaffLeave, StaffLeaveBalance } from "../../core/staff-app.service";
+import { isQueuedMutation, StaffAppService, StaffLeave, StaffLeaveAccrual, StaffLeaveBalance } from "../../core/staff-app.service";
 import { businessDate, displayBusinessDate, parseDisplayBusinessDate } from "../../core/business-date";
 import { StaffDatePickerComponent } from "../../shared/staff-date-picker.component";
 import { StaffPageStateComponent } from "./staff-page-state.component";
@@ -49,13 +49,14 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               @for (leave of leaves(); track leave.id) {
                 <div class="row leave-row">
                   <div class="row-main">
-                    <strong>{{ label(leave.leaveType) }} · {{ leave.days || 1 }}d</strong>
+                    <strong>{{ label(leave.leaveType) }} · {{ leave.requestedDays || leave.days || 1 }}d</strong>
                     <small>{{ displayDate(leave.startDate) }} - {{ displayDate(leave.endDate) }}</small>
+                    @for (part of leave.dayParts || []; track part.date) { @if (part.startTime) { <small>{{ displayDate(part.date) }} · {{ part.startTime }} - {{ part.endTime }}</small> } }
                     @if (leave.reason) { <p>{{ leave.reason }}</p> }
                   </div>
                   <div class="leave-row-actions"><span class="badge" [class.green]="leave.status === 'approved'" [class.red]="leave.status === 'rejected'">{{ leave.status || 'pending' }}</span>@if (leave.status === 'pending' && canRequestLeave()) {
                     <button class="link-button" type="button" [disabled]="withdrawingId() === leave.id" (click)="withdrawLeave(leave)">{{ withdrawingId() === leave.id ? 'Withdrawing...' : 'Withdraw' }}</button>
-                  }</div>
+                  } @else if (leave.status === 'approved' && leave.endDate >= todayIso() && canRequestLeave()) { <button class="link-button" type="button" [disabled]="cancellingId() === leave.id" (click)="cancelLeave(leave)">{{ cancellingId() === leave.id ? 'Cancelling...' : 'Cancel' }}</button> }</div>
                 </div>
               } @empty {
                 @if (!loading() && requestsUnavailable()) { <div class="leaves-empty"><p>Leave requests unavailable.</p><small>Retry to load this month's CRM leave requests.</small></div> }
@@ -72,12 +73,15 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
             <label>From<aura-staff-date-picker [value]="leaveStart" ariaLabel="Leave from date" [disabled]="submitting() || !canRequestLeave()" (valueChange)="setLeaveStart($event)" /></label>
             <label>To<aura-staff-date-picker [value]="leaveEnd" [min]="leaveStartIso()" ariaLabel="Leave to date" [disabled]="submitting() || !canRequestLeave()" (valueChange)="leaveEnd = $event" /></label>
             <label>Reason<input [(ngModel)]="leaveReason" maxlength="500" placeholder="Reason" [disabled]="submitting() || !canRequestLeave()" /></label>
+            <label>Duration<select [(ngModel)]="leaveDuration" [disabled]="submitting() || !canRequestLeave()"><option value="full">Full day</option><option value="partial">Partial day</option></select></label>
+            @if (leaveDuration === 'partial') { <label>Start time<input type="time" [(ngModel)]="partialStart" [disabled]="submitting() || !canRequestLeave()" /></label><label>End time<input type="time" [(ngModel)]="partialEnd" [disabled]="submitting() || !canRequestLeave()" /></label> }
           </div>
           <div class="leave-form-footer">
             <small>{{ leaveReason.trim().length }}/500</small>
             <button class="link-button primary" type="button" [disabled]="!canRequestLeave() || submitting() || !canSubmitLeave()" [attr.aria-busy]="submitting()" (click)="requestLeave()">{{ submitting() ? 'Sending...' : 'Send request' }}</button>
           </div>
         </section>
+        <section class="panel"><div class="panel-title"><h2>Accrual history</h2><span>{{ accruals().length }}</span></div><div class="list">@for (entry of accruals(); track entry.id) { <div class="row"><div class="row-main"><strong>{{ label(entry.leaveType) }} · {{ entry.days }}</strong><small>{{ displayDate(entry.effectiveDate) }} · {{ label(entry.eventType) }}</small>@if (entry.notes) { <small>{{ entry.notes }}</small> }</div></div> } @empty { <div class="leaves-empty"><p>No accrual history yet.</p></div> }</div></section>
       }
     </section>`,
   styleUrls: ["./staff-app.styles.css"],
@@ -111,6 +115,8 @@ export class StaffLeavesPage implements OnInit {
   readonly refreshing = signal(false);
   readonly submitting = signal(false);
   readonly withdrawingId = signal("");
+  readonly cancellingId = signal("");
+  readonly accruals = signal<StaffLeaveAccrual[]>([]);
   readonly message = signal("");
   readonly localError = signal("");
   readonly loadError = signal("");
@@ -124,6 +130,9 @@ export class StaffLeavesPage implements OnInit {
   leaveStart = displayBusinessDate(businessDate());
   leaveEnd = displayBusinessDate(businessDate());
   leaveReason = "";
+  leaveDuration: "full" | "partial" = "full";
+  partialStart = "09:00";
+  partialEnd = "13:00";
 
   constructor(readonly staff: StaffAppService) {}
 
@@ -140,11 +149,13 @@ export class StaffLeavesPage implements OnInit {
     this.requestsUnavailable.set(false);
     this.balancesUnavailable.set(false);
     try {
-      const [requestsResult, balancesResult] = await Promise.allSettled([this.staff.leaves(), this.staff.leaveBalances()]);
+      const accrualRequest = typeof this.staff.leaveAccrualHistory === "function" ? this.staff.leaveAccrualHistory() : Promise.resolve([]);
+      const [requestsResult, balancesResult, accrualResult] = await Promise.allSettled([this.staff.leaves(), this.staff.leaveBalances(), accrualRequest]);
       if (requestsResult.status === "fulfilled") this.leaves.set(requestsResult.value);
       else this.requestsUnavailable.set(true);
       if (balancesResult.status === "fulfilled") this.balances.set(balancesResult.value);
       else this.balancesUnavailable.set(true);
+      if (accrualResult.status === "fulfilled") this.accruals.set(accrualResult.value);
       if (this.requestsUnavailable() || this.balancesUnavailable()) {
         this.loadError.set(this.requestsUnavailable() && this.balancesUnavailable()
           ? "Unable to load leave requests and balances."
@@ -167,7 +178,8 @@ export class StaffLeavesPage implements OnInit {
   canSubmitLeave(): boolean {
     const startDate = parseDisplayBusinessDate(this.leaveStart);
     const endDate = parseDisplayBusinessDate(this.leaveEnd);
-    return !!this.leaveType.trim() && !!startDate && !!endDate && endDate >= startDate && this.leaveReason.trim().length <= 500;
+    return !!this.leaveType.trim() && !!startDate && !!endDate && endDate >= startDate && this.leaveReason.trim().length <= 500
+      && (this.leaveDuration === "full" || (startDate === endDate && !!this.partialStart && this.partialEnd > this.partialStart));
   }
 
   label(value: string): string { return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
@@ -196,13 +208,18 @@ export class StaffLeavesPage implements OnInit {
       this.localError.set("Leave end date cannot be before start date.");
       return;
     }
+    if (this.leaveDuration === "partial" && (startDate !== endDate || !this.partialStart || this.partialEnd <= this.partialStart)) {
+      this.localError.set("Partial leave must use one date and an end time after the start time.");
+      return;
+    }
     if (this.leaveReason.trim().length > 500) {
       this.localError.set("Leave reason cannot exceed 500 characters.");
       return;
     }
     this.submitting.set(true);
     try {
-      const result = await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate, endDate, reason: this.leaveReason.trim() });
+      const dayParts = this.leaveDuration === "partial" ? [{ date: startDate, startTime: this.partialStart, endTime: this.partialEnd }] : undefined;
+      const result = await this.staff.requestLeave({ leaveType: this.leaveType.trim(), startDate, endDate, reason: this.leaveReason.trim(), dayParts });
       this.leaveReason = "";
       if (isQueuedMutation(result)) {
         this.message.set("You are offline. Leave request queued and will send after reconnecting.");
@@ -235,6 +252,18 @@ export class StaffLeavesPage implements OnInit {
       this.withdrawingId.set("");
     }
   }
+
+  async cancelLeave(leave: StaffLeave) {
+    if (this.cancellingId() || leave.status !== "approved" || !this.canRequestLeave()) return;
+    const reason = prompt(`Reason for cancelling ${this.label(leave.leaveType)} leave?`)?.trim();
+    if (!reason) return;
+    this.cancellingId.set(leave.id); this.localError.set(""); this.message.set("");
+    try { await this.staff.cancelLeave(leave.id, leave.version, reason); this.message.set("Approved leave cancelled; future availability restored."); await this.load(true); if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aura:leaves-updated")); }
+    catch { this.localError.set(this.staff.error() || "Unable to cancel approved leave."); }
+    finally { this.cancellingId.set(""); }
+  }
+
+  todayIso(): string { return businessDate(); }
 
   canReadLeaves(): boolean {
     return this.staff.hasPermission("staff.app.leaves.read");

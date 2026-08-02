@@ -15,7 +15,7 @@ pub struct SupplierCommunicationDelivery {
     pub correlation_id: String,
 }
 pub async fn policy(db: &PgPool, tenant: &str, branch: &str) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('negativeStockRule',negative_stock_rule,'autoCheckoutRetailSales',auto_checkout_retail_sales,'autoCheckoutServiceConsumption',auto_checkout_service_consumption,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'countValueVarianceThresholdPaise',count_value_variance_threshold_paise,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'partialDeliveryPolicy',partial_delivery_policy,'financialLockDate',financial_lock_date,'editLockDays',edit_lock_days,'masterEditLock',master_edit_lock,'excessReceivingPolicy',excess_receiving_policy,'priceDifferencePrompt',price_difference_prompt,'priceDifferenceThresholdBps',price_difference_threshold_bps,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at) FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2")
+    sqlx::query_scalar("SELECT jsonb_build_object('negativeStockRule',negative_stock_rule,'autoCheckoutRetailSales',auto_checkout_retail_sales,'autoCheckoutServiceConsumption',auto_checkout_service_consumption,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'countValueVarianceThresholdPaise',count_value_variance_threshold_paise,'allowZeroUnauditedAudit',allow_zero_unaudited_audit,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'partialDeliveryPolicy',partial_delivery_policy,'financialLockDate',financial_lock_date,'editLockDays',edit_lock_days,'masterEditLock',master_edit_lock,'excessReceivingPolicy',excess_receiving_policy,'priceDifferencePrompt',price_difference_prompt,'priceDifferenceThresholdBps',price_difference_threshold_bps,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at) FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2")
         .bind(tenant).bind(branch).fetch_optional(db).await
 }
 
@@ -46,9 +46,10 @@ pub async fn save_policy(
     transfer_delay_cost_per_unit_day_paise: Option<i64>,
     transfer_expected_days: Option<i32>,
     matrix: &Value,
+    allow_zero_unaudited_audit: bool,
 ) -> Result<Value, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO inventory_policies(tenant_id,branch_id,negative_stock_rule,auto_checkout_retail_sales,auto_checkout_service_consumption,valuation_method,expiry_window_days,count_variance_threshold_bps,count_value_variance_threshold_paise,reorder_history_days,reorder_coverage_days,partial_delivery_policy,financial_lock_date,edit_lock_days,master_edit_lock,excess_receiving_policy,price_difference_prompt,price_difference_threshold_bps,transfer_base_transport_cost_paise,transfer_cost_per_km_paise,transfer_handling_cost_per_unit_paise,transfer_delay_cost_per_unit_day_paise,transfer_expected_days,approval_matrix,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::DATE,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET negative_stock_rule=EXCLUDED.negative_stock_rule,auto_checkout_retail_sales=EXCLUDED.auto_checkout_retail_sales,auto_checkout_service_consumption=EXCLUDED.auto_checkout_service_consumption,valuation_method=EXCLUDED.valuation_method,expiry_window_days=EXCLUDED.expiry_window_days,count_variance_threshold_bps=EXCLUDED.count_variance_threshold_bps,count_value_variance_threshold_paise=EXCLUDED.count_value_variance_threshold_paise,reorder_history_days=EXCLUDED.reorder_history_days,reorder_coverage_days=EXCLUDED.reorder_coverage_days,partial_delivery_policy=EXCLUDED.partial_delivery_policy,financial_lock_date=EXCLUDED.financial_lock_date,edit_lock_days=EXCLUDED.edit_lock_days,master_edit_lock=EXCLUDED.master_edit_lock,excess_receiving_policy=EXCLUDED.excess_receiving_policy,price_difference_prompt=EXCLUDED.price_difference_prompt,price_difference_threshold_bps=EXCLUDED.price_difference_threshold_bps,transfer_base_transport_cost_paise=COALESCE(EXCLUDED.transfer_base_transport_cost_paise,inventory_policies.transfer_base_transport_cost_paise),transfer_cost_per_km_paise=COALESCE(EXCLUDED.transfer_cost_per_km_paise,inventory_policies.transfer_cost_per_km_paise),transfer_handling_cost_per_unit_paise=COALESCE(EXCLUDED.transfer_handling_cost_per_unit_paise,inventory_policies.transfer_handling_cost_per_unit_paise),transfer_delay_cost_per_unit_day_paise=COALESCE(EXCLUDED.transfer_delay_cost_per_unit_day_paise,inventory_policies.transfer_delay_cost_per_unit_day_paise),transfer_expected_days=COALESCE(EXCLUDED.transfer_expected_days,inventory_policies.transfer_expected_days),approval_matrix=EXCLUDED.approval_matrix,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING jsonb_build_object('negativeStockRule',negative_stock_rule,'autoCheckoutRetailSales',auto_checkout_retail_sales,'autoCheckoutServiceConsumption',auto_checkout_service_consumption,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'countValueVarianceThresholdPaise',count_value_variance_threshold_paise,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'partialDeliveryPolicy',partial_delivery_policy,'financialLockDate',financial_lock_date,'editLockDays',edit_lock_days,'masterEditLock',master_edit_lock,'excessReceivingPolicy',excess_receiving_policy,'priceDifferencePrompt',price_difference_prompt,'priceDifferenceThresholdBps',price_difference_threshold_bps,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at)")
-        .bind(tenant).bind(branch).bind(negative).bind(auto_retail).bind(auto_service).bind(valuation).bind(expiry).bind(threshold).bind(value_threshold_paise).bind(reorder_history_days).bind(reorder_coverage_days).bind(partial_delivery_policy).bind(financial_lock_date).bind(edit_lock_days).bind(master_edit_lock).bind(excess_receiving_policy).bind(price_difference_prompt).bind(price_difference_threshold_bps).bind(transfer_base_transport_cost_paise).bind(transfer_cost_per_km_paise).bind(transfer_handling_cost_per_unit_paise).bind(transfer_delay_cost_per_unit_day_paise).bind(transfer_expected_days).bind(matrix).bind(actor).fetch_one(db).await
+    sqlx::query_scalar("INSERT INTO inventory_policies(tenant_id,branch_id,negative_stock_rule,auto_checkout_retail_sales,auto_checkout_service_consumption,valuation_method,expiry_window_days,count_variance_threshold_bps,count_value_variance_threshold_paise,reorder_history_days,reorder_coverage_days,partial_delivery_policy,financial_lock_date,edit_lock_days,master_edit_lock,excess_receiving_policy,price_difference_prompt,price_difference_threshold_bps,transfer_base_transport_cost_paise,transfer_cost_per_km_paise,transfer_handling_cost_per_unit_paise,transfer_delay_cost_per_unit_day_paise,transfer_expected_days,approval_matrix,allow_zero_unaudited_audit,updated_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::DATE,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET negative_stock_rule=EXCLUDED.negative_stock_rule,auto_checkout_retail_sales=EXCLUDED.auto_checkout_retail_sales,auto_checkout_service_consumption=EXCLUDED.auto_checkout_service_consumption,valuation_method=EXCLUDED.valuation_method,expiry_window_days=EXCLUDED.expiry_window_days,count_variance_threshold_bps=EXCLUDED.count_variance_threshold_bps,count_value_variance_threshold_paise=EXCLUDED.count_value_variance_threshold_paise,reorder_history_days=EXCLUDED.reorder_history_days,reorder_coverage_days=EXCLUDED.reorder_coverage_days,partial_delivery_policy=EXCLUDED.partial_delivery_policy,financial_lock_date=EXCLUDED.financial_lock_date,edit_lock_days=EXCLUDED.edit_lock_days,master_edit_lock=EXCLUDED.master_edit_lock,excess_receiving_policy=EXCLUDED.excess_receiving_policy,price_difference_prompt=EXCLUDED.price_difference_prompt,price_difference_threshold_bps=EXCLUDED.price_difference_threshold_bps,transfer_base_transport_cost_paise=COALESCE(EXCLUDED.transfer_base_transport_cost_paise,inventory_policies.transfer_base_transport_cost_paise),transfer_cost_per_km_paise=COALESCE(EXCLUDED.transfer_cost_per_km_paise,inventory_policies.transfer_cost_per_km_paise),transfer_handling_cost_per_unit_paise=COALESCE(EXCLUDED.transfer_handling_cost_per_unit_paise,inventory_policies.transfer_handling_cost_per_unit_paise),transfer_delay_cost_per_unit_day_paise=COALESCE(EXCLUDED.transfer_delay_cost_per_unit_day_paise,inventory_policies.transfer_delay_cost_per_unit_day_paise),transfer_expected_days=COALESCE(EXCLUDED.transfer_expected_days,inventory_policies.transfer_expected_days),approval_matrix=EXCLUDED.approval_matrix,allow_zero_unaudited_audit=EXCLUDED.allow_zero_unaudited_audit,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING jsonb_build_object('negativeStockRule',negative_stock_rule,'autoCheckoutRetailSales',auto_checkout_retail_sales,'autoCheckoutServiceConsumption',auto_checkout_service_consumption,'valuationMethod',valuation_method,'expiryWindowDays',expiry_window_days,'countVarianceThresholdBps',count_variance_threshold_bps,'countValueVarianceThresholdPaise',count_value_variance_threshold_paise,'allowZeroUnauditedAudit',allow_zero_unaudited_audit,'reorderHistoryDays',reorder_history_days,'reorderCoverageDays',reorder_coverage_days,'partialDeliveryPolicy',partial_delivery_policy,'financialLockDate',financial_lock_date,'editLockDays',edit_lock_days,'masterEditLock',master_edit_lock,'excessReceivingPolicy',excess_receiving_policy,'priceDifferencePrompt',price_difference_prompt,'priceDifferenceThresholdBps',price_difference_threshold_bps,'transferBaseTransportCostPaise',transfer_base_transport_cost_paise,'transferCostPerKmPaise',transfer_cost_per_km_paise,'transferHandlingCostPerUnitPaise',transfer_handling_cost_per_unit_paise,'transferDelayCostPerUnitDayPaise',transfer_delay_cost_per_unit_day_paise,'transferExpectedDays',transfer_expected_days,'approvalMatrix',approval_matrix,'updatedBy',updated_by,'updatedAt',updated_at)")
+        .bind(tenant).bind(branch).bind(negative).bind(auto_retail).bind(auto_service).bind(valuation).bind(expiry).bind(threshold).bind(value_threshold_paise).bind(reorder_history_days).bind(reorder_coverage_days).bind(partial_delivery_policy).bind(financial_lock_date).bind(edit_lock_days).bind(master_edit_lock).bind(excess_receiving_policy).bind(price_difference_prompt).bind(price_difference_threshold_bps).bind(transfer_base_transport_cost_paise).bind(transfer_cost_per_km_paise).bind(transfer_handling_cost_per_unit_paise).bind(transfer_delay_cost_per_unit_day_paise).bind(transfer_expected_days).bind(matrix).bind(allow_zero_unaudited_audit).bind(actor).fetch_one(db).await
 }
 
 pub async fn supplier_governance(
@@ -311,7 +312,7 @@ pub async fn operations_health(
             AND ledger.movement_type IN (
               'sale','return','purchase','purchase_return',
               'transfer_out','transfer_in','transfer_reversal',
-              'consumption','kit_component_out','kit_assembly_in'
+              'consumption','kit_component_out','kit_assembly_in','kit_unbundle_out','kit_component_in'
             )
         ),
         'trustedLedgerRows',(
@@ -374,20 +375,53 @@ pub async fn create_container(
     let mut tx = db.begin().await?;
     let master=sqlx::query_as::<_,(String,i32,i64)>("SELECT product_usage,stock_quantity,unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
         .bind(tenant).bind(branch).bind(item).fetch_one(&mut *tx).await?;
-    if master.0=="retail" { return Err(sqlx::Error::Protocol("retail-only product cannot be registered as a backbar container".into())); }
-    let consumable=operational_bucket_balance(&mut tx,tenant,branch,item,"consumable_available").await?;
-    let source=if consumable>=i64::from(capacity) { "consumable_available" } else { "store_unopened" };
-    let available=available_source_quantity(&mut tx,tenant,branch,item,source,master.1).await?;
+    if master.0 == "retail" {
+        return Err(sqlx::Error::Protocol(
+            "retail-only product cannot be registered as a backbar container".into(),
+        ));
+    }
+    let consumable =
+        operational_bucket_balance(&mut tx, tenant, branch, item, "consumable_available").await?;
+    let source = if consumable >= i64::from(capacity) {
+        "consumable_available"
+    } else {
+        "store_unopened"
+    };
+    let available =
+        available_source_quantity(&mut tx, tenant, branch, item, source, master.1).await?;
     let rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
         .bind(tenant).bind(branch).fetch_one(&mut *tx).await?;
-    let warning=available<i64::from(capacity);
-    if warning && rule!="allow_with_warning" { return Err(sqlx::Error::Protocol("insufficient available stock for sealed backbar reserve".into())); }
+    let warning = available < i64::from(capacity);
+    if warning && rule != "allow_with_warning" {
+        return Err(sqlx::Error::Protocol(
+            "insufficient available stock for sealed backbar reserve".into(),
+        ));
+    }
     sqlx::query("INSERT INTO inventory_floor_locations(tenant_id,branch_id,code,name,location_type,created_by) VALUES($1,$2,'BACKBAR','Backbar','backbar',$3) ON CONFLICT(tenant_id,branch_id,code) DO NOTHING")
         .bind(tenant).bind(branch).bind(actor).execute(&mut *tx).await?;
     let row=sqlx::query_as::<_,(String,i32)>("INSERT INTO inventory_backbar_containers(tenant_id,branch_id,inventory_item_id,barcode,batch_id,capacity_quantity,remaining_quantity,unit,created_by) SELECT $1,$2,i.id,$4,b.id,$6,$6,$7,$8 FROM inventory_items i LEFT JOIN inventory_batches b ON b.tenant_id=i.tenant_id AND b.branch_id=i.branch_id AND b.inventory_item_id=i.id AND b.id=$5 WHERE i.tenant_id=$1 AND i.branch_id=$2 AND i.id=$3 AND ($5::TEXT IS NULL OR b.id IS NOT NULL) RETURNING id,remaining_quantity")
       .bind(tenant).bind(branch).bind(item).bind(barcode).bind(batch).bind(capacity).bind(unit).bind(actor).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,remaining_after,actor_user_id,idempotency_key) VALUES($1,$2,$3,'created',$4,$5,$6)").bind(tenant).bind(branch).bind(&row.0).bind(row.1).bind(actor).bind(key).execute(&mut *tx).await?;
-    record_operational_movement(&mut tx,tenant,branch,item,"container_registered",source,"sealed_backbar_reserve",capacity,master.2,None,actor,"Container registered","backbar_container",&row.0,&format!("container-register:{key}"),warning,&serde_json::json!({"barcode":barcode,"negativeStockRule":rule})).await?;
+    record_operational_movement(
+        &mut tx,
+        tenant,
+        branch,
+        item,
+        "container_registered",
+        source,
+        "sealed_backbar_reserve",
+        capacity,
+        master.2,
+        None,
+        actor,
+        "Container registered",
+        "backbar_container",
+        &row.0,
+        &format!("container-register:{key}"),
+        warning,
+        &serde_json::json!({"barcode":barcode,"negativeStockRule":rule}),
+    )
+    .await?;
     tx.commit().await?;
     Ok(serde_json::json!({"id":row.0,"status":"sealed","remainingQuantity":row.1}))
 }
@@ -425,7 +459,26 @@ pub async fn auto_checkout_transfer_containers(
                 .bind(tenant).bind(branch).bind(&row.0).bind(capacity).bind(actor).bind(format!("transfer-auto:{shipment_line_id}:{index}")).bind(shipment_line_id).bind(&row.1).execute(&mut **tx).await?;
             let unit_cost=sqlx::query_scalar::<_,i64>("SELECT unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
                 .bind(tenant).bind(branch).bind(inventory_item_id).fetch_one(&mut **tx).await?;
-            record_operational_movement(tx,tenant,branch,inventory_item_id,"auto_transfer_checkout","store_unopened","sealed_backbar_reserve",capacity,unit_cost,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("transfer-op:{shipment_line_id}:{index}"),false,&serde_json::json!({"containerId":row.0,"barcode":row.1})).await?;
+            record_operational_movement(
+                tx,
+                tenant,
+                branch,
+                inventory_item_id,
+                "auto_transfer_checkout",
+                "store_unopened",
+                "sealed_backbar_reserve",
+                capacity,
+                unit_cost,
+                None,
+                actor,
+                "Automatic transfer checkout",
+                "transfer_shipment_line",
+                shipment_line_id,
+                &format!("transfer-op:{shipment_line_id}:{index}"),
+                false,
+                &serde_json::json!({"containerId":row.0,"barcode":row.1}),
+            )
+            .await?;
             in_batch -= capacity;
             remaining -= capacity;
         }
@@ -441,6 +494,59 @@ pub async fn auto_checkout_transfer_containers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn apply_container_opening(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+    container_id: &str,
+    item_id: &str,
+    batch_id: Option<&str>,
+    batch_tracked: bool,
+    capacity: i32,
+    stock_after: i32,
+    fallback_unit_cost_paise: i64,
+    actor: &str,
+) -> Result<i64, sqlx::Error> {
+    if batch_tracked && batch_id.is_none() {
+        return Err(sqlx::Error::Protocol(
+            "batch-tracked container must be linked to a received batch".into(),
+        ));
+    }
+    let unit_cost_paise = if let Some(batch_id) = batch_id {
+        let (quantity, unit_cost_paise) = sqlx::query_as::<_, (i32, i64)>(
+            "SELECT quantity,unit_cost_paise FROM inventory_batches WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND inventory_item_id=$4 FOR UPDATE",
+        )
+        .bind(tenant).bind(branch).bind(batch_id).bind(item_id)
+        .fetch_one(&mut **tx).await?;
+        if quantity < capacity {
+            return Err(sqlx::Error::Protocol(
+                "linked batch has insufficient quantity to open container".into(),
+            ));
+        }
+        unit_cost_paise
+    } else {
+        fallback_unit_cost_paise
+    };
+    sqlx::query("UPDATE inventory_backbar_containers SET status='open',opened_by=$4,opened_at=NOW(),unit_cost_paise=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='sealed'")
+        .bind(tenant).bind(branch).bind(container_id).bind(actor).bind(unit_cost_paise)
+        .execute(&mut **tx).await?;
+    sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant).bind(branch).bind(item_id).bind(stock_after).execute(&mut **tx).await?;
+    let ledger_id = sqlx::query_scalar::<_, String>("INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,backbar_container_id) VALUES($1,$2,$3,'consumption',$4,$5,$6,$7) RETURNING id")
+        .bind(tenant).bind(branch).bind(item_id).bind(-capacity).bind(unit_cost_paise).bind(stock_after).bind(container_id)
+        .fetch_one(&mut **tx).await?;
+    if let Some(batch_id) = batch_id {
+        sqlx::query("UPDATE inventory_batches SET quantity=quantity-$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant).bind(branch).bind(batch_id).bind(capacity).execute(&mut **tx).await?;
+        sqlx::query("INSERT INTO inventory_batch_movements(tenant_id,branch_id,batch_id,stock_ledger_id,quantity_delta) VALUES($1,$2,$3,$4,$5)")
+            .bind(tenant).bind(branch).bind(batch_id).bind(&ledger_id).bind(-capacity).execute(&mut **tx).await?;
+    }
+    sqlx::query("UPDATE inventory_backbar_containers SET opening_stock_ledger_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant).bind(branch).bind(container_id).bind(ledger_id).execute(&mut **tx).await?;
+    Ok(unit_cost_paise)
+}
+
 pub async fn open_container(
     db: &PgPool,
     tenant: &str,
@@ -454,8 +560,8 @@ pub async fn open_container(
         tx.commit().await?;
         return Ok(existing);
     }
-    let row = sqlx::query_as::<_, (String, i32, i64, i32)>(
-        r#"SELECT c.inventory_item_id,c.capacity_quantity,i.unit_cost_paise,i.stock_quantity
+    let row = sqlx::query_as::<_, (String, i32, i64, i32, Option<String>, bool)>(
+        r#"SELECT c.inventory_item_id,c.capacity_quantity,i.unit_cost_paise,i.stock_quantity,c.batch_id,i.batch_tracked
       FROM inventory_backbar_containers c
       JOIN inventory_items i ON i.id=c.inventory_item_id
       WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3 AND c.status='sealed'
@@ -476,16 +582,46 @@ pub async fn open_container(
     }
     let rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
         .bind(tenant).bind(branch).fetch_one(&mut *tx).await?;
-    let warning=row.3<row.1;
-    if warning && rule!="allow_with_warning" {
+    let warning = row.3 < row.1;
+    if warning && rule != "allow_with_warning" {
         return Err(sqlx::Error::RowNotFound);
     }
     let stock_after = row.3 - row.1;
-    sqlx::query("UPDATE inventory_backbar_containers SET status='open',opened_by=$4,opened_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3").bind(tenant).bind(branch).bind(id).bind(actor).execute(&mut *tx).await?;
-    sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3").bind(tenant).bind(branch).bind(&row.0).bind(stock_after).execute(&mut *tx).await?;
-    sqlx::query("INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,backbar_container_id) VALUES($1,$2,$3,'consumption',$4,$5,$6,$7)").bind(tenant).bind(branch).bind(&row.0).bind(-row.1).bind(row.2).bind(stock_after).bind(id).execute(&mut *tx).await?;
+    let unit_cost_paise = apply_container_opening(
+        &mut tx,
+        tenant,
+        branch,
+        id,
+        &row.0,
+        row.4.as_deref(),
+        row.5,
+        row.1,
+        stock_after,
+        row.2,
+        actor,
+    )
+    .await?;
     sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,remaining_after,actor_user_id,idempotency_key) VALUES($1,$2,$3,'opened',$4,$5,$6)").bind(tenant).bind(branch).bind(id).bind(row.1).bind(actor).bind(key).execute(&mut *tx).await?;
-    record_operational_movement(&mut tx,tenant,branch,&row.0,"container_opened","sealed_backbar_reserve","open_floor_balance",row.1,row.2,None,actor,"Container opened","backbar_container",id,&format!("container-open:{key}"),warning,&serde_json::json!({"negativeStockRule":rule})).await?;
+    record_operational_movement(
+        &mut tx,
+        tenant,
+        branch,
+        &row.0,
+        "container_opened",
+        "sealed_backbar_reserve",
+        "open_floor_balance",
+        row.1,
+        unit_cost_paise,
+        None,
+        actor,
+        "Container opened",
+        "backbar_container",
+        id,
+        &format!("container-open:{key}"),
+        warning,
+        &serde_json::json!({"negativeStockRule":rule}),
+    )
+    .await?;
     tx.commit().await?;
     Ok(serde_json::json!({"id":id,"status":"open","remainingQuantity":row.1}))
 }
@@ -513,11 +649,30 @@ pub async fn consume_container(
         tx.commit().await?;
         return Ok(existing);
     }
-    let container=sqlx::query_as::<_,(String,i64)>("SELECT c.inventory_item_id,i.unit_cost_paise FROM inventory_backbar_containers c JOIN inventory_items i ON i.id=c.inventory_item_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3 AND c.status='open' FOR UPDATE OF c,i")
+    let container=sqlx::query_as::<_,(String,i64)>("SELECT c.inventory_item_id,COALESCE(c.unit_cost_paise,i.unit_cost_paise) FROM inventory_backbar_containers c JOIN inventory_items i ON i.id=c.inventory_item_id WHERE c.tenant_id=$1 AND c.branch_id=$2 AND c.id=$3 AND c.status='open' FOR UPDATE OF c,i")
         .bind(tenant).bind(branch).bind(id).fetch_one(&mut *tx).await?;
     let remaining=sqlx::query_scalar::<_,i32>("UPDATE inventory_backbar_containers SET remaining_quantity=remaining_quantity-$4,status=CASE WHEN remaining_quantity-$4=0 THEN 'empty' ELSE status END,closed_by=CASE WHEN remaining_quantity-$4=0 THEN $5 ELSE closed_by END,closed_at=CASE WHEN remaining_quantity-$4=0 THEN NOW() ELSE closed_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='open' AND remaining_quantity >= $4 RETURNING remaining_quantity").bind(tenant).bind(branch).bind(id).bind(quantity).bind(actor).fetch_one(&mut *tx).await?;
     sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,quantity_delta,remaining_after,actor_user_id,idempotency_key) VALUES($1,$2,$3,'consumed',$4,$5,$6,$7)").bind(tenant).bind(branch).bind(id).bind(-quantity).bind(remaining).bind(actor).bind(key).execute(&mut *tx).await?;
-    record_operational_movement(&mut tx,tenant,branch,&container.0,"manual_consumption","open_floor_balance","consumed",quantity,container.1,None,actor,"Manual floor consumption","backbar_container",id,&format!("container-consume:{key}"),false,&serde_json::json!({"remainingAfter":remaining})).await?;
+    record_operational_movement(
+        &mut tx,
+        tenant,
+        branch,
+        &container.0,
+        "manual_consumption",
+        "open_floor_balance",
+        "consumed",
+        quantity,
+        container.1,
+        None,
+        actor,
+        "Manual floor consumption",
+        "backbar_container",
+        id,
+        &format!("container-consume:{key}"),
+        false,
+        &serde_json::json!({"remainingAfter":remaining}),
+    )
+    .await?;
     tx.commit().await?;
     Ok(
         serde_json::json!({"id":id,"status":if remaining==0{"empty"}else{"open"},"remainingQuantity":remaining}),
@@ -538,9 +693,9 @@ pub async fn operational_bucket_balance(
     .fetch_one(&mut **tx).await
 }
 
-fn split_floor_stock(available: i64, quantity: i32) -> (i32,i32) {
-    let floor=available.max(0).min(i64::from(quantity)) as i32;
-    (floor,quantity-floor)
+fn split_floor_stock(available: i64, quantity: i32) -> (i32, i32) {
+    let floor = available.max(0).min(i64::from(quantity)) as i32;
+    (floor, quantity - floor)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -577,7 +732,9 @@ pub async fn record_operational_movement(
         .bind(tenant).bind(branch).bind(item).bind(action).bind(source).bind(destination).bind(quantity)
         .bind(unit_cost_paise).bind(employee).bind(actor).bind(comment).bind(reference_type).bind(reference_id)
         .bind(key).bind(warning).bind(metadata).fetch_optional(&mut **tx).await?;
-    if let Some(row) = inserted { return Ok(row); }
+    if let Some(row) = inserted {
+        return Ok(row);
+    }
     sqlx::query_scalar("SELECT jsonb_build_object('id',id,'inventoryItemId',inventory_item_id,'action',action,'sourceBucket',source_bucket,'destinationBucket',destination_bucket,'quantity',quantity,'unitCostPaise',unit_cost_paise,'stockValuePaise',stock_value_paise,'employeeId',employee_id,'actorUserId',actor_user_id,'comment',comment,'referenceType',reference_type,'referenceId',reference_id,'warning',warning,'metadata',metadata,'createdAt',created_at) FROM inventory_operational_movements WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
         .bind(tenant).bind(branch).bind(key).fetch_one(&mut **tx).await
 }
@@ -599,12 +756,61 @@ pub async fn record_automatic_stock_out(
     key: &str,
     warning: bool,
 ) -> Result<(), sqlx::Error> {
-    let (preferred,from_store)=split_floor_stock(operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?,quantity);
-    if preferred>0 {
-        record_operational_movement(tx,tenant,branch,item,action,preferred_bucket,if action=="auto_retail_sale"{"sold"}else{"consumed"},preferred,unit_cost_paise,employee,actor,"",reference_type,reference_id,&format!("{key}:floor"),warning,&serde_json::json!({"automatic":true})).await?;
+    let (preferred, from_store) = split_floor_stock(
+        operational_bucket_balance(tx, tenant, branch, item, preferred_bucket).await?,
+        quantity,
+    );
+    if preferred > 0 {
+        record_operational_movement(
+            tx,
+            tenant,
+            branch,
+            item,
+            action,
+            preferred_bucket,
+            if action == "auto_retail_sale" {
+                "sold"
+            } else {
+                "consumed"
+            },
+            preferred,
+            unit_cost_paise,
+            employee,
+            actor,
+            "",
+            reference_type,
+            reference_id,
+            &format!("{key}:floor"),
+            warning,
+            &serde_json::json!({"automatic":true}),
+        )
+        .await?;
     }
-    if from_store>0 {
-        record_operational_movement(tx,tenant,branch,item,action,"store_unopened",if action=="auto_retail_sale"{"sold"}else{"consumed"},from_store,unit_cost_paise,employee,actor,"",reference_type,reference_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
+    if from_store > 0 {
+        record_operational_movement(
+            tx,
+            tenant,
+            branch,
+            item,
+            action,
+            "store_unopened",
+            if action == "auto_retail_sale" {
+                "sold"
+            } else {
+                "consumed"
+            },
+            from_store,
+            unit_cost_paise,
+            employee,
+            actor,
+            "",
+            reference_type,
+            reference_id,
+            &format!("{key}:store"),
+            warning,
+            &serde_json::json!({"automatic":true}),
+        )
+        .await?;
     }
     Ok(())
 }
@@ -623,12 +829,53 @@ pub async fn record_automatic_transfer_out(
     key: &str,
     warning: bool,
 ) -> Result<(), sqlx::Error> {
-    let (preferred,from_store)=split_floor_stock(operational_bucket_balance(tx,tenant,branch,item,preferred_bucket).await?,quantity);
-    if preferred>0 {
-        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout",preferred_bucket,"in_transit",preferred,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:floor"),warning,&serde_json::json!({"automatic":true})).await?;
+    let (preferred, from_store) = split_floor_stock(
+        operational_bucket_balance(tx, tenant, branch, item, preferred_bucket).await?,
+        quantity,
+    );
+    if preferred > 0 {
+        record_operational_movement(
+            tx,
+            tenant,
+            branch,
+            item,
+            "auto_transfer_checkout",
+            preferred_bucket,
+            "in_transit",
+            preferred,
+            unit_cost_paise,
+            None,
+            actor,
+            "Automatic transfer checkout",
+            "transfer_shipment_line",
+            shipment_line_id,
+            &format!("{key}:floor"),
+            warning,
+            &serde_json::json!({"automatic":true}),
+        )
+        .await?;
     }
-    if from_store>0 {
-        record_operational_movement(tx,tenant,branch,item,"auto_transfer_checkout","store_unopened","in_transit",from_store,unit_cost_paise,None,actor,"Automatic transfer checkout","transfer_shipment_line",shipment_line_id,&format!("{key}:store"),warning,&serde_json::json!({"automatic":true})).await?;
+    if from_store > 0 {
+        record_operational_movement(
+            tx,
+            tenant,
+            branch,
+            item,
+            "auto_transfer_checkout",
+            "store_unopened",
+            "in_transit",
+            from_store,
+            unit_cost_paise,
+            None,
+            actor,
+            "Automatic transfer checkout",
+            "transfer_shipment_line",
+            shipment_line_id,
+            &format!("{key}:store"),
+            warning,
+            &serde_json::json!({"automatic":true}),
+        )
+        .await?;
     }
     Ok(())
 }
@@ -639,9 +886,9 @@ mod phase4_tests {
 
     #[test]
     fn automatic_checkout_uses_floor_then_store_without_losing_quantity() {
-        assert_eq!(split_floor_stock(7,10),(7,3));
-        assert_eq!(split_floor_stock(-4,10),(0,10));
-        assert_eq!(split_floor_stock(20,10),(10,0));
+        assert_eq!(split_floor_stock(7, 10), (7, 3));
+        assert_eq!(split_floor_stock(-4, 10), (0, 10));
+        assert_eq!(split_floor_stock(20, 10), (10, 0));
     }
 }
 
@@ -653,33 +900,69 @@ pub async fn auto_open_service_container(
     item: &str,
     stock_quantity: i32,
     unit_cost_paise: i64,
+    batch_tracked: bool,
     actor: &str,
     key: &str,
-) -> Result<Option<(String,i32)>, sqlx::Error> {
+) -> Result<Option<(String, i32, i64)>, sqlx::Error> {
     let policy=sqlx::query_as::<_,(bool,String)>("SELECT COALESCE((SELECT auto_checkout_service_consumption FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE),COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
         .bind(tenant).bind(branch).fetch_one(&mut **tx).await?;
-    if !policy.0 { return Ok(None); }
-    let sealed=sqlx::query_as::<_,(String,i32)>(r#"SELECT container.id,container.capacity_quantity
+    if !policy.0 {
+        return Ok(None);
+    }
+    let sealed=sqlx::query_as::<_,(String,i32,Option<String>)>(r#"SELECT container.id,container.capacity_quantity,container.batch_id
         FROM inventory_backbar_containers container
         LEFT JOIN inventory_batches batch ON batch.id=container.batch_id
         WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.inventory_item_id=$3 AND container.status='sealed'
         ORDER BY batch.expiry_date NULLS LAST,batch.received_date NULLS LAST,container.created_at,container.id
         LIMIT 1 FOR UPDATE OF container"#)
         .bind(tenant).bind(branch).bind(item).fetch_optional(&mut **tx).await?;
-    let Some((container_id,capacity))=sealed else { return Ok(None); };
-    let warning=stock_quantity<capacity;
-    if warning && policy.1!="allow_with_warning" { return Err(sqlx::Error::Protocol("insufficient stock to open the next service container".into())); }
-    let stock_after=stock_quantity-capacity;
-    sqlx::query("UPDATE inventory_backbar_containers SET status='open',opened_by=$4,opened_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='sealed'")
-        .bind(tenant).bind(branch).bind(&container_id).bind(actor).execute(&mut **tx).await?;
-    sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-        .bind(tenant).bind(branch).bind(item).bind(stock_after).execute(&mut **tx).await?;
-    sqlx::query("INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,backbar_container_id) VALUES($1,$2,$3,'consumption',$4,$5,$6,$7)")
-        .bind(tenant).bind(branch).bind(item).bind(-capacity).bind(unit_cost_paise).bind(stock_after).bind(&container_id).execute(&mut **tx).await?;
+    let Some((container_id, capacity, batch_id)) = sealed else {
+        return Ok(None);
+    };
+    let warning = stock_quantity < capacity;
+    if warning && policy.1 != "allow_with_warning" {
+        return Err(sqlx::Error::Protocol(
+            "insufficient stock to open the next service container".into(),
+        ));
+    }
+    let stock_after = stock_quantity - capacity;
+    let unit_cost_paise = apply_container_opening(
+        tx,
+        tenant,
+        branch,
+        &container_id,
+        item,
+        batch_id.as_deref(),
+        batch_tracked,
+        capacity,
+        stock_after,
+        unit_cost_paise,
+        actor,
+    )
+    .await?;
     sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,remaining_after,actor_user_id,idempotency_key,metadata) VALUES($1,$2,$3,'opened',$4,$5,$6,jsonb_build_object('automatic',TRUE,'source','service_consumption'))")
         .bind(tenant).bind(branch).bind(&container_id).bind(capacity).bind(actor).bind(key).execute(&mut **tx).await?;
-    record_operational_movement(tx,tenant,branch,item,"auto_service_checkout","sealed_backbar_reserve","open_floor_balance",capacity,unit_cost_paise,None,actor,"Automatic service container opening","backbar_container",&container_id,&format!("{key}:movement"),warning,&serde_json::json!({"automatic":true,"negativeStockRule":policy.1})).await?;
-    Ok(Some((container_id,capacity)))
+    record_operational_movement(
+        tx,
+        tenant,
+        branch,
+        item,
+        "auto_service_checkout",
+        "sealed_backbar_reserve",
+        "open_floor_balance",
+        capacity,
+        unit_cost_paise,
+        None,
+        actor,
+        "Automatic service container opening",
+        "backbar_container",
+        &container_id,
+        &format!("{key}:movement"),
+        warning,
+        &serde_json::json!({"automatic":true,"negativeStockRule":policy.1}),
+    )
+    .await?;
+    Ok(Some((container_id, capacity, unit_cost_paise)))
 }
 
 async fn available_source_quantity(
@@ -695,9 +978,10 @@ async fn available_source_quantity(
     }
     let sealed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(capacity_quantity),0)::BIGINT FROM inventory_backbar_containers WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND status='sealed'")
         .bind(tenant).bind(branch).bind(item).fetch_one(&mut **tx).await?;
-    let retail = operational_bucket_balance(tx,tenant,branch,item,"retail_available").await?;
-    let consumable = operational_bucket_balance(tx,tenant,branch,item,"consumable_available").await?;
-    Ok(i64::from(stock_quantity)-sealed-retail-consumable)
+    let retail = operational_bucket_balance(tx, tenant, branch, item, "retail_available").await?;
+    let consumable =
+        operational_bucket_balance(tx, tenant, branch, item, "consumable_available").await?;
+    Ok(i64::from(stock_quantity) - sealed - retail - consumable)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -715,32 +999,75 @@ pub async fn move_stock_bucket(
     comment: &str,
     key: &str,
 ) -> Result<Value, sqlx::Error> {
-    let mut tx=db.begin().await?;
+    let mut tx = db.begin().await?;
     let master=sqlx::query_as::<_,(String,i32,i64)>("SELECT product_usage,stock_quantity,unit_cost_paise FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
         .bind(tenant).bind(branch).bind(item).fetch_one(&mut *tx).await?;
-    if let Some(staff_id)=employee {
+    if let Some(staff_id) = employee {
         let exists=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)")
             .bind(tenant).bind(branch).bind(staff_id).fetch_one(&mut *tx).await?;
-        if !exists { return Err(sqlx::Error::Protocol("employee is not available".into())); }
+        if !exists {
+            return Err(sqlx::Error::Protocol("employee is not available".into()));
+        }
     }
-    let valid=match action {
-        "manual_checkout" => source=="store_unopened" && match destination {
-            "retail_available" => master.0!="consumable",
-            "consumable_available" => master.0!="retail",
-            _ => false,
-        },
-        "conversion" => master.0=="dual_use" && matches!((source,destination),("retail_available","consumable_available")|("consumable_available","retail_available")),
+    let valid = match action {
+        "manual_checkout" => {
+            source == "store_unopened"
+                && match destination {
+                    "retail_available" => master.0 != "consumable",
+                    "consumable_available" => master.0 != "retail",
+                    _ => false,
+                }
+        }
+        "conversion" => {
+            master.0 == "dual_use"
+                && matches!(
+                    (source, destination),
+                    ("retail_available", "consumable_available")
+                        | ("consumable_available", "retail_available")
+                )
+        }
         _ => false,
     };
-    if !valid { return Err(sqlx::Error::Protocol("product usage and stock bucket action do not match".into())); }
-    let available=available_source_quantity(&mut tx,tenant,branch,item,source,master.1).await?;
+    if !valid {
+        return Err(sqlx::Error::Protocol(
+            "product usage and stock bucket action do not match".into(),
+        ));
+    }
+    let available =
+        available_source_quantity(&mut tx, tenant, branch, item, source, master.1).await?;
     let rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
         .bind(tenant).bind(branch).fetch_one(&mut *tx).await?;
-    let warning=available<i64::from(quantity);
-    if warning && rule!="allow_with_warning" {
-        return Err(sqlx::Error::Protocol(if rule=="approval_required" { "insufficient source bucket; owner approval is required" } else { "insufficient source bucket" }.into()));
+    let warning = available < i64::from(quantity);
+    if warning && rule != "allow_with_warning" {
+        return Err(sqlx::Error::Protocol(
+            if rule == "approval_required" {
+                "insufficient source bucket; owner approval is required"
+            } else {
+                "insufficient source bucket"
+            }
+            .into(),
+        ));
     }
-    let row=record_operational_movement(&mut tx,tenant,branch,item,action,source,destination,quantity,master.2,employee,actor,comment,"manual",key,key,warning,&serde_json::json!({"availableBefore":available,"negativeStockRule":rule})).await?;
+    let row = record_operational_movement(
+        &mut tx,
+        tenant,
+        branch,
+        item,
+        action,
+        source,
+        destination,
+        quantity,
+        master.2,
+        employee,
+        actor,
+        comment,
+        "manual",
+        key,
+        key,
+        warning,
+        &serde_json::json!({"availableBefore":available,"negativeStockRule":rule}),
+    )
+    .await?;
     tx.commit().await?;
     Ok(row)
 }
@@ -754,17 +1081,24 @@ pub async fn reverse_operational_movement(
     comment: &str,
     key: &str,
 ) -> Result<Value, sqlx::Error> {
-    let mut tx=db.begin().await?;
+    let mut tx = db.begin().await?;
     let row=sqlx::query_as::<_,(String,String,String,i32,i64,Option<String>,String)>("SELECT inventory_item_id,source_bucket,destination_bucket,quantity,unit_cost_paise,employee_id,action FROM inventory_operational_movements WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant).bind(branch).bind(id).fetch_one(&mut *tx).await?;
-    if !matches!(row.6.as_str(),"manual_checkout"|"conversion") {
-        return Err(sqlx::Error::Protocol("physical movements must be corrected through their source return or override workflow".into()));
+    if !matches!(row.6.as_str(), "manual_checkout" | "conversion") {
+        return Err(sqlx::Error::Protocol(
+            "physical movements must be corrected through their source return or override workflow"
+                .into(),
+        ));
     }
-    let available=operational_bucket_balance(&mut tx,tenant,branch,&row.0,&row.2).await?;
+    let available = operational_bucket_balance(&mut tx, tenant, branch, &row.0, &row.2).await?;
     let rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
         .bind(tenant).bind(branch).fetch_one(&mut *tx).await?;
-    let warning=available<i64::from(row.3);
-    if warning && rule!="allow_with_warning" { return Err(sqlx::Error::Protocol("insufficient source bucket to reverse movement".into())); }
+    let warning = available < i64::from(row.3);
+    if warning && rule != "allow_with_warning" {
+        return Err(sqlx::Error::Protocol(
+            "insufficient source bucket to reverse movement".into(),
+        ));
+    }
     let inserted=sqlx::query_scalar::<_,Value>(r#"INSERT INTO inventory_operational_movements(
         tenant_id,branch_id,inventory_item_id,action,source_bucket,destination_bucket,quantity,
         unit_cost_paise,stock_value_paise,employee_id,actor_user_id,comment,reference_type,reference_id,
@@ -861,8 +1195,9 @@ pub async fn floor_control(db: &PgPool, tenant: &str, branch: &str) -> Result<Va
                 FROM inventory_operational_movements movement WHERE movement.tenant_id=item.tenant_id AND movement.branch_id=item.branch_id AND movement.inventory_item_id=item.id),0)::BIGINT retail_available,
               COALESCE((SELECT SUM(CASE WHEN movement.destination_bucket='consumable_available' THEN movement.quantity WHEN movement.source_bucket='consumable_available' THEN -movement.quantity ELSE 0 END)
                 FROM inventory_operational_movements movement WHERE movement.tenant_id=item.tenant_id AND movement.branch_id=item.branch_id AND movement.inventory_item_id=item.id),0)::BIGINT consumable_available,
-              COALESCE((SELECT SUM(quarantine.quantity) FROM inventory_receiving_quarantine quarantine
-                WHERE quarantine.tenant_id=item.tenant_id AND quarantine.branch_id=item.branch_id AND quarantine.inventory_item_id=item.id AND quarantine.status='quarantined'),0)::BIGINT damaged_quarantine,
+              COALESCE((SELECT SUM(CASE WHEN quarantine.quantity_basis='base_unit' THEN quarantine.remaining_quantity ELSE quarantine.remaining_quantity*GREATEST(line.units_per_package,1) END)
+                FROM inventory_receiving_quarantine quarantine JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id AND line.tenant_id=quarantine.tenant_id AND line.branch_id=quarantine.branch_id
+                WHERE quarantine.tenant_id=item.tenant_id AND quarantine.branch_id=item.branch_id AND quarantine.inventory_item_id=item.id AND quarantine.remaining_quantity>0),0)::BIGINT damaged_quarantine,
               COALESCE((SELECT SUM(GREATEST(0,shipment_line.dispatched_retail_quantity+shipment_line.dispatched_consumable_quantity
                 -shipment_line.received_retail_quantity-shipment_line.received_consumable_quantity-shipment_line.damaged_quantity-shipment_line.expired_quantity-shipment_line.short_quantity))
                 FROM inventory_transfer_shipment_lines shipment_line
@@ -1123,14 +1458,23 @@ pub async fn fifo_valuation(
         SUM(b.quantity::BIGINT-COALESCE((SELECT SUM(m.quantity_delta::BIGINT) FROM inventory_batch_movements m WHERE m.batch_id=b.id AND m.created_at>=($3::DATE+INTERVAL '1 day')),0))::BIGINT AS quantity_as_of,
         SUM((b.quantity::BIGINT-COALESCE((SELECT SUM(m.quantity_delta::BIGINT) FROM inventory_batch_movements m WHERE m.batch_id=b.id AND m.created_at>=($3::DATE+INTERVAL '1 day')),0))*b.unit_cost_paise)::BIGINT AS value_as_of
       FROM inventory_batches b WHERE b.tenant_id=$1 AND b.branch_id=$2 AND b.created_at<($3::DATE+INTERVAL '1 day') GROUP BY b.inventory_item_id
+    ), open_containers AS (
+      SELECT container.inventory_item_id,
+        SUM(container.remaining_quantity::BIGINT-COALESCE((SELECT SUM(event.quantity_delta::BIGINT) FROM inventory_backbar_container_events event WHERE event.container_id=container.id AND event.tenant_id=container.tenant_id AND event.branch_id=container.branch_id AND event.created_at>=($3::DATE+INTERVAL '1 day')),0))::BIGINT AS quantity_as_of,
+        SUM((container.remaining_quantity::BIGINT-COALESCE((SELECT SUM(event.quantity_delta::BIGINT) FROM inventory_backbar_container_events event WHERE event.container_id=container.id AND event.tenant_id=container.tenant_id AND event.branch_id=container.branch_id AND event.created_at>=($3::DATE+INTERVAL '1 day')),0))*COALESCE(container.unit_cost_paise,0))::BIGINT AS value_as_of
+      FROM inventory_backbar_containers container
+      WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.opened_at<($3::DATE+INTERVAL '1 day')
+      GROUP BY container.inventory_item_id
     ), ledger_qty AS (
-      SELECT i.id,(i.stock_quantity::BIGINT-COALESCE(SUM(l.quantity_delta::BIGINT) FILTER(WHERE l.created_at>=($3::DATE+INTERVAL '1 day')),0))::BIGINT AS quantity_as_of
+      SELECT i.id,(i.stock_quantity::BIGINT-COALESCE(SUM(l.quantity_delta::BIGINT) FILTER(WHERE l.created_at>=($3::DATE+INTERVAL '1 day')),0))::BIGINT AS store_quantity_as_of
       FROM inventory_items i LEFT JOIN inventory_stock_ledger l ON l.tenant_id=i.tenant_id AND l.branch_id=i.branch_id AND l.inventory_item_id=i.id
       WHERE i.tenant_id=$1 AND i.branch_id=$2 AND i.created_at<($3::DATE+INTERVAL '1 day') GROUP BY i.id
-    ) SELECT i.id inventory_item_id,i.name product_name,i.category,q.quantity_as_of stock_quantity,
-      CASE WHEN i.batch_tracked AND q.quantity_as_of<>0 THEN COALESCE(l.value_as_of,0)/q.quantity_as_of ELSE i.unit_cost_paise END unit_cost_paise,
-      CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.quantity_as_of*i.unit_cost_paise END stock_value_paise,i.reorder_point
-      FROM inventory_items i JOIN ledger_qty q ON q.id=i.id LEFT JOIN layers l ON l.inventory_item_id=i.id
+    ) SELECT i.id inventory_item_id,i.name product_name,i.category,(q.store_quantity_as_of+COALESCE(c.quantity_as_of,0)) stock_quantity,
+      CASE WHEN (q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))<>0 THEN
+        (CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.store_quantity_as_of*i.unit_cost_paise END+COALESCE(c.value_as_of,0))/(q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))
+        ELSE i.unit_cost_paise END unit_cost_paise,
+      CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.store_quantity_as_of*i.unit_cost_paise END+COALESCE(c.value_as_of,0) stock_value_paise,i.reorder_point
+      FROM inventory_items i JOIN ledger_qty q ON q.id=i.id LEFT JOIN layers l ON l.inventory_item_id=i.id LEFT JOIN open_containers c ON c.inventory_item_id=i.id
       WHERE i.tenant_id=$1 AND i.branch_id=$2 ORDER BY i.name"#).bind(tenant).bind(branch).bind(as_of).fetch_all(db).await
 }
 

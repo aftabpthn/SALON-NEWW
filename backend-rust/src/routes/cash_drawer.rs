@@ -67,39 +67,39 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BusinessDateQuery {
-    business_date: Option<String>,
+pub(crate) struct BusinessDateQuery {
+    pub(crate) business_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OpenRequest {
-    opening_cash_paise: i64,
-    business_date: Option<String>,
-    notes: Option<String>,
+pub(crate) struct OpenRequest {
+    pub(crate) opening_cash_paise: i64,
+    pub(crate) business_date: Option<String>,
+    pub(crate) notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MovementRequest {
-    movement_type: String,
-    amount_paise: i64,
-    business_date: Option<String>,
-    reference_type: Option<String>,
-    reference_id: Option<String>,
-    notes: String,
-    mfa_code: Option<String>,
-    cash_drawer_till_id: Option<String>,
-    idempotency_key: String,
+pub(crate) struct MovementRequest {
+    pub(crate) movement_type: String,
+    pub(crate) amount_paise: i64,
+    pub(crate) business_date: Option<String>,
+    pub(crate) reference_type: Option<String>,
+    pub(crate) reference_id: Option<String>,
+    pub(crate) notes: String,
+    pub(crate) mfa_code: Option<String>,
+    pub(crate) cash_drawer_till_id: Option<String>,
+    pub(crate) idempotency_key: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CloseRequest {
-    counted_cash_paise: Option<i64>,
-    denomination_breakdown: Option<cash_drawer_service::CashCountBreakdown>,
-    business_date: Option<String>,
-    notes: Option<String>,
+pub(crate) struct CloseRequest {
+    pub(crate) counted_cash_paise: Option<i64>,
+    pub(crate) denomination_breakdown: Option<cash_drawer_service::CashCountBreakdown>,
+    pub(crate) business_date: Option<String>,
+    pub(crate) notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,15 +140,15 @@ struct CorrectionRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProviderReconciliationRequest {
-    provider: String,
-    settlement_date: String,
-    statement_reference: String,
-    statement_gross_paise: i64,
-    fee_paise: i64,
-    bank_net_paise: i64,
-    notes: Option<String>,
-    mfa_code: Option<String>,
+pub(crate) struct ProviderReconciliationRequest {
+    pub(crate) provider: String,
+    pub(crate) settlement_date: String,
+    pub(crate) statement_reference: String,
+    pub(crate) statement_gross_paise: i64,
+    pub(crate) fee_paise: i64,
+    pub(crate) bank_net_paise: i64,
+    pub(crate) notes: Option<String>,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,9 +160,9 @@ struct ProviderReconciliationImportRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReviewRequest {
-    review_note: String,
-    mfa_code: Option<String>,
+pub(crate) struct ReviewRequest {
+    pub(crate) review_note: String,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,9 +182,9 @@ struct TillCloseRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApprovalRequest {
-    approval_note: Option<String>,
-    mfa_code: Option<String>,
+pub(crate) struct ApprovalRequest {
+    pub(crate) approval_note: Option<String>,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,7 +195,7 @@ struct ActionMfaRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DrawerResponse {
+pub(crate) struct DrawerResponse {
     id: String,
     business_date: NaiveDate,
     opening_cash_paise: i64,
@@ -233,7 +233,7 @@ struct TillResponse {
     blind: bool,
 }
 
-async fn current(
+pub(crate) async fn current(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -254,7 +254,7 @@ async fn current(
     }))))
 }
 
-async fn open(
+pub(crate) async fn open(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -279,7 +279,7 @@ async fn open(
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn record_movement(
+pub(crate) async fn record_movement(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -369,7 +369,7 @@ async fn record_movement(
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn list_movements(
+pub(crate) async fn list_movements(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<BusinessDateQuery>,
@@ -433,7 +433,7 @@ async fn reverse_movement(
     Ok(Json(ApiResponse::ok(row)))
 }
 
-async fn close(
+pub(crate) async fn close(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -503,7 +503,7 @@ async fn handover(
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn approve(
+pub(crate) async fn approve(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -779,7 +779,7 @@ async fn change_deposit_status(
     Ok(Json(ApiResponse::ok(row)))
 }
 
-async fn list_provider_reconciliations(
+pub(crate) async fn list_provider_reconciliations(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<BusinessDateQuery>,
@@ -794,7 +794,7 @@ async fn list_provider_reconciliations(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
-async fn create_provider_reconciliation(
+pub(crate) async fn create_provider_reconciliation(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -893,7 +893,7 @@ async fn import_provider_reconciliations(
     Ok(Json(ApiResponse::ok(imported)))
 }
 
-async fn review_provider_reconciliation(
+pub(crate) async fn review_provider_reconciliation(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,

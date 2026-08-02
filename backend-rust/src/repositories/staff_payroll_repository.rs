@@ -600,17 +600,24 @@ pub async fn tip_sources(
     }
     sqlx::query_as(
         r#"
-        SELECT s.staff_id,COALESCE(SUM(s.tip_paise),0)::BIGINT AS tip_paise
+        SELECT tip.staff_id,COALESCE(SUM(tip.amount_paise),0)::BIGINT AS tip_paise
           FROM pos_sales s
-         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.staff_id=ANY($3)
-           AND s.business_date BETWEEN $4 AND $5
-           AND s.tip_paise > 0
+          CROSS JOIN LATERAL (
+            SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+            FROM jsonb_array_elements(COALESCE(s.tip_splits,'[]'::JSONB)) split
+            WHERE jsonb_array_length(COALESCE(s.tip_splits,'[]'::JSONB))>0
+            UNION ALL SELECT s.staff_id,s.tip_paise
+            WHERE jsonb_array_length(COALESCE(s.tip_splits,'[]'::JSONB))=0
+          ) tip
+         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND tip.staff_id=ANY($3)
+           AND s.business_date BETWEEN $4 AND $5 AND tip.amount_paise>0
            AND LOWER(s.status) NOT IN ('draft','void','voided','refunded','cancelled')
            AND NOT EXISTS (
              SELECT 1 FROM staff_tip_payout_items item
-              WHERE item.tenant_id=s.tenant_id AND item.branch_id=s.branch_id AND item.sale_id=s.id
+              WHERE item.tenant_id=s.tenant_id AND item.branch_id=s.branch_id
+                AND item.sale_id=s.id AND item.staff_id=tip.staff_id
            )
-         GROUP BY s.staff_id
+         GROUP BY tip.staff_id
         "#,
     )
     .bind(tenant_id)

@@ -3,14 +3,15 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AuthService } from '../services/auth.service';
+import { authDeviceId, AuthService } from '../services/auth.service';
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   if (!isCoreApiRequest(request.url)) return next(request);
 
   const auth = inject(AuthService);
   const router = inject(Router);
-  const authenticatedRequest = withSession(request, auth);
+  const contextualRequest = withRequestContext(request);
+  const authenticatedRequest = withSession(contextualRequest, auth);
 
   return next(authenticatedRequest).pipe(
     catchError((error: HttpErrorResponse) => {
@@ -19,7 +20,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
       }
 
       return auth.refreshAccessToken().pipe(
-        switchMap(() => next(withSession(request, auth))),
+        switchMap(() => next(withSession(contextualRequest, auth))),
         catchError((refreshError) => {
           auth.clearSession(true);
           void router.navigate(['/login'], {
@@ -32,6 +33,19 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
     }),
   );
 };
+
+function withRequestContext(request: HttpRequest<unknown>): HttpRequest<unknown> {
+  let headers = request.headers;
+  if (!headers.has('x-device-id')) headers = headers.set('x-device-id', authDeviceId());
+  if (!headers.has('x-request-id')) headers = headers.set('x-request-id', crypto.randomUUID());
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method) && !headers.has('Idempotency-Key')) {
+    const bodyKey = request.body && typeof request.body === 'object'
+      ? (request.body as Record<string, unknown>)['idempotencyKey']
+      : undefined;
+    headers = headers.set('Idempotency-Key', typeof bodyKey === 'string' && bodyKey.trim() ? bodyKey.trim() : crypto.randomUUID());
+  }
+  return request.clone({ headers });
+}
 
 function withSession(request: HttpRequest<unknown>, auth: AuthService): HttpRequest<unknown> {
   let headers: HttpHeaders = request.headers;
