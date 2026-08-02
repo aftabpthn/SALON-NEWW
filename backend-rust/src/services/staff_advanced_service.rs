@@ -2198,7 +2198,8 @@ fn database_write_error(
 mod tests {
     use super::{
         adjustment_input, incentive_input, mobile_business_date, performance_row, sha256_text,
-        weighted_score, IncentiveRuleRequest, IncentiveSlabRequest, PayrollAdjustmentRuleRequest,
+        version_parts, weighted_score, IncentiveRuleRequest, IncentiveSlabRequest,
+        PayrollAdjustmentRuleRequest,
     };
     use crate::repositories::staff_advanced_repository::PerformanceSourceRecord;
     use chrono::{DateTime, NaiveDate, Utc};
