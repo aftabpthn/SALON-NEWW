@@ -48,6 +48,24 @@ type PaymentPlatformOverview = {
   providers?: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }>;
 };
 
+type DisputeStrengthFactor = { key: string; label: string; points: number; detail: string };
+type DisputeQueueRow = {
+  dispute: { disputeId: string; provider: string; reason: string; status: string; amountPaise: number; daysToEvidenceDue: number | null };
+  invoiceNumber: string;
+  strengthScore: number;
+  strengthFactors: DisputeStrengthFactor[];
+  urgency: number;
+};
+type DisputeEvidence = DisputeQueueRow & {
+  invoice: { invoiceNumber: string; totalPaise: number; lines: unknown[] };
+  payments: unknown[];
+  serviceDelivery: { appointmentsAroundSale: number; completedAppointment: boolean };
+  authorisation: { signedFormCount: number; hasPaymentReference: boolean };
+  relationship: { priorVisits: number; customerForDays: number; priorDisputes: number };
+  gaps: string[];
+  submissionNote: string;
+};
+
 type PaymentOperation = {
   id: string;
   provider: string;
@@ -89,6 +107,9 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   recentOperations: PaymentOperation[] = [];
   operationActionId = '';
   openDisputes = 0;
+  disputeQueue: DisputeQueueRow[] = [];
+  disputeEvidence: DisputeEvidence | null = null;
+  disputeBusy = false;
   providerSetup: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }> = {};
   private readonly countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
 
@@ -147,6 +168,11 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
       };
       this.recentOperations = platform.data?.recentOperations ?? [];
       this.openDisputes = Number(platform.data?.openDisputes) || 0;
+      // Loaded alongside the summary rather than behind a click: a dispute has
+      // a deadline, so the count is only useful next to what to work first.
+      this.disputeQueue = await firstValueFrom(
+        this.api.get<ApiEnvelope<DisputeQueueRow[]>>('/pos/payment-platform/disputes/queue'),
+      ).then((response) => response.data ?? []).catch(() => []);
       this.providerSetup = platform.data?.providers ?? {};
       this.providers = (response.data ?? []).map((provider) => ({
         provider: provider.provider,
@@ -390,6 +416,43 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
       this.country = 'IN';
     }
   }
+
+  async openDisputeEvidence(row: DisputeQueueRow) {
+    this.disputeEvidence = null;
+    this.disputeBusy = true;
+    this.actionError = '';
+    try {
+      const response = await firstValueFrom(
+        this.api.get<ApiEnvelope<DisputeEvidence>>(`/pos/payment-platform/disputes/${row.dispute.disputeId}/evidence`),
+      );
+      this.disputeEvidence = response.data ?? null;
+    } catch (error) { this.actionError = this.messageFor(error, 'Dispute evidence could not be assembled'); }
+    finally { this.disputeBusy = false; }
+  }
+
+  /// Snapshots the pack. The response itself is still sent through the
+  /// provider's console; AuraShine does not submit representments.
+  async prepareDisputeEvidence(disputeId: string) {
+    if (this.disputeBusy) return;
+    this.disputeBusy = true;
+    this.actionError = '';
+    try {
+      const response = await firstValueFrom(
+        this.api.post<ApiEnvelope<DisputeEvidence>>(`/pos/payment-platform/disputes/${disputeId}/evidence`, {}),
+      );
+      this.disputeEvidence = response.data ?? null;
+      await this.load();
+    } catch (error) { this.actionError = this.messageFor(error, 'Dispute evidence could not be prepared'); }
+    finally { this.disputeBusy = false; }
+  }
+
+  disputeDueLabel(days: number | null) {
+    if (days === null || days === undefined) return 'No deadline set';
+    if (days <= 0) return `Overdue by ${Math.abs(Math.round(days))} day(s)`;
+    return `Due in ${Math.round(days)} day(s)`;
+  }
+
+  closeDisputeEvidence() { this.disputeEvidence = null; }
 
   private titleCase(value: string): string {
     return value

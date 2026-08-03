@@ -57,6 +57,7 @@ pub mod operations_service;
 pub mod organization_service;
 pub mod outgoing_funds_service;
 pub mod package_service;
+pub mod payment_dispute_service;
 pub mod payment_gateway_service;
 pub mod payment_platform_service;
 pub mod pos_enterprise_service;

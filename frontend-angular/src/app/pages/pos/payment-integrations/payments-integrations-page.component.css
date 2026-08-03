@@ -694,3 +694,4 @@ h2 {
     text-align: left;
   }
 }
+.dispute-evidence{display:grid;gap:8px;padding:12px}.dispute-evidence article{display:grid;gap:2px;padding:8px 10px;border-left:3px solid #087a3e;background:#f8fafc;border-radius:6px}.dispute-evidence article p{margin:0;font-size:11px;color:#475569}.dispute-evidence h3{margin:6px 0 0;font-size:12px}.dispute-evidence ul{margin:0;padding-left:18px}.dispute-evidence li{font-size:11px;color:#b42318}.dispute-note{font-size:11px;color:#64748b;font-style:italic}

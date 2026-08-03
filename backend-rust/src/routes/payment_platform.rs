@@ -17,8 +17,8 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     routes::{context::tenant_branch, pos::settle_deferred_customer_commerce_benefits},
     services::{
-        accounting_service, auth_service::AuthClaims, payment_gateway_service,
-        payment_platform_service as platform, security_service,
+        accounting_service, auth_service::AuthClaims, payment_dispute_service,
+        payment_gateway_service, payment_platform_service as platform, security_service,
     },
     state::AppState,
 };
@@ -58,6 +58,14 @@ pub fn router() -> Router<AppState> {
         .route("/pos/payment-platform/payouts", post(create_payout))
         .route("/pos/payment-platform/settlements", get(list_settlements))
         .route("/pos/payment-platform/disputes", get(list_disputes))
+        .route(
+            "/pos/payment-platform/disputes/queue",
+            get(dispute_work_queue),
+        )
+        .route(
+            "/pos/payment-platform/disputes/:id/evidence",
+            get(dispute_evidence).post(prepare_dispute_evidence),
+        )
         .route("/pos/payment-platform/webhooks", get(list_webhook_health))
 }
 
@@ -759,6 +767,51 @@ async fn create_payout(
 
 async fn list_settlements(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
     list_json(&state,&headers,"SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'provider',provider,'providerSettlementId',provider_settlement_id,'currency',currency,'grossPaise',gross_paise,'feePaise',fee_paise,'netPaise',net_paise,'status',status,'availableAt',available_at,'paidAt',paid_at,'createdAt',created_at) ORDER BY created_at DESC),'[]'::jsonb) FROM (SELECT * FROM payment_provider_settlements WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC LIMIT 200) rows","failed to load payment settlements").await
+}
+
+/// Open disputes ordered by what needs work first: deadline, then how
+/// defensible the evidence looks.
+async fn dispute_work_queue(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<Value>> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let queue = payment_dispute_service::work_queue(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(queue)))
+}
+
+/// Assembles the evidence pack for one dispute from live records.
+async fn dispute_evidence(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let pack =
+        payment_dispute_service::evidence_pack(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(pack)))
+}
+
+/// Snapshots the pack as prepared. The response still goes to the provider by
+/// hand: representment rules differ per provider and a wrong automatic
+/// submission cannot be withdrawn.
+async fn prepare_dispute_evidence(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_payment_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let pack = payment_dispute_service::record_prepared_evidence(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &claims.sub,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(pack)))
 }
 
 async fn list_disputes(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
