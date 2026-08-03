@@ -40,6 +40,7 @@ pub mod laundry;
 pub mod marketing_leads;
 pub mod membership_enterprise;
 pub mod memberships;
+pub mod metrics;
 pub mod notifications;
 pub mod operations;
 pub mod outgoing_funds;
@@ -166,11 +167,15 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", axum::routing::get(health::root))
         .route("/health", axum::routing::get(health::health))
+        // Deliberately outside /api/v1: scrapers hit it without a tenant, and it
+        // carries its own bearer token rather than a session.
+        .route("/metrics", axum::routing::get(metrics::metrics))
         .nest("/api/v1", api.clone())
         .nest("/api", api)
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
-        .layer(axum::middleware::from_fn(
+        .layer(from_fn_with_state(
+            state.clone(),
             request_timing_middleware::request_timing,
         ))
         .layer(cors)

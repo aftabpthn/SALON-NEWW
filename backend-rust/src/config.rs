@@ -193,6 +193,12 @@ pub struct Settings {
     pub aws_region: Option<String>,
     pub aws_s3_bucket: Option<String>,
     pub cors_allowed_origins: Vec<String>,
+    /// Bearer token guarding `/metrics`. Unset outside local development means
+    /// the endpoint is not exposed at all.
+    pub metrics_auth_token: Option<String>,
+    /// Endpoint that receives 5xx incident reports. Unset disables forwarding;
+    /// failures still reach the structured logs.
+    pub error_webhook_url: Option<String>,
     pub crm_app_base_url: String,
     pub customer_app_base_url: String,
     pub google_maps_api_key: Option<String>,
@@ -404,6 +410,8 @@ impl Settings {
                 .ok()
                 .filter(|v| !v.is_empty()),
             cors_allowed_origins,
+            metrics_auth_token: optional_value("METRICS_AUTH_TOKEN"),
+            error_webhook_url: optional_value("ERROR_WEBHOOK_URL"),
             crm_app_base_url,
             customer_app_base_url,
             google_maps_api_key: optional_secure_secret("GOOGLE_MAPS_API_KEY")?,

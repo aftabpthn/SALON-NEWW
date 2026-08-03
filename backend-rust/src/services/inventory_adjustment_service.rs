@@ -6,7 +6,10 @@ use uuid::Uuid;
 
 use crate::{
     models::common::AppError,
-    repositories::{inventory_governance_repository, inventory_repository::{self, InventoryRecord, UpdateInventory}},
+    repositories::{
+        inventory_governance_repository,
+        inventory_repository::{self, InventoryRecord, UpdateInventory},
+    },
     state::AppState,
 };
 
@@ -191,15 +194,29 @@ async fn record_backbar_usage_in_tx(
         .await
         .map_err(|_| AppError::internal("failed to validate container tracking"))?;
     if container_required && open_container.is_none() {
-        open_container=inventory_governance_repository::auto_open_service_container(
-            tx,input.tenant_id,input.branch_id,input.inventory_item_id,item.stock_quantity,
-            item.unit_cost_paise,input.actor_user_id,&format!("auto-open:{}",input.idempotency_key),
-        ).await.map_err(|error|match error {
-            sqlx::Error::Protocol(message)=>AppError::validation(message.to_string()),
-            _=>AppError::internal("failed to auto-open service container"),
-        })?.map(|row|inventory_repository::OpenBackbarContainer{id:row.0,remaining_quantity:row.1});
+        open_container = inventory_governance_repository::auto_open_service_container(
+            tx,
+            input.tenant_id,
+            input.branch_id,
+            input.inventory_item_id,
+            item.stock_quantity,
+            item.unit_cost_paise,
+            input.actor_user_id,
+            &format!("auto-open:{}", input.idempotency_key),
+        )
+        .await
+        .map_err(|error| match error {
+            sqlx::Error::Protocol(message) => AppError::validation(message.to_string()),
+            _ => AppError::internal("failed to auto-open service container"),
+        })?
+        .map(|row| inventory_repository::OpenBackbarContainer {
+            id: row.0,
+            remaining_quantity: row.1,
+        });
         if open_container.is_none() {
-            return Err(AppError::validation("open the sealed tube before recording usage"));
+            return Err(AppError::validation(
+                "open the sealed tube before recording usage",
+            ));
         }
     }
     if open_container
@@ -213,13 +230,26 @@ async fn record_backbar_usage_in_tx(
     let checkout_policy=sqlx::query_as::<_,(String,bool)>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block'),COALESCE((SELECT auto_checkout_service_consumption FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE)")
         .bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut **tx).await
         .map_err(|_|AppError::internal("failed to load service checkout policy"))?;
-    let stock_warning=open_container.is_none() && item.stock_quantity<input.actual_quantity;
-    if input.service_id.is_some() && open_container.is_none() && !checkout_policy.1
-        && inventory_governance_repository::operational_bucket_balance(tx,input.tenant_id,input.branch_id,input.inventory_item_id,"consumable_available").await
-            .map_err(|_|AppError::internal("failed to load consumable floor balance"))?<i64::from(input.actual_quantity) {
-        return Err(AppError::validation("checkout consumable stock to the floor before recording service usage"));
+    let stock_warning = open_container.is_none() && item.stock_quantity < input.actual_quantity;
+    if input.service_id.is_some()
+        && open_container.is_none()
+        && !checkout_policy.1
+        && inventory_governance_repository::operational_bucket_balance(
+            tx,
+            input.tenant_id,
+            input.branch_id,
+            input.inventory_item_id,
+            "consumable_available",
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to load consumable floor balance"))?
+            < i64::from(input.actual_quantity)
+    {
+        return Err(AppError::validation(
+            "checkout consumable stock to the floor before recording service usage",
+        ));
     }
-    if stock_warning && checkout_policy.0!="allow_with_warning" {
+    if stock_warning && checkout_policy.0 != "allow_with_warning" {
         return Err(AppError::validation(
             "insufficient inventory for backbar usage",
         ));
@@ -356,12 +386,30 @@ async fn record_backbar_usage_in_tx(
             .await
             .map_err(|_| AppError::validation("open tube has insufficient remaining quantity"))?;
             inventory_governance_repository::record_operational_movement(
-                tx,input.tenant_id,input.branch_id,input.inventory_item_id,
-                if input.service_id.is_some(){"auto_service_checkout"}else{"manual_consumption"},
-                "open_floor_balance","consumed",input.actual_quantity,item.unit_cost_paise,input.staff_id,
-                input.actor_user_id,input.notes.trim(),"backbar_usage",&usage_id,
-                &format!("usage-op:{}",input.idempotency_key),false,&serde_json::json!({"bowlId":bowl_id}),
-            ).await.map_err(|_|AppError::internal("failed to write floor consumption history"))?;
+                tx,
+                input.tenant_id,
+                input.branch_id,
+                input.inventory_item_id,
+                if input.service_id.is_some() {
+                    "auto_service_checkout"
+                } else {
+                    "manual_consumption"
+                },
+                "open_floor_balance",
+                "consumed",
+                input.actual_quantity,
+                item.unit_cost_paise,
+                input.staff_id,
+                input.actor_user_id,
+                input.notes.trim(),
+                "backbar_usage",
+                &usage_id,
+                &format!("usage-op:{}", input.idempotency_key),
+                false,
+                &serde_json::json!({"bowlId":bowl_id}),
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to write floor consumption history"))?;
         } else {
             inventory_repository::apply_adjusted_stock(
                 tx,
@@ -385,11 +433,27 @@ async fn record_backbar_usage_in_tx(
             .await
             .map_err(|_| AppError::internal("failed to write backbar ledger"))?;
             inventory_governance_repository::record_automatic_stock_out(
-                tx,input.tenant_id,input.branch_id,input.inventory_item_id,
-                if input.service_id.is_some(){"auto_service_checkout"}else{"manual_consumption"},
-                "consumable_available",input.actual_quantity,item.unit_cost_paise,input.staff_id,
-                input.actor_user_id,"backbar_usage",&usage_id,&format!("usage-op:{}",input.idempotency_key),stock_warning,
-            ).await.map_err(|_|AppError::internal("failed to write floor consumption history"))?;
+                tx,
+                input.tenant_id,
+                input.branch_id,
+                input.inventory_item_id,
+                if input.service_id.is_some() {
+                    "auto_service_checkout"
+                } else {
+                    "manual_consumption"
+                },
+                "consumable_available",
+                input.actual_quantity,
+                item.unit_cost_paise,
+                input.staff_id,
+                input.actor_user_id,
+                "backbar_usage",
+                &usage_id,
+                &format!("usage-op:{}", input.idempotency_key),
+                stock_warning,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to write floor consumption history"))?;
             allocate_fefo_batches(
                 tx,
                 input.tenant_id,
@@ -615,11 +679,28 @@ pub async fn review_backbar_usage(
             .await
             .map_err(|_| AppError::validation("open tube has insufficient remaining quantity"))?;
             inventory_governance_repository::record_operational_movement(
-                &mut tx,input.tenant_id,input.branch_id,&usage.inventory_item_id,"auto_service_checkout",
-                "open_floor_balance","consumed",usage.actual_quantity,item.unit_cost_paise,None,
-                input.actor_user_id,input.review_note.trim(),"backbar_usage",&usage.id,
-                &format!("review-op:{}",usage.id),false,&serde_json::json!({"approved":true}),
-            ).await.map_err(|_|AppError::internal("failed to write approved floor consumption history"))?;
+                &mut tx,
+                input.tenant_id,
+                input.branch_id,
+                &usage.inventory_item_id,
+                "auto_service_checkout",
+                "open_floor_balance",
+                "consumed",
+                usage.actual_quantity,
+                item.unit_cost_paise,
+                None,
+                input.actor_user_id,
+                input.review_note.trim(),
+                "backbar_usage",
+                &usage.id,
+                &format!("review-op:{}", usage.id),
+                false,
+                &serde_json::json!({"approved":true}),
+            )
+            .await
+            .map_err(|_| {
+                AppError::internal("failed to write approved floor consumption history")
+            })?;
         } else {
             if item.dual_use_stock {
                 return Err(AppError::validation(
@@ -629,8 +710,8 @@ pub async fn review_backbar_usage(
             let negative_rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
                 .bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut *tx).await
                 .map_err(|_|AppError::internal("failed to load approved usage stock policy"))?;
-            let warning=item.stock_quantity<usage.actual_quantity;
-            if warning && negative_rule!="allow_with_warning" {
+            let warning = item.stock_quantity < usage.actual_quantity;
+            if warning && negative_rule != "allow_with_warning" {
                 return Err(AppError::validation(
                     "insufficient inventory for approved backbar usage",
                 ));
@@ -658,10 +739,25 @@ pub async fn review_backbar_usage(
             .await
             .map_err(|_| AppError::internal("failed to write approved backbar ledger"))?;
             inventory_governance_repository::record_automatic_stock_out(
-                &mut tx,input.tenant_id,input.branch_id,&usage.inventory_item_id,"auto_service_checkout",
-                "consumable_available",usage.actual_quantity,item.unit_cost_paise,None,input.actor_user_id,
-                "backbar_usage",&usage.id,&format!("review-op:{}",usage.id),warning,
-            ).await.map_err(|_|AppError::internal("failed to write approved floor consumption history"))?;
+                &mut tx,
+                input.tenant_id,
+                input.branch_id,
+                &usage.inventory_item_id,
+                "auto_service_checkout",
+                "consumable_available",
+                usage.actual_quantity,
+                item.unit_cost_paise,
+                None,
+                input.actor_user_id,
+                "backbar_usage",
+                &usage.id,
+                &format!("review-op:{}", usage.id),
+                warning,
+            )
+            .await
+            .map_err(|_| {
+                AppError::internal("failed to write approved floor consumption history")
+            })?;
             allocate_fefo_batches(
                 &mut tx,
                 input.tenant_id,
@@ -1089,13 +1185,25 @@ async fn consume_pos_open_container(
         return Ok(None);
     }
     if open.is_none() {
-        open=inventory_governance_repository::auto_open_service_container(
-            tx,tenant_id,branch_id,inventory_item_id,item.stock_quantity,item.unit_cost_paise,
-            "system:pos",&format!("pos-auto-open:{sale_line_id}:{inventory_item_id}"),
-        ).await.map_err(|error|match error {
-            sqlx::Error::Protocol(message)=>AppError::validation(message.to_string()),
-            _=>AppError::internal("failed to auto-open POS service container"),
-        })?.map(|row|inventory_repository::OpenBackbarContainer{id:row.0,remaining_quantity:row.1});
+        open = inventory_governance_repository::auto_open_service_container(
+            tx,
+            tenant_id,
+            branch_id,
+            inventory_item_id,
+            item.stock_quantity,
+            item.unit_cost_paise,
+            "system:pos",
+            &format!("pos-auto-open:{sale_line_id}:{inventory_item_id}"),
+        )
+        .await
+        .map_err(|error| match error {
+            sqlx::Error::Protocol(message) => AppError::validation(message.to_string()),
+            _ => AppError::internal("failed to auto-open POS service container"),
+        })?
+        .map(|row| inventory_repository::OpenBackbarContainer {
+            id: row.0,
+            remaining_quantity: row.1,
+        });
     }
     let container =
         open.ok_or_else(|| AppError::validation("open the floor container before POS checkout"))?;
@@ -1299,15 +1407,34 @@ async fn deduct_pos_inventory_item(
     let policy=sqlx::query_as::<_,(String,bool,bool)>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block'),COALESCE((SELECT auto_checkout_retail_sales FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE),COALESCE((SELECT auto_checkout_service_consumption FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE)")
         .bind(tenant_id).bind(branch_id).fetch_one(&mut **tx).await
         .map_err(|_|AppError::internal("failed to load inventory checkout policy"))?;
-    let preferred=if service_consumption{"consumable_available"}else{"retail_available"};
-    let floor_available=inventory_governance_repository::operational_bucket_balance(tx,tenant_id,branch_id,inventory_item_id,preferred)
-        .await.map_err(|_|AppError::internal("failed to load floor stock balance"))?;
-    let auto_checkout=if service_consumption{policy.2}else{policy.1};
-    if !auto_checkout && floor_available<i64::from(quantity) {
-        return Err(AppError::validation(if service_consumption{"checkout consumable stock to the floor before service completion"}else{"checkout retail stock to the floor before sale"}));
+    let preferred = if service_consumption {
+        "consumable_available"
+    } else {
+        "retail_available"
+    };
+    let floor_available = inventory_governance_repository::operational_bucket_balance(
+        tx,
+        tenant_id,
+        branch_id,
+        inventory_item_id,
+        preferred,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load floor stock balance"))?;
+    let auto_checkout = if service_consumption {
+        policy.2
+    } else {
+        policy.1
+    };
+    if !auto_checkout && floor_available < i64::from(quantity) {
+        return Err(AppError::validation(if service_consumption {
+            "checkout consumable stock to the floor before service completion"
+        } else {
+            "checkout retail stock to the floor before sale"
+        }));
     }
-    let warning=item.stock_quantity<quantity;
-    if warning && policy.0!="allow_with_warning" {
+    let warning = item.stock_quantity < quantity;
+    if warning && policy.0 != "allow_with_warning" {
         return Err(AppError::validation(
             "insufficient inventory for POS checkout",
         ));
@@ -1331,11 +1458,27 @@ async fn deduct_pos_inventory_item(
         return Ok(false);
     };
     inventory_governance_repository::record_automatic_stock_out(
-        tx,tenant_id,branch_id,inventory_item_id,
-        if service_consumption{"auto_service_checkout"}else{"auto_retail_sale"},preferred,quantity,
-        item.unit_cost_paise,employee_id,"system:pos","pos_sale_line",sale_line_id,
-        &format!("pos-op:{sale_line_id}:{inventory_item_id}"),warning,
-    ).await.map_err(|_|AppError::internal("failed to write automatic checkout history"))?;
+        tx,
+        tenant_id,
+        branch_id,
+        inventory_item_id,
+        if service_consumption {
+            "auto_service_checkout"
+        } else {
+            "auto_retail_sale"
+        },
+        preferred,
+        quantity,
+        item.unit_cost_paise,
+        employee_id,
+        "system:pos",
+        "pos_sale_line",
+        sale_line_id,
+        &format!("pos-op:{sale_line_id}:{inventory_item_id}"),
+        warning,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write automatic checkout history"))?;
     allocate_fefo_batches(tx, tenant_id, branch_id, &item, &ledger_id, quantity).await?;
     sqlx::query("UPDATE inventory_items SET stock_quantity=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(tenant_id)
@@ -1635,7 +1778,14 @@ async fn update_in_tx(
         ));
     }
 
-    if input.batch_tracked != Some(current.batch_tracked) {
+    // `None` means "leave batch tracking as it is", the same convention the
+    // unit guard above uses. Comparing the Option directly made an omitted
+    // field look like a change, so any update to an item holding stock — a
+    // plain quantity adjustment included — was rejected outright.
+    if input
+        .batch_tracked
+        .is_some_and(|value| value != current.batch_tracked)
+    {
         if current.stock_quantity != 0 {
             return Err(AppError::conflict(
                 "batch tracking can change only when stock is zero",
@@ -2609,16 +2759,69 @@ mod tests {
             CREATE TABLE inventory_items (
               id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
               sku TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '',
+              subcategory TEXT NOT NULL DEFAULT '', brand TEXT NOT NULL DEFAULT '',
+              product_usage TEXT NOT NULL DEFAULT 'retail',
               unit TEXT NOT NULL DEFAULT 'pcs', package_unit TEXT NOT NULL DEFAULT 'pcs',
               units_per_package INTEGER NOT NULL DEFAULT 1, stock_quantity INTEGER NOT NULL DEFAULT 0,
-              reorder_point INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
+              reorder_point INTEGER NOT NULL DEFAULT 0, alert_level INTEGER NOT NULL DEFAULT 0,
+              desired_level INTEGER NOT NULL DEFAULT 0, order_level INTEGER NOT NULL DEFAULT 0,
+              safety_stock_level INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
               hsn_code TEXT NOT NULL DEFAULT '', gst_percent INTEGER NOT NULL DEFAULT 0,
               barcode TEXT NOT NULL DEFAULT '', batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,
-              dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE, active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
+              dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE, center_available BOOLEAN NOT NULL DEFAULT TRUE,
+              active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
               franchise_override_fields TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ
             )
             "#,
+            // The item SELECT aggregates barcodes from this table, so reading a
+            // single item fails without it.
+            r#"CREATE TABLE inventory_item_barcodes (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL, barcode TEXT NOT NULL,
+              is_primary BOOLEAN NOT NULL DEFAULT FALSE, active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )"#,
+            // An adjustment registers its reason as a master value, so the
+            // write path needs this table even when the test never reads it.
+            r#"CREATE TABLE inventory_master_values (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, label TEXT NOT NULL,
+              parent_code TEXT NOT NULL DEFAULT '', active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )"#,
+            r#"CREATE UNIQUE INDEX uq_inventory_master_values_code
+              ON inventory_master_values(tenant_id,branch_id,kind,LOWER(code))"#,
+            // Editing a master field checks whether the item is tied up in an
+            // open purchase order or stock count, so those tables must exist.
+            // Only the columns the lock query reads are modelled here.
+            r#"CREATE TABLE purchase_orders (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft'
+            )"#,
+            r#"CREATE TABLE purchase_order_lines (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, purchase_order_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL
+            )"#,
+            r#"CREATE TABLE stock_count_sessions (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'counting'
+            )"#,
+            r#"CREATE TABLE stock_count_session_items (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, session_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL
+            )"#,
+            r#"CREATE TABLE inventory_policies (
+              tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+              negative_stock_rule TEXT NOT NULL DEFAULT 'block',
+              valuation_method TEXT NOT NULL DEFAULT 'weighted_average',
+              expiry_window_days INTEGER NOT NULL DEFAULT 30,
+              count_variance_threshold_bps INTEGER NOT NULL DEFAULT 500,
+              approval_matrix JSONB NOT NULL DEFAULT '{}'::JSONB,
+              master_edit_lock BOOLEAN NOT NULL DEFAULT FALSE,
+              updated_by TEXT NOT NULL DEFAULT '', PRIMARY KEY(tenant_id,branch_id)
+            )"#,
             r#"CREATE TABLE franchise_policies (
               tenant_id TEXT PRIMARY KEY, central_branch_id TEXT NOT NULL,
               allowed_override_fields TEXT[] NOT NULL DEFAULT '{}'

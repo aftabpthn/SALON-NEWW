@@ -10,11 +10,16 @@ mod routes;
 mod services;
 mod state;
 
-use std::{net::SocketAddr, time::Duration};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use anyhow::{Context, Result};
 use axum::serve;
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
+use infrastructure::worker;
 use state::AppState;
 use tokio::net::TcpListener;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -27,7 +32,13 @@ async fn main() -> Result<()> {
         .init();
 
     let settings = config::Settings::load()?;
-    let db = infrastructure::db::create_pool(&settings.database_url)
+
+    // A `--migrate-only` run is the deploy pipeline's dedicated schema step, so
+    // it always migrates regardless of how the serving tasks are configured.
+    let migrate_only = std::env::args().any(|arg| arg == "--migrate-only");
+    let run_migrations = migrate_only || infrastructure::db::migrations_on_boot_enabled();
+
+    let db = infrastructure::db::create_pool(&settings.database_url, run_migrations)
         .await
         .context("Unable to initialize PostgreSQL pool")?;
 
@@ -38,7 +49,7 @@ async fn main() -> Result<()> {
     .await
     .map_err(|error| anyhow::anyhow!("Unable to protect statutory PII: {}", error.message()))?;
 
-    if std::env::args().any(|arg| arg == "--migrate-only") {
+    if migrate_only {
         tracing::info!("database migrations completed");
         db.close().await;
         return Ok(());
@@ -61,241 +72,247 @@ async fn main() -> Result<()> {
         .context("Redis ping timed out")?
         .context("Redis ping check failed")?;
     let state = AppState::new(settings.clone(), db, redis);
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if services::saas_service::escalate_due_tickets(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("support SLA escalation cycle failed");
-                }
-            }
-        });
-    }
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(15));
-            loop {
-                interval.tick().await;
-                if services::report_export_service::process_due(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("report export worker cycle failed");
-                }
-            }
-        });
-    }
 
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(900));
-            loop {
-                interval.tick().await;
-                if services::client_service::refresh_intelligence_snapshots(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("client intelligence snapshot refresh failed");
-                }
-            }
-        });
-    }
+    // Every worker below runs on whichever replica wins its advisory lock for
+    // that cycle. Before this, all of them ran in all replicas at once, so a
+    // service scaled to eight tasks did eight copies of the same scan.
+    // `worker::spawn` names each lock, so the names must stay stable across
+    // releases.
 
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if routes::appointments::expire_waitlist_offers(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("waitlist offer expiry cycle failed");
-                }
-            }
-        });
-    }
-
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
-            loop {
-                interval.tick().await;
-                if services::ai_concierge_service::purge_expired_transcripts(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("AI transcript retention cycle failed");
-                }
-            }
-        });
-    }
-
-    {
-        // Proactive briefing. Six-hourly rather than daily so a restart cannot
-        // skip a day; the per-signal cooldown is what stops it repeating.
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(
-                services::ai_briefing_service::BRIEFING_WORKER_INTERVAL_SECONDS,
-            ));
-            loop {
-                interval.tick().await;
-                if services::ai_briefing_service::run_daily_briefing_worker(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("AI daily briefing cycle failed");
-                }
-            }
-        });
-    }
-
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(21_600));
-            loop {
-                interval.tick().await;
-                if services::happy_hours_service::run_auto_sunset_worker(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("Happy Hours auto-sunset cycle failed");
-                }
-            }
-        });
-    }
-
-    if state.settings.invoice_delivery_configured() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            let mut last_reminder_date = None;
-            loop {
-                interval.tick().await;
-                let today = Utc::now().date_naive();
-                if last_reminder_date != Some(today) {
-                    match routes::pos::schedule_due_invoice_reminders_worker(&worker_state).await {
-                        Ok(_) => last_reminder_date = Some(today),
-                        Err(_) => tracing::warn!("invoice due-reminder scheduling failed"),
-                    }
-                }
-                if routes::pos::run_invoice_outbox_worker(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("invoice delivery worker cycle failed");
-                }
-                if services::saas_service::process_support_email_outbox(
-                    &worker_state.db,
-                    &worker_state.settings,
-                )
+    worker::spawn(
+        &state,
+        "support_sla_escalation",
+        Duration::from_secs(60),
+        |state| async move {
+            if services::saas_service::escalate_due_tickets(&state.db)
                 .await
                 .is_err()
-                {
-                    tracing::warn!("support email delivery worker cycle failed");
-                }
-                if routes::pos_legacy_completion::process_due_daily_reports_worker(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("POS daily-report delivery cycle failed");
-                }
-                if services::analytics_service::process_due_custom_reports(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("custom report delivery cycle failed");
-                }
-                if services::inventory_governance_service::process_due_communications(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("inventory supplier communication cycle failed");
-                }
+            {
+                worker::note_failure("support_sla_escalation", "escalate_due_tickets");
             }
-        });
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "report_export",
+        Duration::from_secs(15),
+        |state| async move {
+            if services::report_export_service::process_due(&state)
+                .await
+                .is_err()
+            {
+                worker::note_failure("report_export", "process_due");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "client_intelligence_snapshots",
+        Duration::from_secs(900),
+        |state| async move {
+            if services::client_service::refresh_intelligence_snapshots(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("client_intelligence_snapshots", "refresh_snapshots");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "appointment_waitlist_expiry",
+        Duration::from_secs(60),
+        |state| async move {
+            if routes::appointments::expire_waitlist_offers(&state)
+                .await
+                .is_err()
+            {
+                worker::note_failure("appointment_waitlist_expiry", "expire_offers");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "ai_transcript_retention",
+        Duration::from_secs(21_600),
+        |state| async move {
+            if services::ai_concierge_service::purge_expired_transcripts(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "purge_transcripts");
+            }
+        },
+    );
+
+    // Proactive briefing. Six-hourly rather than daily so a restart cannot
+    // skip a day; the per-signal cooldown is what stops it repeating.
+    worker::spawn(
+        &state,
+        "ai_daily_briefing",
+        Duration::from_secs(services::ai_briefing_service::BRIEFING_WORKER_INTERVAL_SECONDS),
+        |state| async move {
+            if services::ai_briefing_service::run_daily_briefing_worker(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_daily_briefing", "run_briefing");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "happy_hours_auto_sunset",
+        Duration::from_secs(21_600),
+        |state| async move {
+            if services::happy_hours_service::run_auto_sunset_worker(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("happy_hours_auto_sunset", "auto_sunset");
+            }
+        },
+    );
+
+    if state.settings.invoice_delivery_configured() {
+        // Reminder scheduling is once-a-day work sharing a minute-by-minute
+        // delivery loop. The memo is per-process and therefore best-effort: if
+        // leadership moves, the new leader re-checks, and the scheduler itself
+        // is responsible for not double-sending.
+        let last_reminder_date: Arc<Mutex<Option<NaiveDate>>> = Arc::new(Mutex::new(None));
+        worker::spawn(
+            &state,
+            "invoice_delivery",
+            Duration::from_secs(60),
+            move |state| {
+                let last_reminder_date = Arc::clone(&last_reminder_date);
+                async move {
+                    let today = Utc::now().date_naive();
+                    let already_scheduled = last_reminder_date
+                        .lock()
+                        .map(|date| *date == Some(today))
+                        .unwrap_or(false);
+                    if !already_scheduled {
+                        match routes::pos::schedule_due_invoice_reminders_worker(&state).await {
+                            Ok(_) => {
+                                if let Ok(mut date) = last_reminder_date.lock() {
+                                    *date = Some(today);
+                                }
+                            }
+                            Err(_) => {
+                                worker::note_failure("invoice_delivery", "schedule_reminders");
+                            }
+                        }
+                    }
+                    if routes::pos::run_invoice_outbox_worker(&state)
+                        .await
+                        .is_err()
+                    {
+                        worker::note_failure("invoice_delivery", "invoice_outbox");
+                    }
+                    if services::saas_service::process_support_email_outbox(
+                        &state.db,
+                        &state.settings,
+                    )
+                    .await
+                    .is_err()
+                    {
+                        worker::note_failure("invoice_delivery", "support_email_outbox");
+                    }
+                    if routes::pos_legacy_completion::process_due_daily_reports_worker(&state)
+                        .await
+                        .is_err()
+                    {
+                        worker::note_failure("invoice_delivery", "daily_reports");
+                    }
+                    if services::analytics_service::process_due_custom_reports(&state)
+                        .await
+                        .is_err()
+                    {
+                        worker::note_failure("invoice_delivery", "custom_reports");
+                    }
+                    if services::inventory_governance_service::process_due_communications(&state)
+                        .await
+                        .is_err()
+                    {
+                        worker::note_failure("invoice_delivery", "supplier_communications");
+                    }
+                }
+            },
+        );
     }
 
     if state.settings.benefit_delivery_configured() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if services::benefit_notification_service::schedule(&worker_state)
+        worker::spawn(
+            &state,
+            "benefit_delivery",
+            Duration::from_secs(60),
+            |state| async move {
+                if services::benefit_notification_service::schedule(&state)
                     .await
                     .is_err()
                 {
-                    tracing::warn!("benefit and campaign scheduling failed");
+                    worker::note_failure("benefit_delivery", "schedule");
                 }
-                if services::benefit_notification_service::process_due(&worker_state)
+                if services::benefit_notification_service::process_due(&state)
                     .await
                     .is_err()
                 {
-                    tracing::warn!("benefit and campaign delivery cycle failed");
+                    worker::note_failure("benefit_delivery", "process_due");
                 }
-            }
-        });
+            },
+        );
     }
 
     if state.settings.security_encryption_key.is_some() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
-            loop {
-                interval.tick().await;
-                if services::integration_service::process_webhooks(
-                    &worker_state.db,
-                    &worker_state.settings,
-                )
-                .await
-                .is_err()
+        worker::spawn(
+            &state,
+            "integration_delivery",
+            Duration::from_secs(30),
+            |state| async move {
+                if services::integration_service::process_webhooks(&state.db, &state.settings)
+                    .await
+                    .is_err()
                 {
-                    tracing::warn!("integration webhook delivery cycle failed");
+                    worker::note_failure("integration_delivery", "webhooks");
                 }
                 if services::integration_service::process_connector_sync_jobs(
-                    &worker_state.db,
-                    &worker_state.settings,
+                    &state.db,
+                    &state.settings,
                 )
                 .await
                 .is_err()
                 {
-                    tracing::warn!("integration connector sync cycle failed");
+                    worker::note_failure("integration_delivery", "connector_sync");
                 }
-            }
-        });
+            },
+        );
     }
 
     if state.settings.mobile_push_provider_enabled() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(15));
-            loop {
-                interval.tick().await;
+        worker::spawn(
+            &state,
+            "mobile_push_delivery",
+            Duration::from_secs(15),
+            |state| async move {
                 if services::team_chat_service::process_push_deliveries(
-                    &worker_state.db,
-                    worker_state
+                    &state.db,
+                    state
                         .settings
                         .mobile_push_provider_url
                         .as_deref()
                         .unwrap_or_default(),
-                    worker_state
+                    state
                         .settings
                         .mobile_push_provider_token
                         .as_deref()
                         .unwrap_or_default(),
-                    worker_state
+                    state
                         .settings
                         .security_encryption_key
                         .as_deref()
@@ -304,128 +321,117 @@ async fn main() -> Result<()> {
                 .await
                 .is_err()
                 {
-                    tracing::warn!("mobile push delivery cycle failed");
+                    worker::note_failure("mobile_push_delivery", "push_deliveries");
                 }
-            }
-        });
+            },
+        );
     }
 
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(5));
-            loop {
-                interval.tick().await;
-                if services::migration_service::process_due(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("data import worker cycle failed");
-                }
-                if services::purchase_bill_drafts_service::process_due_historical_bulk(
-                    &worker_state,
-                )
+    worker::spawn(
+        &state,
+        "data_import",
+        Duration::from_secs(5),
+        |state| async move {
+            if services::migration_service::process_due(&state.db)
                 .await
                 .is_err()
-                {
-                    tracing::warn!("historical purchase bulk worker cycle failed");
-                }
+            {
+                worker::note_failure("data_import", "import_jobs");
             }
-        });
-    }
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if services::operations_service::run_escalation_worker(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("field job SLA escalation cycle failed");
-                }
-                if services::operations_service::process_marketplace_retries(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("marketplace webhook retry cycle failed");
-                }
+            if services::purchase_bill_drafts_service::process_due_historical_bulk(&state)
+                .await
+                .is_err()
+            {
+                worker::note_failure("data_import", "historical_bulk");
             }
-        });
-    }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "field_operations",
+        Duration::from_secs(60),
+        |state| async move {
+            if services::operations_service::run_escalation_worker(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("field_operations", "sla_escalation");
+            }
+            if services::operations_service::process_marketplace_retries(&state)
+                .await
+                .is_err()
+            {
+                worker::note_failure("field_operations", "marketplace_retries");
+            }
+        },
+    );
 
     if state.settings.compliance_provider_enabled() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if services::compliance_provider_service::process_due(&worker_state)
+        worker::spawn(
+            &state,
+            "invoice_compliance",
+            Duration::from_secs(60),
+            |state| async move {
+                if services::compliance_provider_service::process_due(&state)
                     .await
                     .is_err()
                 {
-                    tracing::warn!("invoice compliance worker cycle failed");
+                    worker::note_failure("invoice_compliance", "process_due");
                 }
-            }
-        });
+            },
+        );
     }
 
     if state.settings.razorpay_payment_links_enabled() {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(300));
-            loop {
-                interval.tick().await;
-                if services::membership_auto_renew_service::process_due(&worker_state)
+        worker::spawn(
+            &state,
+            "membership_auto_renew",
+            Duration::from_secs(300),
+            |state| async move {
+                if services::membership_auto_renew_service::process_due(&state)
                     .await
                     .is_err()
                 {
-                    tracing::warn!("membership auto-renew worker cycle failed");
+                    worker::note_failure("membership_auto_renew", "process_due");
                 }
-            }
-        });
+            },
+        );
     }
 
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(300));
-            loop {
-                interval.tick().await;
-                if services::pos_enterprise_service::run_integrity_monitor(&worker_state.db)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("POS financial integrity monitor cycle failed");
-                }
-                if services::inventory_controls_service::process_due_automation(&worker_state)
-                    .await
-                    .is_err()
-                {
-                    tracing::warn!("autonomous inventory cycle failed");
-                }
-            }
-        });
-    }
-
-    {
-        let worker_state = state.clone();
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(60));
-            loop {
-                interval.tick().await;
-                if services::profit_governance_service::process_automated_action_queue(
-                    &worker_state.db,
-                )
+    worker::spawn(
+        &state,
+        "pos_integrity_monitor",
+        Duration::from_secs(300),
+        |state| async move {
+            if services::pos_enterprise_service::run_integrity_monitor(&state.db)
                 .await
                 .is_err()
-                {
-                    tracing::warn!("automated profit action scan cycle failed");
-                }
+            {
+                worker::note_failure("pos_integrity_monitor", "integrity_monitor");
             }
-        });
-    }
+            if services::inventory_controls_service::process_due_automation(&state)
+                .await
+                .is_err()
+            {
+                worker::note_failure("pos_integrity_monitor", "inventory_automation");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "profit_action_queue",
+        Duration::from_secs(60),
+        |state| async move {
+            if services::profit_governance_service::process_automated_action_queue(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("profit_action_queue", "action_queue");
+            }
+        },
+    );
 
     let app = routes::build_router(state);
     let addr: SocketAddr = format!("{}:{}", settings.app_host, settings.app_port).parse()?;

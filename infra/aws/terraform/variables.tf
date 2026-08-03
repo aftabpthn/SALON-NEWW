@@ -192,3 +192,31 @@ variable "support_email_raw_retention_days" {
     error_message = "support_email_raw_retention_days must be between 1 and 365."
   }
 }
+
+variable "error_webhook_url" {
+  description = "Optional endpoint that receives 5xx incident reports (Sentry store URL, Slack webhook, or any JSON sink). Empty disables forwarding; failures still reach CloudWatch."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.error_webhook_url == "" || startswith(var.error_webhook_url, "https://")
+    error_message = "error_webhook_url must use HTTPS."
+  }
+}
+
+variable "otel_collector_image" {
+  description = "ADOT collector image that scrapes the API's /metrics endpoint and publishes it to CloudWatch."
+  type        = string
+  default     = "public.ecr.aws/aws-observability/aws-otel-collector:v0.43.3"
+}
+
+variable "metrics_scrape_interval_seconds" {
+  description = "How often the collector scrapes /metrics. Below 60s multiplies CloudWatch ingestion cost without adding much signal."
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.metrics_scrape_interval_seconds >= 15 && var.metrics_scrape_interval_seconds <= 300
+    error_message = "metrics_scrape_interval_seconds must be between 15 and 300."
+  }
+}

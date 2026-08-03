@@ -39,6 +39,29 @@ services:
     volumes:
       - aurashine-clamav-data:/var/lib/clamav
 
+  # Mirrors the dedicated migration task the AWS pipeline runs before it touches
+  # the service. Keeping it here means a migration that locks a busy table shows
+  # up locally instead of during a production rollout.
+  migrate:
+    build: ./backend-rust
+    container_name: aurashine-migrate
+    command: ["aura-shine-backend", "--migrate-only"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      APP_ENV: development
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aura_shine
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:?set AI_SERVICE_TOKEN}
+      MIGRATION_EVIDENCE_ENCRYPTION_KEY: ${MIGRATION_EVIDENCE_ENCRYPTION_KEY:?set MIGRATION_EVIDENCE_ENCRYPTION_KEY}
+      MIGRATION_PROOF_SIGNING_KEY: ${MIGRATION_PROOF_SIGNING_KEY:?set MIGRATION_PROOF_SIGNING_KEY}
+
   api:
     build: ./backend-rust
     container_name: aurashine-api
@@ -50,10 +73,17 @@ services:
         condition: service_healthy
       clamav:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       APP_ENV: development
+      # The migrate service above owns the schema; see infra/aws/terraform/compute.tf.
+      RUN_MIGRATIONS_ON_BOOT: "false"
+      RUN_WORKERS: "true"
+      METRICS_AUTH_TOKEN: ${METRICS_AUTH_TOKEN:-}
+      ERROR_WEBHOOK_URL: ${ERROR_WEBHOOK_URL:-}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/aura_shine
       REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}

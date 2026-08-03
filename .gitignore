@@ -37,6 +37,7 @@ backend-rust/data/
 *.err
 frontend-angular/playwright/.auth/
 frontend-angular/playwright-report/
+frontend-angular/staff-app-playwright-report/
 frontend-angular/test-results/
 
 # Terraform local providers, plans, and state

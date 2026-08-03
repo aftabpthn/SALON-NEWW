@@ -8909,6 +8909,17 @@ mod tests {
         .execute(pool)
         .await
         .unwrap();
+        // Adds source_provider and the profile columns to
+        // integration_import_mappings, plus mapping_version on
+        // integration_import_jobs. Every query below reads them, so leaving it
+        // out of this replay made the tests fail on a schema no environment
+        // actually runs.
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0319_data_migration_saved_mapping_profiles.sql"
+        ))
+        .execute(pool)
+        .await
+        .unwrap();
     }
 
     #[test]
@@ -8938,9 +8949,8 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn import_foundation_is_scoped_traceable_audited_and_duplicate_safe(pool: PgPool) {
-        prepare_schema(&pool).await;
         let rows = json!([{
             "source_row_number": 2,
             "source_external_id": "legacy-client-1",
@@ -9065,16 +9075,29 @@ mod tests {
         assert_eq!(trace.1, "legacy-client-1");
         assert!(trace.2.is_some());
 
-        let audit_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM integration_import_audit_events WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3",
+        // Naming the events beats counting them: a bare count passed against
+        // the old cut-down fixture only because half the lifecycle could not
+        // run, and it would keep passing if one event were swapped for another.
+        // Sorted, because the primary key is a UUID and carries no insertion
+        // order — the set of events is the contract here, not their sequence.
+        let mut audit_events: Vec<String> = sqlx::query_scalar(
+            "SELECT event_type FROM integration_import_audit_events WHERE tenant_id=$1 AND branch_id=$2 AND job_id=$3",
         )
         .bind("tenant-1")
         .bind("branch-1")
         .bind(&job.id)
-        .fetch_one(&pool)
+        .fetch_all(&pool)
         .await
         .unwrap();
-        assert_eq!(audit_count, 2);
+        audit_events.sort();
+        assert_eq!(
+            audit_events,
+            vec![
+                "migration.batch.completed",
+                "migration.commit.revalidated",
+                "migration.job.created",
+            ]
+        );
 
         let recovery = rollback_job(&pool, "tenant-1", "branch-1", &job.id, "owner-1")
             .await
@@ -9090,9 +9113,8 @@ mod tests {
         assert_eq!(client_count, 0);
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn phase_nine_preview_and_yellow_gate_commit_approval(pool: PgPool) {
-        prepare_schema(&pool).await;
         let payload = json!({
             "source_row_number":2,
             "source_external_id":"legacy-client-1",
@@ -9176,9 +9198,8 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn phase_ten_quarantine_retry_preserves_original_and_adds_checkpoint(pool: PgPool) {
-        prepare_schema(&pool).await;
         sqlx::query("INSERT INTO integration_import_upload_sessions(id,tenant_id,branch_id,original_file_name,file_extension,expected_size_bytes,total_parts,status,created_by) VALUES('upload-1','tenant-1','branch-1','clients.csv','csv',10,1,'completed','owner-1')")
             .execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO integration_import_source_files(id,tenant_id,branch_id,upload_session_id,original_file_name,file_extension,declared_content_type,detected_content_type,file_format,size_bytes,sha256,storage_key,created_by) VALUES('source-1','tenant-1','branch-1','upload-1','clients.csv','csv','text/csv','text/csv','csv',10,'phase10-hash','evidence/source-1','owner-1')")
@@ -9306,9 +9327,8 @@ mod tests {
         assert_eq!(chunks, vec!["completed", "pending"]);
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn duplicate_actions_merge_link_keep_and_rollback_exactly(pool: PgPool) {
-        prepare_schema(&pool).await;
         sqlx::query(
             "INSERT INTO clients(id,tenant_id,branch_id,first_name,last_name,phone,normalized_phone,email) VALUES('existing-1','tenant-1','branch-1','Existing','Client','+919000000001','+919000000001','')",
         )
@@ -9410,9 +9430,8 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn saved_mappings_are_tenant_and_branch_scoped(pool: PgPool) {
-        prepare_schema(&pool).await;
         let mapping = save_mapping(
             &pool,
             "tenant-1",

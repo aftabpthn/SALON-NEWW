@@ -7952,6 +7952,21 @@ mod tests {
             .starts_with("DINGG-CLIENT-MEMBERSHIPS-"));
     }
 
+    // KNOWN FAILING — needs a product decision, not a test edit.
+    //
+    // `templates()` emits OpeningPayables immediately after PurchaseBills, which
+    // reads naturally: opening payables are supplier balances carried in with
+    // the bills. This test expects it last.
+    //
+    // The dependency contract in migration_repository's
+    // phase_eight_dependency_rank_matches_execution_contract gives
+    // OpeningPayables rank 6 — the final tier, alongside StockMovements and
+    // Files — which matches this test, not `templates()`.
+    //
+    // One of the two is wrong, and the answer decides the order entities are
+    // actually imported in. Whoever owns the migration contract should say
+    // which; changing either side to force this green risks reordering a real
+    // customer data import.
     #[test]
     fn master_data_templates_follow_dependency_order() {
         let entities = templates()
@@ -8004,7 +8019,11 @@ mod tests {
     #[test]
     fn phase_zero_templates_publish_complete_fixed_contracts() {
         let templates = templates();
-        assert_eq!(templates.len(), 23);
+        // 24 since OpeningPayables joined the set. Where it belongs in the
+        // ordering is a separate question (see
+        // master_data_templates_follow_dependency_order); either answer leaves
+        // the count at 24.
+        assert_eq!(templates.len(), 24);
         for template in &templates {
             assert_eq!(template.contract_version, MIGRATION_CONTRACT_VERSION);
             assert!(!template.columns.is_empty());
@@ -8043,17 +8062,11 @@ mod tests {
         assert_eq!(product.reference_entity, Some(MigrationEntity::Products));
     }
 
-    #[sqlx::test(migrations = false)]
+    #[sqlx::test]
     async fn analyze_reports_duplicates_without_writing_live_rows(pool: PgPool) {
-        sqlx::query(
-            "CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,first_name TEXT NOT NULL,normalized_phone TEXT NOT NULL,merged_into_client_id TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query("CREATE TABLE staff(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,employee_code TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())")
-            .execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO clients VALUES('client-1','tenant-1','branch-1','Existing','+919876543210',NULL,NOW())")
+        // Duplicate resolution reads across two dozen tables, far more than a
+        // hand-written fixture can track; run the real schema instead.
+        sqlx::query("INSERT INTO clients(id,tenant_id,branch_id,first_name,normalized_phone) VALUES('client-1','tenant-1','branch-1','Existing','+919876543210')")
             .execute(&pool).await.unwrap();
         let csv =
             "Old ID,Customer Name,Mobile,Email\nlegacy-1,Incoming,9876543210,incoming@example.test";
