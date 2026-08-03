@@ -41,6 +41,19 @@ jobs:
       - name: Verify staff RBAC and route parity
         working-directory: backend-rust
         run: cargo test --test staff_control_center_api_parity -- --nocapture
+      # These four need no database — they read the source tree and assert the
+      # permission, entitlement, session and payment-provider contracts hold.
+      # They already existed but nothing ran them, so a route mapped to an
+      # unregistered permission reached main and returned 500 for every caller.
+      - name: Verify permission, entitlement and provider contracts
+        working-directory: backend-rust
+        run: |
+          cargo test \
+            --test permission_registry_contract \
+            --test permission_session_invalidation_contract \
+            --test subscription_entitlement_contract \
+            --test payment_provider_catalog \
+            -- --nocapture
       - name: Verify staff security boundaries
         working-directory: backend-rust
         run: cargo test --bin aura-shine-backend staff_security_ -- --nocapture
@@ -50,3 +63,14 @@ jobs:
       - name: Verify staff app contracts
         working-directory: staff-app
         run: npx vitest run
+      # 210 wiring contracts that already lived in the repo but were reachable
+      # from no script and no workflow, so they silently drifted out of date.
+      - name: Install CRM app dependencies
+        working-directory: frontend-angular
+        run: npm ci
+      - name: Verify CRM app wiring contracts
+        working-directory: frontend-angular
+        run: npm test
+      - name: Verify customer app wiring contracts
+        working-directory: customer-app
+        run: npm test

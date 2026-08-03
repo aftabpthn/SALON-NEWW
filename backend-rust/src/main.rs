@@ -487,7 +487,49 @@ async fn main() -> Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
 
+    tracing::info!("aura-shine-backend stopped accepting connections");
+
     Ok(())
+}
+
+/// Resolves when the process is asked to stop.
+///
+/// ECS sends SIGTERM and only escalates to SIGKILL after its stop timeout, and
+/// the target group drains for `deregistration_delay` seconds before that.
+/// Without this, the process died on the first signal and every request still
+/// in flight during the drain window — a checkout, a payment callback — was cut
+/// mid-transaction on each rollout.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            tracing::warn!("unable to listen for the interrupt signal");
+            // Never resolve, so a broken handler cannot trigger a shutdown by
+            // itself; the other branch still works.
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(_) => {
+                tracing::warn!("unable to listen for the terminate signal");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("interrupt received; draining in-flight requests"),
+        _ = terminate => tracing::info!("SIGTERM received; draining in-flight requests"),
+    }
 }

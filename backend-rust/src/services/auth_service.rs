@@ -344,6 +344,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff",
     },
     PermissionDefinition {
+        code: "staff.governance.read",
+        label: "View staff rules and SOP",
+        group: "Staff",
+    },
+    PermissionDefinition {
+        code: "staff.governance.manage",
+        label: "Manage staff rules and SOP",
+        group: "Staff",
+    },
+    PermissionDefinition {
         code: "staff.self_manage",
         label: "Use staff self-service",
         group: "Staff",
@@ -661,6 +671,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "staff.app.profile.read",
         label: "Show Staff App profile",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.profile.manage",
+        label: "Update Staff App profile",
         group: "Staff App",
     },
     PermissionDefinition {

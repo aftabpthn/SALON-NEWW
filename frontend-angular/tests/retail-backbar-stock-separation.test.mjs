@@ -10,7 +10,14 @@ const template = read('../src/app/pages/inventory/inventory-page.component.html'
 assert.ok(migration.includes('dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE'));
 assert.ok(migration.includes('NEW.stock_quantity < sealed_quantity'));
 assert.ok(migration.includes("NEW.status='sealed'"));
-assert.ok(adjustment.includes('dual-use backbar consumption must be posted against the open container'));
-assert.ok(inventory.includes('dualUseStock: this.productDraft.dualUseStock'));
+// The guard is what matters, not its wording: dual-use consumption must refuse
+// to post until a sealed unit has been opened.
+assert.ok(adjustment.includes('open the sealed tube before recording usage'));
+assert.ok(adjustment.includes('open tube has insufficient remaining quantity'));
+// dualUseStock is derived from the product usage rather than tracked as its own
+// draft flag, so the two can never disagree.
+assert.ok(inventory.includes("dualUseStock: this.productDraft.productUsage === 'dual_use'"));
 assert.ok(template.includes('Retail / Backbar stock'));
-assert.ok(template.includes('Same SKU is sold at retail and used in backbar'));
+// The dual-use choice now lives in the product-use selector rather than a
+// separate checkbox with explanatory copy.
+assert.ok(template.includes('value="dual_use"'));

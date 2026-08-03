@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 
 use crate::{
     config::is_local_env,
+    infrastructure::cache,
     models::common::{ApiResponse, ApiResult, AppError},
     routes::context::tenant_branch,
     services::{auth_service, auth_service::AuthClaims, kiosk_service},
@@ -18,6 +19,8 @@ use crate::{
 
 const DEVICE_COOKIE: &str = "aura_kiosk_device";
 const GUEST_COOKIE: &str = "aura_kiosk_guest";
+const ACTIVATION_RATE_LIMIT_MAX: i64 = 10;
+const ACTIVATION_RATE_LIMIT_SECONDS: i64 = 60;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -108,8 +111,10 @@ struct BranchInput {
 
 async fn activate(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<ActivationInput>,
 ) -> Result<Response, AppError> {
+    enforce_activation_rate_limit(&state, &headers).await?;
     let (token, value) = kiosk_service::activate(&state, &input.activation_code).await?;
     response_with_cookie(
         &state,
@@ -288,6 +293,44 @@ fn require_manage(claims: &AuthClaims) -> Result<(), AppError> {
             "appointments.manage permission is required",
         ))
     }
+}
+
+/// Throttles unauthenticated activation attempts per source IP.
+///
+/// Activation codes are short-lived but they are looked up across every tenant
+/// at once, so an unthrottled endpoint lets one caller sweep for any salon's
+/// pending kiosk and walk away with a long-lived device token. The source IP
+/// header is set by the security-headers middleware, which strips whatever the
+/// client sent and only trusts `x-forwarded-for` behind a known proxy.
+async fn enforce_activation_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(), AppError> {
+    let source = headers
+        .get("x-aurashine-source-ip")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("direct");
+    let allowed = cache::rate_limit_allows(
+        &state.redis,
+        &format!("kiosk_activate_rate:{source}"),
+        ACTIVATION_RATE_LIMIT_MAX,
+        ACTIVATION_RATE_LIMIT_SECONDS,
+    )
+    .await
+    .map_err(|_| {
+        AppError::service_unavailable(
+            "RATE_LIMIT_STORE_UNAVAILABLE",
+            "kiosk activation rate limit store is unavailable",
+        )
+    })?;
+    if !allowed {
+        return Err(AppError::rate_limited(
+            "too many kiosk activation attempts; try again later",
+        ));
+    }
+    Ok(())
 }
 
 fn cookie_value(headers: &HeaderMap, name: &str) -> String {
