@@ -46,6 +46,14 @@ interface ProfessionalResult {
   pricePaise: number;
 }
 
+interface QuickFilterChip {
+  label: string;
+  filter?: FilterKey;
+  query?: string;
+  mode?: SearchMode;
+  sort?: SortKey;
+}
+
 @Component({
   standalone: true,
   imports: [RouterLink, IonButton, IonContent, IonIcon, BusinessCardComponent],
@@ -87,8 +95,8 @@ interface ProfessionalResult {
           </section>
 
           <nav class="premium-chip-row" aria-label="Quick filters">
-            @for (chip of ['Nearby', 'Open Now', 'Offers', 'Premium', 'Women', 'Men', 'Spa', 'Hair', 'Facial', 'Massage', 'Nails']; track chip) {
-              <button type="button" [class.selected]="chip === 'Nearby'" (click)="toggleFilterPanel()">{{ chip }}</button>
+            @for (chip of quickFilterChips; track chip.label) {
+              <button type="button" [class.selected]="isQuickFilterSelected(chip)" [attr.aria-pressed]="isQuickFilterSelected(chip)" (click)="applyQuickFilter(chip)">{{ chip.label }}</button>
             }
           </nav>
 
@@ -2621,6 +2629,19 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "rating", label: "Top rated" },
     { key: "reviews", label: "Most reviewed" }
   ];
+  readonly quickFilterChips: QuickFilterChip[] = [
+    { label: "Nearby", filter: "nearest", sort: "distance" },
+    { label: "Open Now", filter: "open" },
+    { label: "Offers", filter: "deals" },
+    { label: "Premium", filter: "premium" },
+    { label: "Women", query: "Women", mode: "services" },
+    { label: "Men", query: "Men", mode: "services" },
+    { label: "Spa", query: "Spa", mode: "services" },
+    { label: "Hair", query: "Hair", mode: "services" },
+    { label: "Facial", query: "Facial", mode: "services" },
+    { label: "Massage", query: "Massage", mode: "services" },
+    { label: "Nails", query: "Nail", mode: "services" }
+  ];
   readonly flatFilterOptions = computed(() => this.filterSections.flatMap((section) => section.options));
   readonly activeFilterCount = computed(() => this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0));
   readonly filterButtonLabel = computed(() => this.activeFilterCount() ? this.activeFilterSummary().slice(0, 2).join(", ") : "All filters");
@@ -3067,6 +3088,48 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.activeFilters.set(filters);
     this.draftFilters.set(filters);
     this.filter.set(filters[0] || "open");
+    void this.executeSearch();
+  }
+
+  isQuickFilterSelected(chip: QuickFilterChip): boolean {
+    if (chip.filter) return this.activeFilters().includes(chip.filter);
+    if (!chip.query) return false;
+    return this.mode() === (chip.mode || "services") && this.query().trim().toLowerCase() === chip.query.toLowerCase();
+  }
+
+  applyQuickFilter(chip: QuickFilterChip) {
+    this.closeSheets();
+    if (chip.filter) {
+      const isSelected = this.activeFilters().includes(chip.filter);
+      const filters = isSelected
+        ? this.activeFilters().filter((item) => item !== chip.filter)
+        : this.normalizedFilterList([...this.activeFilters(), chip.filter]);
+      this.activeFilters.set(filters);
+      this.draftFilters.set(filters);
+      this.filter.set(filters[0] || "open");
+      if (chip.sort) {
+        this.sort.set(isSelected && this.sort() === chip.sort ? "recommended" : chip.sort);
+        this.draftSort.set(this.sort());
+      }
+      if (chip.filter === "nearest" && !isSelected && !this.hasUsableLocation()) {
+        this.activeFilters.set(filters.filter((item) => item !== "nearest"));
+        this.useLocation();
+        return;
+      }
+      void this.executeSearch();
+      return;
+    }
+
+    if (!chip.query) return;
+    if (this.isQuickFilterSelected(chip)) {
+      this.query.set("");
+      this.mode.set("salons");
+      this.draftMode.set("salons");
+    } else {
+      this.query.set(chip.query);
+      this.mode.set(chip.mode || "services");
+      this.draftMode.set(this.mode());
+    }
     void this.executeSearch();
   }
 
