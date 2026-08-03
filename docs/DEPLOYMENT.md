@@ -135,13 +135,45 @@ Never commit:
 3. Provision or update RDS PostgreSQL.
 4. Provision or update ElastiCache Redis.
 5. Create/update ECS task definitions.
-6. Deploy ECS services.
-7. Attach Rust API service to ALB target group.
-8. Verify:
+6. **Run schema migrations as a dedicated one-off task**
+   (`aws_ecs_task_definition.migration`, which runs
+   `aura-shine-backend --migrate-only`) and wait for exit code 0.
+7. Deploy ECS services.
+8. Attach Rust API service to ALB target group.
+9. Verify:
    - `GET https://<domain>/health`
    - `GET https://<domain>/api/v1/health`
+   - `GET https://<domain>/metrics` with the `METRICS_AUTH_TOKEN` bearer
    - login smoke test after owner/user exists
-9. Watch CloudWatch for 30 minutes.
+10. Watch CloudWatch for 30 minutes.
+
+### Why step 6 is separate
+
+Serving tasks run with `RUN_MIGRATIONS_ON_BOOT=false`. Migrating inside every
+replica made each task in a rolling deploy queue behind the same advisory lock
+before it could pass a health check, so deploys crawled and could trip the
+deployment circuit breaker. `--migrate-only` migrates regardless of that flag,
+so the dedicated task cannot be switched off by configuration.
+
+Lock-safety rules for the migrations themselves are in
+`docs/SCHEMA_MIGRATION_SAFETY.md`. Schema changes go out 03:00–05:00 IST.
+
+### Background workers
+
+Workers run inside the API tasks, but each cycle is leader-elected through a
+lease in `worker_leases`: one replica holds tenure and the others skip. Before
+this, a service scaled to eight tasks ran eight copies of every worker loop.
+
+Set `RUN_WORKERS=false` on the API tasks once a dedicated single-task worker
+service exists. Until then leave it `true` — the lease makes extra replicas
+free.
+
+Ownership during an incident:
+
+```sql
+SELECT worker_name, holder_id, renewed_at, expires_at > NOW() AS valid
+FROM worker_leases ORDER BY worker_name;
+```
 
 ## 10. Rollback
 

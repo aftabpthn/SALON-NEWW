@@ -22,6 +22,21 @@ resource "aws_cloudwatch_log_group" "clamav" {
   retention_in_days = var.log_retention_days
 }
 
+# Receives the collector's own stdout (scrape errors, export failures).
+resource "aws_cloudwatch_log_group" "otel" {
+  name              = "/aurashine/${var.environment}/otel"
+  retention_in_days = var.log_retention_days
+}
+
+# Receives the Embedded Metric Format documents the collector writes. Every
+# scraped series lands here in full — including labels like `tenant` that are
+# deliberately not promoted to CloudWatch dimensions — so Logs Insights can
+# answer "which salon was slow?" without paying per-tenant metric costs.
+resource "aws_cloudwatch_log_group" "metrics" {
+  name              = "/aurashine/${var.environment}/metrics"
+  retention_in_days = var.log_retention_days
+}
+
 resource "aws_iam_role" "task_execution" {
   name = "${local.name}-task-execution"
 
@@ -124,7 +139,106 @@ resource "aws_iam_role_policy" "task_files" {
   })
 }
 
+resource "aws_iam_role_policy" "task_metrics" {
+  name = "metrics-publishing"
+  role = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogStream",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:PutLogEvents",
+        "logs:PutRetentionPolicy",
+      ]
+      # EMF reaches CloudWatch metrics through the logs API, so no
+      # cloudwatch:PutMetricData grant is needed.
+      Resource = [
+        aws_cloudwatch_log_group.metrics.arn,
+        "${aws_cloudwatch_log_group.metrics.arn}:*",
+      ]
+    }]
+  })
+}
+
 locals {
+  # The collector scrapes the API over the task's loopback interface and
+  # republishes it as EMF. `$${env:...}` escapes Terraform interpolation so the
+  # collector, not Terraform, resolves the token at runtime.
+  #
+  # metric_declarations is the cost control: only listed metric/dimension pairs
+  # become CloudWatch custom metrics (billed per metric per month). Everything
+  # else still lands in the EMF log group and stays queryable. `tenant` is
+  # excluded on purpose — promoting it would mint a metric per salon.
+  otel_config = <<-YAML
+    receivers:
+      prometheus:
+        config:
+          global:
+            scrape_interval: ${var.metrics_scrape_interval_seconds}s
+            # Prometheus refuses to start if the timeout exceeds the interval,
+            # so derive it rather than letting a low interval break the config.
+            scrape_timeout: ${min(15, var.metrics_scrape_interval_seconds)}s
+          scrape_configs:
+            - job_name: aurashine-api
+              metrics_path: /metrics
+              scheme: http
+              authorization:
+                type: Bearer
+                credentials: $${env:METRICS_AUTH_TOKEN}
+              static_configs:
+                - targets: ["127.0.0.1:8080"]
+    processors:
+      resourcedetection:
+        detectors: [env, ecs]
+        timeout: 5s
+      batch/metrics:
+        timeout: 60s
+    exporters:
+      awsemf:
+        namespace: AuraShine/${var.environment}
+        log_group_name: ${aws_cloudwatch_log_group.metrics.name}
+        log_stream_name: "{TaskId}"
+        region: ${var.aws_region}
+        dimension_rollup_option: NoDimensionRollup
+        resource_to_telemetry_conversion:
+          enabled: false
+        metric_declarations:
+          - dimensions: [["route"]]
+            metric_name_selectors:
+              - "^aurashine_http_request_duration_seconds$"
+              - "^aurashine_http_errors_total$"
+          - dimensions: [["worker", "outcome"]]
+            metric_name_selectors:
+              - "^aurashine_worker_cycles_total$"
+          # Both sets: [worker, step] to see which job broke, and [] so an
+          # alarm has a single aggregate series to watch. NoDimensionRollup
+          # means CloudWatch publishes exactly what is declared here and
+          # nothing else, so an alarm's dimensions must match a set listed
+          # above it.
+          - dimensions: [["worker", "step"], []]
+            metric_name_selectors:
+              - "^aurashine_worker_step_failures_total$"
+          - dimensions: [["state"]]
+            metric_name_selectors:
+              - "^aurashine_db_pool_connections$"
+          - dimensions: [[]]
+            metric_name_selectors:
+              - "^aurashine_metrics_series_dropped_total$"
+    service:
+      telemetry:
+        logs:
+          level: warn
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [resourcedetection, batch/metrics]
+          exporters: [awsemf]
+  YAML
+
   backend_secret_names = [
     "DATABASE_URL",
     "REDIS_URL",
@@ -134,6 +248,8 @@ locals {
     "SECURITY_ENCRYPTION_KEY",
     "MIGRATION_PROOF_SIGNING_KEY",
     "SUPPORT_EMAIL_WEBHOOK_SECRET",
+    "METRICS_AUTH_TOKEN",
+    "ERROR_WEBHOOK_URL",
     "AWS_REGION",
     "AWS_S3_BUCKET",
     "CORS_ALLOWED_ORIGINS",
@@ -192,6 +308,15 @@ resource "aws_ecs_task_definition" "app" {
         { name = "MIGRATION_CLAMD_ADDRESS", value = "127.0.0.1:3310" },
         { name = "MIGRATION_FILE_STORAGE_ROOT", value = "/var/lib/aurashine/migration-files" },
         { name = "RUST_LOG", value = "info" },
+        # The deploy pipeline runs aws_ecs_task_definition.migration before
+        # touching this service, so serving tasks must not migrate again: doing
+        # so made every task in a rolling deploy queue behind the same advisory
+        # lock before it could pass a health check.
+        { name = "RUN_MIGRATIONS_ON_BOOT", value = "false" },
+        # Workers stay on here because each cycle is leader-elected through a
+        # lease in worker_leases, so extra replicas skip rather than duplicate.
+        # Flip to "false" once a dedicated single-task worker service exists.
+        { name = "RUN_WORKERS", value = "true" },
       ]
       secrets = local.backend_secrets
       mountPoints = [{
@@ -245,10 +370,42 @@ resource "aws_ecs_task_definition" "app" {
       }
     },
     {
-      name              = "clamav"
-      image             = var.clamav_image
-      essential         = true
-      cpu               = 768
+      # Scrapes the backend's /metrics over loopback and republishes it to
+      # CloudWatch as EMF. Not essential: losing telemetry must never take the
+      # API down with it.
+      name              = "otel"
+      image             = var.otel_collector_image
+      essential         = false
+      cpu               = 128
+      memoryReservation = 256
+      environment = [
+        { name = "AOT_CONFIG_CONTENT", value = local.otel_config },
+      ]
+      secrets = [
+        { name = "METRICS_AUTH_TOKEN", valueFrom = "${aws_secretsmanager_secret.runtime.arn}:METRICS_AUTH_TOKEN::" },
+      ]
+      dependsOn = [{
+        containerName = "backend"
+        condition     = "START"
+      }]
+      linuxParameters = { initProcessEnabled = true }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.otel.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "otel"
+        }
+      }
+    },
+    {
+      name      = "clamav"
+      image     = var.clamav_image
+      essential = true
+      # 768 -> 640 to fund the collector's 128 without growing the task size.
+      # Fargate treats container cpu as a share, not a cap, so ClamAV still
+      # bursts into idle capacity during a scan.
+      cpu               = 640
       memoryReservation = 4096
       portMappings = [{
         containerPort = 3310

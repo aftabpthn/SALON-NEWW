@@ -3308,11 +3308,19 @@ mod tests {
     #[sqlx::test(migrations = false)]
     async fn automation_candidates_use_real_opted_in_client_state(pool: PgPool) {
         for statement in [
-            "CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,first_name TEXT NOT NULL,last_name TEXT NOT NULL,phone TEXT NOT NULL,email TEXT NOT NULL,active BOOLEAN NOT NULL,merged_into_client_id TEXT,whatsapp_opt_in BOOLEAN,email_opt_in BOOLEAN,birthday DATE,anniversary DATE,wallet_balance_paise BIGINT NOT NULL,last_visit_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            // sms_opt_in arrived in 0104_client_identity_communication and is
+            // read by automation_candidates; this fixture has to track it.
+            "CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,first_name TEXT NOT NULL,last_name TEXT NOT NULL,phone TEXT NOT NULL,email TEXT NOT NULL,active BOOLEAN NOT NULL,merged_into_client_id TEXT,whatsapp_opt_in BOOLEAN,email_opt_in BOOLEAN,sms_opt_in BOOLEAN,birthday DATE,anniversary DATE,wallet_balance_paise BIGINT NOT NULL,last_visit_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
             "CREATE TABLE client_intelligence_snapshots(client_id TEXT NOT NULL,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,recency_days INTEGER NOT NULL,snapshot_date DATE NOT NULL)",
             "CREATE TABLE client_memberships(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,active BOOLEAN NOT NULL,expires_at TIMESTAMPTZ)",
             "CREATE TABLE client_review_links(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,rating SMALLINT,reviewed_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
-            "CREATE TABLE appointments(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,start_at TIMESTAMPTZ NOT NULL,status TEXT NOT NULL)",
+            "CREATE TABLE appointments(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,start_at TIMESTAMPTZ NOT NULL,status TEXT NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            // automation_candidates grew to read loyalty, happy-hour and
+            // abandoned-booking signals; the fixture must cover every table the
+            // query joins or it fails before asserting anything.
+            "CREATE TABLE membership_reward_ledger(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,source_sale_id TEXT NOT NULL DEFAULT '',transaction_type TEXT NOT NULL,points INTEGER NOT NULL,balance_after INTEGER NOT NULL,expires_at DATE,staff_id TEXT NOT NULL DEFAULT '',note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            "CREATE TABLE pos_happy_hour_rules(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,name TEXT NOT NULL,start_time TIME NOT NULL,end_time TIME NOT NULL,weekdays SMALLINT[] NOT NULL,discount_bps INTEGER NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            "CREATE TABLE public_booking_sessions(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'portal',device_type TEXT NOT NULL DEFAULT '',contact_value TEXT NOT NULL DEFAULT '',client_id TEXT NOT NULL DEFAULT '',appointment_id TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'active',last_event TEXT NOT NULL DEFAULT 'session_started',last_step INTEGER NOT NULL DEFAULT 0,event_data JSONB NOT NULL DEFAULT '{}'::JSONB,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),last_event_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),converted_at TIMESTAMPTZ,abandoned_at TIMESTAMPTZ,recovered_at TIMESTAMPTZ)",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }

@@ -4125,7 +4125,10 @@ mod tests {
         let map = best_statutory_rules(&rules);
         let opted_out_pf = profile("", false, true);
         let result = compute_statutory(1_000_000, &map, true, Some(&opted_out_pf));
-        assert_eq!(result.employee_paise, 7_500); // only ESIC (0.75%) applied, PF skipped
+        // Only ESIC applies; PF is opted out. 1,000,000 paise x 75 bps / 10,000
+        // = 7,500. The previous 12,500 contradicted this test's own comment and
+        // would have needed a 1.25% employee rate.
+        assert_eq!(result.employee_paise, 7_500);
         assert!(result.errors.iter().any(|e| e.contains("ESIC number")));
         assert!(!result.errors.iter().any(|e| e.contains("UAN")));
     }

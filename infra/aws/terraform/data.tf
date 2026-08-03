@@ -38,6 +38,11 @@ resource "random_password" "support_email_webhook" {
   special = false
 }
 
+resource "random_password" "metrics_auth" {
+  length  = 64
+  special = false
+}
+
 resource "random_password" "origin_header" {
   length  = 48
   special = false
@@ -191,6 +196,13 @@ locals {
       ["https://${aws_cloudfront_distribution.app.domain_name}"],
       var.extra_cors_allowed_origins,
     ))
+
+    # Guards /metrics, which exposes route latency and failure rates across every
+    # tenant. Generated rather than operator-supplied so it is never absent.
+    METRICS_AUTH_TOKEN = random_password.metrics_auth.result
+
+    # Empty disables outbound incident reporting; failures still reach the logs.
+    ERROR_WEBHOOK_URL = var.error_webhook_url
   }
 }
 

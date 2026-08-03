@@ -2707,7 +2707,14 @@ async fn update_in_tx(
         ));
     }
 
-    if input.batch_tracked != Some(current.batch_tracked) {
+    // `None` means "leave batch tracking as it is", the same convention the
+    // unit guard above uses. Comparing the Option directly made an omitted
+    // field look like a change, so any update to an item holding stock — a
+    // plain quantity adjustment included — was rejected outright.
+    if input
+        .batch_tracked
+        .is_some_and(|value| value != current.batch_tracked)
+    {
         if current.stock_quantity != 0 {
             return Err(AppError::conflict(
                 "batch tracking can change only when stock is zero",
@@ -4168,16 +4175,69 @@ mod tests {
             CREATE TABLE inventory_items (
               id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
               sku TEXT NOT NULL DEFAULT '', name TEXT NOT NULL DEFAULT '', category TEXT NOT NULL DEFAULT '',
+              subcategory TEXT NOT NULL DEFAULT '', brand TEXT NOT NULL DEFAULT '',
+              product_usage TEXT NOT NULL DEFAULT 'retail',
               unit TEXT NOT NULL DEFAULT 'pcs', package_unit TEXT NOT NULL DEFAULT 'pcs',
               units_per_package INTEGER NOT NULL DEFAULT 1, stock_quantity INTEGER NOT NULL DEFAULT 0,
-              reorder_point INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
+              reorder_point INTEGER NOT NULL DEFAULT 0, alert_level INTEGER NOT NULL DEFAULT 0,
+              desired_level INTEGER NOT NULL DEFAULT 0, order_level INTEGER NOT NULL DEFAULT 0,
+              safety_stock_level INTEGER NOT NULL DEFAULT 0, unit_cost_paise BIGINT NOT NULL DEFAULT 0,
               hsn_code TEXT NOT NULL DEFAULT '', gst_percent INTEGER NOT NULL DEFAULT 0,
               barcode TEXT NOT NULL DEFAULT '', batch_tracked BOOLEAN NOT NULL DEFAULT FALSE,
-              dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE, active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
+              dual_use_stock BOOLEAN NOT NULL DEFAULT FALSE, center_available BOOLEAN NOT NULL DEFAULT TRUE,
+              active BOOLEAN NOT NULL DEFAULT TRUE, central_master_item_id TEXT,
               franchise_override_fields TEXT[] NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
               updated_at TIMESTAMPTZ
             )
             "#,
+            // The item SELECT aggregates barcodes from this table, so reading a
+            // single item fails without it.
+            r#"CREATE TABLE inventory_item_barcodes (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL, barcode TEXT NOT NULL,
+              is_primary BOOLEAN NOT NULL DEFAULT FALSE, active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )"#,
+            // An adjustment registers its reason as a master value, so the
+            // write path needs this table even when the test never reads it.
+            r#"CREATE TABLE inventory_master_values (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, kind TEXT NOT NULL, code TEXT NOT NULL, label TEXT NOT NULL,
+              parent_code TEXT NOT NULL DEFAULT '', active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_by TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )"#,
+            r#"CREATE UNIQUE INDEX uq_inventory_master_values_code
+              ON inventory_master_values(tenant_id,branch_id,kind,LOWER(code))"#,
+            // Editing a master field checks whether the item is tied up in an
+            // open purchase order or stock count, so those tables must exist.
+            // Only the columns the lock query reads are modelled here.
+            r#"CREATE TABLE purchase_orders (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft'
+            )"#,
+            r#"CREATE TABLE purchase_order_lines (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, purchase_order_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL
+            )"#,
+            r#"CREATE TABLE stock_count_sessions (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'counting'
+            )"#,
+            r#"CREATE TABLE stock_count_session_items (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL,
+              branch_id TEXT NOT NULL, session_id TEXT NOT NULL, inventory_item_id TEXT NOT NULL
+            )"#,
+            r#"CREATE TABLE inventory_policies (
+              tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+              negative_stock_rule TEXT NOT NULL DEFAULT 'block',
+              valuation_method TEXT NOT NULL DEFAULT 'weighted_average',
+              expiry_window_days INTEGER NOT NULL DEFAULT 30,
+              count_variance_threshold_bps INTEGER NOT NULL DEFAULT 500,
+              approval_matrix JSONB NOT NULL DEFAULT '{}'::JSONB,
+              master_edit_lock BOOLEAN NOT NULL DEFAULT FALSE,
+              updated_by TEXT NOT NULL DEFAULT '', PRIMARY KEY(tenant_id,branch_id)
+            )"#,
             r#"CREATE TABLE franchise_policies (
               tenant_id TEXT PRIMARY KEY, central_branch_id TEXT NOT NULL,
               allowed_override_fields TEXT[] NOT NULL DEFAULT '{}'

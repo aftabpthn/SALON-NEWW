@@ -219,3 +219,85 @@ resource "aws_cloudwatch_event_target" "ecs_deployment_failure" {
 
   depends_on = [aws_sns_topic_policy.alerts]
 }
+
+# --- Application metrics published by the ADOT collector ---------------------
+#
+# These read the AuraShine/<env> namespace the collector writes via EMF. They
+# fire on symptoms the ALB cannot see: a worker that stopped running, a pool
+# that is exhausted, a metrics pipeline that has gone quiet.
+#
+# treat_missing_data is "breaching" where silence is itself the failure — no
+# datapoint means the collector is not scraping, and that is the state that
+# previously went unnoticed for as long as nobody looked.
+
+resource "aws_cloudwatch_metric_alarm" "db_pool_saturated" {
+  alarm_name          = "${local.name}-db-pool-saturated"
+  alarm_description   = "Connections in use are approaching the per-task pool limit; requests will start queueing on acquire."
+  namespace           = "AuraShine/${var.environment}"
+  metric_name         = "aurashine_db_pool_connections"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  threshold           = 20
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    state = "in_use"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "metrics_pipeline_silent" {
+  alarm_name          = "${local.name}-metrics-pipeline-silent"
+  alarm_description   = "No datapoints from the /metrics scrape. The collector, the token, or the API itself is down — treat this as loss of visibility, not a quiet period."
+  namespace           = "AuraShine/${var.environment}"
+  metric_name         = "aurashine_db_pool_connections"
+  statistic           = "SampleCount"
+  period              = 900
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    state = "total"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "metrics_cardinality_overflow" {
+  alarm_name          = "${local.name}-metrics-cardinality-overflow"
+  alarm_description   = "A metric family hit its label-set cap. Some label is carrying identifiers it should not; series are being dropped."
+  namespace           = "AuraShine/${var.environment}"
+  metric_name         = "aurashine_metrics_series_dropped_total"
+  statistic           = "Maximum"
+  period              = 900
+  evaluation_periods  = 1
+  datapoints_to_alarm = 1
+  threshold           = 0
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+}
+
+resource "aws_cloudwatch_metric_alarm" "worker_steps_failing" {
+  alarm_name          = "${local.name}-worker-steps-failing"
+  alarm_description   = "Background worker jobs are erroring. Invoice delivery, report exports or payouts may be silently stalled."
+  namespace           = "AuraShine/${var.environment}"
+  metric_name         = "aurashine_worker_step_failures_total"
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 2
+  datapoints_to_alarm = 2
+  threshold           = 5
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+}

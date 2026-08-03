@@ -236,14 +236,20 @@ pub async fn require_auth(
     let masked_fields = claims.masked_fields.clone();
     let audit_claims = claims.clone();
     req.extensions_mut().insert(claims);
-    mask_json_response(
+    let mut response = mask_json_response(
         next.run(req).await,
         &state,
         &audit_claims,
         &request_path,
         &masked_fields,
     )
-    .await
+    .await?;
+    response
+        .extensions_mut()
+        .insert(crate::middleware::request_timing::VerifiedTenantId(
+            audit_claims.tenant_id,
+        ));
+    Ok(response)
 }
 
 fn request_mutates_data(method: &axum::http::Method) -> bool {
