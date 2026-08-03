@@ -855,6 +855,17 @@ export function createApp() {
   app.use("/api", messageHistoryReportRouter);
   app.use("/api", messageTemplateStudioRouter);
 
+  app.get(/^(?!\/api).*/, (_req, res, next) => {
+    const clientDist = resolveClientDist();
+    if (!clientDist) {
+      res.redirect(302, "/");
+      return;
+    }
+    res.sendFile(join(clientDist, "index.html"), (error) => {
+      if (error) next(error);
+    });
+  });
+
   app.use(notFoundHandler);
   app.use(errorHandler);
 
