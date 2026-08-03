@@ -211,7 +211,7 @@ pub async fn require_auth(
         &request_path,
         &masked_fields,
     )
-    .await;
+    .await?;
     response
         .extensions_mut()
         .insert(crate::middleware::request_timing::VerifiedTenantId(
