@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiBaseUrl: "https://greenyellow-louse-758785.hostingersite.com/api/v1",
+  apiBaseUrl: "https://aurashinesalonwellness.in/api/v1",
   staffAppUrl: "/staff/login",
   firebase: {
     apiKey: "",

@@ -1671,13 +1671,11 @@ export class AppComponent implements OnDestroy {
     if (!this.generalSettings.allowBranchSwitch()) return;
     if (branchId === this.state.selectedBranchId()) return;
     this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
-    window.location.reload();
   }
 
   selectRequiredBranch(branchId: string): void {
     if (!branchId) return;
     this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
-    window.location.reload();
   }
 
   private applyDefaultLandingPage(): void {
