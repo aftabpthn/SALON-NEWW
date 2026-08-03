@@ -663,7 +663,15 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     await this.loadShellData();
   }
 
+  private shellReloadInFlight = false;
+  private shellReloadQueued = false;
+
   private async loadShellData() {
+    if (this.shellReloadInFlight) {
+      this.shellReloadQueued = true;
+      return;
+    }
+    this.shellReloadInFlight = true;
     try {
       const [os, preferences] = await Promise.all([
         this.staff.enterpriseOs({}, true),
@@ -677,6 +685,12 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       this.offlinePending.set(this.staff.offlineQueueSize());
     } catch {
       this.os.set(null);
+    } finally {
+      this.shellReloadInFlight = false;
+      if (this.shellReloadQueued) {
+        this.shellReloadQueued = false;
+        void this.loadShellData();
+      }
     }
   }
 

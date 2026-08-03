@@ -100,6 +100,8 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   });
 
   private loadGeneration = 0;
+  private loadInFlight = false;
+  private loadQueued = false;
   private readonly attendanceUpdated = () => void this.load();
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
@@ -116,6 +118,23 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   @HostListener("window:offline") onOffline() { this.online.set(false); }
 
   async load() {
+    if (this.loadInFlight) {
+      this.loadQueued = true;
+      return;
+    }
+    this.loadInFlight = true;
+    try {
+      await this.performLoad();
+    } finally {
+      this.loadInFlight = false;
+      if (this.loadQueued) {
+        this.loadQueued = false;
+        void this.load();
+      }
+    }
+  }
+
+  private async performLoad() {
     const generation = ++this.loadGeneration;
     const hasData = !!this.data();
     this.initialLoading.set(!hasData);
