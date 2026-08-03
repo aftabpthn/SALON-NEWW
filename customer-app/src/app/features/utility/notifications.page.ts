@@ -208,12 +208,12 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 
     .wallet-loading { display: grid; gap: 16px; }
     .wallet-skeleton { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: #FFFFFF; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.08); }
-    .skeleton-block { background: #E8EEF4; animation: wallet-skeleton 1.4s ease-in-out infinite; }
+    .skeleton-block { background: #EBEBEC; animation: wallet-skeleton 1.4s ease-in-out infinite; }
     .skeleton-balance { min-height: 180px; border-radius: clamp(18px, 4vw, 26px); }
     .skeleton-transactions { display: grid; gap: 14px; }
     .skeleton-transaction { display: grid; grid-template-columns: 44px minmax(0, 1fr) minmax(60px, 0.25fr); align-items: center; gap: 12px; }
-    .skeleton-line { width: 56%; height: 12px; border-radius: 999px; background: #E8EEF4; animation: wallet-skeleton 1.4s ease-in-out infinite; }
-    .skeleton-circle { width: 44px; height: 44px; border-radius: 14px; background: #E8EEF4; animation: wallet-skeleton 1.4s ease-in-out infinite; }
+    .skeleton-line { width: 56%; height: 12px; border-radius: 999px; background: #EBEBEC; animation: wallet-skeleton 1.4s ease-in-out infinite; }
+    .skeleton-circle { width: 44px; height: 44px; border-radius: 14px; background: #EBEBEC; animation: wallet-skeleton 1.4s ease-in-out infinite; }
     .skeleton-title { width: 42%; height: 20px; }
     .skeleton-amount { width: 28%; }
     .wallet-guide-skeleton { min-height: 300px; }

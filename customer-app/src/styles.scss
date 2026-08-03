@@ -46,7 +46,7 @@ body::after {
 
 body::before {
   inset: 0;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0));
+  background: linear-gradient(180deg, rgba(244, 244, 242, 0.72), rgba(255, 255, 255, 0));
 }
 
 body::after {
@@ -1661,7 +1661,7 @@ ion-button:active,
   body.aura-dark-ready {
     background:
       radial-gradient(circle at 92% 2%, rgba(238, 242, 255, 0.72), transparent 30%),
-      linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+      linear-gradient(180deg, #FFFFFF 0%, #F4F4F2 100%);
   }
 }
 
@@ -1770,7 +1770,7 @@ ion-tab-bar::before {
   inset: 7px;
   z-index: -1;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 252, 0.92));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(244, 244, 242, 0.92));
 }
 
 ion-tab-button {

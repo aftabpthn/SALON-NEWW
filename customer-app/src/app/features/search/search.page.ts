@@ -1259,10 +1259,10 @@ interface QuickFilterChip {
         gap: 10px;
         margin: -2px 0 4px;
         padding: 8px 10px;
-        border: 1px solid rgba(226, 232, 240, 0.92);
+        border: 1px solid rgba(232, 232, 232, 0.95);
         border-radius: 14px;
         background: #FFFFFF;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        box-shadow: 0 8px 20px rgba(28, 28, 28, 0.05);
       }
 
       .premium-result-row > div {

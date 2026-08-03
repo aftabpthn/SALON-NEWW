@@ -73,7 +73,7 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
       flex: 1 1 auto;
       min-width: 0;
       gap: 8px;
-      color: var(--text, #101828);
+      color: var(--text, #1C1C1C);
       text-decoration: none;
     }
     .header-logo {
@@ -94,7 +94,7 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
     .header-logo img { width: 100%; height: 100%; object-fit: cover; }
     .header-copy { display: grid; min-width: 0; line-height: 1.14; }
     .header-copy strong { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.88rem; letter-spacing: -0.015em; }
-    .header-copy small { color: var(--muted, #667085); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.01em; }
+    .header-copy small { color: var(--muted, #696969); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.01em; }
     .header-action {
       flex: 0 0 auto;
       gap: 5px;

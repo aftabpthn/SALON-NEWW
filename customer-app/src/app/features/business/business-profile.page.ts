@@ -563,7 +563,7 @@ import { Subscription } from "rxjs";
     .hero-business-name {
       margin: 0;
       max-width: min(620px, 100%);
-      color: #101828;
+      color: #1C1C1C;
       font-size: clamp(0.98rem, 4vw, 1.65rem);
       font-weight: 900;
       letter-spacing: -0.055em;
@@ -615,7 +615,7 @@ import { Subscription } from "rxjs";
       min-width: 34px;
       min-height: 34px;
       margin: 0;
-      --color: #101828;
+      --color: #1C1C1C;
       --background: transparent;
       --box-shadow: none;
       --border-radius: 0;

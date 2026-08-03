@@ -17,8 +17,8 @@
   --ion-color-primary-tint: #818CF8;
   --ion-color-secondary: #FDF2F8;
   --ion-color-secondary-rgb: 253, 242, 248;
-  --ion-color-secondary-contrast: #101828;
-  --ion-color-secondary-contrast-rgb: 16, 24, 40;
+  --ion-color-secondary-contrast: #1C1C1C;
+  --ion-color-secondary-contrast-rgb: 28, 28, 28;
   --ion-color-secondary-shade: #FCE7F3;
   --ion-color-secondary-tint: #FFFFFF;
   --ion-color-tertiary: #ECFDF5;
@@ -26,22 +26,22 @@
   --ion-color-warning: #D97706;
   --ion-color-danger: #EF4444;
   --ion-background-color: #FFFFFF;
-  --ion-text-color: #101828;
+  --ion-text-color: #1C1C1C;
   --app-bg: #FFFFFF;
   --surface: #FFFFFF;
-  --surface-soft: #F8FAFC;
-  --surface-elevated: #EEF2FF;
-  --text: #101828;
-  --muted: #667085;
-  --border: #EAECF0;
-  --border-strong: #D0D5DD;
+  --surface-soft: #F4F4F2;
+  --surface-elevated: #EBEBEC;
+  --text: #1C1C1C;
+  --muted: #696969;
+  --border: #E8E8E8;
+  --border-strong: #D5D9D9;
   --primary: var(--brand-700);
   --primary-2: var(--brand-600);
   --accent: var(--brand-800);
   --accent-2: var(--primary-soft);
   --gold-soft: #FFF7ED;
   --gold-glow: rgba(99, 102, 241, 0.16);
-  --black-glass: rgba(16, 24, 40, 0.9);
+  --black-glass: rgba(28, 28, 28, 0.9);
   --success: #10B981;
   --warning: #D97706;
   --info: #2563EB;
@@ -74,8 +74,8 @@
   --page-top: 18px;
   --page-bottom: calc(104px + var(--safe-bottom));
   --card-image-ratio: 4 / 3;
-  --shadow-card: 0 18px 48px rgba(16, 24, 40, 0.08), 0 0 0 1px rgba(234, 236, 240, 0.8);
-  --shadow-soft: 0 12px 30px rgba(16, 24, 40, 0.06);
+  --shadow-card: 0 18px 48px rgba(28, 28, 28, 0.08), 0 0 0 1px rgba(232, 232, 232, 0.8);
+  --shadow-soft: 0 12px 30px rgba(28, 28, 28, 0.06);
   --motion-fast: 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --motion-medium: 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
   --motion-slow: 520ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -121,7 +121,7 @@
   :root {
     color-scheme: light dark;
     --dark-ready-surface: #FFFFFF;
-    --dark-ready-text: #101828;
+    --dark-ready-text: #1C1C1C;
     --dark-ready-border: rgba(148, 163, 184, 0.28);
   }
 }

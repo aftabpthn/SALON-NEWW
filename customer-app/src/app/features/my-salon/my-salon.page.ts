@@ -669,10 +669,10 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
   `,
   styles: [`
     :host {
-      --ms-ink: var(--text, #101828);
-      --ms-muted: var(--muted, #667085);
+      --ms-ink: var(--text, #1C1C1C);
+      --ms-muted: var(--muted, #696969);
       --ms-ivory: var(--surface, #FFFFFF);
-      --ms-line: var(--border, #EAECF0);
+      --ms-line: var(--border, #E8E8E8);
       --ms-emerald: #10b981;
       --ms-rose: #f43f5e;
       --ms-accent: var(--primary, #6366F1);

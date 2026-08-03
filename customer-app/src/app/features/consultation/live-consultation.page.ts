@@ -552,7 +552,7 @@ interface ConsultationChatMessage {
       align-content: start;
       overflow: visible;
       scroll-padding-block: 16px calc(132px + env(safe-area-inset-bottom));
-      background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+      background: linear-gradient(180deg, #FFFFFF 0%, #F4F4F2 100%);
     }
 
     .suggested-replies button:hover,

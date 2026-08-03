@@ -476,7 +476,7 @@ type BookingFlowItem = {
     .date-card strong { line-height: 1.05; }
     .date-card span { color: var(--muted); font-size: 0.78rem; line-height: 1.05; }
     .date-card em { display: none; }
-    .skeleton-line { display: block; width: 100%; height: 12px; border-radius: 999px; background: linear-gradient(90deg, rgba(234, 236, 240, 0.92), rgba(248, 250, 252, 0.98), rgba(234, 236, 240, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; }
+    .skeleton-line { display: block; width: 100%; height: 12px; border-radius: 999px; background: linear-gradient(90deg, rgba(232, 232, 232, 0.92), rgba(244, 244, 242, 0.98), rgba(232, 232, 232, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; }
     .skeleton-line.title { width: min(260px, 75%); height: 28px; border-radius: 12px; }
     .skeleton-line.heading { width: 112px; height: 18px; margin-bottom: 12px; border-radius: 10px; }
     .skeleton-line.wide { width: min(520px, 100%); }
@@ -492,10 +492,10 @@ type BookingFlowItem = {
     .slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .slot { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border-color: var(--border); color: var(--text); background: #FFFFFF; font-size: 0.9rem; line-height: 1; transition: none; }
     .slot:not(:disabled):not(.selected):hover, .slot:not(:disabled):not(.selected):focus-visible { border-color: rgba(99, 102, 241, 0.42); }
-    .slot.skeleton-slot { min-height: 45px; border-color: transparent; background: linear-gradient(90deg, rgba(234, 236, 240, 0.92), rgba(248, 250, 252, 0.98), rgba(234, 236, 240, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; pointer-events: none; }
+    .slot.skeleton-slot { min-height: 45px; border-color: transparent; background: linear-gradient(90deg, rgba(232, 232, 232, 0.92), rgba(244, 244, 242, 0.98), rgba(232, 232, 232, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; pointer-events: none; }
     .slot.selected { position: relative; color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22); text-decoration: none; opacity: 1; }
     .slot.selected::after { content: none; }
-    .slot:disabled:not(.selected) { color: rgba(82, 101, 121, 0.42); border-color: rgba(234, 236, 240, 0.9); background: var(--surface-soft); text-decoration: none; box-shadow: none; }
+    .slot:disabled:not(.selected) { color: rgba(105, 105, 105, 0.45); border-color: rgba(232, 232, 232, 0.9); background: var(--surface-soft); text-decoration: none; box-shadow: none; }
     .confirm-grid { display: grid; gap: 12px; }
     .confirm-card, .trust-card { padding: 16px; }
     .confirm-card h2, .trust-card h3 { margin: 0 0 10px; letter-spacing: -0.04em; }

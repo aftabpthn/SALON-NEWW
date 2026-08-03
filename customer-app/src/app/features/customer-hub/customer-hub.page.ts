@@ -2685,7 +2685,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .skeleton-block,
     .skeleton-line,
     .skeleton-circle {
-      background: #E8EEF4;
+      background: #EBEBEC;
       animation: wallet-skeleton 1.4s ease-in-out infinite;
     }
 

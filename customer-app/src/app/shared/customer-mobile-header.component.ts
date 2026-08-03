@@ -27,13 +27,13 @@ import { IonBackButton, IonButtons, IonHeader, IonTitle, IonToolbar } from "@ion
       --padding-end: 12px;
       --background: rgba(255, 255, 255, 0.96);
       --border-width: 0;
-      color: var(--text, #101828);
+      color: var(--text, #1C1C1C);
     }
     .customer-mobile-header ion-back-button {
       width: 44px;
       height: 44px;
       --icon-font-size: 24px;
-      --color: var(--text, #101828);
+      --color: var(--text, #1C1C1C);
       --padding-start: 0;
       --padding-end: 0;
       --border-radius: 14px;
@@ -49,7 +49,7 @@ import { IonBackButton, IonButtons, IonHeader, IonTitle, IonToolbar } from "@ion
       white-space: nowrap;
     }
     .header-title {
-      color: var(--text, #101828);
+      color: var(--text, #1C1C1C);
       font-size: 1rem;
       font-weight: 900;
       letter-spacing: -0.02em;
@@ -57,7 +57,7 @@ import { IonBackButton, IonButtons, IonHeader, IonTitle, IonToolbar } from "@ion
     }
     small {
       margin-top: 2px;
-      color: var(--muted, #667085);
+      color: var(--muted, #696969);
       font-size: 0.74rem;
       font-weight: 750;
       line-height: 1.2;

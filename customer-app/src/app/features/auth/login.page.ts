@@ -286,7 +286,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       background:
         radial-gradient(circle at top left, rgba(99, 102, 241, 0.14), transparent 32%),
         radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 34%),
-        linear-gradient(180deg, #FFFFFF, #FFFFFF 58%, #F8FAFC);
+        linear-gradient(180deg, #FFFFFF, #FFFFFF 58%, #F4F4F2);
     }
 
     .auth-card {
