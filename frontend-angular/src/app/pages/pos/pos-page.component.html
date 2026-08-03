@@ -189,7 +189,7 @@
       <option [value]="terminal.id">{{ terminal.terminalName }} ({{ terminal.terminalCode }})</option>
     }</select></div></label>
   }
-  <label class="wide-half">
+<label class="wide-half">
     <span>Appointment</span>
     <div class="control-with-icon"><span class="ui-icon"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"></rect><path d="M8 3v4M16 3v4M8 13h5"></path></svg></span><select [ngModel]="reference" (ngModelChange)="setCompletedAppointment($event)">
     <option value="">Walk-in / no appointment</option>
@@ -198,6 +198,12 @@
     }
   </select></div>
 </label>
+@if (selectedAppointmentGroupSize > 1) {
+  <label><span>Invoice scope</span><select [ngModel]="separateGroupInvoice ? 'separate' : 'group'" (ngModelChange)="setInvoiceScope($event)"><option value="group">Whole group</option><option value="separate">Selected appointment</option></select></label>
+}
+<label><span>Buyer GSTIN</span><input type="text" maxlength="15" [(ngModel)]="buyerGstin" placeholder="Optional" /></label>
+<label><span>Place of supply</span><input type="text" inputmode="numeric" maxlength="2" [(ngModel)]="placeOfSupplyStateCode" placeholder="State code" /></label>
+<label class="check-line"><input type="checkbox" [(ngModel)]="reverseCharge" /><span>Reverse charge</span></label>
 </div>
 
 <div class="quick-catalog-row">
@@ -264,7 +270,8 @@
     }</select></label>
   }
   @if (activeAddonSale === 'gift_card') {
-    <label>Gift card amount<input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" /></label>
+    <label>Existing card code (leave blank for new)<input type="text" [(ngModel)]="giftCardReloadCode" placeholder="Card code" /></label>
+    <label>{{ giftCardReloadCode.trim() ? 'Reload amount' : 'Gift card amount' }}<input type="number" min="0" step="0.01" [(ngModel)]="giftCardAmount" placeholder="Amount" /></label>
   }
   @if (activeAddonSale === 'membership') {
     <button type="button" class="secondary-action" (click)="addMembershipSale()" [disabled]="!selectedMembershipId">Add membership</button>
@@ -273,7 +280,7 @@
     <button type="button" class="secondary-action" (click)="addPackageSale()" [disabled]="!selectedPackageId">Add package</button>
   }
   @if (activeAddonSale === 'gift_card') {
-    <button type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">Add gift card</button>
+    <button type="button" class="secondary-action" (click)="addGiftCardSale()" [disabled]="num(giftCardAmount) <= 0">{{ giftCardReloadCode.trim() ? 'Add reload' : 'Add gift card' }}</button>
   }
 </div>
 }
@@ -350,6 +357,9 @@
         @if (settlementDiscountForLine(line) > 0) {
           <small class="roundoff-line">Round-off discount {{ settlementDiscountForLine(line) / 100 | currency:'INR':'symbol':'1.0-2' }}</small>
         }
+        @if (line.otherFeePaise > 0) {
+          <small>Other fee {{ line.otherFeePaise / 100 | currency:'INR':'symbol':'1.0-2' }} per unit included</small>
+        }
         @if (line.lineType === 'custom') {
           <input type="text" [ngModel]="line.customName" (ngModelChange)="setLineItemSearch(line, $event)" placeholder="Custom item" />
         }
@@ -414,6 +424,9 @@
       <label><span>Discount</span><input type="number" min="0" step="0.01" [(ngModel)]="billDiscount" placeholder="0" /></label>
       <label><span>Type</span><select [(ngModel)]="billDiscountType"><option value="amount">₹</option><option value="percent">%</option></select></label>
       <label><span>Tip</span><input type="number" min="0" step="0.01" [(ngModel)]="tipAmount" placeholder="0" /></label>
+      @if (manualDiscountRequiresReason) {
+        <label class="wide"><span>Discount reason</span><input type="text" maxlength="500" [(ngModel)]="discountReason" placeholder="Required" /></label>
+      }
       <label class="wide"><span>Coupon code</span><div class="coupon-input"><input type="text" [ngModel]="couponCode" (ngModelChange)="onCouponCodeInput($event)" placeholder="Coupon" /><button type="button" (click)="applyCoupon()" [disabled]="couponApplying || !couponCode">{{ couponApplying ? 'Checking...' : 'Apply' }}</button></div>@if (couponDiscountPaise > 0) {
       <small class="gift-card-state success">Applied · {{ couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }} off</small>
       }@if (couponError) {
@@ -425,6 +438,9 @@
 
 <section class="summary-card">
   <div><span>Subtotal</span><strong>{{ subtotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  @if (otherFeeTotalPaise > 0) {
+    <div><span>Other fee (included)</span><strong>{{ otherFeeTotalPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
+  }
   <div><span>Manual discount</span><strong>{{ billDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>
   @if (couponDiscountPaise > 0) {
     <div><span>Coupon discount</span><strong>-{{ couponDiscountPaise / 100 | currency:'INR':'symbol':'1.0-2' }}</strong></div>

@@ -339,6 +339,7 @@ async fn booking_portal_reschedule(
     }
 
     let reschedule = ReschedulePayload {
+        expected_version: None,
         start_at: requested_start.unwrap(),
         end_at: requested_end,
         reason: payload.reason.unwrap_or_default(),
@@ -351,10 +352,16 @@ async fn booking_portal_reschedule(
         booking_group_id: String::new(),
         change_mode: "official".to_string(),
         actor_source: "client".to_string(),
+        outside_hours_override_reason: String::new(),
     };
-    let response =
-        appointments::reschedule_appointment(State(state), headers, Path(id), Json(reschedule))
-            .await?;
+    let response = appointments::reschedule_appointment(
+        State(state),
+        None,
+        headers,
+        Path(id),
+        Json(reschedule),
+    )
+    .await?;
     Ok(response)
 }
 

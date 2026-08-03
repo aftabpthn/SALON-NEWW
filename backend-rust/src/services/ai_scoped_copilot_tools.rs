@@ -22,6 +22,7 @@ use crate::{
             AnswerEnvelope, ComparisonPoint, ConfidenceReport, LanguageDetection, MetricPoint,
             RecommendedAction, ResolvedScope, ScopeRequest,
         },
+        ai_workforce_service,
         auth_service::AuthClaims,
     },
 };
@@ -200,6 +201,7 @@ pub async fn execute(
     claims: &AuthClaims,
     request: &ToolRequest,
 ) -> Result<AnswerEnvelope, AppError> {
+    ai_workforce_service::require_enabled_and_consume(db, tenant_id, branch_id).await?;
     let descriptor = tool_descriptor(&request.tool)
         .ok_or_else(|| AppError::validation("requested AI tool is not allow-listed"))?;
     let domain = domain_for(&request.tool)

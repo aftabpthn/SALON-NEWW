@@ -159,6 +159,7 @@ export interface Business {
   startingPricePaise: number;
   categories: string[];
   services: ServiceItem[];
+  products?: WebstoreProduct[];
   staff: StaffMember[];
   reviews: BusinessReview[];
   policies?: string[];
@@ -394,6 +395,7 @@ export interface CreateBookingPayload {
   serviceIds: string[];
   serviceSelections?: BookingServiceSelection[];
   clientId?: string;
+  additionalClientIds?: string[];
   packageCreditId?: string;
   staffId?: string;
   startAt: string;
@@ -404,6 +406,7 @@ export interface CreateBookingPayload {
   offerCode?: string;
   paymentMode: "pay_at_venue" | "online";
   cardGuaranteeAccepted?: boolean;
+  idempotencyKey?: string;
 }
 
 export interface BookingServiceSelection {
@@ -818,6 +821,10 @@ export interface CustomerBookingContactlessPayload {
 
 export interface CustomerBookingCheckInPayload {
   etaMinutes: number;
+  latitude?: number;
+  longitude?: number;
+  accuracyMeters?: number;
+  idempotencyKey?: string;
 }
 
 export interface CustomerBookingCheckInResult {
@@ -872,6 +879,53 @@ export interface CustomerNotification {
   resourceId?: string;
   deepLink?: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface KioskContext {
+  deviceId: string;
+  branch: { id: string; name: string; address?: string; geofenceRadiusMeters?: number };
+  branches: Array<{ id: string; name: string; address?: string }>;
+  branding: { appName?: string; logoUrl?: string; primaryColor?: string; accentColor?: string };
+  config: { allowGroupCheckIn?: boolean; allowSameDayBooking?: boolean; allowAddOnRequest?: boolean; checkoutMode?: "mirror" | "self_pay"; requireGeofence?: boolean; geofenceRadiusMeters?: number };
+  onlineBookingPath: string;
+}
+
+export interface KioskGuestSession {
+  sessionId: string;
+  appointmentId: string;
+  startAt: string;
+  endAt: string;
+  status: string;
+  services: Array<{ id: string; name: string; durationMinutes: number }>;
+  eligibleAddOns?: Array<{ id: string; name: string; pricePaise: number; durationMinutes: number }>;
+  groupCount: number;
+  pendingForms: Array<{ id: string; name: string; formType: string; version: number; requiresSignature: boolean }>;
+  missingProfile: { firstName: boolean; lastName: boolean; email: boolean };
+  queue?: { status?: string; position?: number; estimatedWaitMinutes?: number };
+  expiresInMinutes: number;
+}
+
+export interface PurchaseProductPayload {
+  productId: string;
+  branchId: string;
+  quantity: number;
+  couponCode?: string;
+  idempotencyKey?: string;
+}
+
+export interface WebstoreProduct {
+  id: string;
+  groupBookingIds?: string[];
+  bookingType?: "single" | "couple" | "group";
+  businessId: string;
+  name: string;
+  category: string;
+  brand: string;
+  pricePaise: number;
+  availableQuantity: number;
+  unit: string;
+  gstPercent: number;
+  hsnCode: string;
 }
 
 export interface FieldJobTracking {

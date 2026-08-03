@@ -23,6 +23,10 @@ const MAX_NOTES_LEN: usize = 1_000;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/pos/cash-drawer/current", get(current))
+        .route(
+            "/pos/cash-drawer/settings",
+            get(cash_control_settings).put(save_cash_control_settings),
+        )
         .route("/pos/cash-drawer/open", post(open))
         .route(
             "/pos/cash-drawer/movements",
@@ -77,6 +81,8 @@ pub(crate) struct OpenRequest {
     pub(crate) opening_cash_paise: i64,
     pub(crate) business_date: Option<String>,
     pub(crate) notes: Option<String>,
+    #[serde(default)]
+    pub(crate) holiday_exception: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,8 +176,16 @@ pub(crate) struct ReviewRequest {
 struct TillRequest {
     till_code: String,
     till_name: String,
+    terminal_id: Option<String>,
     opening_cash_paise: i64,
     notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CashControlSettingsRequest {
+    max_cash_paise: i64,
+    variance_alert_paise: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -221,6 +235,7 @@ struct TillResponse {
     drawer_session_id: String,
     till_code: String,
     till_name: String,
+    terminal_id: Option<String>,
     opening_cash_paise: i64,
     expected_cash_paise: Option<i64>,
     counted_cash_paise: Option<i64>,
@@ -264,6 +279,17 @@ pub(crate) async fn open(
         return Err(AppError::validation("openingCashPaise cannot be negative"));
     }
     validate_optional_text(payload.notes.as_deref(), "notes", MAX_NOTES_LEN)?;
+    if payload.holiday_exception
+        && (!is_approver(&claims.role)
+            || payload
+                .notes
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty()))
+    {
+        return Err(AppError::forbidden(
+            "holiday exception requires owner, admin, or manager access and notes",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let session = cash_drawer_service::open(
         &state,
@@ -273,10 +299,67 @@ pub(crate) async fn open(
         parse_date(payload.business_date.as_deref())?,
         payload.opening_cash_paise,
         payload.notes.as_deref().unwrap_or_default(),
+        payload.holiday_exception,
     )
     .await?;
     publish_cash_drawer(&state, &tenant_id, &branch_id, &session.id, "drawer.opened");
     Ok(Json(ApiResponse::ok(response(session, false))))
+}
+
+async fn cash_control_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<cash_drawer_repository::CashControlSettings> {
+    if !can_manage_financial(&claims) {
+        return Err(AppError::forbidden(
+            "financial management access is required",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = cash_drawer_repository::control_settings(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load cash control settings"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_cash_control_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<CashControlSettingsRequest>,
+) -> ApiResult<cash_drawer_repository::CashControlSettings> {
+    if !is_approver(&claims.role) {
+        return Err(AppError::forbidden(
+            "only owner, admin, or manager can change cash controls",
+        ));
+    }
+    if !(0..=MAX_FINANCIAL_AMOUNT_PAISE).contains(&payload.max_cash_paise)
+        || !(0..=MAX_FINANCIAL_AMOUNT_PAISE).contains(&payload.variance_alert_paise)
+    {
+        return Err(AppError::validation(
+            "cash control values are outside the allowed range",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = cash_drawer_repository::save_control_settings(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload.max_cash_paise,
+        payload.variance_alert_paise,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save cash control settings"))?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "cash_drawer",
+        &branch_id,
+        "cash.controls_updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 pub(crate) async fn record_movement(
@@ -988,6 +1071,10 @@ async fn create_till(
         &id,
         payload.till_code.trim(),
         payload.till_name.trim(),
+        payload
+            .terminal_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty()),
         payload.opening_cash_paise,
         payload.notes.as_deref().unwrap_or_default().trim(),
     )
@@ -1213,6 +1300,7 @@ fn till_response(
         drawer_session_id: till.drawer_session_id,
         till_code: till.till_code,
         till_name: till.till_name,
+        terminal_id: till.terminal_id,
         opening_cash_paise: till.opening_cash_paise,
         expected_cash_paise: reveal_expected.then_some(till.expected_cash_paise),
         counted_cash_paise: till.counted_cash_paise,

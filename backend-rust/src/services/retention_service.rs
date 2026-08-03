@@ -141,6 +141,28 @@ pub async fn reissue_gift_card(
     .ok_or_else(|| AppError::conflict("gift card must be active with a positive balance"))
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn transfer_gift_card(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    target_client_id: &str,
+    reason: &str,
+    key: &str,
+    actor: &str,
+) -> Result<retention_repository::GiftCardRecord, AppError> {
+    let target = required(target_client_id, "targetClientId is required")?;
+    let reason = required(reason, "reason is required")?;
+    let key = idempotency_key(key)?;
+    retention_repository::transfer_gift_card(
+        db, tenant_id, branch_id, id, target, reason, key, actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to transfer gift card"))?
+    .ok_or_else(|| AppError::conflict("gift card or transfer target is not available"))
+}
+
 pub async fn ensure_referral_code(
     db: &PgPool,
     tenant_id: &str,
@@ -205,6 +227,17 @@ pub async fn complete_referral(
     id: &str,
     actor: &str,
 ) -> Result<retention_repository::ReferralRecord, AppError> {
+    let qualified = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM pos_sales sale WHERE sale.tenant_id=r.tenant_id AND sale.branch_id=r.branch_id AND sale.client_id=r.referred_client_id AND sale.status='paid' AND sale.total_paise>0 AND sale.created_at>=r.created_at) FROM client_referrals r WHERE r.tenant_id=$1 AND r.branch_id=$2 AND r.id=$3",
+    )
+    .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
+    .map_err(|_| AppError::internal("failed to validate referral purchase"))?
+    .ok_or_else(|| AppError::not_found("referral not found"))?;
+    if !qualified {
+        return Err(AppError::conflict(
+            "referral reward requires a paid qualifying purchase",
+        ));
+    }
     let settings = membership_service::membership_settings(db, tenant_id, branch_id).await?;
     let referral = settings.get("referrals").cloned().unwrap_or_default();
     if referral.get("enabled").and_then(Value::as_bool) == Some(false) {

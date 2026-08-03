@@ -16,6 +16,7 @@ import {
   timeOutline
 } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
+import { WebstoreProduct } from "../../core/api.types";
 
 @Component({
   standalone: true,
@@ -37,7 +38,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
             <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
               <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
             </ion-button>
-            <ion-button fill="clear" shape="round" aria-label="Share business"><ion-icon name="share-outline"></ion-icon></ion-button>
+            <ion-button fill="clear" shape="round" aria-label="Share business" (click)="shareBusiness()"><ion-icon name="share-outline"></ion-icon></ion-button>
           </div>
           <div class="cover-copy app-container">
             <span class="status-pill" [class.closed]="!business().isOpen">{{ business().isOpen ? "Open now" : "Closed now" }}</span>
@@ -105,6 +106,29 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 }
               </div>
             </section>
+
+            @if (products().length) {
+              <section class="services-section">
+                <div class="section-heading"><div><h2 class="section-title">Shop products</h2></div></div>
+                <label class="coupon-field">Coupon code<input #coupon maxlength="80" autocomplete="off" /></label>
+                @if (checkoutMessage()) { <p class="checkout-message" role="status">{{ checkoutMessage() }}</p> }
+                <div class="service-stack">
+                  @for (product of products(); track product.id) {
+                    <article class="service-card premium-card">
+                      <div>
+                        <h3>{{ product.name }}</h3>
+                        <p class="muted">{{ product.brand || product.category }}</p>
+                        <strong>{{ money(product.pricePaise) }} · {{ product.availableQuantity }} {{ product.unit }} available</strong>
+                      </div>
+                      <div class="product-actions">
+                        <input #quantity type="number" min="1" [max]="product.availableQuantity" value="1" aria-label="Product quantity" />
+                        <ion-button size="small" class="primary-gradient" [disabled]="checkoutProductId() === product.id" (click)="buyProduct(product, quantity.value, coupon.value)">{{ checkoutProductId() === product.id ? "Opening payment" : "Buy" }}</ion-button>
+                      </div>
+                    </article>
+                  }
+                </div>
+              </section>
+            }
 
             <section class="staff-section">
               <div class="section-heading">
@@ -427,6 +451,34 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: var(--primary-2);
     }
 
+    .coupon-field {
+      display: grid;
+      gap: 6px;
+      max-width: 260px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .coupon-field input,
+    .product-actions input {
+      min-height: 42px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .product-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .product-actions input { width: 68px; }
+    .checkout-message { color: var(--primary-2); font-weight: 800; }
+
     .staff-grid,
     .review-grid,
     .info-grid {
@@ -734,6 +786,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
 export class BusinessProfilePage implements OnInit {
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug())!);
+  readonly products = computed(() => this.business()?.products ?? []);
+  readonly checkoutProductId = signal("");
+  readonly checkoutMessage = signal("");
 
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
     addIcons({
@@ -790,5 +845,42 @@ export class BusinessProfilePage implements OnInit {
       return;
     }
     void this.marketplace.toggleFavorite(business.id).catch(() => undefined);
+  }
+
+  async buyProduct(product: WebstoreProduct, quantityValue: string, couponCode: string) {
+    const business = this.business();
+    if (!business) return;
+    if (!this.marketplace.isAuthenticated()) {
+      void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
+      return;
+    }
+    const quantity = Number(quantityValue);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > product.availableQuantity) {
+      this.checkoutMessage.set("Choose an available whole quantity.");
+      return;
+    }
+    this.checkoutProductId.set(product.id);
+    this.checkoutMessage.set("");
+    try {
+      const checkout = await this.marketplace.buyProduct({
+        productId: product.id,
+        branchId: business.branchId || business.id,
+        quantity,
+        couponCode: couponCode.trim() || undefined
+      });
+      const paymentUrl = checkout.paymentLink?.shortUrl || checkout.paymentLink?.url;
+      if (paymentUrl) window.location.assign(paymentUrl);
+      else this.checkoutMessage.set("Order created. Payment link is available in Invoices.");
+    } catch {
+      this.checkoutMessage.set(this.marketplace.error() || "Product checkout failed.");
+    } finally {
+      this.checkoutProductId.set("");
+    }
+  }
+
+  async shareBusiness() {
+    const data = { title: this.business()?.businessName || "AuraShine", url: window.location.href };
+    if (navigator.share) await navigator.share(data).catch(() => undefined);
+    else await navigator.clipboard?.writeText(data.url).catch(() => undefined);
   }
 }

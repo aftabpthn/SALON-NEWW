@@ -164,11 +164,11 @@
 
 @if (!loading && tab === 'products') {
   <section class="table-card">
-    <header class="register-head"><strong>{{ 'inventory.products' | translate }}</strong><button class="icon-button" type="button" [attr.aria-label]="'inventory.refreshProducts' | translate" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></header>
+    <header class="register-head"><strong>{{ 'inventory.products' | translate }}</strong><div><button type="button" [disabled]="!selectedProductIds.size" (click)="bulkPrintLabels()">Print selected labels</button><button type="button" [disabled]="!selectedProductIds.size" (click)="bulkUpdateProducts(true)">Enable at center</button><button type="button" [disabled]="!selectedProductIds.size" (click)="bulkUpdateProducts(false)">Disable at center</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.refreshProducts' | translate" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
     @if (filteredItems.length) {
-      <table><thead><tr><th scope="col">{{ 'inventory.product' | translate }}</th><th scope="col">{{ 'inventory.skuBarcode' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.stock' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.reorderLevel' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.unitCost' | translate }}</th><th scope="col">{{ 'inventory.status' | translate }}</th><th scope="col">{{ 'inventory.action' | translate }}</th></tr></thead>
+      <table><thead><tr><th scope="col"><span class="visually-hidden">Select</span></th><th scope="col">{{ 'inventory.product' | translate }}</th><th scope="col">{{ 'inventory.skuBarcode' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.stock' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.reorderLevel' | translate }}</th><th scope="col" class="numeric">{{ 'inventory.unitCost' | translate }}</th><th scope="col">{{ 'inventory.status' | translate }}</th><th scope="col">{{ 'inventory.action' | translate }}</th></tr></thead>
       <tbody>@for (row of filteredItems; track row) {
-        <tr><td><strong>{{ row.name }}</strong><small>{{ row.category || '-' }}</small></td><td>{{ code(row.sku) }}<small>{{ code(row.barcode) }}</small></td><td class="numeric">{{ row.stockQuantity }} {{ row.unit }}<small>{{ packageSummary(row) }}</small></td><td class="numeric">{{ row.reorderPoint }}</td><td class="numeric">{{ money(row.unitCostPaise) }} / {{ row.unit }}<small>{{ money(packageCostPaise(row)) }} / {{ row.packageUnit }}</small></td><td><span class="status" [class.muted]="!row.active">{{ (row.batchTracked ? 'inventory.batchTracked' : row.active ? 'inventory.active' : 'inventory.inactive') | translate }}</span></td><td class="actions"><button type="button" (click)="openProduct(row)">{{ 'inventory.view' | translate }}</button><button type="button" (click)="printBarcode(row)">{{ 'inventory.label' | translate }}</button><button type="button" (click)="openKit(row)">{{ 'inventory.kit' | translate }}</button></td></tr>
+        <tr><td><input type="checkbox" [attr.aria-label]="'Select ' + row.name" [checked]="selectedProductIds.has(row.id)" (change)="toggleProductSelection(row.id,$any($event.target).checked)" /></td><td><strong>{{ row.name }}</strong><small>{{ row.category || '-' }}</small></td><td>{{ code(row.sku) }}<small>{{ code(row.barcode) }}</small></td><td class="numeric">{{ row.stockQuantity }} {{ row.unit }}<small>{{ packageSummary(row) }}</small></td><td class="numeric">{{ row.reorderPoint }}</td><td class="numeric">{{ money(row.unitCostPaise) }} / {{ row.unit }}<small>{{ money(packageCostPaise(row)) }} / {{ row.packageUnit }}</small></td><td><span class="status" [class.muted]="!row.active">{{ (row.batchTracked ? 'inventory.batchTracked' : row.active ? 'inventory.active' : 'inventory.inactive') | translate }}</span></td><td class="actions"><button type="button" (click)="openProduct(row)">{{ 'inventory.view' | translate }}</button><button type="button" (click)="printBarcode(row)">{{ 'inventory.label' | translate }}</button><button type="button" (click)="openKit(row)">{{ 'inventory.kit' | translate }}</button></td></tr>
       }</tbody>
     </table>
   } @else {
@@ -243,12 +243,27 @@
 
 @if (!loading && tab === 'reports') {
   <nav class="report-tabs" aria-label="Inventory report type">
+    <button type="button" [class.active]="reportView === 'stock'" (click)="selectReportView('stock')">Current Stock</button>
     <button type="button" [class.active]="reportView === 'ageing'" (click)="selectReportView('ageing')">Inventory Ageing</button>
+    @if (canViewInventoryCost) {<button type="button" [class.active]="reportView === 'cogs'" (click)="selectReportView('cogs')">COGS</button>}
     <button type="button" [class.active]="reportView === 'expiry'" (click)="selectReportView('expiry')">Near Expiry</button>
     <button type="button" [class.active]="reportView === 'traceability'" (click)="selectReportView('traceability')">Batch Traceability</button>
     <button type="button" [class.active]="reportView === 'variance'" (click)="selectReportView('variance')">Stock Variance</button>
     <button type="button" [class.active]="reportView === 'suppliers'" (click)="selectReportView('suppliers')">Supplier Performance</button>
+    <button type="button" [class.active]="reportView === 'catalog'" (click)="selectReportView('catalog')">Product Catalog</button>
   </nav>
+
+  @if (reportView === 'stock' || reportView === 'catalog') {
+    <section class="table-card"><header class="register-head"><strong>{{ reportView === 'stock' ? 'Current Stock' : 'Product Catalog' }}</strong><span class="api-state">{{ items.length }} products</span></header>
+      @if (items.length) {<table><thead><tr><th>Product</th><th>SKU / barcode</th><th>Category</th><th>Usage</th><th class="numeric">Stock</th>@if (canViewInventoryCost) {<th class="numeric">Unit cost</th>}<th class="numeric">Retail price</th><th>Status</th></tr></thead><tbody>@for (row of items; track row.id) {<tr><td><strong>{{ row.name }}</strong><small>{{ row.brand || '—' }}</small></td><td>{{ row.sku || '—' }}<small>{{ row.barcode || '—' }}</small></td><td>{{ row.category || '—' }}<small>{{ row.subcategory || '—' }}</small></td><td>{{ row.productUsage.replace('_',' + ') }}</td><td class="numeric">{{ row.stockQuantity }} {{ row.unit }}</td>@if (canViewInventoryCost) {<td class="numeric">{{ money(row.unitCostPaise) }}</td>}<td class="numeric">{{ money(row.retailPricePaise) }}</td><td>{{ row.active ? 'Active':'Inactive' }}</td></tr>}</tbody></table>} @else {<div class="empty-state">No records yet</div>}
+    </section>
+  }
+
+  @if (reportView === 'cogs' && canViewInventoryCost) {
+    <section class="table-card"><header class="register-head"><strong>Cost of Goods Sold / Consumed</strong><span class="api-state">Ledger backed</span></header>
+      @if (cogsRows.length) {<table><thead><tr><th>Date</th><th>Product</th><th>Movement</th><th class="numeric">Quantity</th><th class="numeric">Unit cost</th><th class="numeric">COGS</th><th>Source</th></tr></thead><tbody>@for (row of cogsRows; track row.id) {<tr><td>{{ date(row.createdAt) }}</td><td><strong>{{ row.itemName }}</strong></td><td>{{ row.movementType.replaceAll('_',' ') }}</td><td class="numeric">{{ -row.quantityDelta }}</td><td class="numeric">{{ money(row.unitCostPaise) }}</td><td class="numeric">{{ money(-row.valuePaise) }}</td><td>{{ row.source }}</td></tr>}</tbody></table>} @else {<div class="empty-state">No outbound cost movements</div>}
+    </section>
+  }
 
   @if (reportView === 'ageing') {
     <section class="table-card">
@@ -341,11 +356,11 @@
     <section class="table-card order-table">
       <header class="register-head"><strong>{{ 'inventory.ui.4b9ccde188' | translate }}</strong><div><select [attr.aria-label]="'inventory.ui.d72f09d7b3' | translate" [ngModel]="orderSupplier" (ngModelChange)="onOrderSupplierChange($event)"><option value="">{{ 'inventory.ui.471f0ea6ec' | translate }}</option>@for (supplier of suppliers; track supplier) {
       <option [value]="supplier.id">{{ supplier.name }}</option>
-      }</select><button type="button" [disabled]="!canExportReports || !filteredOrders.length" (click)="exportOrders()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button></div></header>
+      }</select><button type="button" [disabled]="!selectedOrderIds.size || !inventoryPolicy.purchaseOrderSettings.bulkRaiseEnabled" (click)="bulkRaiseOrders()">Raise selected</button><button type="button" [disabled]="!canExportReports || !filteredOrders.length" (click)="exportOrders()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button></div></header>
       @if (filteredOrders.length) {
-        <table><thead><tr><th>{{ 'inventory.ui.7c17176d8e' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.41cb6080cc' | translate }}</th><th>{{ 'inventory.ui.0b941ea96a' | translate }}</th><th>{{ 'inventory.ui.44d25b5d1b' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
+        <table><thead><tr><th><span class="visually-hidden">Select</span></th><th>{{ 'inventory.ui.7c17176d8e' | translate }}</th><th>{{ 'inventory.ui.55edd46287' | translate }}</th><th>{{ 'inventory.ui.41cb6080cc' | translate }}</th><th>{{ 'inventory.ui.0b941ea96a' | translate }}</th><th>{{ 'inventory.ui.44d25b5d1b' | translate }}</th><th>{{ 'inventory.ui.b25928c699' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead>
         <tbody>@for (row of filteredOrders; track row) {
-          <tr><td><strong>{{ row.orderNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.createdAt) }}</td><td>{{ date(row.expectedDate) }}</td><td>{{ row.lineCount }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td><span class="status" [class.muted]="row.status === 'received' || row.status === 'rejected'">{{ orderStatusLabel(row.status) }}</span></td><td class="actions">@if (row.status === 'draft') {
+          <tr><td>@if (row.status === 'draft') {<input type="checkbox" [attr.aria-label]="'Select ' + row.orderNumber" [checked]="selectedOrderIds.has(row.id)" (change)="toggleOrderSelection(row.id,$any($event.target).checked)" />}</td><td><strong>{{ row.orderNumber }}</strong></td><td>{{ row.supplierName }}</td><td>{{ date(row.createdAt) }}</td><td>{{ date(row.expectedDate) }}</td><td>{{ row.lineCount }}</td><td><strong>{{ money(row.totalPaise) }}</strong></td><td><span class="status" [class.muted]="row.status === 'received' || row.status === 'rejected'">{{ orderStatusLabel(row.status) }}</span></td><td class="actions">@if (row.status === 'draft') {
           <button type="button" (click)="orderAction(row, 'submit')">{{ 'inventory.ui.2dacf65959' | translate }}</button>
           }@if (row.status === 'pending_approval') {
           <button type="button" (click)="orderAction(row, 'approve')">{{ 'inventory.ui.7b2c7f146a' | translate }}</button>
@@ -480,7 +495,7 @@
             </header>
             @if (!productEditing) {
               <div class="product-detail-grid">
-                <article><h3>{{ 'inventory.ui.d8e528cb29' | translate }}</h3><span>Use<b>{{ detail.product.productUsage.replace('_',' + ') }}</b></span><span>Center<b>{{ detail.product.centerAvailable ? 'Available' : 'Unavailable' }}</b></span><span>{{ 'inventory.ui.2ee762355b' | translate }}<b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>Packaging<b>{{ packageSummary(detail.product) }}</b></span><span>Alert / order / desired / safety<b>{{ detail.product.alertLevel }} / {{ detail.product.orderLevel }} / {{ detail.product.desiredLevel }} / {{ detail.product.safetyStockLevel }}</b></span><span>Base unit cost<b>{{ money(detail.product.unitCostPaise) }} / {{ detail.product.unit }}</b></span><span>Package cost<b>{{ money(packageCostPaise(detail.product)) }} / {{ detail.product.packageUnit }}</b></span><span>Barcodes<b>{{ detail.product.barcodes.join(', ') || 'â€”' }}</b></span><span>{{ 'inventory.ui.e81a151bd0' | translate }}<b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
+                <article><h3>{{ 'inventory.ui.d8e528cb29' | translate }}</h3><span>Use<b>{{ detail.product.productUsage.replace('_',' + ') }}</b></span><span>Center<b>{{ detail.product.centerAvailable ? 'Available' : 'Unavailable' }}</b></span><span>Webstore<b>{{ detail.product.onlineSaleEnabled ? 'Available' : 'Hidden' }}</b></span><span>{{ 'inventory.ui.2ee762355b' | translate }}<b>{{ detail.product.stockQuantity }} {{ detail.product.unit }}</b></span><span>Packaging<b>{{ packageSummary(detail.product) }}</b></span><span>Alert / order / desired / safety<b>{{ detail.product.alertLevel }} / {{ detail.product.orderLevel }} / {{ detail.product.desiredLevel }} / {{ detail.product.safetyStockLevel }}</b></span><span>Base unit cost<b>{{ money(detail.product.unitCostPaise) }} / {{ detail.product.unit }}</b></span><span>Package cost<b>{{ money(packageCostPaise(detail.product)) }} / {{ detail.product.packageUnit }}</b></span><span>Barcodes<b>{{ detail.product.barcodes.join(', ') || 'â€”' }}</b></span><span>{{ 'inventory.ui.e81a151bd0' | translate }}<b>{{ detail.product.batchTracked ? 'Batch' : 'Standard' }}</b></span></article>
                 @if (detail.product.dualUseStock) {
                   <article><h3>Retail / Backbar stock</h3><span>Retail shelf<b>{{ detail.retailShelfQuantity }}</b></span><span>Sealed backbar<b>{{ detail.sealedBackbarQuantity }}</b></span><span>Open balance<b>{{ detail.openContainerBalance }} {{ detail.openContainerUnit || '' }}</b></span></article>
                 }
@@ -511,6 +526,10 @@
               <div class="table-scroll"><table><thead><tr><th>Entity ledger</th><th>Branch</th><th class="numeric">Quantity</th><th>Source / evidence</th><th class="numeric">Before â†’ after</th><th>Trust</th><th>Date</th></tr></thead><tbody>
                 @for (row of detail.entityLedger; track row) {<tr><td><strong>{{ row.movementType }}</strong></td><td>{{ row.branchName }}</td><td class="numeric">{{ row.quantityDelta }}</td><td><strong>{{ row.sourceType.replaceAll('_', ' ') }}</strong><br><small>{{ row.source || row.sourceId || 'â€”' }} @if (row.batchAllocations.length) { Â· {{ row.batchAllocations.length }} batch evidence }</small></td><td class="numeric">{{ row.stockBeforeQuantity }} â†’ {{ row.stockAfterQuantity }}</td><td><span class="status trust" [attr.data-status]="row.snapshotStatus">{{ row.snapshotStatus }}</span></td><td>{{ date(row.createdAt) }}</td></tr>}
                 @if (!detail.entityLedger.length) {<tr><td colspan="7" class="empty-state">No ledger movements</td></tr>}
+              </tbody></table></div>
+              <div class="table-scroll"><table><thead><tr><th>Lifecycle</th><th>Reason</th><th>Replacement</th><th>Actor</th><th>Date</th></tr></thead><tbody>
+                @for (row of detail.lifecycleEvents; track row.id) {<tr><td><span class="status">{{ row.eventType }}</span></td><td>{{ row.reason }}</td><td>{{ row.replacementProductName || '—' }}</td><td>{{ row.actorUserId }}</td><td>{{ date(row.createdAt) }}</td></tr>}
+                @if (!detail.lifecycleEvents.length) {<tr><td colspan="5" class="empty-state">No lifecycle changes</td></tr>}
               </tbody></table></div>
             }
             @if (!productEditing) {
@@ -560,6 +579,7 @@
               <label class="span-2">Barcodes (primary first, comma-separated)<input maxlength="1200" [(ngModel)]="productDraft.barcodesText" name="productBarcodes" /></label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.batchTracked" name="productBatchTracked" />{{ 'inventory.ui.084c5a5702' | translate }}</label>
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.centerAvailable" name="productCenterAvailable" />Available at this center</label>
+              @if (productDraft.productUsage !== 'consumable') { <label class="check"><input type="checkbox" [(ngModel)]="productDraft.onlineSaleEnabled" name="productOnlineSaleEnabled" />Sell in Webstore</label> }
               <label class="check"><input type="checkbox" [(ngModel)]="productDraft.active" name="productActive" />{{ 'inventory.ui.a733b809d2' | translate }}</label>
             </form>
           }
@@ -767,6 +787,8 @@
 }
 @if (drawer === 'product') {
   <footer><button type="button" (click)="closeDrawer()">{{ 'inventory.ui.bbfa773e5a' | translate }}</button>@if (productDetail && !productEditing) {
+  @if (canViewInventoryCost) {<button type="button" [disabled]="saving" (click)="cloneProduct()">Clone</button>}
+  @if (productDetail.product.active) {<button type="button" [disabled]="saving || productDetail.product.stockQuantity !== 0" (click)="changeProductLifecycle('discontinue')">Discontinue</button>} @else {<button type="button" [disabled]="saving" (click)="changeProductLifecycle('reactivate')">Reactivate</button>}
   <button class="primary" type="button" (click)="startProductEdit()">{{ 'inventory.ui.fbeabd233f' | translate }}</button>
   }@if (productEditing) {
   <button class="primary" type="submit" form="product-form" [disabled]="saving">{{ saving ? 'Savingâ€¦' : 'Save' }}</button>

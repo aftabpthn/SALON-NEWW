@@ -18,6 +18,9 @@ pub struct ServicePriceQuote {
     pub pricing_level_id: Option<String>,
     pub pricing_level_name: Option<String>,
     pub pricing_level_price_paise: Option<i64>,
+    pub audience_type: Option<String>,
+    pub audience_id: Option<String>,
+    pub audience_price_paise: Option<i64>,
     pub variant_id: Option<String>,
     pub variant_adjustment_paise: i64,
     pub addon_total_paise: i64,
@@ -25,8 +28,20 @@ pub struct ServicePriceQuote {
     pub price_rule_name: Option<String>,
     pub dynamic_adjustment_bps: i32,
     pub dynamic_adjustment_paise: i64,
+    pub other_fee_paise: i64,
+    pub deposit_percent: i32,
+    pub deposit_paise: i64,
+    pub cancellation_cutoff_hours: i32,
+    pub cancellation_fee_paise: i64,
+    pub commission_bps: i32,
+    pub demand_percent: i32,
+    pub channel: String,
     pub final_price_paise: i64,
     pub duration_minutes: i64,
+    pub processing_time_minutes: i32,
+    pub recovery_time_minutes: i32,
+    pub cleanup_time_minutes: i32,
+    pub total_occupancy_minutes: i64,
 }
 
 pub async fn quote(
@@ -39,6 +54,25 @@ pub async fn quote(
     addon_ids: &[String],
     starts_at: DateTime<Utc>,
 ) -> Result<ServicePriceQuote, AppError> {
+    quote_with_context(
+        db, tenant_id, branch_id, service_id, staff_id, variant_id, addon_ids, starts_at, "", "crm",
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn quote_with_context(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    service_id: &str,
+    staff_id: &str,
+    variant_id: &str,
+    addon_ids: &[String],
+    starts_at: DateTime<Utc>,
+    client_id: &str,
+    channel: &str,
+) -> Result<ServicePriceQuote, AppError> {
     if !addon_ids.is_empty() {
         let settings = service_settings_service::settings(db, tenant_id, branch_id).await?;
         if !service_settings_service::addons_enabled(&settings) {
@@ -47,6 +81,7 @@ pub async fn quote(
     }
     let source = services_repository::pricing_source(
         db, tenant_id, branch_id, service_id, staff_id, variant_id, addon_ids, starts_at,
+        client_id, channel,
     )
     .await
     .map_err(|_| AppError::internal("failed to resolve service price"))?
@@ -68,7 +103,8 @@ pub async fn quote(
 
 fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> ServicePriceQuote {
     let effective_base = source
-        .staff_price_paise
+        .audience_price_paise
+        .or(source.staff_price_paise)
         .or(source.pricing_level_price_paise)
         .unwrap_or(source.base_price_paise);
     let variant_subtotal = effective_base
@@ -78,11 +114,17 @@ fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> Se
     let final_price_paise = variant_subtotal
         .saturating_add(dynamic_adjustment_paise)
         .saturating_add(source.addon_price_paise)
+        .saturating_add(source.other_fee_paise)
         .max(0);
     let duration_minutes = i64::from(source.base_duration_minutes)
         .saturating_add(i64::from(source.variant_duration_delta_minutes))
         .saturating_add(source.addon_duration_minutes)
         .max(0);
+    let total_occupancy_minutes = duration_minutes
+        .saturating_add(i64::from(source.processing_time_minutes))
+        .saturating_add(i64::from(source.recovery_time_minutes))
+        .saturating_add(i64::from(source.cleanup_time_minutes));
+    let deposit_paise = adjustment_amount(final_price_paise, source.deposit_percent * 100).max(0);
 
     ServicePriceQuote {
         service_id: source.service_id,
@@ -92,6 +134,9 @@ fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> Se
         pricing_level_id: source.pricing_level_id,
         pricing_level_name: source.pricing_level_name,
         pricing_level_price_paise: source.pricing_level_price_paise,
+        audience_type: source.audience_type,
+        audience_id: source.audience_id,
+        audience_price_paise: source.audience_price_paise,
         variant_id: source.variant_id,
         variant_adjustment_paise: source.variant_price_delta_paise,
         addon_total_paise: source.addon_price_paise,
@@ -99,8 +144,20 @@ fn calculate_quote(source: ServicePricingSource, starts_at: DateTime<Utc>) -> Se
         price_rule_name: source.rule_name,
         dynamic_adjustment_bps: source.adjustment_bps,
         dynamic_adjustment_paise,
+        other_fee_paise: source.other_fee_paise,
+        deposit_percent: source.deposit_percent,
+        deposit_paise,
+        cancellation_cutoff_hours: source.cancellation_cutoff_hours,
+        cancellation_fee_paise: source.cancellation_fee_paise,
+        commission_bps: source.commission_bps,
+        demand_percent: source.demand_percent,
+        channel: source.channel,
         final_price_paise,
         duration_minutes,
+        processing_time_minutes: source.processing_time_minutes,
+        recovery_time_minutes: source.recovery_time_minutes,
+        cleanup_time_minutes: source.cleanup_time_minutes,
+        total_occupancy_minutes,
     }
 }
 
@@ -125,6 +182,9 @@ mod tests {
                 service_id: "service-1".into(),
                 base_price_paise: 100_00,
                 base_duration_minutes: 45,
+                processing_time_minutes: 10,
+                recovery_time_minutes: 5,
+                cleanup_time_minutes: 5,
                 staff_price_paise: Some(120_00),
                 pricing_level_id: Some("level-1".into()),
                 pricing_level_name: Some("Senior Stylist".into()),
@@ -138,12 +198,24 @@ mod tests {
                 rule_id: Some("rule-1".into()),
                 rule_name: Some("Peak".into()),
                 adjustment_bps: 1_000,
+                audience_type: None,
+                audience_id: None,
+                audience_price_paise: None,
+                other_fee_paise: 500,
+                deposit_percent: 25,
+                cancellation_cutoff_hours: 24,
+                cancellation_fee_paise: 2_000,
+                commission_bps: 1_500,
+                demand_percent: 80,
+                channel: "crm".into(),
             },
             Utc::now(),
         );
 
         assert_eq!(quote.dynamic_adjustment_paise, 14_00);
-        assert_eq!(quote.final_price_paise, 184_00);
+        assert_eq!(quote.final_price_paise, 189_00);
         assert_eq!(quote.duration_minutes, 70);
+        assert_eq!(quote.total_occupancy_minutes, 90);
+        assert_eq!(quote.deposit_paise, 4_725);
     }
 }

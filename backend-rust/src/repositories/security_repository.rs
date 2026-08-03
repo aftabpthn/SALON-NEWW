@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool};
 
 #[derive(Debug, Serialize, FromRow)]
@@ -220,6 +220,11 @@ pub struct PrivacyRequestRecord {
     pub request_type: String,
     pub summary: String,
     pub status: String,
+    pub approval_status: String,
+    pub approved_by: Option<String>,
+    pub approved_at: Option<DateTime<Utc>>,
+    pub execution_status: String,
+    pub execution_summary_json: Value,
     pub resolution_note: String,
     pub resolved_by: Option<String>,
     pub resolved_at: Option<DateTime<Utc>>,
@@ -1593,6 +1598,7 @@ pub async fn list_privacy_requests(
     sqlx::query_as(
         r#"
         SELECT id, requester_id, subject_type, subject_id, request_type, summary, status,
+               approval_status, approved_by, approved_at, execution_status, execution_summary_json,
                resolution_note, resolved_by, resolved_at, created_at, updated_at
         FROM security_privacy_requests
         WHERE tenant_id=$1 AND branch_id=$2 AND ($3='all' OR status=$3)
@@ -1620,9 +1626,13 @@ pub async fn create_privacy_request(
     sqlx::query_as(
         r#"
         INSERT INTO security_privacy_requests(
-          tenant_id, branch_id, requester_id, subject_type, subject_id, request_type, summary
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+          tenant_id, branch_id, requester_id, subject_type, subject_id, request_type, summary,
+          approval_status, execution_status
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,
+          CASE WHEN $6='deletion' THEN 'pending' ELSE 'not_required' END,
+          CASE WHEN $6='deletion' THEN 'pending' ELSE 'not_started' END)
         RETURNING id, requester_id, subject_type, subject_id, request_type, summary, status,
+                  approval_status, approved_by, approved_at, execution_status, execution_summary_json,
                   resolution_note, resolved_by, resolved_at, created_at, updated_at
         "#,
     )
@@ -1649,8 +1659,9 @@ pub async fn resolve_privacy_request(
         r#"
         UPDATE security_privacy_requests
         SET status='resolved', resolution_note=$5, resolved_by=$4, resolved_at=NOW(), updated_at=NOW()
-        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='open'
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='open' AND request_type<>'deletion'
         RETURNING id, requester_id, subject_type, subject_id, request_type, summary, status,
+                  approval_status, approved_by, approved_at, execution_status, execution_summary_json,
                   resolution_note, resolved_by, resolved_at, created_at, updated_at
         "#,
     )
@@ -1885,6 +1896,532 @@ pub async fn create_fraud_warning(
     .await
 }
 
+pub async fn data_governance_snapshot(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        SELECT jsonb_build_object(
+          'retentionPolicies',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'id',p.id,'recordClass',p.record_class,'retentionDays',p.retention_days,
+            'disposition',p.disposition,'legalBasis',p.legal_basis,'ownerUserId',p.owner_user_id,
+            'active',p.active,'version',p.version,'updatedBy',p.updated_by,'updatedAt',p.updated_at)
+            ORDER BY p.record_class) FROM security_data_retention_policies p
+            WHERE p.tenant_id=$1 AND p.branch_id=$2),'[]'::JSONB),
+          'legalHolds',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'id',h.id,'subjectType',h.subject_type,'subjectId',h.subject_id,'reason',h.reason,
+            'status',CASE WHEN h.status='active' AND h.expires_at IS NOT NULL AND h.expires_at<=NOW() THEN 'expired' ELSE h.status END,
+            'expiresAt',h.expires_at,'createdBy',h.created_by,'releasedBy',h.released_by,
+            'releasedAt',h.released_at,'createdAt',h.created_at) ORDER BY h.created_at DESC)
+            FROM security_legal_holds h WHERE h.tenant_id=$1 AND h.branch_id=$2),'[]'::JSONB),
+          'piiExports',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'id',e.id,'subjectType',e.subject_type,'subjectId',e.subject_id,'rowLimit',e.row_limit,
+            'reason',e.reason,'status',CASE WHEN e.status='approved' AND e.expires_at<=NOW() THEN 'expired' ELSE e.status END,
+            'requestedBy',e.requested_by,'approvedBy',e.approved_by,'approvalNote',e.approval_note,
+            'approvedAt',e.approved_at,'expiresAt',e.expires_at,'downloadedAt',e.downloaded_at,
+            'createdAt',e.created_at) ORDER BY e.created_at DESC)
+            FROM security_pii_export_requests e WHERE e.tenant_id=$1 AND e.branch_id=$2),'[]'::JSONB),
+          'evidenceItems',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'id',i.id,'framework',i.framework,'controlKey',i.control_key,'title',i.title,
+            'ownerUserId',i.owner_user_id,'status',i.status,'evidenceReference',i.evidence_reference,
+            'independentAssessor',i.independent_assessor,'validUntil',i.valid_until,'notes',i.notes,
+            'version',i.version,'updatedBy',i.updated_by,'updatedAt',i.updated_at)
+            ORDER BY i.framework,i.control_key) FROM security_compliance_evidence_items i
+            WHERE i.tenant_id=$1 AND i.branch_id=$2),'[]'::JSONB),
+          'penTestFindings',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+            'id',f.id,'title',f.title,'severity',f.severity,'status',f.status,
+            'ownerUserId',f.owner_user_id,'remediationNote',f.remediation_note,
+            'riskAcceptanceReason',f.risk_acceptance_reason,'riskAcceptedBy',f.risk_accepted_by,
+            'riskAcceptanceExpiresAt',f.risk_acceptance_expires_at,'version',f.version,
+            'updatedBy',f.updated_by,'updatedAt',f.updated_at) ORDER BY f.updated_at DESC)
+            FROM security_pen_test_findings f WHERE f.tenant_id=$1 AND f.branch_id=$2),'[]'::JSONB),
+          'consentEvidence',jsonb_build_object(
+            'clientEvents',(SELECT COUNT(*) FROM client_consent_events WHERE tenant_id=$1 AND branch_id=$2),
+            'activeClientConsents',(SELECT COUNT(*) FROM clients WHERE tenant_id=$1 AND branch_id=$2
+              AND (whatsapp_opt_in IS TRUE OR sms_opt_in IS TRUE OR email_opt_in IS TRUE)),
+            'biometricConsents',(SELECT COUNT(*) FROM staff_biometric_consents WHERE tenant_id=$1 AND branch_id=$2)
+          ),
+          'openUnacceptedPenTestFindings',(SELECT COUNT(*) FROM security_pen_test_findings
+            WHERE tenant_id=$1 AND branch_id=$2 AND status='open')
+        )
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_retention_policy(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    record_class: &str,
+    retention_days: i32,
+    disposition: &str,
+    legal_basis: &str,
+    owner_user_id: &str,
+    actor_id: &str,
+    version: Option<i32>,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"
+        INSERT INTO security_data_retention_policies(
+          tenant_id,branch_id,record_class,retention_days,disposition,legal_basis,
+          owner_user_id,updated_by
+        )
+        SELECT $1,$2,$3,$4,$5,$6,u.id,$8 FROM users u
+        WHERE u.tenant_id=$1 AND u.id=$7 AND u.active=TRUE
+        ON CONFLICT(tenant_id,branch_id,record_class) DO UPDATE SET
+          retention_days=EXCLUDED.retention_days,disposition=EXCLUDED.disposition,
+          legal_basis=EXCLUDED.legal_basis,owner_user_id=EXCLUDED.owner_user_id,
+          updated_by=EXCLUDED.updated_by,version=security_data_retention_policies.version+1,
+          updated_at=NOW()
+        WHERE $9::INTEGER IS NOT NULL AND security_data_retention_policies.version=$9
+        RETURNING jsonb_build_object('id',id,'recordClass',record_class,
+          'retentionDays',retention_days,'disposition',disposition,'legalBasis',legal_basis,
+          'ownerUserId',owner_user_id,'active',active,'version',version,'updatedBy',updated_by,
+          'updatedAt',updated_at)
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(record_class)
+    .bind(retention_days)
+    .bind(disposition)
+    .bind(legal_basis)
+    .bind(owner_user_id)
+    .bind(actor_id)
+    .bind(version)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn create_legal_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    subject_type: &str,
+    subject_id: &str,
+    reason: &str,
+    expires_at: Option<DateTime<Utc>>,
+    actor_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO security_legal_holds(
+          tenant_id,branch_id,subject_type,subject_id,reason,expires_at,created_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7)
+        RETURNING jsonb_build_object('id',id,'subjectType',subject_type,'subjectId',subject_id,
+          'reason',reason,'status',status,'expiresAt',expires_at,'createdBy',created_by,'createdAt',created_at)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(subject_type)
+    .bind(subject_id)
+    .bind(reason)
+    .bind(expires_at)
+    .bind(actor_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn release_legal_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    hold_id: &str,
+    actor_id: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let row: Option<Value> = sqlx::query_scalar(
+        r#"UPDATE security_legal_holds SET status='released',released_by=$4,released_at=NOW()
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='active'
+        RETURNING jsonb_build_object('id',id,'subjectType',subject_type,'subjectId',subject_id,
+          'reason',reason,'status',status,'expiresAt',expires_at,'createdBy',created_by,
+          'releasedBy',released_by,'releasedAt',released_at,'createdAt',created_at)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(hold_id)
+    .bind(actor_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(row) = &row {
+        sqlx::query(
+            r#"UPDATE security_privacy_requests SET execution_status='pending',
+            execution_summary_json='{}'::JSONB,updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND request_type='deletion' AND status='open'
+            AND approval_status='approved' AND execution_status='blocked'
+            AND subject_type=$3 AND subject_id=$4"#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(row["subjectType"].as_str().unwrap_or_default())
+        .bind(row["subjectId"].as_str().unwrap_or_default())
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(row)
+}
+
+pub async fn create_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    subject_id: &str,
+    row_limit: i32,
+    reason: &str,
+    actor_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO security_pii_export_requests(
+          tenant_id,branch_id,subject_type,subject_id,row_limit,reason,requested_by
+        ) VALUES($1,$2,'client',$3,$4,$5,$6)
+        RETURNING jsonb_build_object('id',id,'subjectType',subject_type,'subjectId',subject_id,
+          'rowLimit',row_limit,'reason',reason,'status',status,'requestedBy',requested_by,
+          'createdAt',created_at)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(subject_id)
+    .bind(row_limit)
+    .bind(reason)
+    .bind(actor_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn decide_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    export_id: &str,
+    actor_id: &str,
+    decision: &str,
+    note: &str,
+    token_hash: &str,
+    expires_at: Option<DateTime<Utc>>,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"UPDATE security_pii_export_requests SET
+          status=$5,approved_by=$4,approval_note=$6,download_token_hash=$7,
+          approved_at=CASE WHEN $5='approved' THEN NOW() ELSE NULL END,expires_at=$8
+        WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending' AND requested_by<>$4
+        RETURNING jsonb_build_object('id',id,'subjectType',subject_type,'subjectId',subject_id,
+          'rowLimit',row_limit,'reason',reason,'status',status,'requestedBy',requested_by,
+          'approvedBy',approved_by,'approvalNote',approval_note,'approvedAt',approved_at,
+          'expiresAt',expires_at,'createdAt',created_at)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(export_id)
+    .bind(actor_id)
+    .bind(decision)
+    .bind(note)
+    .bind(token_hash)
+    .bind(expires_at)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn download_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    export_id: &str,
+    token_hash: &str,
+    actor_id: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("UPDATE security_pii_export_requests SET status='expired' WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='approved' AND expires_at<=NOW()")
+        .bind(tenant_id).bind(branch_id).bind(export_id).execute(&mut *tx).await?;
+    let request = sqlx::query_as::<_, (String, i32, String, String, DateTime<Utc>)>(
+        "SELECT subject_id,row_limit,reason,requested_by,expires_at FROM security_pii_export_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='approved' AND download_token_hash=$4 AND expires_at>NOW() FOR UPDATE",
+    )
+    .bind(tenant_id).bind(branch_id).bind(export_id).bind(token_hash)
+    .fetch_optional(&mut *tx).await?;
+    let Some((subject_id, row_limit, reason, requested_by, expires_at)) = request else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let records: Value = sqlx::query_scalar(
+        r#"SELECT COALESCE(jsonb_agg(item),'[]'::JSONB) FROM (
+          SELECT jsonb_build_object(
+            'id',c.id,'code',c.code,'firstName',c.first_name,'lastName',c.last_name,
+            'phone',c.phone,'email',c.email,'birthday',c.birthday,'anniversary',c.anniversary,
+            'notes',c.notes,'active',c.active,'createdAt',c.created_at,'updatedAt',c.updated_at,
+            'communicationPreferences',jsonb_build_object('preferredChannel',c.preferred_communication_channel,
+              'whatsapp',c.whatsapp_opt_in,'sms',c.sms_opt_in,'email',c.email_opt_in),
+            'profile',COALESCE((SELECT jsonb_build_object(
+              'gender',profile.gender,'address',profile.address,'city',profile.city,
+              'postalCode',profile.postal_code,'preferredLanguage',profile.preferred_language,
+              'occupation',profile.occupation,'marketingSource',profile.marketing_source,
+              'sourceDetail',profile.source_detail,'version',profile.version,'updatedAt',profile.updated_at)
+              FROM client_profile_360 profile WHERE profile.tenant_id=c.tenant_id
+              AND profile.branch_id=c.branch_id AND profile.client_id=c.id),'{}'::JSONB),
+            'portalAccounts',COALESCE((SELECT jsonb_agg(jsonb_build_object(
+              'id',a.id,'firstName',a.first_name,'lastName',a.last_name,'phone',a.phone,
+              'email',a.email,'status',a.status,'createdAt',a.created_at))
+              FROM customer_account_clients link JOIN customer_accounts a ON a.id=link.account_id
+              WHERE link.tenant_id=c.tenant_id AND link.branch_id=c.branch_id AND link.client_id=c.id),'[]'::JSONB),
+            'consents',COALESCE((SELECT jsonb_agg(jsonb_build_object('channel',event.channel,
+              'optedIn',event.opted_in,'source',event.source,'reason',event.reason,
+              'recordedAt',event.recorded_at) ORDER BY event.recorded_at DESC)
+              FROM client_consent_events event WHERE event.tenant_id=c.tenant_id
+              AND event.branch_id=c.branch_id AND event.client_id=c.id),'[]'::JSONB),
+            'appointmentCount',(SELECT COUNT(*) FROM appointments a WHERE a.tenant_id=c.tenant_id AND a.branch_id=c.branch_id AND a.client_id=c.id),
+            'saleCount',(SELECT COUNT(*) FROM pos_sales sale WHERE sale.tenant_id=c.tenant_id AND sale.branch_id=c.branch_id AND sale.client_id=c.id),
+            'formSubmissionCount',(SELECT COUNT(*) FROM client_form_submissions form WHERE form.tenant_id=c.tenant_id AND form.branch_id=c.branch_id AND form.client_id=c.id),
+            'treatmentPhotoCount',(SELECT COUNT(*) FROM client_treatment_photos photo WHERE photo.tenant_id=c.tenant_id AND photo.branch_id=c.branch_id AND photo.client_id=c.id)
+          ) item FROM clients c
+          WHERE c.tenant_id=$1 AND c.branch_id=$2 AND ($3='' OR c.id=$3)
+          ORDER BY c.created_at DESC,c.id LIMIT $4
+        ) scoped"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(&subject_id).bind(row_limit)
+    .fetch_one(&mut *tx).await?;
+    sqlx::query("UPDATE security_pii_export_requests SET status='downloaded',downloaded_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(export_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(Some(json!({
+        "exportId": export_id, "tenantId": tenant_id, "branchId": branch_id,
+        "subjectType": "client", "subjectId": subject_id, "rowLimit": row_limit,
+        "reason": reason, "requestedBy": requested_by, "approvedDownloadBy": actor_id,
+        "expiresAt": expires_at, "downloadedAt": Utc::now(), "records": records
+    })))
+}
+
+pub async fn approve_privacy_deletion(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    actor_id: &str,
+) -> Result<Option<PrivacyRequestRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"UPDATE security_privacy_requests SET approval_status='approved',approved_by=$4,
+        approved_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+        AND request_type='deletion' AND status='open' AND approval_status='pending' AND requester_id<>$4
+        RETURNING id,requester_id,subject_type,subject_id,request_type,summary,status,
+          approval_status,approved_by,approved_at,execution_status,execution_summary_json,
+          resolution_note,resolved_by,resolved_at,created_at,updated_at"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(request_id).bind(actor_id)
+    .fetch_optional(db).await
+}
+
+#[derive(Debug)]
+pub enum PrivacyDeletionOutcome {
+    Completed(Value),
+    LegalHold,
+    NotFound,
+}
+
+pub async fn execute_client_deletion(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    actor_id: &str,
+) -> Result<PrivacyDeletionOutcome, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let request = sqlx::query_as::<_, (String, String)>(
+        "SELECT subject_type,subject_id FROM security_privacy_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND request_type='deletion' AND status='open' AND approval_status='approved' AND execution_status='pending' FOR UPDATE",
+    )
+    .bind(tenant_id).bind(branch_id).bind(request_id).fetch_optional(&mut *tx).await?;
+    let Some((subject_type, client_id)) = request else {
+        tx.rollback().await?;
+        return Ok(PrivacyDeletionOutcome::NotFound);
+    };
+    if subject_type != "client" {
+        tx.rollback().await?;
+        return Ok(PrivacyDeletionOutcome::NotFound);
+    }
+    let held: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM security_legal_holds WHERE tenant_id=$1 AND branch_id=$2 AND subject_type='client' AND subject_id=$3 AND status='active' AND (expires_at IS NULL OR expires_at>NOW()))")
+        .bind(tenant_id).bind(branch_id).bind(&client_id).fetch_one(&mut *tx).await?;
+    if held {
+        sqlx::query("UPDATE security_privacy_requests SET execution_status='blocked',execution_summary_json=jsonb_build_object('reason','active_legal_hold'),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant_id).bind(branch_id).bind(request_id).execute(&mut *tx).await?;
+        tx.commit().await?;
+        return Ok(PrivacyDeletionOutcome::LegalHold);
+    }
+    let anonymized = sqlx::query("UPDATE clients SET first_name='Deleted',last_name='',phone='',normalized_phone='',email='',birthday=NULL,anniversary=NULL,notes='',categories_json='[]'::JSONB,preferred_staff_id=NULL,preferred_communication_channel='none',whatsapp_opt_in=FALSE,sms_opt_in=FALSE,email_opt_in=FALSE,phone_verified_at=NULL,email_verified_at=NULL,active=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(&client_id).execute(&mut *tx).await?.rows_affected();
+    if anonymized == 0 {
+        tx.rollback().await?;
+        return Ok(PrivacyDeletionOutcome::NotFound);
+    }
+    let account_ids: Vec<String> = sqlx::query_scalar("SELECT account_id FROM customer_account_clients WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(&client_id).fetch_all(&mut *tx).await?;
+    let links_removed = sqlx::query(
+        "DELETE FROM customer_account_clients WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&client_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    let mut accounts_deleted = 0_u64;
+    let mut sessions_revoked = 0_u64;
+    for account_id in account_ids {
+        let orphaned: bool = sqlx::query_scalar(
+            "SELECT NOT EXISTS(SELECT 1 FROM customer_account_clients WHERE account_id=$1)",
+        )
+        .bind(&account_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if orphaned {
+            accounts_deleted += sqlx::query("UPDATE customer_accounts SET status='deleted',first_name='',last_name='',phone='',normalized_phone='',email='',communication_preferences='{}'::JSONB,updated_at=NOW() WHERE id=$1 AND status<>'deleted'")
+                .bind(&account_id).execute(&mut *tx).await?.rows_affected();
+            sessions_revoked += sqlx::query("UPDATE customer_sessions SET revoked_at=NOW(),revoke_reason='privacy_deletion' WHERE account_id=$1 AND revoked_at IS NULL")
+                .bind(&account_id).execute(&mut *tx).await?.rows_affected();
+        }
+    }
+    let payment_instruments_revoked = sqlx::query("UPDATE client_payment_instruments SET status='revoked',recurring_enabled=FALSE,revoked_at=COALESCE(revoked_at,NOW()),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND status<>'revoked'")
+        .bind(tenant_id).bind(branch_id).bind(&client_id).execute(&mut *tx).await?.rows_affected();
+    let extended_profiles_deleted = sqlx::query(
+        "DELETE FROM client_profile_360 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&client_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    let photos_deleted = sqlx::query(
+        "DELETE FROM client_treatment_photos WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(&client_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    let retained_form_evidence: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM client_form_submissions WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(&client_id).fetch_one(&mut *tx).await?;
+    let summary = json!({"clientId":client_id,"crmProfileAnonymized":true,"portalLinksRemoved":links_removed,
+      "customerAccountsDeleted":accounts_deleted,"mobileSessionsRevoked":sessions_revoked,
+      "paymentInstrumentsRevoked":payment_instruments_revoked,"treatmentPhotosDeleted":photos_deleted,
+      "extendedProfilesDeleted":extended_profiles_deleted,
+      "immutableFormEvidenceRetained":retained_form_evidence});
+    sqlx::query("UPDATE security_privacy_requests SET status='resolved',approval_status='approved',execution_status='completed',execution_summary_json=$4,resolution_note='Governed customer deletion completed',resolved_by=$5,resolved_at=NOW(),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(request_id).bind(&summary).bind(actor_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(PrivacyDeletionOutcome::Completed(summary))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_compliance_evidence(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    framework: &str,
+    control_key: &str,
+    title: &str,
+    owner_user_id: &str,
+    status: &str,
+    evidence_reference: &str,
+    independent_assessor: &str,
+    valid_until: Option<&str>,
+    notes: &str,
+    actor_id: &str,
+    version: Option<i32>,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar(r#"INSERT INTO security_compliance_evidence_items(
+      tenant_id,branch_id,framework,control_key,title,owner_user_id,status,evidence_reference,
+      independent_assessor,valid_until,notes,updated_by)
+      SELECT $1,$2,$3,$4,$5,u.id,$7,$8,$9,$10::DATE,$11,$12 FROM users u
+      WHERE u.tenant_id=$1 AND u.id=$6 AND u.active=TRUE
+      ON CONFLICT(tenant_id,branch_id,framework,control_key) DO UPDATE SET title=EXCLUDED.title,
+      owner_user_id=EXCLUDED.owner_user_id,status=EXCLUDED.status,evidence_reference=EXCLUDED.evidence_reference,
+      independent_assessor=EXCLUDED.independent_assessor,valid_until=EXCLUDED.valid_until,notes=EXCLUDED.notes,
+      updated_by=EXCLUDED.updated_by,version=security_compliance_evidence_items.version+1,updated_at=NOW()
+      WHERE $13::INTEGER IS NOT NULL AND security_compliance_evidence_items.version=$13
+      RETURNING jsonb_build_object('id',id,'framework',framework,'controlKey',control_key,'title',title,
+      'ownerUserId',owner_user_id,'status',status,'evidenceReference',evidence_reference,
+      'independentAssessor',independent_assessor,'validUntil',valid_until,'notes',notes,
+      'version',version,'updatedBy',updated_by,'updatedAt',updated_at)"#)
+      .bind(tenant_id).bind(branch_id).bind(framework).bind(control_key).bind(title)
+      .bind(owner_user_id).bind(status).bind(evidence_reference).bind(independent_assessor)
+      .bind(valid_until).bind(notes).bind(actor_id).bind(version).fetch_optional(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_pen_test_finding(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    finding_id: Option<&str>,
+    title: &str,
+    severity: &str,
+    status: &str,
+    owner_user_id: &str,
+    remediation_note: &str,
+    risk_acceptance_reason: &str,
+    risk_acceptance_expires_at: Option<DateTime<Utc>>,
+    actor_id: &str,
+    version: Option<i32>,
+) -> Result<Option<Value>, sqlx::Error> {
+    if let Some(finding_id) = finding_id {
+        return sqlx::query_scalar(
+            r#"UPDATE security_pen_test_findings SET
+          title=$4,severity=$5,status=$6,owner_user_id=$7,remediation_note=$8,
+          risk_acceptance_reason=$9,risk_accepted_by=CASE WHEN $6='risk_accepted' THEN $11 END,
+          risk_acceptance_expires_at=$10,updated_by=$11,version=version+1,updated_at=NOW()
+          WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$12
+          AND EXISTS(SELECT 1 FROM users u WHERE u.tenant_id=$1 AND u.id=$7 AND u.active=TRUE)
+          RETURNING jsonb_build_object('id',id,'title',title,'severity',severity,'status',status,
+          'ownerUserId',owner_user_id,'remediationNote',remediation_note,
+          'riskAcceptanceReason',risk_acceptance_reason,'riskAcceptedBy',risk_accepted_by,
+          'riskAcceptanceExpiresAt',risk_acceptance_expires_at,'version',version,
+          'updatedBy',updated_by,'updatedAt',updated_at)"#,
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(finding_id)
+        .bind(title)
+        .bind(severity)
+        .bind(status)
+        .bind(owner_user_id)
+        .bind(remediation_note)
+        .bind(risk_acceptance_reason)
+        .bind(risk_acceptance_expires_at)
+        .bind(actor_id)
+        .bind(version)
+        .fetch_optional(db)
+        .await;
+    }
+    sqlx::query_scalar(
+        r#"INSERT INTO security_pen_test_findings(
+      tenant_id,branch_id,title,severity,status,owner_user_id,remediation_note,
+      risk_acceptance_reason,risk_accepted_by,risk_acceptance_expires_at,updated_by)
+      SELECT $1,$2,$3,$4,$5,u.id,$7,$8,CASE WHEN $5='risk_accepted' THEN $10 END,$9,$10
+      FROM users u WHERE u.tenant_id=$1 AND u.id=$6 AND u.active=TRUE
+      RETURNING jsonb_build_object('id',id,'title',title,'severity',severity,'status',status,
+      'ownerUserId',owner_user_id,'remediationNote',remediation_note,
+      'riskAcceptanceReason',risk_acceptance_reason,'riskAcceptedBy',risk_accepted_by,
+      'riskAcceptanceExpiresAt',risk_acceptance_expires_at,'version',version,
+      'updatedBy',updated_by,'updatedAt',updated_at)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(title)
+    .bind(severity)
+    .bind(status)
+    .bind(owner_user_id)
+    .bind(remediation_note)
+    .bind(risk_acceptance_reason)
+    .bind(risk_acceptance_expires_at)
+    .bind(actor_id)
+    .fetch_optional(db)
+    .await
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn record_intrusion_detection(
     db: &PgPool,
@@ -1953,4 +2490,164 @@ pub async fn record_intrusion_detection(
         .await?;
     }
     tx.commit().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    #[sqlx::test]
+    async fn phase_three_governance_is_scoped_and_audit_is_append_only(db: PgPool) {
+        let tenant_a = Uuid::new_v4();
+        let tenant_b = Uuid::new_v4();
+        let branch_a = Uuid::new_v4();
+        let branch_b = Uuid::new_v4();
+        for (id, name) in [(tenant_a, "Aurora North"), (tenant_b, "Aurora South")] {
+            sqlx::query("INSERT INTO tenants(id,name,slug,scope_id) VALUES($1::UUID,$2,$3,$1)")
+                .bind(id.to_string())
+                .bind(name)
+                .bind(format!("aurora-{}", &id.to_string()[..8]))
+                .execute(&db)
+                .await
+                .unwrap();
+        }
+        for (id, tenant, name, code) in [
+            (branch_a, tenant_a, "North One", "N1"),
+            (branch_b, tenant_b, "South One", "S1"),
+        ] {
+            sqlx::query("INSERT INTO branches(id,tenant_id,name,code,scope_id) VALUES($1::UUID,$2::UUID,$3,$4,$1)")
+                .bind(id.to_string()).bind(tenant.to_string()).bind(name).bind(code)
+                .execute(&db).await.unwrap();
+        }
+        for (id, tenant, branch, email) in [
+            (
+                "requester-a",
+                tenant_a,
+                branch_a,
+                "requester@aurora.example",
+            ),
+            ("approver-a", tenant_a, branch_a, "approver@aurora.example"),
+            (
+                "operator-b",
+                tenant_b,
+                branch_b,
+                "operator@aurorasouth.example",
+            ),
+        ] {
+            sqlx::query("INSERT INTO users(id,tenant_id,branch_id,role_name,email,password_hash,full_name) VALUES($1,$2,$3,'Owner',$4,'argon2-hash','Security Owner')")
+                .bind(id).bind(tenant.to_string()).bind(branch.to_string()).bind(email)
+                .execute(&db).await.unwrap();
+        }
+        let client_id = Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO clients(id,tenant_id,branch_id,first_name,last_name,phone,email) VALUES($1,$2,$3,'Aarav','Mehta','919999000001','aarav@aurora.example')")
+            .bind(&client_id).bind(tenant_a.to_string()).bind(branch_a.to_string())
+            .execute(&db).await.unwrap();
+
+        save_retention_policy(
+            &db,
+            &tenant_a.to_string(),
+            &branch_a.to_string(),
+            "client_profile",
+            365,
+            "anonymize",
+            "Consent withdrawal",
+            "approver-a",
+            "approver-a",
+            None,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let isolated = data_governance_snapshot(&db, &tenant_b.to_string(), &branch_b.to_string())
+            .await
+            .unwrap();
+        assert_eq!(isolated["retentionPolicies"], json!([]));
+
+        let deletion = create_privacy_request(
+            &db,
+            &tenant_a.to_string(),
+            &branch_a.to_string(),
+            "requester-a",
+            "client",
+            &client_id,
+            "deletion",
+            "Delete customer account",
+        )
+        .await
+        .unwrap();
+        approve_privacy_deletion(
+            &db,
+            &tenant_a.to_string(),
+            &branch_a.to_string(),
+            &deletion.id,
+            "approver-a",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let hold = create_legal_hold(
+            &db,
+            &tenant_a.to_string(),
+            &branch_a.to_string(),
+            "client",
+            &client_id,
+            "Active dispute",
+            None,
+            "approver-a",
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            execute_client_deletion(
+                &db,
+                &tenant_a.to_string(),
+                &branch_a.to_string(),
+                &deletion.id,
+                "approver-a"
+            )
+            .await
+            .unwrap(),
+            PrivacyDeletionOutcome::LegalHold
+        ));
+        release_legal_hold(
+            &db,
+            &tenant_a.to_string(),
+            &branch_a.to_string(),
+            hold["id"].as_str().unwrap(),
+            "approver-a",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(matches!(
+            execute_client_deletion(
+                &db,
+                &tenant_a.to_string(),
+                &branch_a.to_string(),
+                &deletion.id,
+                "approver-a"
+            )
+            .await
+            .unwrap(),
+            PrivacyDeletionOutcome::Completed(_)
+        ));
+        let client: (String, String, bool) = sqlx::query_as(
+            "SELECT first_name,phone,active FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+        ).bind(tenant_a.to_string()).bind(branch_a.to_string()).bind(&client_id)
+            .fetch_one(&db).await.unwrap();
+        assert_eq!(client, ("Deleted".into(), "".into(), false));
+
+        let audit_id: String = sqlx::query_scalar(
+            "INSERT INTO auth_audit_logs(tenant_id,user_id,branch_id,event_type,outcome,details_json) VALUES($1,$2,$3,'security.phase3.test','success','{}'::JSONB) RETURNING id",
+        ).bind(tenant_a.to_string()).bind("approver-a").bind(branch_a.to_string())
+            .fetch_one(&db).await.unwrap();
+        assert!(
+            sqlx::query("UPDATE auth_audit_logs SET outcome='changed' WHERE id=$1")
+                .bind(audit_id)
+                .execute(&db)
+                .await
+                .is_err()
+        );
+    }
 }

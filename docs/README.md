@@ -311,18 +311,24 @@ POST   /api/security/backups
 
 Security data persists in `security_audit_logs`, `security_activity_events`, `security_sessions`, `security_permissions`, `encrypted_secrets` and `security_backups`. API requests receive protection headers and rate-limit headers, and activity events are tracked without blocking business requests.
 
-Offline-first endpoints:
+Offline and device-delivery endpoints:
 
 ```text
-GET    /api/offline/summary
-POST   /api/offline/cache-snapshots
-POST   /api/offline/sync-items
-POST   /api/offline/sync
-POST   /api/offline/appointments
-POST   /api/offline/billing
+POST   /api/v1/pos/offline-checkout
+GET    /api/v1/pos/offline-checkout/:operationId
+POST   /api/v1/staff/mobile/sync
+GET    /api/v1/staff/mobile/conflicts
+POST   /api/v1/staff/mobile/conflicts/:id/resolve
+POST   /api/v1/staff/self/mobile/telemetry
+GET    /api/v1/staff/mobile/telemetry
 ```
 
-Offline data persists in `offline_cache_snapshots` and `offline_sync_items`. Offline appointments run through the smart booking conflict engine, while offline billing runs through POS checkout so invoices, payments, client history and inventory deduction remain consistent.
+Staff App snapshots and allowlisted mutations use its encrypted, user-bound
+device store and server idempotency/conflict contracts. POS offline checkout is
+restricted to unpaid service/product invoices; payments and customer-liability
+mutations remain online-only. Device telemetry persists in
+`staff_mobile_device_telemetry`. See
+[HARDWARE_SUPPORT_MATRIX.md](./HARDWARE_SUPPORT_MATRIX.md).
 
 White-label endpoints:
 

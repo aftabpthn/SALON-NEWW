@@ -653,7 +653,7 @@ pub async fn micro_profit_lines(
                  COALESCE(appointment.id,'') AS appointment_id,
                  CASE WHEN appointment.id IS NULL THEN 'Direct sale'
                       ELSE CONCAT('Appointment ',appointment.id) END AS appointment_name,
-                 COALESCE(NULLIF(appointment.source_channel,''),NULLIF(sale.source,''),'pos') AS channel,
+                 COALESCE(NULLIF(appointment.source,''),NULLIF(appointment.source_channel,''),NULLIF(sale.source,''),'pos') AS channel,
                  COALESCE((SELECT entry.id FROM accounting_journal_entries entry
                             WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id
                               AND entry.source_type='invoice' AND entry.source_id=sale.id
@@ -1412,14 +1412,14 @@ pub async fn custom_pivot(
                       WHEN 'date' THEN TO_CHAR((appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,'YYYY-MM-DD')
                       WHEN 'status' THEN INITCAP(appointment.status)
                       WHEN 'staff' THEN COALESCE(NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),'Unassigned')
-                      WHEN 'source' THEN COALESCE(NULLIF(appointment.source_channel,''),'Manual')
+                      WHEN 'source' THEN COALESCE(NULLIF(appointment.source,''),NULLIF(appointment.source_channel,''),'Manual')
                     END AS row_key,
                     CASE $6
                       WHEN 'none' THEN 'Total'
                       WHEN 'date' THEN TO_CHAR((appointment.start_at AT TIME ZONE 'Asia/Kolkata')::DATE,'YYYY-MM-DD')
                       WHEN 'status' THEN INITCAP(appointment.status)
                       WHEN 'staff' THEN COALESCE(NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),'Unassigned')
-                      WHEN 'source' THEN COALESCE(NULLIF(appointment.source_channel,''),'Manual')
+                      WHEN 'source' THEN COALESCE(NULLIF(appointment.source,''),NULLIF(appointment.source_channel,''),'Manual')
                     END AS column_key,
                     appointment.id,
                     GREATEST(EXTRACT(EPOCH FROM (appointment.end_at-appointment.start_at))::BIGINT/60,0) AS duration_minutes

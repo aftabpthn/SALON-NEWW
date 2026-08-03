@@ -26,10 +26,10 @@ resource "aws_efs_file_system" "migration" {
 }
 
 resource "aws_efs_mount_target" "migration" {
-  for_each = toset(aws_subnet.private[*].id)
+  count = length(aws_subnet.private)
 
   file_system_id  = aws_efs_file_system.migration.id
-  subnet_id       = each.value
+  subnet_id       = aws_subnet.private[count.index].id
   security_groups = [aws_security_group.migration_efs.id]
 }
 

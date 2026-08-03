@@ -860,10 +860,15 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     this.api.get<any>(`/api/v1/pos/invoices/${this.selected.id}`).subscribe({
       next: (res) => {
         const data = res?.data ?? res;
-        this.refundMethods = Array.from(new Set(this.rows(data?.payments)
+        const originalMethods = Array.from(new Set(this.rows(data?.payments)
           .map((payment) => String(payment.method ?? '').trim().toLowerCase())
           .filter(Boolean)));
-        this.refundMethod = this.refundMethods.length === 1 ? this.refundMethods[0] : '';
+        this.refundMethods = [
+          ...(originalMethods.length > 1 ? ['original_tender'] : []),
+          ...originalMethods,
+          'exchange_credit',
+        ];
+        this.refundMethod = originalMethods.length === 1 ? originalMethods[0] : 'original_tender';
         this.loadRefundTills();
         this.returnLines = this.rows(data?.lines).map((line) => ({
           id: String(line.id ?? ''),
@@ -933,6 +938,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
 
     this.error = '';
     this.returnLoading = true;
+    const exchangeCredit = this.refundMethod === 'exchange_credit';
     this.api.post<any>(`/api/v1/pos/invoices/${this.selected.id}/refund`, {
       reason,
       idempotencyKey: this.returnIdempotencyKey || this.newIdempotencyKey(),
@@ -945,7 +951,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       next: () => {
         const selectedId = this.selected?.id;
         this.closeReturnDrawer();
-        this.message = 'Item return recorded';
+        this.message = exchangeCredit ? 'Return recorded and exchange credit issued' : 'Item return recorded';
         this.load(() => {
           const updated = this.invoices.find((invoice) => invoice.id === selectedId);
           if (updated) this.select(updated);

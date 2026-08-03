@@ -1329,6 +1329,9 @@ pub struct AiCopilotAlertRecord {
     pub title: String,
     pub detail: String,
     pub metrics_json: serde_json::Value,
+    pub evidence_json: serde_json::Value,
+    pub action_owner_user_id: String,
+    pub source_refs: serde_json::Value,
     pub confidence: f64,
     pub required_permission: String,
     pub fingerprint: String,
@@ -1373,13 +1376,19 @@ pub async fn upsert_alert(
         r#"INSERT INTO ai_copilot_alerts (
              tenant_id,branch_id,scope_level,scope_label,alert_type,severity,subject_type,
              subject_id,subject_name,title,detail,metrics_json,confidence,required_permission,
-             fingerprint,period_start,period_end
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+             fingerprint,period_start,period_end,evidence_json,action_owner_user_id,source_refs
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+             jsonb_build_array(jsonb_build_object('detail',$11,'metrics',$12)),
+             COALESCE((SELECT default_action_owner_user_id FROM ai_governance_settings WHERE tenant_id=$1 AND branch_id=$2),''),
+             jsonb_build_array(jsonb_build_object('type',$7,'id',$8)))
            ON CONFLICT (tenant_id,branch_id,fingerprint) WHERE status IN ('open','acknowledged')
            DO UPDATE SET severity=EXCLUDED.severity,
                          title=EXCLUDED.title,
                          detail=EXCLUDED.detail,
                          metrics_json=EXCLUDED.metrics_json,
+                         evidence_json=EXCLUDED.evidence_json,
+                         action_owner_user_id=EXCLUDED.action_owner_user_id,
+                         source_refs=EXCLUDED.source_refs,
                          confidence=EXCLUDED.confidence,
                          period_start=EXCLUDED.period_start,
                          period_end=EXCLUDED.period_end,
@@ -1387,7 +1396,7 @@ pub async fn upsert_alert(
                          last_seen_at=NOW(),
                          updated_at=NOW()
            RETURNING id,branch_id,scope_level,scope_label,alert_type,severity,subject_type,
-                     subject_id,subject_name,title,detail,metrics_json,confidence::FLOAT8 AS confidence,
+                     subject_id,subject_name,title,detail,metrics_json,evidence_json,action_owner_user_id,source_refs,confidence::FLOAT8 AS confidence,
                      required_permission,fingerprint,period_start,period_end,status,
                      occurrence_count,last_seen_at,created_at"#,
     )
@@ -1424,7 +1433,7 @@ pub async fn list_alerts(
 ) -> Result<Vec<AiCopilotAlertRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT id,branch_id,scope_level,scope_label,alert_type,severity,subject_type,
-                  subject_id,subject_name,title,detail,metrics_json,confidence::FLOAT8 AS confidence,
+                  subject_id,subject_name,title,detail,metrics_json,evidence_json,action_owner_user_id,source_refs,confidence::FLOAT8 AS confidence,
                   required_permission,fingerprint,period_start,period_end,status,
                   occurrence_count,last_seen_at,created_at
              FROM ai_copilot_alerts
@@ -1462,7 +1471,7 @@ pub async fn set_alert_status(
             WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND id=$3
               AND status IN ('open','acknowledged')
            RETURNING id,branch_id,scope_level,scope_label,alert_type,severity,subject_type,
-                     subject_id,subject_name,title,detail,metrics_json,confidence::FLOAT8 AS confidence,
+                     subject_id,subject_name,title,detail,metrics_json,evidence_json,action_owner_user_id,source_refs,confidence::FLOAT8 AS confidence,
                      required_permission,fingerprint,period_start,period_end,status,
                      occurrence_count,last_seen_at,created_at"#,
     )
@@ -1491,6 +1500,12 @@ pub struct AiCopilotApprovalRecord {
     pub status: String,
     pub requested_by: String,
     pub requested_role: String,
+    pub evidence_json: serde_json::Value,
+    pub action_owner_user_id: String,
+    pub source_refs: serde_json::Value,
+    pub confidence: String,
+    pub prompt_version: String,
+    pub model_name: String,
     pub decided_by: String,
     pub decided_at: Option<DateTime<Utc>>,
     pub decision_note: String,
@@ -1513,6 +1528,12 @@ pub struct ApprovalInsert<'a> {
     pub status: &'a str,
     pub requested_by: &'a str,
     pub requested_role: &'a str,
+    pub evidence_json: serde_json::Value,
+    pub action_owner_user_id: &'a str,
+    pub source_refs: serde_json::Value,
+    pub confidence: &'a str,
+    pub prompt_version: &'a str,
+    pub model_name: &'a str,
     pub decided_by: &'a str,
     pub expires_in_hours: i32,
 }
@@ -1525,13 +1546,16 @@ pub async fn insert_approval(
         r#"INSERT INTO ai_copilot_approvals (
              tenant_id,branch_id,action_type,approval_mode,title,summary,payload_json,
              scope_level,scope_label,required_permission,status,requested_by,requested_role,
-             decided_by,decided_at,expires_at
+             decided_by,decided_at,expires_at,evidence_json,action_owner_user_id,
+             source_refs,confidence,prompt_version,model_name
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
              CASE WHEN $11='pending' THEN NULL ELSE NOW() END,
-             CASE WHEN $15::INT>0 THEN NOW()+MAKE_INTERVAL(hours => $15::INT) ELSE NULL END)
+             CASE WHEN $15::INT>0 THEN NOW()+MAKE_INTERVAL(hours => $15::INT) ELSE NULL END,
+             $16,$17,$18,$19,$20,$21)
            RETURNING id,branch_id,action_type,approval_mode,title,summary,payload_json,
                      scope_level,scope_label,required_permission,status,requested_by,
-                     requested_role,decided_by,decided_at,decision_note,expires_at,created_at"#,
+                     requested_role,evidence_json,action_owner_user_id,source_refs,confidence,
+                     prompt_version,model_name,decided_by,decided_at,decision_note,expires_at,created_at"#,
     )
     .bind(approval.tenant_id)
     .bind(approval.branch_id)
@@ -1548,6 +1572,12 @@ pub async fn insert_approval(
     .bind(approval.requested_role)
     .bind(approval.decided_by)
     .bind(approval.expires_in_hours)
+    .bind(approval.evidence_json)
+    .bind(approval.action_owner_user_id)
+    .bind(approval.source_refs)
+    .bind(approval.confidence)
+    .bind(approval.prompt_version)
+    .bind(approval.model_name)
     .fetch_one(db)
     .await
 }
@@ -1562,7 +1592,8 @@ pub async fn list_approvals(
     sqlx::query_as(
         r#"SELECT id,branch_id,action_type,approval_mode,title,summary,payload_json,
                   scope_level,scope_label,required_permission,status,requested_by,
-                  requested_role,decided_by,decided_at,decision_note,expires_at,created_at
+                  requested_role,evidence_json,action_owner_user_id,source_refs,confidence,
+                  prompt_version,model_name,decided_by,decided_at,decision_note,expires_at,created_at
              FROM ai_copilot_approvals
             WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
               AND ($3='' OR status=$3)
@@ -1586,7 +1617,8 @@ pub async fn approval_by_id(
     sqlx::query_as(
         r#"SELECT id,branch_id,action_type,approval_mode,title,summary,payload_json,
                   scope_level,scope_label,required_permission,status,requested_by,
-                  requested_role,decided_by,decided_at,decision_note,expires_at,created_at
+                  requested_role,evidence_json,action_owner_user_id,source_refs,confidence,
+                  prompt_version,model_name,decided_by,decided_at,decision_note,expires_at,created_at
              FROM ai_copilot_approvals
             WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[]) AND id=$3"#,
     )
@@ -1615,7 +1647,8 @@ pub async fn decide_approval(
               AND (expires_at IS NULL OR expires_at>NOW())
            RETURNING id,branch_id,action_type,approval_mode,title,summary,payload_json,
                      scope_level,scope_label,required_permission,status,requested_by,
-                     requested_role,decided_by,decided_at,decision_note,expires_at,created_at"#,
+                     requested_role,evidence_json,action_owner_user_id,source_refs,confidence,
+                     prompt_version,model_name,decided_by,decided_at,decision_note,expires_at,created_at"#,
     )
     .bind(tenant_id)
     .bind(branch_ids)
@@ -2289,6 +2322,12 @@ mod tests {
                 status: "pending",
                 requested_by: &fixture.user_id,
                 requested_role: "manager",
+                evidence_json: json!(["synthetic test evidence"]),
+                action_owner_user_id: &fixture.user_id,
+                source_refs: json!([]),
+                confidence: "medium",
+                prompt_version: "test-v1",
+                model_name: "deterministic-test",
                 decided_by: "",
                 expires_in_hours: 72,
             },
@@ -2315,6 +2354,12 @@ mod tests {
                 status: "approved",
                 requested_by: &fixture.user_id,
                 requested_role: "manager",
+                evidence_json: json!(["synthetic test evidence"]),
+                action_owner_user_id: &fixture.user_id,
+                source_refs: json!([]),
+                confidence: "medium",
+                prompt_version: "test-v1",
+                model_name: "deterministic-test",
                 decided_by: "ai-copilot-auto",
                 expires_in_hours: 0,
             },

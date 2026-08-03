@@ -199,6 +199,27 @@
       <label>{{ 'inventory.ui.24e8505587' | translate }}<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
       <label>{{ 'inventory.ui.eb2cf73d0b' | translate }}<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
       <label>{{ 'inventory.ui.f5595ea0c0' | translate }}<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
+      @for (action of stockActions; track action) {
+        <label class="toggle"><input type="checkbox" [(ngModel)]="policy.stockActionMatrix[action]" />Allow {{ action }}</label>
+      }
+      <label>PO number prefix<input maxlength="12" [(ngModel)]="policy.purchaseOrderSettings.numberPrefix" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.approvalRequired" />PO approval required</label>
+      <label>PO auto-approval threshold (paise)<input type="number" min="0" [(ngModel)]="policy.purchaseOrderSettings.approvalThresholdPaise" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.bulkRaiseEnabled" />Bulk raise purchase orders</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.supplierElectronicDelivery" />Supplier electronic delivery</label>
+      <label>Price caption<input maxlength="30" [(ngModel)]="policy.labelSettings.priceCaption" /></label>
+      <label>Label width (mm)<input type="number" min="20" max="100" [(ngModel)]="policy.labelSettings.widthMm" /></label>
+      <label>Label height (mm)<input type="number" min="15" max="80" [(ngModel)]="policy.labelSettings.heightMm" /></label>
+      <label>Label columns<input type="number" min="1" max="8" [(ngModel)]="policy.labelSettings.columns" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showName" />Show product name</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showPrice" />Show price</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showSku" />Show SKU</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showBatch" />Show batch</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showExpiry" />Show expiry</label>
+      <label>Product term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['product']" /></label>
+      <label>Retail term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['retail']" /></label>
+      <label>Consumable term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['consumable']" /></label>
+      <label>Stock term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['stock']" /></label>
     </div>
     @if (negativeStockRequests.length) {
       <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.2f0039e913' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.bcdf8d373d' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>@for (row of negativeStockRequests; track row) {

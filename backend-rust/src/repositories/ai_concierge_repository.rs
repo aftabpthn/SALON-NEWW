@@ -13,6 +13,12 @@ pub struct AiGovernanceRecord {
     pub transcript_retention_days: i32,
     pub prompt_version: String,
     pub booking_url: String,
+    pub default_action_owner_user_id: String,
+    pub max_requests_per_minute: i32,
+    pub max_latency_ms: i32,
+    pub monthly_cost_budget_paise: i64,
+    pub evaluation_retention_days: i32,
+    pub model_allowlist: Value,
     pub updated_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -62,7 +68,15 @@ pub struct AiVoiceCallRecord {
     pub ended_at: Option<DateTime<Utc>>,
     pub ring_duration_seconds: i32,
     pub conversation_duration_seconds: i32,
+    #[allow(dead_code)]
+    #[serde(skip_serializing)]
     pub recording_url: String,
+    pub recording_available: bool,
+    pub recording_consent_status: String,
+    pub recording_retention_until: Option<DateTime<Utc>>,
+    pub call_queue: String,
+    pub extension: String,
+    pub voicemail: bool,
     pub transcript_available: bool,
     pub ai_session_id: Option<String>,
     pub client_id: Option<String>,
@@ -142,7 +156,7 @@ pub async fn governance(
     tenant_id: &str,
     branch_id: &str,
 ) -> Result<Option<AiGovernanceRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT enabled,allowed_channels,require_booking_confirmation,redact_sensitive_data,transcript_retention_days,prompt_version,booking_url,updated_by,created_at,updated_at FROM ai_governance_settings WHERE tenant_id=$1 AND branch_id=$2")
+    sqlx::query_as("SELECT enabled,allowed_channels,require_booking_confirmation,redact_sensitive_data,transcript_retention_days,prompt_version,booking_url,default_action_owner_user_id,max_requests_per_minute,max_latency_ms,monthly_cost_budget_paise,evaluation_retention_days,model_allowlist,updated_by,created_at,updated_at FROM ai_governance_settings WHERE tenant_id=$1 AND branch_id=$2")
         .bind(tenant_id).bind(branch_id).fetch_optional(db).await
 }
 
@@ -157,22 +171,38 @@ pub async fn save_governance(
     transcript_retention_days: i32,
     prompt_version: &str,
     booking_url: &str,
+    default_action_owner_user_id: &str,
+    max_requests_per_minute: i32,
+    max_latency_ms: i32,
+    monthly_cost_budget_paise: i64,
+    evaluation_retention_days: i32,
+    model_allowlist: &Value,
     updated_by: &str,
 ) -> Result<AiGovernanceRecord, sqlx::Error> {
     sqlx::query_as(
         r#"INSERT INTO ai_governance_settings(
               tenant_id,branch_id,enabled,allowed_channels,require_booking_confirmation,
-              redact_sensitive_data,transcript_retention_days,prompt_version,booking_url,updated_by
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+              redact_sensitive_data,transcript_retention_days,prompt_version,booking_url,
+              default_action_owner_user_id,max_requests_per_minute,max_latency_ms,
+              monthly_cost_budget_paise,evaluation_retention_days,model_allowlist,updated_by
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             ON CONFLICT(tenant_id,branch_id) DO UPDATE SET
               enabled=EXCLUDED.enabled,allowed_channels=EXCLUDED.allowed_channels,
               require_booking_confirmation=EXCLUDED.require_booking_confirmation,
               redact_sensitive_data=EXCLUDED.redact_sensitive_data,
               transcript_retention_days=EXCLUDED.transcript_retention_days,
               prompt_version=EXCLUDED.prompt_version,booking_url=EXCLUDED.booking_url,
+              default_action_owner_user_id=EXCLUDED.default_action_owner_user_id,
+              max_requests_per_minute=EXCLUDED.max_requests_per_minute,
+              max_latency_ms=EXCLUDED.max_latency_ms,
+              monthly_cost_budget_paise=EXCLUDED.monthly_cost_budget_paise,
+              evaluation_retention_days=EXCLUDED.evaluation_retention_days,
+              model_allowlist=EXCLUDED.model_allowlist,
               updated_by=EXCLUDED.updated_by,updated_at=NOW()
             RETURNING enabled,allowed_channels,require_booking_confirmation,redact_sensitive_data,
-              transcript_retention_days,prompt_version,booking_url,updated_by,created_at,updated_at"#,
+              transcript_retention_days,prompt_version,booking_url,default_action_owner_user_id,
+              max_requests_per_minute,max_latency_ms,monthly_cost_budget_paise,
+              evaluation_retention_days,model_allowlist,updated_by,created_at,updated_at"#,
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -183,6 +213,12 @@ pub async fn save_governance(
     .bind(transcript_retention_days)
     .bind(prompt_version)
     .bind(booking_url)
+    .bind(default_action_owner_user_id)
+    .bind(max_requests_per_minute)
+    .bind(max_latency_ms)
+    .bind(monthly_cost_budget_paise)
+    .bind(evaluation_retention_days)
+    .bind(model_allowlist)
     .bind(updated_by)
     .fetch_one(db)
     .await
@@ -448,6 +484,20 @@ pub async fn purge_expired_transcripts(db: &PgPool) -> Result<u64, sqlx::Error> 
     .map(|result| result.rows_affected())
 }
 
+pub async fn transcript_retention_days(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<i32, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT COALESCE((SELECT transcript_retention_days FROM ai_governance_settings WHERE tenant_id=$1 AND branch_id=$2),30)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn upsert_voice_call_record(
     db: &PgPool,
@@ -468,8 +518,14 @@ pub async fn upsert_voice_call_record(
     ring_duration_seconds: i32,
     conversation_duration_seconds: i32,
     recording_url: &str,
+    recording_consent_status: &str,
+    recording_retention_until: Option<DateTime<Utc>>,
+    call_queue: &str,
+    extension: &str,
+    voicemail: bool,
     transcript_available: bool,
     client_id: Option<&str>,
+    lead_id: Option<&str>,
     ai_session_id: Option<&str>,
     ai_summary: &str,
     ai_intent: &str,
@@ -484,9 +540,10 @@ pub async fn upsert_voice_call_record(
               tenant_id,branch_id,provider,provider_call_id,provider_event_id,direction,
               caller_phone,normalized_caller_phone,salon_phone,staff_phone,status,
               started_at,answered_at,ended_at,ring_duration_seconds,conversation_duration_seconds,
-              recording_url,transcript_available,client_id,ai_session_id,ai_summary,ai_intent,
+              recording_url,recording_consent_status,recording_retention_until,call_queue,extension,voicemail,
+              transcript_available,client_id,lead_id,ai_session_id,ai_summary,ai_intent,
               ai_action_type,callback_required,callback_due_at,lost_reason,metadata_json
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)
             ON CONFLICT(tenant_id,branch_id,provider,provider_call_id) DO UPDATE SET
               provider_event_id=COALESCE(NULLIF(EXCLUDED.provider_event_id,''),ai_voice_call_records.provider_event_id),
               direction=EXCLUDED.direction,
@@ -501,8 +558,14 @@ pub async fn upsert_voice_call_record(
               ring_duration_seconds=GREATEST(ai_voice_call_records.ring_duration_seconds,EXCLUDED.ring_duration_seconds),
               conversation_duration_seconds=GREATEST(ai_voice_call_records.conversation_duration_seconds,EXCLUDED.conversation_duration_seconds),
               recording_url=COALESCE(NULLIF(EXCLUDED.recording_url,''),ai_voice_call_records.recording_url),
+              recording_consent_status=CASE WHEN EXCLUDED.recording_consent_status='unknown' THEN ai_voice_call_records.recording_consent_status ELSE EXCLUDED.recording_consent_status END,
+              recording_retention_until=COALESCE(EXCLUDED.recording_retention_until,ai_voice_call_records.recording_retention_until),
+              call_queue=COALESCE(NULLIF(EXCLUDED.call_queue,''),ai_voice_call_records.call_queue),
+              extension=COALESCE(NULLIF(EXCLUDED.extension,''),ai_voice_call_records.extension),
+              voicemail=ai_voice_call_records.voicemail OR EXCLUDED.voicemail,
               transcript_available=ai_voice_call_records.transcript_available OR EXCLUDED.transcript_available,
               client_id=COALESCE(EXCLUDED.client_id,ai_voice_call_records.client_id),
+              lead_id=COALESCE(EXCLUDED.lead_id,ai_voice_call_records.lead_id),
               ai_session_id=COALESCE(EXCLUDED.ai_session_id,ai_voice_call_records.ai_session_id),
               ai_summary=COALESCE(NULLIF(EXCLUDED.ai_summary,''),ai_voice_call_records.ai_summary),
               ai_intent=COALESCE(NULLIF(EXCLUDED.ai_intent,''),ai_voice_call_records.ai_intent),
@@ -514,7 +577,8 @@ pub async fn upsert_voice_call_record(
               updated_at=NOW()
             RETURNING id,provider,provider_call_id,direction,caller_phone,salon_phone,staff_phone,status,
               started_at,answered_at,ended_at,ring_duration_seconds,conversation_duration_seconds,
-              recording_url,transcript_available,ai_session_id,client_id,lead_id,appointment_id,pos_sale_id,
+              recording_url,(recording_url<>'') AS recording_available,recording_consent_status,recording_retention_until,call_queue,extension,voicemail,
+              transcript_available,ai_session_id,client_id,lead_id,appointment_id,pos_sale_id,
               ai_summary,ai_intent,ai_action_type,callback_required,callback_due_at,lost_reason,created_at,updated_at"#,
     )
     .bind(tenant_id)
@@ -534,8 +598,14 @@ pub async fn upsert_voice_call_record(
     .bind(ring_duration_seconds)
     .bind(conversation_duration_seconds)
     .bind(recording_url)
+    .bind(recording_consent_status)
+    .bind(recording_retention_until)
+    .bind(call_queue)
+    .bind(extension)
+    .bind(voicemail)
     .bind(transcript_available)
     .bind(client_id)
+    .bind(lead_id)
     .bind(ai_session_id)
     .bind(ai_summary)
     .bind(ai_intent)
@@ -637,7 +707,8 @@ pub async fn recent_voice_calls(
     sqlx::query_as(
         r#"SELECT id,provider,provider_call_id,direction,caller_phone,salon_phone,staff_phone,status,
               started_at,answered_at,ended_at,ring_duration_seconds,conversation_duration_seconds,
-              recording_url,transcript_available,ai_session_id,client_id,lead_id,appointment_id,pos_sale_id,
+              recording_url,(recording_url<>'') AS recording_available,recording_consent_status,recording_retention_until,call_queue,extension,voicemail,
+              transcript_available,ai_session_id,client_id,lead_id,appointment_id,pos_sale_id,
               ai_summary,ai_intent,ai_action_type,callback_required,callback_due_at,lost_reason,created_at,updated_at
              FROM ai_voice_call_records
             WHERE tenant_id=$1 AND branch_id=$2 AND COALESCE(started_at,created_at) >= $3 AND COALESCE(started_at,created_at) < $4
@@ -740,4 +811,169 @@ pub async fn message_belongs_to_session(
     .bind(message_id)
     .fetch_one(db)
     .await
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWorkforceMetricsRecord {
+    pub request_count_30d: i64,
+    pub denied_count_30d: i64,
+    pub prediction_count_30d: i64,
+    pub open_recommendations: i64,
+    pub recommendation_owner_gaps: i64,
+    pub recommendation_evidence_gaps: i64,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AiWorkforceEvaluationRecord {
+    pub id: String,
+    pub suite_version: String,
+    pub dataset_digest: String,
+    pub production_data_used: bool,
+    pub model_name: String,
+    pub prompt_version: String,
+    pub unsafe_prompt_tests_passed: bool,
+    pub hallucination_tests_passed: bool,
+    pub unauthorized_action_tests_passed: bool,
+    pub baseline_metric_bps: Option<i32>,
+    pub observed_metric_bps: Option<i32>,
+    pub sample_size: i32,
+    pub evidence: Value,
+    pub recorded_by: String,
+    pub created_at: DateTime<Utc>,
+}
+
+pub async fn consume_workforce_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO ai_workforce_request_windows(
+             tenant_id,branch_id,window_started_at,request_count
+           ) VALUES ($1,$2,date_trunc('minute',NOW()),1)
+           ON CONFLICT(tenant_id,branch_id,window_started_at) DO UPDATE SET
+             request_count=ai_workforce_request_windows.request_count+1,updated_at=NOW()
+           RETURNING request_count::BIGINT"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn workforce_metrics(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<AiWorkforceMetricsRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT
+          (SELECT COUNT(*)::BIGINT FROM ai_copilot_scope_audit WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=NOW()-INTERVAL '30 days') AS request_count_30d,
+          (SELECT COUNT(*)::BIGINT FROM ai_copilot_scope_audit WHERE tenant_id=$1 AND branch_id=$2 AND outcome IN ('denied','error') AND created_at>=NOW()-INTERVAL '30 days') AS denied_count_30d,
+          (SELECT COUNT(*)::BIGINT FROM ai_prediction_runs WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=NOW()-INTERVAL '30 days') AS prediction_count_30d,
+          ((SELECT COUNT(*) FROM ai_copilot_alerts WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('open','acknowledged'))
+           +(SELECT COUNT(*) FROM ai_copilot_approvals WHERE tenant_id=$1 AND branch_id=$2 AND status='pending')
+           +(SELECT COUNT(*) FROM ai_action_drafts WHERE tenant_id=$1 AND branch_id=$2 AND status='draft'))::BIGINT AS open_recommendations,
+          ((SELECT COUNT(*) FROM ai_copilot_alerts WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('open','acknowledged') AND action_owner_user_id='')
+           +(SELECT COUNT(*) FROM ai_copilot_approvals WHERE tenant_id=$1 AND branch_id=$2 AND status='pending' AND action_owner_user_id='')
+           +(SELECT COUNT(*) FROM ai_action_drafts WHERE tenant_id=$1 AND branch_id=$2 AND status='draft' AND action_owner_user_id=''))::BIGINT AS recommendation_owner_gaps,
+          ((SELECT COUNT(*) FROM ai_copilot_alerts WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('open','acknowledged') AND jsonb_array_length(evidence_json)=0)
+           +(SELECT COUNT(*) FROM ai_copilot_approvals WHERE tenant_id=$1 AND branch_id=$2 AND status='pending' AND jsonb_array_length(evidence_json)=0)
+           +(SELECT COUNT(*) FROM ai_action_drafts WHERE tenant_id=$1 AND branch_id=$2 AND status='draft' AND jsonb_array_length(evidence_json)=0))::BIGINT AS recommendation_evidence_gaps"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn record_workforce_evaluation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    suite_version: &str,
+    dataset_digest: &str,
+    model_name: &str,
+    prompt_version: &str,
+    unsafe_prompt_tests_passed: bool,
+    hallucination_tests_passed: bool,
+    unauthorized_action_tests_passed: bool,
+    baseline_metric_bps: Option<i32>,
+    observed_metric_bps: Option<i32>,
+    sample_size: i32,
+    evidence: &Value,
+    recorded_by: &str,
+) -> Result<AiWorkforceEvaluationRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"INSERT INTO ai_workforce_evaluations(
+             tenant_id,branch_id,suite_version,dataset_digest,production_data_used,
+             model_name,prompt_version,unsafe_prompt_tests_passed,hallucination_tests_passed,
+             unauthorized_action_tests_passed,baseline_metric_bps,observed_metric_bps,
+             sample_size,evidence,recorded_by
+           ) VALUES($1,$2,$3,$4,FALSE,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           RETURNING id,suite_version,dataset_digest,production_data_used,model_name,
+             prompt_version,unsafe_prompt_tests_passed,hallucination_tests_passed,
+             unauthorized_action_tests_passed,baseline_metric_bps,observed_metric_bps,
+             sample_size,evidence,recorded_by,created_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(suite_version)
+    .bind(dataset_digest)
+    .bind(model_name)
+    .bind(prompt_version)
+    .bind(unsafe_prompt_tests_passed)
+    .bind(hallucination_tests_passed)
+    .bind(unauthorized_action_tests_passed)
+    .bind(baseline_metric_bps)
+    .bind(observed_metric_bps)
+    .bind(sample_size)
+    .bind(evidence)
+    .bind(recorded_by)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn latest_workforce_evaluation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Option<AiWorkforceEvaluationRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT id,suite_version,dataset_digest,production_data_used,model_name,
+             prompt_version,unsafe_prompt_tests_passed,hallucination_tests_passed,
+             unauthorized_action_tests_passed,baseline_metric_bps,observed_metric_bps,
+             sample_size,evidence,recorded_by,created_at
+           FROM ai_workforce_evaluations
+           WHERE tenant_id=$1 AND branch_id=$2
+           ORDER BY created_at DESC,id DESC LIMIT 1"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn record_workforce_policy_audit(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    before_policy: &Value,
+    after_policy: &Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO ai_workforce_policy_audit(tenant_id,branch_id,actor_user_id,before_policy,after_policy) VALUES($1,$2,$3,$4,$5)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(actor_user_id)
+    .bind(before_policy)
+    .bind(after_policy)
+    .execute(db)
+    .await
+    .map(|_| ())
 }

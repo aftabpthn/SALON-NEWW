@@ -36,13 +36,15 @@ pub async fn create_draft(
     requires_confirmation: bool,
     payload: &Value,
     refresh_targets: &Value,
+    evidence_json: &Value,
+    source_refs: &Value,
     created_by: &str,
 ) -> Result<ActionDraftRecord, sqlx::Error> {
     sqlx::query_as(&format!(
         r#"INSERT INTO ai_action_drafts(
               tenant_id,branch_id,action_type,summary,requires_confirmation,
-              payload,refresh_targets,created_by
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              payload,refresh_targets,evidence_json,action_owner_user_id,source_refs,created_by
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)
@@ -52,6 +54,9 @@ pub async fn create_draft(
     .bind(requires_confirmation)
     .bind(payload)
     .bind(refresh_targets)
+    .bind(evidence_json)
+    .bind(created_by)
+    .bind(source_refs)
     .bind(created_by)
     .fetch_one(db)
     .await

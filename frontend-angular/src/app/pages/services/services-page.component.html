@@ -141,6 +141,26 @@
             <input type="number" min="0" [(ngModel)]="serviceForm.cleanupTimeMinutes" name="cleanupTimeMinutes" />
           </label>
         </div>
+        <div class="field-row">
+          <label>
+            Processing time
+            <input type="number" min="0" max="1440" [(ngModel)]="serviceForm.processingTimeMinutes" name="processingTimeMinutes" />
+          </label>
+          <label>
+            Recovery time
+            <input type="number" min="0" max="1440" [(ngModel)]="serviceForm.recoveryTimeMinutes" name="recoveryTimeMinutes" />
+          </label>
+        </div>
+        <fieldset class="pricing-card">
+          <legend>Commercial policy</legend>
+          <div class="pricing-row rule-row">
+            <input type="number" min="0" step="0.01" aria-label="Other fee" placeholder="Other fee" [(ngModel)]="serviceForm.otherFee" name="otherFee" />
+            <input type="number" min="0" max="100" aria-label="Deposit percent" placeholder="Deposit %" [(ngModel)]="serviceForm.depositPercent" name="depositPercent" />
+            <input type="number" min="0" max="8760" aria-label="Cancellation cutoff hours" placeholder="Cancel cutoff hours" [(ngModel)]="serviceForm.cancellationCutoffHours" name="cancellationCutoffHours" />
+            <input type="number" min="0" step="0.01" aria-label="Cancellation fee" placeholder="Cancellation fee" [(ngModel)]="serviceForm.cancellationFee" name="cancellationFee" />
+            <input type="number" min="0" max="100" step="0.01" aria-label="Commission percent" placeholder="Commission %" [(ngModel)]="serviceForm.commissionPercent" name="commissionPercent" />
+          </div>
+        </fieldset>
         <label>
           Status
           <select [(ngModel)]="serviceForm.status" name="status">
@@ -228,6 +248,8 @@
             <input type="time" aria-label="Price rule end" [(ngModel)]="row.endTime" [name]="'ruleEnd' + index" />
             <input type="number" min="-50" max="100" step="0.01" aria-label="Price adjustment percentage" placeholder="Adjustment %" [(ngModel)]="row.adjustmentPercent" [name]="'ruleAdjustment' + index" />
             <input type="number" min="0" max="1000" step="1" aria-label="Price rule priority" placeholder="Priority" [(ngModel)]="row.priority" [name]="'rulePriority' + index" />
+            <select aria-label="Price rule channel" [(ngModel)]="row.channel" [name]="'ruleChannel' + index"><option value="all">All channels</option><option value="crm">CRM</option><option value="webstore">Webstore</option><option value="kiosk">Kiosk</option><option value="staffApp">Staff App</option><option value="customerApp">Customer App</option></select>
+            <input type="number" min="0" max="100" aria-label="Minimum demand percent" placeholder="Demand %" [(ngModel)]="row.minDemandPercent" [name]="'ruleDemand' + index" />
             <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'ruleActive' + index" />Active</label>
             <button type="button" (click)="removePriceRule(index)">Remove</button>
           </div>
@@ -236,6 +258,51 @@
           <div class="compact-empty">No schedule pricing yet</div>
         }
         <button type="button" (click)="addPriceRule()">Add schedule rule</button>
+      </fieldset>
+      <fieldset class="pricing-card">
+        <legend>Channel availability</legend>
+        <div class="channel-checks">
+          <label><input type="checkbox" [(ngModel)]="serviceForm.channelAvailability['crm']" name="channelCrm" />CRM</label>
+          <label><input type="checkbox" [(ngModel)]="serviceForm.channelAvailability['webstore']" name="channelWebstore" />Webstore</label>
+          <label><input type="checkbox" [(ngModel)]="serviceForm.channelAvailability['kiosk']" name="channelKiosk" />Kiosk</label>
+          <label><input type="checkbox" [(ngModel)]="serviceForm.channelAvailability['staffApp']" name="channelStaffApp" />Staff App</label>
+          <label><input type="checkbox" [(ngModel)]="serviceForm.channelAvailability['customerApp']" name="channelCustomerApp" />Customer App</label>
+        </div>
+      </fieldset>
+      <fieldset class="pricing-card">
+        <legend>Guest and benefit pricing</legend>
+        @for (row of serviceForm.audiencePrices; track trackByIndex(index, row); let index = $index) {
+          <div class="pricing-row staff-price-row">
+            <select [(ngModel)]="row.audienceType" [name]="'audienceType' + index" aria-label="Audience type"><option value="guest">Guest</option><option value="membership">Membership</option><option value="package">Package</option></select>
+            <input [(ngModel)]="row.audienceId" [name]="'audienceId' + index" aria-label="Audience record ID" placeholder="Record ID" />
+            <input type="number" min="0" step="0.01" [(ngModel)]="row.price" [name]="'audiencePrice' + index" aria-label="Audience price" placeholder="Price" />
+            <label class="active-check"><input type="checkbox" [(ngModel)]="row.active" [name]="'audienceActive' + index" />Active</label>
+            <button type="button" (click)="removeAudiencePrice(index)">Remove</button>
+          </div>
+        }
+        <button type="button" (click)="addAudiencePrice()">Add audience price</button>
+      </fieldset>
+      <fieldset class="pricing-card">
+        <legend>Eligible resources</legend>
+        @for (row of serviceForm.resourceRequirements; track trackByIndex(index, row); let index = $index) {
+          <div class="pricing-row staff-price-row">
+            <select [(ngModel)]="row.resourceId" [name]="'resourceRequirement' + index" aria-label="Eligible resource"><option value="">Select resource</option>@for (resource of resourceOptions; track resource.id) {<option [value]="resource.id">{{ resource.name }} · {{ resource.kind }} · {{ resource.capacity }}</option>}</select>
+            <label class="active-check"><input type="checkbox" [(ngModel)]="row.required" [name]="'resourceRequired' + index" />Required</label>
+            <button type="button" (click)="removeResourceRequirement(index)">Remove</button>
+          </div>
+        }
+        <button type="button" (click)="addResourceRequirement()">Add resource</button>
+      </fieldset>
+      <fieldset class="pricing-card">
+        <legend>Revenue allocation</legend>
+        @for (row of serviceForm.revenueAllocation; track trackByIndex(index, row); let index = $index) {
+          <div class="pricing-row staff-price-row">
+            <input [(ngModel)]="row.revenueCenterId" [name]="'revenueCenter' + index" aria-label="Revenue center ID" placeholder="Revenue center ID" />
+            <input type="number" min="0" max="100" step="0.01" [(ngModel)]="row.allocationPercent" [name]="'revenueAllocation' + index" aria-label="Revenue allocation percent" placeholder="Allocation %" />
+            <button type="button" (click)="removeRevenueAllocation(index)">Remove</button>
+          </div>
+        }
+        <button type="button" (click)="addRevenueAllocation()">Add allocation</button>
       </fieldset>
       <button class="consumption-toggle" type="button" (click)="openProductConsumption()">Product consumption (optional)</button>
       @if (productConsumptionOpen) {

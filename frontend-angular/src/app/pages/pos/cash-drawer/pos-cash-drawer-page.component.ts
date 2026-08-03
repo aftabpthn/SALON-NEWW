@@ -27,7 +27,8 @@ interface StaffOption { id: string; firstName?: string; middleName?: string; las
 interface StaffListPage { items: StaffOption[]; total: number; page: number; pageSize: number; }
 interface BankDeposit { id: string; amountPaise: number; bankName: string; reference: string; status: string; notes: string; depositedAt: string; }
 interface ProviderReconciliation { id: string; provider: string; statementReference: string; systemGrossPaise: number; statementGrossPaise: number; feePaise: number; bankNetPaise: number; grossDifferencePaise: number; netDifferencePaise: number; status: string; createdByUserId: string; reviewedByUserId: string; }
-interface CashTill { id: string; tillCode: string; tillName: string; openingCashPaise: number; expectedCashPaise: number | null; countedCashPaise: number | null; variancePaise: number | null; status: string; blind: boolean; }
+interface CashTill { id: string; tillCode: string; tillName: string; terminalId: string | null; openingCashPaise: number; expectedCashPaise: number | null; countedCashPaise: number | null; variancePaise: number | null; status: string; blind: boolean; }
+interface PosTerminal { id: string; terminalName: string; terminalCode: string; status: string; }
 interface CashMovement { id: string; cashDrawerTillId: string | null; movementType: string; amountPaise: number; referenceId: string; notes: string; reversesMovementId: string | null; reversedById: string | null; correctionReason: string; createdAt: string; }
 
 interface CashDrawerReport {
@@ -37,6 +38,9 @@ interface CashDrawerReport {
   cashRefundsPaise: number;
   cashInPaise: number;
   cashOutPaise: number;
+  bookingDepositPaise: number;
+  tipPaise: number;
+  otherFeePaise: number;
   expectedCashPaise: number | null;
   countedCashPaise: number | null;
   variancePaise: number | null;
@@ -44,6 +48,7 @@ interface CashDrawerReport {
   bankDepositPaise: number;
   pendingDepositPaise: number;
   reconciliationExceptions: number;
+  pettyCashCategories: Array<{ category: string; amountPaise: number }>;
 }
 
 @Component({
@@ -58,6 +63,7 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
   report: CashDrawerReport | null = null;
   openingCash = '';
   openingNotes = '';
+  holidayException = false;
   movementType = 'cash_in';
   movementAmount = '';
   movementReference = '';
@@ -97,8 +103,10 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
   readonly reconciliationProviders = ['razorpay', 'cashfree', 'phonepe'];
   reconciliationImporting = false;
   tills: CashTill[] = [];
+  terminals: PosTerminal[] = [];
   tillCode = '';
   tillName = '';
+  tillTerminalId = '';
   tillOpening = '';
   tillNotes = '';
   tillCounts: Record<string, string> = {};
@@ -119,6 +127,7 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.loadStaff();
+    this.loadTerminals();
     this.load();
     this.liveUpdates = this.realtime.events().subscribe((event) => {
       if (event.entityType === 'cash_drawer' || (event.entityType === 'invoice' && event.action === 'invoice.refunded')) this.load();
@@ -142,11 +151,13 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
 
   openDrawer(): void {
     if (this.openingCash !== '' && (!Number.isFinite(Number(this.openingCash)) || Number(this.openingCash) < 0)) { this.error = 'Opening cash cannot be negative'; return; }
+    if (this.holidayException && !this.openingNotes.trim()) { this.error = 'Holiday exception notes are required'; return; }
     this.run('/api/v1/pos/cash-drawer/open', {
       businessDate: this.isoDate(),
       openingCashPaise: this.toPaise(this.openingCash),
       notes: this.openingNotes.trim(),
-    }, 'Cash drawer opened', () => { this.openingCash = ''; this.openingNotes = ''; }, () => this.reloadSession(true));
+      holidayException: this.holidayException,
+    }, 'Cash drawer opened', () => { this.openingCash = ''; this.openingNotes = ''; this.holidayException = false; }, () => this.reloadSession(true));
   }
 
   recordMovement(): void {
@@ -331,7 +342,8 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
     }
     this.run(`/api/v1/pos/cash-drawer/${this.session.id}/tills`, {
       tillCode: this.tillCode.trim(), tillName: this.tillName.trim(), openingCashPaise: this.toPaise(this.tillOpening), notes: this.tillNotes.trim(),
-    }, 'Cash till opened', () => { this.tillCode = ''; this.tillName = ''; this.tillOpening = ''; this.tillNotes = ''; }, () => this.reloadTillState());
+      terminalId: this.tillTerminalId || null,
+    }, 'Cash till opened', () => { this.tillCode = ''; this.tillName = ''; this.tillTerminalId = ''; this.tillOpening = ''; this.tillNotes = ''; }, () => this.reloadTillState());
   }
 
   closeTill(till: CashTill): void {
@@ -361,6 +373,7 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
     return this.canManageFinancial && row.createdByUserId !== this.auth.userId;
   }
   get openTills(): CashTill[] { return this.tills.filter((till) => till.status === 'open'); }
+  terminalName(id: string | null): string { return this.terminals.find((row) => row.id === id)?.terminalName ?? 'Unassigned'; }
   get staffPageCount(): number { return Math.max(1, Math.ceil(this.staffTotal / this.staffPageSize)); }
 
   searchStaff(): void {
@@ -430,6 +443,13 @@ export class PosCashDrawerPageComponent implements OnInit, OnDestroy {
         this.sectionLoading.staff = false;
       },
       error: (error) => { this.staff = []; this.staffTotal = 0; this.sectionErrors.staff = this.errorText(error); this.sectionLoading.staff = false; },
+    });
+  }
+
+  loadTerminals(): void {
+    this.api.get<any>('/api/v1/pos/terminals').subscribe({
+      next: (response) => { const value = response?.data ?? response; this.terminals = Array.isArray(value) ? value.filter((row) => row.status === 'active') : []; },
+      error: () => { this.terminals = []; },
     });
   }
 

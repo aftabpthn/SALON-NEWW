@@ -53,6 +53,7 @@ type ReadCacheEntry<T> = {
   value?: T;
   promise?: Promise<T>;
 };
+type OfflineSnapshot<T> = { cachedAt: string; value: T };
 type OfflineQueueEntry = {
   queueId: string;
   idempotencyKey: string;
@@ -1302,6 +1303,7 @@ export class StaffAppService {
   readonly mfaSetup = signal<StaffMfaSetup | null>(null);
   readonly securityContext = signal<StaffSecurityContext | null>(null);
   readonly offlineQueueCount = signal(0);
+  readonly offlineSnapshotAt = signal("");
 
   constructor(private readonly http: HttpClient) {
     this.purgeLegacyAuthStorage();
@@ -1413,6 +1415,7 @@ export class StaffAppService {
   }
 
   async dashboard(params: Record<string, string> = {}): Promise<StaffDashboard> {
+    if (!this.isOnline()) return this.cachedOfflineSnapshot<StaffDashboard>(this.offlineDashboardCacheKey(params), "No encrypted offline dashboard is available.");
     return this.cachedRead(
       `dashboard:${stableQueryKey(params)}`,
       10_000,
@@ -1420,14 +1423,18 @@ export class StaffAppService {
         this.loading.set(true);
         this.error.set("");
         try {
-          return await this.withRefreshRetry(async () => {
+          const value = await this.withRefreshRetry(async () => {
             const response = await firstValueFrom(this.http.get<RustStaffSelfDashboard | ApiEnvelope<RustStaffSelfDashboard>>(`${this.baseUrl}/staff/self/dashboard`, {
               headers: this.authHeaders(),
               params
             }));
             return this.normalizeDashboard(this.unwrap(response));
           });
+          const offlineKey = this.scopedOfflineDashboardCacheKey(params);
+          if (offlineKey) await this.writeOfflineSnapshot(offlineKey, value);
+          return value;
         } catch (error) {
+          if (error instanceof HttpErrorResponse && error.status === 0) return this.cachedOfflineSnapshot<StaffDashboard>(this.offlineDashboardCacheKey(params), "No encrypted offline dashboard is available.");
           const message = this.errorMessage(error, "Unable to load staff dashboard.");
           this.error.set(message);
           throw error;
@@ -1720,6 +1727,10 @@ export class StaffAppService {
     await this.post("/staff/self/mobile/crash-reports", payload, false);
   }
 
+  async reportMobileTelemetry(payload: Record<string, unknown>): Promise<void> {
+    await this.post("/staff/self/mobile/telemetry", payload, false);
+  }
+
   async updateSchedule(scheduleId: string, payload: { version: number; scheduleDate?: string; startTime?: string; endTime?: string; status?: string; notes?: string }): Promise<unknown> {
     return this.patch(`/staff-self/calendar/${encodeURIComponent(scheduleId)}`, payload);
   }
@@ -1828,7 +1839,7 @@ export class StaffAppService {
     if (!this.isOnline()) return this.cachedToday(cacheKey);
     try {
       const value = await this.loadToday(date);
-      await this.offlineStore.write(cacheKey, value);
+      await this.writeOfflineSnapshot(cacheKey, value);
       return value;
     } catch (error) {
       if (!(error instanceof HttpErrorResponse) || error.status !== 0) throw error;
@@ -1877,9 +1888,7 @@ export class StaffAppService {
   }
 
   private async cachedToday(cacheKey: string): Promise<StaffToday> {
-    const cached = await this.offlineStore.read<StaffToday>(cacheKey);
-    if (cached) return cached;
-    throw new Error("No encrypted offline schedule is available for this day.");
+    return this.cachedOfflineSnapshot(cacheKey, "No encrypted offline schedule is available for this day.");
   }
 
   async changeRequiredPassword(newPassword: string): Promise<void> {
@@ -3113,6 +3122,35 @@ export class StaffAppService {
     const user = this.user();
     if (!user?.id || !user.branchId || !this.tenantIdValue) throw new Error("An authenticated staff session is required for offline access.");
     return `today:${this.tenantIdValue}:${user.branchId}:${user.id}:${date}`;
+  }
+
+  private offlineDashboardCacheKey(params: Record<string, string>): string {
+    const key = this.scopedOfflineDashboardCacheKey(params);
+    if (!key) throw new Error("An authenticated staff session is required for offline access.");
+    return key;
+  }
+
+  private scopedOfflineDashboardCacheKey(params: Record<string, string>): string | null {
+    const user = this.user();
+    if (!user?.id || !user.branchId || !this.tenantIdValue) return null;
+    return `dashboard:${this.tenantIdValue}:${user.branchId}:${user.id}:${stableQueryKey(params)}`;
+  }
+
+  private async writeOfflineSnapshot<T>(key: string, value: T): Promise<void> {
+    const cachedAt = new Date().toISOString();
+    await this.offlineStore.write(key, { cachedAt, value } satisfies OfflineSnapshot<T>);
+    this.offlineSnapshotAt.set(cachedAt);
+  }
+
+  private async cachedOfflineSnapshot<T>(key: string, message: string): Promise<T> {
+    const cached = await this.offlineStore.read<T | OfflineSnapshot<T>>(key);
+    if (cached && typeof cached === "object" && "cachedAt" in cached && "value" in cached) {
+      const snapshot = cached as OfflineSnapshot<T>;
+      this.offlineSnapshotAt.set(snapshot.cachedAt);
+      return snapshot.value;
+    }
+    if (cached) { this.offlineSnapshotAt.set(""); return cached; }
+    throw new Error(message);
   }
 
   private async clearOfflineState(): Promise<void> {

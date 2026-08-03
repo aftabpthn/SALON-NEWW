@@ -159,6 +159,12 @@ async fn main() -> Result<()> {
                 {
                     tracing::warn!("AI transcript retention cycle failed");
                 }
+                if repositories::communication_repository::redact_expired_content(&worker_state.db)
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!("communication retention cycle failed");
+                }
             }
         });
     }

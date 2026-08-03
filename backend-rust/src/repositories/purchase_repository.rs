@@ -1026,10 +1026,22 @@ pub async fn create_order(
     tax_paise: i64,
     shipping_paise: i64,
     handling_paise: i64,
+    number_prefix: &str,
     created_by: &str,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO purchase_orders(tenant_id,branch_id,order_number,supplier_id,expected_date,notes,taxable_paise,tax_paise,shipping_paise,handling_paise,total_paise,created_by) SELECT $1,$2,'PO-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),supplier.id,$4,$5,$6,$7,$8,$9,$6+$7+$8+$9,$10 FROM suppliers supplier WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2 AND supplier.id=$3 AND supplier.active=TRUE RETURNING id")
-        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(expected_date).bind(notes).bind(taxable_paise).bind(tax_paise).bind(shipping_paise).bind(handling_paise).bind(created_by).fetch_one(&mut **tx).await
+    sqlx::query_scalar("INSERT INTO purchase_orders(tenant_id,branch_id,order_number,supplier_id,expected_date,notes,taxable_paise,tax_paise,shipping_paise,handling_paise,total_paise,created_by) SELECT $1,$2,$10||'-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),supplier.id,$4,$5,$6,$7,$8,$9,$6+$7+$8+$9,$11 FROM suppliers supplier WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2 AND supplier.id=$3 AND supplier.active=TRUE RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(expected_date).bind(notes).bind(taxable_paise).bind(tax_paise).bind(shipping_paise).bind(handling_paise).bind(number_prefix).bind(created_by).fetch_one(&mut **tx).await
+}
+
+pub async fn queue_order_email(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    order_id: &str,
+    actor: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("INSERT INTO supplier_communication_queue(tenant_id,branch_id,supplier_id,purchase_order_id,channel,destination,subject,message,idempotency_key,created_by) SELECT po.tenant_id,po.branch_id,po.supplier_id,po.id,'email',supplier.email,'Purchase order '||po.order_number,'Purchase order '||po.order_number||' total: '||po.total_paise||' paise','po:'||po.id||':send', $4 FROM purchase_orders po JOIN suppliers supplier ON supplier.id=po.supplier_id AND supplier.tenant_id=po.tenant_id AND supplier.branch_id=po.branch_id WHERE po.tenant_id=$1 AND po.branch_id=$2 AND po.id=$3 AND BTRIM(COALESCE(supplier.email,''))<>'' ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING")
+        .bind(tenant_id).bind(branch_id).bind(order_id).bind(actor).execute(&mut **tx).await?.rows_affected() == 1)
 }
 
 #[allow(clippy::too_many_arguments)]

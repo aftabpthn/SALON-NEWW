@@ -16,7 +16,10 @@ use uuid::Uuid;
 
 use crate::{
     models::common::AppError,
-    repositories::benefit_notification_repository::{self, NewBenefitDelivery},
+    repositories::{
+        benefit_notification_repository::{self, NewBenefitDelivery},
+        communication_repository,
+    },
     routes::pos::{
         append_pos_invoice_event_from_gateway, settle_deferred_customer_commerce_benefits,
     },
@@ -533,6 +536,7 @@ async fn lookup_business_number(
 /// Unlike the legacy lookup this never chooses the tenant: the branch is fixed
 /// by the receiving number, and the sender either is a client of that branch or
 /// is not.
+#[cfg(test)]
 async fn client_in_branch(
     db: &PgPool,
     tenant_id: &str,
@@ -579,21 +583,33 @@ async fn record_provider_message(
     )
     .await?
     {
-        let client_id = client_in_branch(db, &tenant_id, &branch_id, &message.sender).await?;
-        // A client's message is still recorded on their communication history
-        // exactly as before. A sender with no client record — a staff member
-        // messaging their own branch — is routed without one.
-        if let Some(client_id) = client_id.as_deref() {
-            if !record_client_communication(db, &tenant_id, &branch_id, client_id, message, channel)
-                .await?
-            {
-                return Ok(None);
-            }
+        let identity = communication_repository::resolve_or_create_inbound_identity(
+            db,
+            &tenant_id,
+            &branch_id,
+            channel,
+            &message.sender,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to resolve inbound contact"))?;
+        if (identity.client_id.is_some() || identity.lead_id.is_some())
+            && !record_client_communication(
+                db,
+                &tenant_id,
+                &branch_id,
+                identity.client_id.as_deref(),
+                identity.lead_id.as_deref(),
+                message,
+                channel,
+            )
+            .await?
+        {
+            return Ok(None);
         }
         return Ok(Some(InboundMessageContext {
             tenant_id,
             branch_id,
-            client_id,
+            client_id: identity.client_id,
         }));
     }
 
@@ -637,7 +653,17 @@ async fn record_provider_message(
         return Ok(None);
     }
     let (tenant_id, branch_id, client_id) = &scopes[0];
-    if !record_client_communication(db, tenant_id, branch_id, client_id, message, channel).await? {
+    if !record_client_communication(
+        db,
+        tenant_id,
+        branch_id,
+        Some(client_id),
+        None,
+        message,
+        channel,
+    )
+    .await?
+    {
         return Ok(None);
     }
     Ok(Some(InboundMessageContext {
@@ -655,22 +681,24 @@ async fn record_client_communication(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    client_id: &str,
+    client_id: Option<&str>,
+    lead_id: Option<&str>,
     message: &WhatsAppMessage,
     channel: &str,
 ) -> Result<bool, AppError> {
     let communication_id = Uuid::new_v4().to_string();
     let inserted = sqlx::query_scalar::<_, String>(
         r#"INSERT INTO client_communications (
-             id,tenant_id,branch_id,client_id,source_type,source_id,channel,direction,status,
+             id,tenant_id,branch_id,client_id,lead_id,source_type,source_id,channel,direction,status,
              recipient,subject,body,provider_message_id,occurred_at,updated_at
-           ) VALUES ($1,$2,$3,$4,'provider',$5,$6,'inbound','received',$7,INITCAP($6),$8,$5,NOW(),NOW())
+           ) VALUES ($1,$2,$3,$4,$5,'provider',$6,$7,'inbound','received',$8,INITCAP($7),$9,$6,NOW(),NOW())
            ON CONFLICT DO NOTHING RETURNING id"#,
     )
     .bind(&communication_id)
     .bind(tenant_id)
     .bind(branch_id)
     .bind(client_id)
+    .bind(lead_id)
     .bind(&message.message_id)
     .bind(channel)
     .bind(&message.sender)
@@ -686,13 +714,14 @@ async fn record_client_communication(
              id,tenant_id,branch_id,notification_type,title,body,resource_type,resource_id,
              metadata_json,is_read,created_at,updated_at
            ) VALUES (gen_random_uuid()::TEXT,$1,$2,'inbound_message',INITCAP($3) || ' message',$4,
-                     'client',$5,JSONB_BUILD_OBJECT('channel',$3,'communicationId',$6),FALSE,NOW(),NOW())"#,
+                     $5,$6,JSONB_BUILD_OBJECT('channel',$3,'communicationId',$7),FALSE,NOW(),NOW())"#,
     )
     .bind(tenant_id)
     .bind(branch_id)
     .bind(channel)
     .bind(&message.body)
-    .bind(client_id)
+    .bind(if client_id.is_some() { "client" } else { "lead" })
+    .bind(client_id.or(lead_id).unwrap_or_default())
     .bind(&communication_id)
     .execute(db)
     .await

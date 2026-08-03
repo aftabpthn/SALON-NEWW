@@ -16,7 +16,7 @@ type StaffGridMode =
   | 'Status Board'
   | 'Capacity View'
   | 'Conflict View';
-type ToolbarCommand = 'block' | 'waitlist' | 'move';
+type ToolbarCommand = 'block' | 'waitlist' | 'queue' | 'classes' | 'move';
 type ApiList<T> = { success?: boolean; data?: T[] } | T[];
 type AppointmentSettings = {
   startTime: string;
@@ -45,6 +45,7 @@ type StaffOption = {
   role: string;
   photoUrl: string;
   serviceIds: string[];
+  gender: string;
 };
 
 type ServiceOption = {
@@ -86,7 +87,7 @@ type AppointmentRecord = {
   clientId: string;
   staffId: string;
   requestedStaffId: string;
-  staffPreference: 'any' | 'preferred' | 'required';
+  staffPreference: 'any' | 'preferred' | 'required' | 'first_available' | 'gender_female' | 'gender_male';
   serviceIds: string[];
   startAt: string;
   endAt: string;
@@ -99,6 +100,9 @@ type AppointmentRecord = {
   bookingGroupId: string;
   activityLines: AppointmentActivityLine[];
   inventoryConsumptionStatus: string;
+  version: number;
+  serviceMode: BookingLine['serviceMode'];
+  segmentLabel: string;
 };
 
 type AppointmentActivityLine = {
@@ -113,7 +117,7 @@ type AppointmentCard = {
   clientId: string;
   staffId: string;
   requestedStaffId: string;
-  staffPreference: 'any' | 'preferred' | 'required';
+  staffPreference: 'any' | 'preferred' | 'required' | 'first_available' | 'gender_female' | 'gender_male';
   serviceIds: string[];
   startAt: string;
   endAt: string;
@@ -135,6 +139,9 @@ type AppointmentCard = {
   activityLines: AppointmentActivityLine[];
   detailRows: Array<{ label: string; value: string }>;
   inventoryConsumptionStatus: string;
+  version: number;
+  serviceMode: BookingLine['serviceMode'];
+  segmentLabel: string;
 };
 
 type CalendarColumn = {
@@ -150,6 +157,7 @@ type CalendarColumn = {
 type BookingLine = {
   id: string;
   appointmentId: string;
+  expectedVersion: number | null;
   clientId: string;
   clientSearch: string;
   clientOpen: boolean;
@@ -162,7 +170,7 @@ type BookingLine = {
   chairRoomId: string;
   initialStaffId: string;
   requestedStaffId: string;
-  staffPreference: 'any' | 'preferred' | 'required';
+  staffPreference: 'any' | 'preferred' | 'required' | 'first_available' | 'gender_female' | 'gender_male';
   staffChangeApproval: '' | 'client-approved' | 'manager-override';
   staffChangeReason: string;
   recommendedStaffId: string;
@@ -174,6 +182,8 @@ type BookingLine = {
   staffOpen: boolean;
   variantId: string;
   addonIds: string[];
+  serviceMode: 'sequential' | 'gap' | 'parallel' | 'segmented';
+  segmentLabel: string;
 };
 
 type ChairRoomOption = { id: string; name: string; kind: string };
@@ -218,7 +228,10 @@ type PreviousService = {
   staffId: string;
 };
 
-type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; notes: string; constraintType: string; constraintResourceKind: string };
+type WaitlistEntry = { id: string; customerId: string; serviceIds: string[]; preferredSlotAt: string; status: string; notes: string; constraintType: string; constraintResourceKind: string; notificationAttempts: number };
+type WalkInQueueEntry = { id: string; clientId: string; clientName: string; serviceIds: string[]; requestedStaffId: string; assignedStaffId: string; priority: number; durationMinutes: number; status: string; estimatedStartAt: string; checkedInAt: string; notes: string; version: number };
+type FitnessClassTemplate = { id: string; name: string; serviceId: string; durationMinutes: number; capacity: number; waitlistCapacity: number; roomResourceId: string; active: boolean };
+type FitnessClassSession = { id: string; templateId: string; name: string; instructorStaffId: string; instructorName: string; roomResourceId: string; startsAt: string; endsAt: string; capacity: number; status: string; bookedCount: number; waitlistCount: number };
 type BlackoutEntry = { id: string; staffId: string; blackoutGroupId: string; blackoutDate: string; blockedFrom: string; blockedUntil: string; reason: string };
 type BookingIntelligence = {
   plan: Array<{ lineId: string; serviceName: string; startAt: string; activeEndsAt: string; busyUntil: string; processingMinutes: number; cleanupMinutes: number; bufferMinutes: number; consultation: { required: boolean; patchTestRequired: boolean; formDefinitionId: string; current: boolean }; staff: Array<{ staffId: string; name: string; gender: string; verifiedSkills: number; bookedMinutes: number }> }>;
@@ -306,6 +319,13 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   noShowAmount = '';
   noShowProvider = 'razorpay';
   noShowSaving = false;
+  lifecycleAction: 'cancel' | 'restore' | null = null;
+  lifecycleTarget: { id: string; version: number; client: string; status: string } | null = null;
+  lifecycleReason = '';
+  lifecycleOutsideHoursReason = '';
+  lifecycleFeeAction: 'pending' | 'waive' | 'charge' = 'pending';
+  lifecycleFeePolicy: { amountPaise: number; due: boolean; event?: { status?: string } | null } | null = null;
+  lifecycleSaving = false;
   activityRefreshError = '';
   clientSmsSending = false;
   private activityRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -321,6 +341,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   appointmentRows: AppointmentRecord[] = [];
   appointments: AppointmentCard[] = [];
   waitlistEntries: WaitlistEntry[] = [];
+  walkInQueue: WalkInQueueEntry[] = [];
+  classTemplates: FitnessClassTemplate[] = [];
+  classSessions: FitnessClassSession[] = [];
   blackouts: BlackoutEntry[] = [];
 
   bookingClientSearch = '';
@@ -336,6 +359,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   notifyStaff = true;
   recurrenceFrequency: 'none' | 'weekly' | 'fortnightly' | 'monthly' = 'none';
   recurrenceCount = '';
+  bookingType: 'couple' | 'group' | 'large_group' = 'couple';
+  bookingGroupName = '';
+  outsideHoursOverrideReason = '';
   collectAdvance = false;
   advanceAmount = '';
   advancePaymentMethod = '';
@@ -360,9 +386,21 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   commandReason = '';
   commandConstraintType = 'none';
   commandConstraintResourceKind = '';
+  classTemplateId = '';
+  classTemplateName = '';
+  classCapacity = '';
+  classWaitlistCapacity = '';
+  classRoomResourceId = '';
+  classRecurrence: 'none' | 'daily' | 'weekly' = 'none';
+  classRecurrenceCount = '1';
+  classLateBookingMinutes = '';
+  classLateCancelMinutes = '';
+  classLateCancelFee = '';
+  classNoShowFee = '';
   kpiHistory: { label: string; statuses: string[]; waitlist: boolean } | null = null;
 
   private lineSeed = 0;
+  private bookingMutationKey = '';
 
   get summary() {
     const count = (statuses: string[]) => this.appointmentRows
@@ -413,6 +451,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         time: `${this.timeText(item.startAt)} - ${this.timeText(item.endAt)}`,
         status: this.statusLabel(item.status),
         bookingNumber: item.bookingNumber,
+        version: item.version,
+        restorable: ['cancelled', 'no-show'].includes(item.status.toLowerCase()),
       }));
   }
 
@@ -425,6 +465,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       time: `${this.shortDate(entry.preferredSlotAt)} ${this.timeText(entry.preferredSlotAt)}`,
       status: 'Waitlist',
       bookingNumber: '',
+      version: 0,
+      restorable: false,
     }));
   }
 
@@ -934,6 +976,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.commandServiceId = this.commandServiceId || this.services[0]?.id || '';
     this.commandAppointmentId = this.commandAppointmentId || this.appointmentRows[0]?.id || '';
     if (command === 'waitlist') void this.loadWaitlist();
+    if (command === 'queue' || command === 'classes') void this.loadFitnessSummary();
     if (command === 'block') void this.loadBlackouts();
   }
 
@@ -979,6 +1022,47 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         });
       }
 
+      if (this.activeCommand === 'queue') {
+        if (!this.commandClientId || !this.commandServiceId) throw new Error('Client and service required');
+        await this.postJson('/api/v1/fitness/queue', {
+          clientId: this.commandClientId,
+          serviceIds: [this.commandServiceId],
+          requestedStaffId: this.commandStaffId || null,
+          priority: 0,
+          notes: this.commandReason.trim(),
+          idempotencyKey: `walk-in:${crypto.randomUUID()}`,
+        });
+      }
+
+      if (this.activeCommand === 'classes') {
+        let templateId = this.classTemplateId;
+        if (!templateId) {
+          if (!this.classTemplateName.trim() || !this.commandServiceId) throw new Error('Class name and service required');
+          const created = await this.postJson<any>('/api/v1/fitness/class-templates', {
+            name: this.classTemplateName.trim(), serviceId: this.commandServiceId,
+            durationMinutes: Number(this.commandDurationMinutes) || 60,
+            capacity: Number(this.classCapacity) || 1,
+            waitlistCapacity: Number(this.classWaitlistCapacity) || 0,
+            roomResourceId: this.classRoomResourceId || null,
+            lateBookingMinutes: Number(this.classLateBookingMinutes) || 0,
+            lateCancelMinutes: Number(this.classLateCancelMinutes) || 0,
+            lateCancelFeePaise: Math.round((Number(this.classLateCancelFee) || 0) * 100),
+            noShowFeePaise: Math.round((Number(this.classNoShowFee) || 0) * 100),
+          });
+          templateId = String(created?.data?.id || created?.id || '');
+        }
+        if (!templateId || !this.commandStaffId) throw new Error('Class template and instructor required');
+        await this.postJson('/api/v1/fitness/class-sessions', {
+          templateId,
+          instructorStaffId: this.commandStaffId,
+          roomResourceId: this.classRoomResourceId || null,
+          startsAt: this.localDateTimeToIso(this.appointmentDate, this.commandStartTime),
+          frequency: this.classRecurrence,
+          count: Number(this.classRecurrenceCount) || 1,
+          idempotencyKey: `class-session:${crypto.randomUUID()}`,
+        });
+      }
+
       if (this.activeCommand === 'move') {
         if (!this.commandAppointmentId) throw new Error('Appointment required');
         const current = this.appointmentRows.find((item) => item.id === this.commandAppointmentId);
@@ -992,7 +1076,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         });
       }
 
-      await Promise.all([this.loadAppointments(), this.loadWaitlist(), this.loadBlackouts()]);
+      await Promise.all([this.loadAppointments(), this.loadWaitlist(), this.loadBlackouts(), this.loadFitnessSummary()]);
       this.closeCommand();
     } catch (error) {
       this.commandError = this.errorMessage(error, 'Action failed');
@@ -1060,7 +1144,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   addParallelServiceLine() {
     const base = this.bookingLines[0];
     const nextStaff = this.staff.find((person) => person.id !== base?.staffId)?.id || '';
-    this.bookingLines = [...this.bookingLines, this.blankLine(nextStaff, base?.startTime || this.timeToInput(this.times[0]))];
+    const line = this.blankLine(nextStaff, base?.startTime || this.timeToInput(this.times[0]));
+    line.serviceMode = 'parallel';
+    this.bookingLines = [...this.bookingLines, line];
   }
 
   filteredLineClients(line: BookingLine) {
@@ -1141,9 +1227,21 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.setStaffPreference(line, line.staffPreference === 'any' ? 'preferred' : 'any');
   }
 
-  setStaffPreference(line: BookingLine, preference: 'any' | 'preferred' | 'required') {
+  setStaffPreference(line: BookingLine, preference: BookingLine['staffPreference']) {
     line.staffPreference = preference;
+    if (['first_available', 'gender_female', 'gender_male'].includes(preference)) {
+      line.staffId = '';
+      line.staffSearch = '';
+      line.requestedStaffId = '';
+      return;
+    }
     line.requestedStaffId = preference === 'any' ? '' : (line.requestedStaffId || line.staffId);
+  }
+
+  addSplitServiceLine() {
+    this.addServiceLine();
+    const line = this.bookingLines[this.bookingLines.length - 1];
+    line.serviceMode = 'segmented';
   }
 
   addSelectedPreviousService(item: PreviousService) {
@@ -1161,6 +1259,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   get bookingTotalPaise() {
     return Number(this.bookingIntelligence?.deposit.totalPaise || 0);
+  }
+
+  get bookingGuestCount() {
+    return new Set(this.bookingLines.map((line) => line.clientId).filter(Boolean)).size;
   }
 
   toggleAdvancePayment(checked: boolean) {
@@ -1186,12 +1288,16 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const validLines = this.bookingLines.filter((line) => line.serviceId && line.staffId && line.startTime);
+    const validLines = this.bookingLines.filter((line) => line.serviceId && line.startTime
+      && (line.staffId || ['first_available', 'gender_female', 'gender_male'].includes(line.staffPreference)));
     if (!validLines.length || validLines.length !== this.bookingLines.length) {
       this.bookingError = 'Service, staff, and time required';
       return;
     }
-    if (validLines.some((line) => line.recommendedStaffId && line.staffId !== line.recommendedStaffId && line.recommendationOverrideReason.trim().length < 3)) {
+    if (validLines.some((line) => line.recommendedStaffId
+      && !['first_available', 'gender_female', 'gender_male'].includes(line.staffPreference)
+      && line.staffId !== line.recommendedStaffId
+      && line.recommendationOverrideReason.trim().length < 3)) {
       this.bookingError = 'Manager override reason is required when recommended staff is changed';
       return;
     }
@@ -1200,11 +1306,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.bookingError = 'Recurring booking occurrences must be between 2 and 52';
       return;
     }
-    if (validLines.some((line) => this.hasStaffBlackout(line.staffId, line.startTime, line.durationMinutes))) {
+    if (validLines.some((line) => line.staffId && this.hasStaffBlackout(line.staffId, line.startTime, line.durationMinutes))) {
       this.bookingError = 'Staff is unavailable for this blocked time';
       return;
     }
-    if (!this.appointmentSettings.overlapTimeSlot && validLines.some((line) => this.hasOverlap(line))) {
+    if (!this.appointmentSettings.overlapTimeSlot && validLines.some((line) => line.staffId && this.hasOverlap(line))) {
       this.bookingError = 'Time slot already booked';
       return;
     }
@@ -1253,6 +1359,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       const bookingGroupId = this.editingAppointmentId
         ? this.editingBookingGroupId
         : (validLines.length > 1 ? crypto.randomUUID() : '');
+      const guestCount = new Set(validLines.map((line) => line.clientId)).size;
+      const bookingType = guestCount === 1 ? 'standard'
+        : guestCount >= 7 ? 'large_group'
+          : guestCount === 2 && this.bookingType === 'couple' ? 'couple' : 'group';
+      this.bookingMutationKey ||= `crm-booking:${crypto.randomUUID()}`;
       await this.postJson('/api/v1/appointments/batch', {
         client_id: this.selectedClientId,
         status: this.statusFromLabel(this.appointmentSettings.defaultStatus),
@@ -1260,6 +1371,12 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         removed_appointment_ids: [...new Set(this.removedServiceAppointmentIds)],
         recurrence_count: this.editingAppointmentId || this.recurrenceFrequency === 'none' ? 1 : Number(this.recurrenceCount),
         recurrence_interval_days: this.recurrenceFrequency === 'fortnightly' ? 14 : this.recurrenceFrequency === 'monthly' ? 28 : 7,
+        idempotency_key: this.bookingMutationKey,
+        booking_type: bookingType,
+        host_client_id: this.selectedClientId,
+        group_name: this.bookingGroupName.trim(),
+        group_notes: this.bookingNotes.trim(),
+        outside_hours_override_reason: this.outsideHoursOverrideReason.trim(),
         advance_payment: this.collectAdvance ? {
           amount_paise: advancePaise,
           method: this.advancePaymentMethod,
@@ -1268,6 +1385,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         } : null,
         lines: validLines.map((line) => ({
           appointment_id: line.appointmentId,
+          expected_version: line.expectedVersion,
           client_id: line.clientId,
           staff_id: line.staffId,
           requested_staff_id: line.requestedStaffId,
@@ -1286,6 +1404,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           notes: this.bookingNotesFor(line),
           variant_id: line.variantId,
           addon_ids: line.addonIds,
+          service_mode: line.serviceMode,
+          segment_label: line.segmentLabel.trim(),
+          sequence_no: validLines.indexOf(line) + 1,
         })),
       });
 
@@ -1308,6 +1429,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     try {
       for (const line of targets) {
         await this.postJson(`/api/v1/appointments/${line.appointmentId}/reschedule`, {
+          expected_version: line.expectedVersion,
           start_at: this.localDateTimeToIso(this.appointmentDate, line.startTime),
           end_at: this.localDateTimeToIso(this.appointmentDate, this.addMinutesToTime(line.startTime, line.durationMinutes || 30)),
           staff_id: line.staffId,
@@ -1318,6 +1440,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           actor_source: 'crm',
           staff_change_approval: line.staffChangeApproval,
           staff_change_reason: line.staffChangeReason.trim(),
+          outside_hours_override_reason: this.outsideHoursOverrideReason.trim(),
         });
       }
       await this.loadAppointments();
@@ -1442,6 +1565,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       this.openNoShowDrawer();
       return;
     }
+    if (status === 'cancelled') {
+      void this.openLifecycleAction('cancel', this.selectedAppointment);
+      return;
+    }
     if (status === 'completed') {
       this.appointmentActionError = '';
       this.statusSaving = status;
@@ -1522,6 +1649,11 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.noShowAmount = '';
     this.noShowProvider = 'razorpay';
     this.noShowDrawerOpen = true;
+    void this.getJson<any>(`/api/v1/appointments/${this.selectedAppointment.id}/fee-policy`).then((result) => {
+      const policy = result?.data ?? result;
+      this.lifecycleFeePolicy = policy;
+      this.noShowAmount = policy?.due && policy?.amountPaise ? String(Number(policy.amountPaise) / 100) : '';
+    }).catch(() => { this.lifecycleFeePolicy = null; });
   }
 
   closeNoShowDrawer() {
@@ -1530,7 +1662,77 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.noShowSaving = false;
   }
 
-  async submitNoShow(createCharge: boolean) {
+  async openLifecycleAction(action: 'cancel' | 'restore', target: { id: string; version: number; client: string; status: string }) {
+    this.lifecycleAction = action;
+    this.lifecycleTarget = target;
+    this.lifecycleReason = '';
+    this.lifecycleOutsideHoursReason = '';
+    this.lifecycleFeeAction = 'pending';
+    this.lifecycleFeePolicy = null;
+    this.appointmentActionError = '';
+    try {
+      const result = await this.getJson<any>(`/api/v1/appointments/${target.id}/fee-policy`);
+      this.lifecycleFeePolicy = result?.data ?? result;
+    } catch {
+      this.lifecycleFeePolicy = null;
+    }
+  }
+
+  closeLifecycleAction() {
+    this.lifecycleAction = null;
+    this.lifecycleTarget = null;
+    this.lifecycleSaving = false;
+  }
+
+  async submitLifecycleAction() {
+    const target = this.lifecycleTarget;
+    if (!target || this.lifecycleSaving) return;
+    if (this.lifecycleReason.trim().length < 3) {
+      this.appointmentActionError = 'Reason must contain at least 3 characters';
+      return;
+    }
+    this.lifecycleSaving = true;
+    this.appointmentActionError = '';
+    try {
+      if (this.lifecycleAction === 'restore') {
+        await this.postJson(`/api/v1/appointments/${target.id}/restore`, {
+          expectedVersion: target.version,
+          reason: this.lifecycleReason.trim(),
+          outsideHoursOverrideReason: this.lifecycleOutsideHoursReason.trim(),
+        });
+        this.appointmentActionMessage = 'Appointment restored';
+      } else {
+        await this.postJson(`/api/v1/appointments/${target.id}/status`, {
+          status: 'cancelled', reason: this.lifecycleReason.trim(), apply_group: true,
+        });
+        if (this.lifecycleFeePolicy?.due && this.lifecycleFeeAction === 'waive') {
+          await this.postJson(`/api/v1/appointments/${target.id}/fee-waive`, { reason: this.lifecycleReason.trim() });
+        } else if (this.lifecycleFeePolicy?.due && this.lifecycleFeeAction === 'charge') {
+          const result: any = await this.postJson(`/api/v1/appointments/${target.id}/fee-charge`, {
+            amountPaise: this.lifecycleFeePolicy.amountPaise,
+            provider: this.noShowProvider,
+            idempotencyKey: `cancellation-${target.id}-${Date.now()}`,
+            reason: this.lifecycleReason.trim(),
+          });
+          const link = (result?.data ?? result)?.charge?.paymentLink?.url;
+          if (link) await navigator.clipboard.writeText(link).catch(() => undefined);
+        }
+        this.appointmentActionMessage = 'Appointment cancelled';
+      }
+      this.closeLifecycleAction();
+      await this.loadAppointments();
+      this.selectedAppointment = null;
+    } catch (error) {
+      this.appointmentActionError = this.errorMessage(error, 'Unable to complete appointment action');
+      this.lifecycleSaving = false;
+    }
+  }
+
+  openHistoryRestore(row: { id: string; version: number; client: string; status: string }) {
+    void this.openLifecycleAction('restore', row);
+  }
+
+  async submitNoShow(createCharge: boolean, waive = false) {
     if (!this.selectedAppointment || this.noShowSaving) return;
     const appointmentId = this.selectedAppointment.id;
     const amountPaise = Math.round(Number(this.noShowAmount) * 100);
@@ -1542,7 +1744,13 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.appointmentActionError = '';
     this.appointmentActionMessage = '';
     try {
-      if (createCharge) {
+      if (waive) {
+        await this.postJson(`/api/v1/appointments/${appointmentId}/status`, {
+          status: 'no-show', reason: 'no show', apply_group: false,
+        });
+        await this.postJson(`/api/v1/appointments/${appointmentId}/fee-waive`, { reason: 'Manager-approved no-show fee waiver' });
+        this.appointmentActionMessage = 'Appointment marked no-show and fee waived';
+      } else if (createCharge) {
         const result: any = await this.postJson(`/api/v1/appointments/${appointmentId}/no-show-charge`, {
           amountPaise,
           provider: this.noShowProvider,
@@ -1595,6 +1803,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   openEditAppointment(card: AppointmentCard) {
+    this.bookingMutationKey = `crm-booking:${crypto.randomUUID()}`;
+    this.outsideHoursOverrideReason = '';
     this.editingAppointmentId = card.id;
     this.editingBookingGroupId = card.bookingGroupId || crypto.randomUUID();
     this.removedServiceAppointmentIds = [];
@@ -1613,6 +1823,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           const line = this.blankLine(row.staffId, this.timeToInput(this.timeText(row.startAt)));
           const service = this.services.find((entry) => entry.id === serviceId);
           line.appointmentId = row.id;
+          line.expectedVersion = row.version;
           line.clientId = row.clientId;
           line.clientSearch = this.clientLabel(this.clients.find((entry) => entry.id === row.clientId));
           line.serviceId = serviceId;
@@ -1622,6 +1833,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           line.initialStaffId = row.staffId;
           line.requestedStaffId = row.requestedStaffId;
           line.staffPreference = row.staffPreference;
+          line.serviceMode = row.serviceMode;
+          line.segmentLabel = row.segmentLabel;
           return line;
         }))
       : [this.blankLine(card.staffId, this.timeToInput(this.timeText(card.startAt)))];
@@ -1737,7 +1950,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       })).filter((client) => client.id);
       const routeClientId = this.route.snapshot.queryParamMap.get('clientId') || '';
       const routeClient = routeClientId ? this.clients.find((client) => client.id === routeClientId) : undefined;
-      if (routeClient) this.selectClient(routeClient);
+      if (routeClient) {
+        if (this.route.snapshot.queryParamMap.get('openBooking') === '1') this.openNewBooking();
+        this.selectClient(routeClient);
+      }
     } catch {
       this.clients = [];
     }
@@ -1791,6 +2007,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           role: person.jobTitle || person.job_title || 'All services',
           photoUrl: await this.resolveStaffPhoto(String(photoUrl)),
           serviceIds: serviceIds.map((id: unknown) => String(id)).filter(Boolean),
+          gender: String(person.gender || '').toLowerCase(),
         };
       }))).filter((person) => person.id);
       this.restoreScheduledStaffPreference();
@@ -1904,12 +2121,63 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         customerId: String(item.customerId || item.customer_id || ''),
         serviceIds: Array.isArray(item.serviceIds) ? item.serviceIds : Array.isArray(item.service_ids) ? item.service_ids : [],
         preferredSlotAt: String(item.preferredSlotAt || item.preferred_slot_at || ''),
+        status: String(item.status || 'pending'),
         notes: String(item.notes || ''),
         constraintType: String(item.constraintType || item.constraint_type || 'none'),
         constraintResourceKind: String(item.constraintResourceKind || item.constraint_resource_kind || ''),
+        notificationAttempts: Number(item.notificationAttempts || item.notification_attempts || 0),
       })).filter((item) => item.id);
     } catch {
       this.waitlistEntries = [];
+    }
+  }
+
+  private async loadFitnessSummary() {
+    try {
+      const result = await this.getJson<any>('/api/v1/fitness/summary');
+      const data = result?.data || result || {};
+      this.walkInQueue = (Array.isArray(data.queue) ? data.queue : []).map((item: any) => ({
+        id: String(item.id || ''), clientId: String(item.clientId || ''), clientName: String(item.clientName || ''),
+        serviceIds: Array.isArray(item.serviceIds) ? item.serviceIds : [], requestedStaffId: String(item.requestedStaffId || ''),
+        assignedStaffId: String(item.assignedStaffId || ''), priority: Number(item.priority || 0), durationMinutes: Number(item.durationMinutes || 0),
+        status: String(item.status || ''), estimatedStartAt: String(item.estimatedStartAt || ''), checkedInAt: String(item.checkedInAt || ''),
+        notes: String(item.notes || ''), version: Number(item.version || 1),
+      })).filter((item: WalkInQueueEntry) => item.id);
+      this.classTemplates = (Array.isArray(data.classTemplates) ? data.classTemplates : []).map((item: any) => ({
+        id: String(item.id || ''), name: String(item.name || ''), serviceId: String(item.serviceId || ''),
+        durationMinutes: Number(item.durationMinutes || 0), capacity: Number(item.capacity || 0), waitlistCapacity: Number(item.waitlistCapacity || 0),
+        roomResourceId: String(item.roomResourceId || ''), active: item.active !== false,
+      })).filter((item: FitnessClassTemplate) => item.id);
+      this.classSessions = (Array.isArray(data.classSessions) ? data.classSessions : []).map((item: any) => ({
+        id: String(item.id || ''), templateId: String(item.templateId || ''), name: String(item.name || ''), instructorStaffId: String(item.instructorStaffId || ''),
+        instructorName: String(item.instructorName || ''), roomResourceId: String(item.roomResourceId || ''), startsAt: String(item.startsAt || ''), endsAt: String(item.endsAt || ''),
+        capacity: Number(item.capacity || 0), status: String(item.status || ''), bookedCount: Number(item.bookedCount || 0), waitlistCount: Number(item.waitlistCount || 0),
+      })).filter((item: FitnessClassSession) => item.id);
+      if (this.classTemplateId && !this.classTemplates.some((item) => item.id === this.classTemplateId)) this.classTemplateId = '';
+    } catch (error) {
+      this.commandError = this.errorMessage(error, 'Unable to load queue and classes');
+    }
+  }
+
+  async updateQueueStatus(entry: WalkInQueueEntry, status: string) {
+    try {
+      await this.patchJson(`/api/v1/fitness/queue/${entry.id}`, { status, assignedStaffId: entry.assignedStaffId || null, expectedVersion: entry.version });
+      await this.loadFitnessSummary();
+    } catch (error) {
+      this.commandError = this.errorMessage(error, 'Unable to update queue');
+    }
+  }
+
+  async registerClassGuest(session: FitnessClassSession) {
+    if (!this.commandClientId) { this.commandError = 'Select client'; return; }
+    try {
+      await this.postJson(`/api/v1/fitness/class-sessions/${session.id}/registrations`, {
+        clientId: this.commandClientId, clientMembershipId: null, clientPackageCreditId: null,
+        notes: this.commandReason.trim(), idempotencyKey: `class-registration:${crypto.randomUUID()}`,
+      });
+      await this.loadFitnessSummary();
+    } catch (error) {
+      this.commandError = this.errorMessage(error, 'Unable to register class guest');
     }
   }
 
@@ -1954,8 +2222,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
   }
 
   waitlistConstraintLabel(entry: WaitlistEntry) {
-    if (entry.constraintType === 'none') return '';
-    return [entry.constraintType.replaceAll('_', ' '), entry.constraintResourceKind].filter(Boolean).join(' · ');
+    const constraint = entry.constraintType === 'none' ? '' : [entry.constraintType.replaceAll('_', ' '), entry.constraintResourceKind].filter(Boolean).join(' · ');
+    return [entry.status === 'offered' ? `Offer active · attempt ${entry.notificationAttempts}` : '', constraint].filter(Boolean).join(' · ');
   }
 
   blackoutLabel(entry: BlackoutEntry) {
@@ -2036,6 +2304,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     }
     try {
       await this.postJson(`/api/v1/appointments/${dragged.id}/reschedule`, {
+        expected_version: dragged.version,
         start_at: startAt,
         end_at: this.localDateTimeToIso(date, this.addMinutesToTime(this.timeToInput(time), duration)),
         staff_id: nextStaffId,
@@ -2043,6 +2312,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
         reason: 'Moved on calendar',
         change_mode: 'calendar-move',
         actor_source: 'crm',
+        outside_hours_override_reason: '',
       });
       await this.loadAppointments();
     } catch (error) {
@@ -2082,6 +2352,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     this.notifyStaff = true;
     this.recurrenceFrequency = 'none';
     this.recurrenceCount = '';
+    this.bookingType = 'couple';
+    this.bookingGroupName = '';
+    this.outsideHoursOverrideReason = '';
+    this.bookingMutationKey = `crm-booking:${crypto.randomUUID()}`;
     this.collectAdvance = false;
     this.advanceAmount = '';
     this.advancePaymentReference = '';
@@ -2095,6 +2369,7 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
     return {
       id: `line_${++this.lineSeed}`,
       appointmentId: '',
+      expectedVersion: null,
       clientId: client?.id || '',
       clientSearch: this.clientLabel(client),
       clientOpen: false,
@@ -2119,6 +2394,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       staffOpen: false,
       variantId: '',
       addonIds: [],
+      serviceMode: 'sequential',
+      segmentLabel: '',
     };
   }
 
@@ -2169,6 +2446,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
           bookingGroupId: item.bookingGroupId,
           activityLines: item.activityLines,
           inventoryConsumptionStatus: item.inventoryConsumptionStatus,
+          version: item.version,
+          serviceMode: item.serviceMode,
+          segmentLabel: item.segmentLabel,
           detailRows: [],
         };
         card.detailRows = this.appointmentDetailRows(card);
@@ -2291,8 +2571,8 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       clientId: String(item.client_id || item.clientId || ''),
       staffId: String(item.staff_id || item.staffId || ''),
       requestedStaffId: String(item.requested_staff_id || item.requestedStaffId || ''),
-      staffPreference: ['preferred', 'required'].includes(String(item.staff_preference || item.staffPreference || '').toLowerCase())
-        ? String(item.staff_preference || item.staffPreference).toLowerCase() as 'preferred' | 'required'
+      staffPreference: ['preferred', 'required', 'first_available', 'gender_female', 'gender_male'].includes(String(item.staff_preference || item.staffPreference || '').toLowerCase())
+        ? String(item.staff_preference || item.staffPreference).toLowerCase() as AppointmentRecord['staffPreference']
         : 'any',
       serviceIds: Array.isArray(item.service_ids) ? item.service_ids : Array.isArray(item.serviceIds) ? item.serviceIds : [],
       startAt: String(item.start_at || item.startAt || ''),
@@ -2306,6 +2586,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       bookingGroupId: String(item.booking_group_id || item.bookingGroupId || ''),
       activityLines: this.activityLines(item),
       inventoryConsumptionStatus: String(item.inventory_consumption_status || item.inventoryConsumptionStatus || 'not_required'),
+      version: Number(item.version || 1),
+      serviceMode: ['gap', 'parallel', 'segmented'].includes(String(item.service_mode || item.serviceMode || '').toLowerCase())
+        ? String(item.service_mode || item.serviceMode).toLowerCase() as BookingLine['serviceMode'] : 'sequential',
+      segmentLabel: String(item.segment_label || item.segmentLabel || ''),
     };
   }
 
@@ -2414,6 +2698,10 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
 
   private async postJson<T>(url: string, body: unknown): Promise<T> {
     return firstValueFrom(this.api.post<T>(url, body));
+  }
+
+  private async patchJson<T>(url: string, body: unknown): Promise<T> {
+    return firstValueFrom(this.api.patch<T>(url, body));
   }
 
   private async deleteJson<T>(url: string): Promise<T> {

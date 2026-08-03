@@ -10,7 +10,7 @@ import { AuthService } from '../../core/services/auth.service';
 
 type WorkspaceTab = 'Timeline' | 'Profile' | 'Insights' | 'Growth' | 'Clinical' | 'Consent' | 'Forms' | 'Communications' | 'Reports' | 'Masters';
 type TimelineType = 'Appointments' | 'Invoices' | 'Services' | 'Payments' | 'Wallet' | 'Loyalty' | 'Memberships' | 'Packages' | 'WhatsApp' | 'Notes' | 'Custom forms' | 'Consent' | 'Reviews' | 'Audit activity';
-type DrawerMode = 'client' | 'note' | 'clinical' | 'family' | 'soap' | 'contact-preferences' | 'form-definition' | 'form-submission' | 'photo' | 'photo-detail' | 'review' | 'merge' | 'retention' | 'gift-register' | 'master' | 'discount-rule' | 'discount' | 'win-back' | null;
+type DrawerMode = 'client' | 'profile-360' | 'note' | 'clinical' | 'family' | 'soap' | 'contact-preferences' | 'form-definition' | 'form-submission' | 'photo' | 'photo-detail' | 'review' | 'merge' | 'retention' | 'gift-register' | 'master' | 'discount-rule' | 'discount' | 'win-back' | null;
 type RetentionAction = 'wallet-credit' | 'wallet-debit' | 'loyalty-adjust' | 'gift-detail' | 'gift-void' | 'gift-reissue' | 'referral-link' | null;
 type FormField = {
   key: string;
@@ -163,6 +163,12 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   consentHistory: any[] = [];
   communications: any[] = [];
   reviews: any[] = [];
+  mergeHistory: any[] = [];
+  crossLocationVisits: any[] = [];
+  financialExposure: any = {};
+  attribution: any = {};
+  profile360: any = null;
+  profile360Draft = this.blankProfile360();
   auditEvents: any[] = [];
   staffRows: any[] = [];
   reportRows: any[] = [];
@@ -250,6 +256,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
 
   get canManageClients() {
     return this.auth.hasPermission('clients.manage', 'front_desk.write') || this.auth.hasRole('owner', 'admin', 'manager', 'receptionist');
+  }
+
+  get canRequestClientDeletion() {
+    return this.auth.hasPermission('security.manage') || this.auth.hasRole('owner', 'admin');
   }
 
   get canManageClientConsent() {
@@ -457,12 +467,26 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   }
 
   async deleteSelectedClient() {
-    if (!this.selectedClient || !window.confirm('Delete this client?')) return;
+    if (!this.selectedClient || !window.confirm('Deactivate this client? Historical records will remain available.')) return;
     await this.saveClientStatus(
       this.api.delete<ApiEnvelope<any>>(`/clients/${this.selectedClient.id}`),
-      'Client could not be deleted',
+      'Client could not be deactivated',
       true,
     );
+  }
+
+  async requestClientDeletion() {
+    if (!this.selectedClient || !this.canRequestClientDeletion || !window.confirm('Create a governed deletion request for this client?')) return;
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/security/privacy-requests', {
+        subjectType: 'client', subjectId: this.selectedClient.id, requestType: 'deletion',
+        summary: `Customer deletion request for ${this.selectedClient.code || this.selectedClient.id}`,
+      }));
+      if (!result.success) throw new Error(result.error?.message || 'Deletion request failed');
+      window.alert('Deletion request created. A different authorized user must approve it before MFA-protected execution.');
+    } catch (error) {
+      this.clientError = this.errorMessage(error, 'Deletion request failed');
+    }
   }
 
   selectClient(client: ClientRow, updateRoute = true) {
@@ -525,6 +549,12 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.consentHistory = [];
     this.communications = [];
     this.reviews = [];
+    this.profile360 = null;
+    this.profile360Draft = this.blankProfile360();
+    this.mergeHistory = [];
+    this.crossLocationVisits = [];
+    this.financialExposure = {};
+    this.attribution = {};
     this.auditEvents = [];
     this.clientSummary = {};
     this.walletTransactions = [];
@@ -855,6 +885,13 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.drawerMode = 'merge';
   }
 
+  showProfile360() {
+    if (!this.selectedClient || !this.canManageClients) return;
+    this.profile360Draft = { ...this.blankProfile360(), ...(this.profile360 || {}), expectedVersion: this.profile360?.version ?? undefined };
+    this.clientError = '';
+    this.drawerMode = 'profile-360';
+  }
+
   showFormDefinition(definition?: any) {
     if (!this.canManageClientForms) return;
     this.definitionDraft = definition ? {
@@ -1048,6 +1085,25 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     } finally {
       this.savingWorkspace = false;
     }
+  }
+
+  async reverseMerge(item: any) {
+    if (!this.selectedClient || !this.canMergeClients || item.reversedAt) return;
+    const reason = window.prompt('Reason for restoring the merged client?')?.trim();
+    if (!reason) return;
+    await this.saveWorkspace(
+      this.api.post<ApiEnvelope<any>>(`/clients/${this.selectedClient.id}/merge/${encodeURIComponent(item.sourceClientId)}/reverse`, { reason }),
+      'Client merge could not be reversed',
+    );
+    await this.loadClients();
+  }
+
+  async saveProfile360() {
+    if (!this.selectedClient) return;
+    await this.saveWorkspace(
+      this.api.put<ApiEnvelope<any>>(`/clients/${this.selectedClient.id}/profile-360`, this.profile360Draft),
+      'Client profile save failed',
+    );
   }
 
   async saveFormDefinition() {
@@ -1647,6 +1703,11 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.consentHistory = Array.isArray(data[0]?.consentHistory) ? data[0].consentHistory : [];
     this.communications = Array.isArray(data[0]?.communications) ? data[0].communications : [];
     this.reviews = Array.isArray(data[0]?.reviews) ? data[0].reviews : [];
+    this.profile360 = data[0]?.profile || null;
+    this.mergeHistory = Array.isArray(data[0]?.mergeHistory) ? data[0].mergeHistory : [];
+    this.crossLocationVisits = Array.isArray(data[0]?.crossLocationVisits) ? data[0].crossLocationVisits : [];
+    this.financialExposure = data[0]?.financialExposure || {};
+    this.attribution = data[0]?.attribution || {};
     this.auditEvents = Array.isArray(data[4]) ? data[4] : [];
     this.staffRows = Array.isArray(data[5]) ? data[5] : this.staffRows;
     this.walletTransactions = Array.isArray(data[1]?.transactions) ? data[1].transactions : [];
@@ -1800,6 +1861,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   private async refreshClientWorkspace(clientId: string) {
     await this.loadTimeline(clientId, true);
     if (this.selectedClient?.id === clientId) await this.loadClientWorkspace(clientId);
+  }
+
+  private blankProfile360() {
+    return { gender: '', address: '', city: '', postalCode: '', preferredLanguage: '', occupation: '', marketingSource: '', sourceDetail: '', expectedVersion: undefined as number | undefined };
   }
 
   private async saveClientStatus(request: Observable<ApiEnvelope<any>>, fallback: string, clearAfter = false) {

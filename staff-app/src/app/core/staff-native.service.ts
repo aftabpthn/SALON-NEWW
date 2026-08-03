@@ -1,7 +1,7 @@
 import { Injectable } from "@angular/core";
 import { Router } from "@angular/router";
 import { Capacitor } from "@capacitor/core";
-import { StaffAppService } from "./staff-app.service";
+import { STAFF_APP_VERSION, StaffAppService } from "./staff-app.service";
 
 export type StaffNativePermission = "camera" | "gps" | "microphone" | "nfc" | "push";
 
@@ -32,11 +32,20 @@ export class StaffNativeService {
       import("@capacitor/network"),
       import("@capacitor/push-notifications")
     ]);
+    const [appInfo, network] = await Promise.all([App.getInfo(), Network.getStatus()]);
+    const appVersion = appInfo.version || STAFF_APP_VERSION;
+    void this.reportTelemetry("launch", network.connected, network.connectionType, appVersion);
     await App.addListener("appUrlOpen", ({ url }) => void this.openDeepLink(url));
     await App.addListener("appStateChange", ({ isActive }) => {
-      if (isActive) window.dispatchEvent(new CustomEvent("aura:app-resume"));
+      if (isActive) {
+        window.dispatchEvent(new CustomEvent("aura:app-resume"));
+        void Network.getStatus().then((status) => this.reportTelemetry("resume", status.connected, status.connectionType, appVersion));
+      }
     });
-    await Network.addListener("networkStatusChange", ({ connected }) => window.dispatchEvent(new Event(connected ? "online" : "offline")));
+    await Network.addListener("networkStatusChange", ({ connected, connectionType }) => {
+      window.dispatchEvent(new Event(connected ? "online" : "offline"));
+      void this.reportTelemetry("network_change", connected, connectionType, appVersion);
+    });
     await PushNotifications.addListener("pushNotificationReceived", () => window.dispatchEvent(new CustomEvent("aura:notifications-updated")));
     await PushNotifications.addListener("pushNotificationActionPerformed", ({ notification }) => {
       const target = String(notification.data?.["url"] || notification.data?.["deepLink"] || "/staff/notifications");
@@ -110,7 +119,7 @@ export class StaffNativeService {
       provider,
       authSecret: "",
       p256dh: "",
-      metadata: { native: true, appVersion: "0.1.0" }
+      metadata: { native: true, appVersion: STAFF_APP_VERSION }
     });
   }
 
@@ -133,7 +142,7 @@ export class StaffNativeService {
     await this.staff.reportMobileCrash({
       deviceId: this.staff.deviceId(),
       platform: this.platform(),
-      appVersion: "0.1.0",
+      appVersion: STAFF_APP_VERSION,
       errorType: errorType.slice(0, 100),
       message,
       sourcePath: location.pathname.slice(0, 300),
@@ -144,5 +153,15 @@ export class StaffNativeService {
 
   private async webPermission(name: PermissionName): Promise<string> {
     try { return (await navigator.permissions.query({ name })).state; } catch { return "unavailable"; }
+  }
+
+  private async reportTelemetry(eventType: "launch" | "resume" | "network_change", online: boolean, networkType: string, appVersion: string): Promise<void> {
+    if (!this.staff.isAuthenticated()) return;
+    await this.staff.reportMobileTelemetry({
+      deviceUid: this.staff.deviceId(), platform: this.platform(), appVersion, eventType,
+      networkType: networkType || "unknown", online,
+      metadata: { native: true, userAgent: navigator.userAgent.slice(0, 500) },
+      occurredAt: new Date().toISOString()
+    }).catch(() => undefined);
   }
 }

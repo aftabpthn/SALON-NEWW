@@ -37,7 +37,8 @@
       <div>
           <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="showEdit()"><i class="bi bi-pencil"></i>Edit client</button>
           <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="blockSelectedClient()"><i class="bi bi-slash-circle"></i>{{ selectedClient?.active ? 'Block client' : 'Unblock client' }}</button>
-          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="deleteSelectedClient()"><i class="bi bi-trash"></i>Delete client</button>
+          <button type="button" [disabled]="!selectedClient || !canManageClients" (click)="deleteSelectedClient()"><i class="bi bi-person-dash"></i>Deactivate client</button>
+          <button type="button" [disabled]="!selectedClient || !canRequestClientDeletion" (click)="requestClientDeletion()"><i class="bi bi-shield-exclamation"></i>Request deletion</button>
         <button type="button" (click)="selectTab('Reports')"><i class="bi bi-bar-chart"></i>Client reports</button>
         <button type="button" (click)="openGiftCardRegister()"><i class="bi bi-gift"></i>Gift card register</button>
         <button type="button" (click)="exportClients()"><i class="bi bi-download"></i>Export clients</button>
@@ -240,7 +241,7 @@
         }
         @if (activeTab === 'Profile') {
           <section class="profile-tab">
-        <header class="tab-toolbar"><h2>Profile</h2><div><button type="button" [disabled]="!canManageClients" (click)="showFamilyLink()">Link family</button></div></header>
+        <header class="tab-toolbar"><h2>Profile</h2><div><button type="button" [disabled]="!canManageClients" (click)="showProfile360()">Edit profile</button><button type="button" [disabled]="!canManageClients" (click)="showFamilyLink()">Link family</button></div></header>
             <div class="detail-grid">
               <span><small>Client code</small><b>{{ selectedClient.code || '—' }}</b></span><span><small>Branch</small><b>{{ selectedClient.center | branchName }}</b></span>
               <span><small>Birthday</small><b>{{ formatDate(selectedClient.birthday) }}</b></span><span><small>Anniversary</small><b>{{ formatDate(selectedClient.anniversary) }}</b></span>
@@ -251,9 +252,13 @@
               <div class="record-list">@for (member of familyMembers; track member) {
                 <div><span><b>{{ member.firstName }} {{ member.lastName }}</b><small>{{ member.relationshipType }} · {{ member.phone || '—' }}</small></span><button type="button" (click)="unlinkFamilyMember(member)">Unlink</button></div>
               }</div>
-            } @else {
-              <div class="small-empty">No records yet</div>
-            }</article>
+              } @else {
+                <div class="small-empty">No records yet</div>
+              }</article>
+              <article><header><strong>Demographics &amp; preferences</strong></header><div class="form-card-body"><span><small>Gender</small><b>{{ profile360?.gender || '—' }}</b></span><span><small>Language</small><b>{{ profile360?.preferredLanguage || '—' }}</b></span><span><small>Occupation</small><b>{{ profile360?.occupation || '—' }}</b></span><span><small>Location</small><b>{{ profile360?.city || profile360?.address || '—' }}</b></span></div></article>
+              <article><header><strong>Source &amp; attribution</strong></header><div class="form-card-body"><span><small>Marketing source</small><b>{{ profile360?.marketingSource || '—' }}</b></span><span><small>Source detail</small><b>{{ profile360?.sourceDetail || '—' }}</b></span><span><small>Linked leads</small><b>{{ attribution?.leads?.length || 0 }}</b></span><span><small>Booking sources</small><b>{{ attribution?.bookingSources?.length || 0 }}</b></span></div></article>
+              <article class="wide-card"><header><strong>Cross-location visits</strong></header>@if (crossLocationVisits.length) {<div class="record-list">@for (visit of crossLocationVisits; track visit.appointmentId) {<div><span><b>{{ visit.branchName }} · {{ visit.serviceNames || visit.status }}</b><small>{{ formatDateTime(visit.startAt) }} · {{ visit.status }}</small></span></div>}</div>} @else {<div class="small-empty">No verified cross-location visits</div>}</article>
+              <article class="wide-card"><header><strong>Merge evidence</strong></header>@if (mergeHistory.length) {<div class="record-list">@for (item of mergeHistory; track item.id) {<div><span><b>{{ item.sourceClientName || item.sourceClientId }}</b><small>{{ item.reversedAt ? 'Restored' : 'Merged' }} · {{ formatDateTime(item.reversedAt || item.mergedAt) }}</small></span>@if (!item.reversedAt) {<button type="button" [disabled]="!canMergeClients" (click)="reverseMerge(item)">Restore</button>}</div>}</div>} @else {<div class="small-empty">No merge history</div>}</article>
           </div>
         </section>
       }
@@ -277,6 +282,7 @@
         </div>
         <div class="forms-consent-grid retention-grid">
           <article><header><strong>Wallet &amp; prepaid credit</strong></header><div class="form-card-body"><span><small>Wallet balance</small><b>{{ money(walletBalancePaise) }}</b></span><span><small>Store credits</small><b>{{ storeCredits.length }}</b></span></div><div class="card-actions"><button type="button" [disabled]="!canManageClients" (click)="openRetention('wallet-credit')">Credit</button><button type="button" [disabled]="walletBalancePaise <= 0 || !canManageClients" (click)="openRetention('wallet-debit')">Debit</button></div></article>
+          <article><header><strong>Refunds &amp; chargebacks</strong></header><div class="form-card-body"><span><small>Refunded</small><b>{{ money(financialExposure?.refundTotalPaise || 0) }}</b></span><span><small>Credit notes</small><b>{{ money(financialExposure?.creditNoteTotalPaise || 0) }}</b></span><span><small>Chargebacks</small><b>{{ money(financialExposure?.chargebackTotalPaise || 0) }}</b></span><span><small>Open disputes</small><b>{{ financialExposure?.openChargebacks || 0 }}</b></span></div></article>
           <article><header><strong>Loyalty tier</strong></header><div class="form-card-body"><span><small>Current tier</small><b>{{ retention.loyalty.currentTier?.name || 'No tier' }}</b></span><span><small>Next tier</small><b>{{ retention.loyalty.nextTier?.name || '—' }}@if (retention.loyalty.pointsToNextTier !== null) {
           · {{ retention.loyalty.pointsToNextTier }} points
           }</b></span></div><div class="card-actions"><button type="button" [disabled]="!canManageClients" (click)="openRetention('loyalty-adjust')">Adjust points</button></div></article>
@@ -667,6 +673,24 @@
       }
     </form>
     <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" form="client-form" [disabled]="savingClient">{{ savingClient ? 'Saving...' : 'Save' }}</button></footer>
+  </aside>
+}
+
+@if (drawerMode === 'profile-360') {
+  <aside class="client-drawer" aria-label="Client demographics and source form">
+    <header><strong>Client profile</strong><button type="button" aria-label="Close client profile form" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <form class="drawer-body" id="client-profile-360-form" (ngSubmit)="saveProfile360()">
+      <label>Gender<input [ngModel]="profile360Draft.gender" name="gender" (ngModelChange)="profile360Draft.gender = titleCase($event)" /></label>
+      <label>Preferred language<input [ngModel]="profile360Draft.preferredLanguage" name="preferredLanguage" (ngModelChange)="profile360Draft.preferredLanguage = titleCase($event)" /></label>
+      <label>Occupation<input [ngModel]="profile360Draft.occupation" name="occupation" (ngModelChange)="profile360Draft.occupation = titleCase($event)" /></label>
+      <label>City<input [ngModel]="profile360Draft.city" name="city" (ngModelChange)="profile360Draft.city = titleCase($event)" /></label>
+      <label>Postal code<input [(ngModel)]="profile360Draft.postalCode" name="postalCode" /></label>
+      <label>Marketing source<input [ngModel]="profile360Draft.marketingSource" name="marketingSource" (ngModelChange)="profile360Draft.marketingSource = titleCase($event)" /></label>
+      <label class="full-field">Address<textarea rows="4" [(ngModel)]="profile360Draft.address" name="address"></textarea></label>
+      <label class="full-field">Source detail<textarea rows="4" [(ngModel)]="profile360Draft.sourceDetail" name="sourceDetail"></textarea></label>
+      @if (clientError) {<p class="form-error">{{ clientError }}</p>}
+    </form>
+    <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" form="client-profile-360-form" [disabled]="savingWorkspace">{{ savingWorkspace ? 'Saving...' : 'Save' }}</button></footer>
   </aside>
 }
 

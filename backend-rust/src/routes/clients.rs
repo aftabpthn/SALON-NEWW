@@ -16,15 +16,19 @@ use sha2::{Digest, Sha256};
 use crate::{
     config::is_local_env,
     models::common::{ApiResponse, ApiResult, AppError},
-    repositories::clients_repository::{
-        self, ClientAppointmentHistoryRecord, ClientAuditRecord, ClientClinicalProfileRecord,
-        ClientCommunicationRecord, ClientConsentEventRecord, ClientContactPreferencesRecord,
-        ClientDiscountRuleWrite, ClientDuplicateRecord, ClientFamilyMemberRecord,
-        ClientFormDefinitionRecord, ClientFormSubmissionRecord, ClientInvoiceHistoryRecord,
-        ClientMasterWrite, ClientNoteRecord, ClientRecord, ClientReportFilters, ClientReviewRecord,
-        ClientServiceHistoryRecord, ClientSoapNoteRecord, ClientSummaryRecord,
-        ClientTimelineEventRecord, ClientTreatmentPhotoRecord, ClientWinBackOfferWrite,
-        CreateClient, UpdateClient,
+    repositories::{
+        ai_scope_repository,
+        clients_repository::{
+            self, ClientAppointmentHistoryRecord, ClientAuditRecord, ClientClinicalProfileRecord,
+            ClientCommunicationRecord, ClientConsentEventRecord, ClientContactPreferencesRecord,
+            ClientCrossLocationVisitRecord, ClientDiscountRuleWrite, ClientDuplicateRecord,
+            ClientFamilyMemberRecord, ClientFormDefinitionRecord, ClientFormSubmissionRecord,
+            ClientInvoiceHistoryRecord, ClientMasterWrite, ClientMergeHistoryRecord,
+            ClientNoteRecord, ClientProfile360Record, ClientRecord, ClientReportFilters,
+            ClientReviewRecord, ClientServiceHistoryRecord, ClientSoapNoteRecord,
+            ClientSummaryRecord, ClientTimelineEventRecord, ClientTreatmentPhotoRecord,
+            ClientWinBackOfferWrite, CreateClient, UpdateClient,
+        },
     },
     routes::context::tenant_branch,
     services::{
@@ -117,6 +121,14 @@ pub fn router() -> Router<AppState> {
             axum::routing::patch(save_contact_preferences),
         )
         .route("/clients/:id/merge", axum::routing::post(merge_client))
+        .route(
+            "/clients/:id/merge/:source_id/reverse",
+            axum::routing::post(reverse_client_merge),
+        )
+        .route(
+            "/clients/:id/profile-360",
+            axum::routing::put(save_client_profile_360),
+        )
         .route("/clients/:id/audit", get(list_client_audit))
         .route(
             "/clients/:id/reviews",
@@ -385,6 +397,11 @@ pub struct Client360Response {
     pub consent_history: Vec<ClientConsentEventRecord>,
     pub communications: Vec<ClientCommunicationRecord>,
     pub reviews: Vec<ClientReviewRecord>,
+    pub profile: Option<ClientProfile360Record>,
+    pub merge_history: Vec<ClientMergeHistoryRecord>,
+    pub cross_location_visits: Vec<ClientCrossLocationVisitRecord>,
+    pub financial_exposure: Value,
+    pub attribution: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,6 +557,34 @@ struct ContactPreferencesRequest {
 #[serde(rename_all = "camelCase")]
 struct MergeClientRequest {
     target_client_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReverseMergeRequest {
+    reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ClientProfile360Request {
+    #[serde(default)]
+    gender: String,
+    #[serde(default)]
+    address: String,
+    #[serde(default)]
+    city: String,
+    #[serde(default)]
+    postal_code: String,
+    #[serde(default)]
+    preferred_language: String,
+    #[serde(default)]
+    occupation: String,
+    #[serde(default)]
+    marketing_source: String,
+    #[serde(default)]
+    source_detail: String,
+    expected_version: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1277,12 +1322,35 @@ async fn export_client_report(
 
 async fn get_client(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Client360Response> {
+    require_client_permission(&claims, "clients.read")?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let cross_location_allowed = matches!(claims.role.as_str(), "owner" | "admin" | "manager")
+        || claims
+            .permissions
+            .iter()
+            .any(|item| item == "clients.cross_location.read");
+    let authorized_branch_ids = if cross_location_allowed {
+        ai_scope_repository::authorized_branches(
+            &state.db,
+            &tenant_id,
+            &claims.sub,
+            matches!(claims.role.as_str(), "owner" | "admin"),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to resolve authorized client branches"))?
+        .into_iter()
+        .filter(|branch| branch.active)
+        .map(|branch| branch.branch_id)
+        .collect()
+    } else {
+        Vec::new()
+    };
     Ok(Json(ApiResponse::ok(
-        load_client_360(&state, &tenant_id, &branch_id, &id).await?,
+        load_client_360(&state, &tenant_id, &branch_id, &id, &authorized_branch_ids).await?,
     )))
 }
 
@@ -1291,6 +1359,7 @@ async fn load_client_360(
     tenant_id: &str,
     branch_id: &str,
     id: &str,
+    authorized_branch_ids: &[String],
 ) -> Result<Client360Response, AppError> {
     let row = clients_repository::get(&state.db, &tenant_id, &branch_id, &id)
         .await
@@ -1313,6 +1382,11 @@ async fn load_client_360(
         consent_history,
         communications,
         reviews,
+        profile,
+        merge_history,
+        cross_location_visits,
+        financial_exposure,
+        attribution,
     ) = tokio::try_join!(
         clients_repository::summary(&state.db, &tenant_id, &branch_id, &id),
         clients_repository::appointment_history(&state.db, &tenant_id, &branch_id, &id),
@@ -1329,6 +1403,17 @@ async fn load_client_360(
         clients_repository::list_consent_events(&state.db, &tenant_id, &branch_id, &id),
         clients_repository::list_communications(&state.db, &tenant_id, &branch_id, &id),
         clients_repository::list_reviews(&state.db, &tenant_id, &branch_id, &id),
+        clients_repository::get_profile_360(&state.db, &tenant_id, &branch_id, &id),
+        clients_repository::list_merge_history(&state.db, &tenant_id, &branch_id, &id),
+        clients_repository::cross_location_visits(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &id,
+            authorized_branch_ids
+        ),
+        clients_repository::financial_exposure(&state.db, &tenant_id, &branch_id, &id),
+        clients_repository::client_attribution(&state.db, &tenant_id, &branch_id, &id),
     )
     .map_err(|_| AppError::internal("failed to load client 360 history"))?;
 
@@ -1349,6 +1434,11 @@ async fn load_client_360(
         consent_history,
         communications,
         reviews,
+        profile,
+        merge_history,
+        cross_location_visits,
+        financial_exposure,
+        attribution,
     })
 }
 
@@ -1527,6 +1617,107 @@ async fn merge_client(
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"sourceClientId":source_id,"targetClientId":target_id}),
     )))
+}
+
+async fn reverse_client_merge(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((target_id, source_id)): Path<(String, String)>,
+    Json(payload): Json<ReverseMergeRequest>,
+) -> ApiResult<Value> {
+    require_client_permission(&claims, "clients.merge")?;
+    let reason = payload.reason.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation(
+            "reason is required and must be 500 characters or fewer",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    if !clients_repository::reverse_client_merge(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &target_id,
+        &source_id,
+        reason,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reverse client merge"))?
+    {
+        return Err(AppError::conflict(
+            "active merge was not found or source client cannot be restored",
+        ));
+    }
+    publish_client_timeline(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &target_id,
+        "client",
+        &source_id,
+        "client.merge.reversed",
+    );
+    Ok(Json(ApiResponse::ok(json!({
+        "sourceClientId":source_id,"targetClientId":target_id,"reversed":true
+    }))))
+}
+
+async fn save_client_profile_360(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ClientProfile360Request>,
+) -> ApiResult<ClientProfile360Record> {
+    require_client_permission(&claims, "clients.manage")?;
+    let values = [
+        (payload.gender.trim(), 40, "gender"),
+        (payload.address.trim(), 500, "address"),
+        (payload.city.trim(), 120, "city"),
+        (payload.postal_code.trim(), 24, "postalCode"),
+        (payload.preferred_language.trim(), 40, "preferredLanguage"),
+        (payload.occupation.trim(), 120, "occupation"),
+        (payload.marketing_source.trim(), 120, "marketingSource"),
+        (payload.source_detail.trim(), 500, "sourceDetail"),
+    ];
+    if let Some((_, _, field)) = values
+        .iter()
+        .find(|(value, limit, _)| value.chars().count() > *limit)
+    {
+        return Err(AppError::validation(format!("{field} is too long")));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = clients_repository::save_profile_360(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        values[0].0,
+        values[1].0,
+        values[2].0,
+        values[3].0,
+        values[4].0,
+        values[5].0,
+        values[6].0,
+        values[7].0,
+        payload.expected_version,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save client profile"))?
+    .ok_or_else(|| AppError::conflict("client profile version changed or client was not found"))?;
+    publish_client_timeline(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        "client",
+        &id,
+        "client.profile_360.updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
 }
 
 async fn list_client_audit(
@@ -2381,7 +2572,13 @@ async fn staff_guest_360(
 ) -> ApiResult<Value> {
     let scope = staff_guest_scope(&state, &claims, &headers, &appointment_id).await?;
     let (mut guest, relationships, timeline, photo_consent) = tokio::try_join!(
-        load_client_360(&state, &scope.tenant_id, &scope.branch_id, &scope.client_id),
+        load_client_360(
+            &state,
+            &scope.tenant_id,
+            &scope.branch_id,
+            &scope.client_id,
+            &[]
+        ),
         async {
             clients_repository::memory_relationships(
                 &state.db,
@@ -2433,7 +2630,16 @@ async fn staff_guest_360(
         guest.client.email = masked_email(&guest.client.email);
         guest.communications.clear();
         guest.duplicates.clear();
+        if let Some(profile) = guest.profile.as_mut() {
+            profile.address.clear();
+            profile.city.clear();
+            profile.postal_code.clear();
+        }
     }
+    guest.merge_history.clear();
+    guest.cross_location_visits.clear();
+    guest.financial_exposure = json!({});
+    guest.attribution = json!({});
     guest
         .client_notes
         .retain(|note| note.visibility != "management" || management_notes);

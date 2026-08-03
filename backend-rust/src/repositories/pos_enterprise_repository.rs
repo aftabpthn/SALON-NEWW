@@ -72,6 +72,19 @@ pub struct ZReport {
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct DailyAccountingExportLine {
+    pub journal_entry_id: String,
+    pub business_date: NaiveDate,
+    pub source_type: String,
+    pub source_id: String,
+    pub memo: String,
+    pub account_code: String,
+    pub debit_paise: i64,
+    pub credit_paise: i64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct RiskCase {
     pub id: String,
     pub business_date: NaiveDate,
@@ -479,6 +492,42 @@ pub async fn get_day_lock(
         .bind(tenant).bind(branch).bind(date).fetch_optional(db).await
 }
 
+pub async fn insert_day_lock_event(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    date: NaiveDate,
+    action: &str,
+    reason: &str,
+    holiday_name: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO pos_day_lock_events(tenant_id,branch_id,business_date,action,reason,actor_user_id,holiday_exception,holiday_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
+        .bind(tenant).bind(branch).bind(date).bind(action).bind(reason).bind(actor)
+        .bind(holiday_name.is_some()).bind(holiday_name.unwrap_or_default()).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn list_day_lock_events(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'action',action,'reason',reason,'actorUserId',actor_user_id,'holidayException',holiday_exception,'holidayName',holiday_name,'createdAt',created_at) FROM pos_day_lock_events WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 ORDER BY created_at,id")
+        .bind(tenant).bind(branch).bind(date).fetch_all(db).await
+}
+
+pub async fn branch_holiday(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('name',name,'closed',closed,'opensAt',opens_at,'closesAt',closes_at) FROM branch_holidays WHERE tenant_id::TEXT=$1 AND branch_id::TEXT=$2 AND holiday_date=$3")
+        .bind(tenant).bind(branch).bind(date).fetch_optional(db).await
+}
+
 pub async fn latest_z_report(
     db: &PgPool,
     tenant: &str,
@@ -487,6 +536,28 @@ pub async fn latest_z_report(
 ) -> Result<Option<ZReport>, sqlx::Error> {
     sqlx::query_as("SELECT id,business_date,version,report_json,sha256,generated_at FROM pos_z_reports WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 ORDER BY version DESC LIMIT 1")
         .bind(tenant).bind(branch).bind(date).fetch_optional(db).await
+}
+
+pub async fn daily_accounting_export_lines(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Vec<DailyAccountingExportLine>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT entry.id AS journal_entry_id,entry.entry_date AS business_date,
+                entry.source_type,entry.source_id,entry.memo,line.account_code,
+                line.debit_paise,line.credit_paise
+           FROM accounting_journal_entries entry
+           JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+          WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND entry.entry_date=$3
+          ORDER BY entry.entry_date,entry.id,line.id",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_all(db)
+    .await
 }
 
 pub async fn insert_z_report(

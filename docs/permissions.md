@@ -4,7 +4,7 @@ The runtime catalog is defined in `backend-rust/src/services/auth_service.rs` an
 
 | Domain | Read | Manage / elevated |
 | --- | --- | --- |
-| Appointments | `appointments.read` | `appointments.manage`, `appointments.settings.manage` |
+| Appointments | `appointments.read` | `appointments.manage`, `appointments.settings.manage`, `appointments.outside_hours.override`, `appointments.fees.waive` |
 | Bookings | `bookings.read` | `bookings.manage` |
 | Clients | `clients.read`, `clients.audit.read` | `clients.manage`, `clients.consent.manage`, `clients.forms.manage`, `clients.merge`, `clients.reviews.link` |
 | POS | `pos.read` | `pos.manage`, `pos.void`, `pos.refund` |

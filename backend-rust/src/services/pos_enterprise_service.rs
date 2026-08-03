@@ -5,7 +5,10 @@ use sqlx::PgPool;
 
 use crate::{
     models::common::AppError,
-    repositories::pos_enterprise_repository::{self, RiskCase, ZReport},
+    repositories::{
+        cash_drawer_repository,
+        pos_enterprise_repository::{self, RiskCase, ZReport},
+    },
 };
 
 pub async fn add_corporate_member(
@@ -210,6 +213,17 @@ pub async fn generate_z_report(
         ));
     }
 
+    let reconciliation = eod_reconciliation(db, tenant, branch, date).await?;
+    if !reconciliation
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(AppError::conflict(
+            "invoice, payment, register, and accounting totals must reconcile before Z-report generation",
+        ));
+    }
+
     let sales: (i64, i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT COUNT(*)::BIGINT,COALESCE(SUM(subtotal_paise),0)::BIGINT,COALESCE(SUM(discount_paise),0)::BIGINT,COALESCE(SUM(tax_paise),0)::BIGINT,COALESCE(SUM(cgst_paise),0)::BIGINT,COALESCE(SUM(sgst_paise),0)::BIGINT,COALESCE(SUM(igst_paise),0)::BIGINT,COALESCE(SUM(total_paise),0)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status NOT IN ('voided','cancelled')",
     )
@@ -254,6 +268,7 @@ pub async fn generate_z_report(
         "sales": {"invoiceCount": sales.0,"subtotalPaise":sales.1,"discountPaise":sales.2,"taxPaise":sales.3,"cgstPaise":sales.4,"sgstPaise":sales.5,"igstPaise":sales.6,"totalPaise":sales.7},
         "payments": payments.into_iter().map(|(method,amount)| json!({"method":method,"amountPaise":amount})).collect::<Vec<_>>(),
         "cash": {"openingPaise":cash.0,"countedPaise":cash.1,"variancePaise":cash.2},
+        "reconciliation": reconciliation,
         "taxRegister": tax_register.into_iter().map(|(code,rate,taxable,cgst,sgst,igst)| json!({"hsnSacCode":code,"taxPercent":rate,"taxablePaise":taxable,"cgstPaise":cgst,"sgstPaise":sgst,"igstPaise":igst})).collect::<Vec<_>>()
     });
     let digest = format!("{:x}", Sha256::digest(report.to_string().as_bytes()));
@@ -262,12 +277,130 @@ pub async fn generate_z_report(
         .map_err(|_| AppError::internal("failed to store immutable Z-report"))
 }
 
+pub async fn eod_reconciliation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Value, AppError> {
+    let invoices: (i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT,COALESCE(SUM(total_paise),0)::BIGINT,COALESCE(SUM(paid_paise),0)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD invoices"))?;
+    let payment_total: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(payment.amount_paise),0)::BIGINT FROM pos_payments payment JOIN pos_sales sale ON sale.tenant_id=payment.tenant_id AND sale.branch_id=payment.branch_id AND sale.id=payment.sale_id WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND sale.business_date=$3 AND sale.status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD payments"))?;
+    let invoice_journal_total: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(line.debit_paise),0)::BIGINT FROM accounting_journal_entries entry JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id AND line.account_code='ACCOUNTS_RECEIVABLE' JOIN pos_sales sale ON sale.tenant_id=entry.tenant_id AND sale.branch_id=entry.branch_id AND sale.id=entry.source_id WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND entry.source_type='invoice' AND sale.business_date=$3 AND sale.status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD invoice journals"))?;
+    let payment_journal_total: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(line.debit_paise),0)::BIGINT FROM accounting_journal_entries entry JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id AND line.account_code<>'ACCOUNTS_RECEIVABLE' JOIN pos_payments payment ON payment.tenant_id=entry.tenant_id AND payment.branch_id=entry.branch_id AND payment.id=entry.source_id JOIN pos_sales sale ON sale.tenant_id=payment.tenant_id AND sale.branch_id=payment.branch_id AND sale.id=payment.sale_id WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND entry.source_type='payment' AND sale.business_date=$3 AND sale.status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD payment journals"))?;
+    let missing_invoice_journals: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM pos_sales sale WHERE sale.tenant_id=$1 AND sale.branch_id=$2 AND sale.business_date=$3 AND sale.total_paise<>0 AND sale.status NOT IN ('draft','voided','cancelled') AND NOT EXISTS(SELECT 1 FROM accounting_journal_entries entry WHERE entry.tenant_id=sale.tenant_id AND entry.branch_id=sale.branch_id AND entry.source_type='invoice' AND entry.source_id=sale.id)",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to verify EOD invoice journal coverage"))?;
+    let missing_payment_journals: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM pos_payments payment JOIN pos_sales sale ON sale.tenant_id=payment.tenant_id AND sale.branch_id=payment.branch_id AND sale.id=payment.sale_id WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND sale.business_date=$3 AND payment.amount_paise<>0 AND sale.status NOT IN ('draft','voided','cancelled') AND NOT EXISTS(SELECT 1 FROM accounting_journal_entries entry WHERE entry.tenant_id=payment.tenant_id AND entry.branch_id=payment.branch_id AND entry.source_type='payment' AND entry.source_id=payment.id)",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to verify EOD payment journal coverage"))?;
+    let unbalanced_journals: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM (SELECT entry.id FROM accounting_journal_entries entry JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND entry.entry_date=$3 GROUP BY entry.id HAVING SUM(line.debit_paise)<>SUM(line.credit_paise)) mismatch",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to validate balanced EOD journals"))?;
+    let drawer: (i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT,COALESCE(SUM(CASE WHEN EXISTS(SELECT 1 FROM cash_drawer_tills till WHERE till.tenant_id=session.tenant_id AND till.branch_id=session.branch_id AND till.drawer_session_id=session.id) THEN (SELECT COALESCE(SUM(till.opening_cash_paise),0)::BIGINT FROM cash_drawer_tills till WHERE till.tenant_id=session.tenant_id AND till.branch_id=session.branch_id AND till.drawer_session_id=session.id) ELSE session.opening_cash_paise END),0)::BIGINT,COALESCE(SUM(session.expected_cash_paise),0)::BIGINT,COUNT(*) FILTER(WHERE session.status IN ('open','pending_approval'))::BIGINT FROM cash_drawer_sessions session WHERE session.tenant_id=$1 AND session.branch_id=$2 AND session.business_date=$3",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD register"))?;
+    let cash_payments: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(payment.amount_paise),0)::BIGINT FROM pos_payments payment JOIN pos_sales sale ON sale.tenant_id=payment.tenant_id AND sale.branch_id=payment.branch_id AND sale.id=payment.sale_id WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND sale.business_date=$3 AND payment.method='cash' AND sale.status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+    .map_err(|_| AppError::internal("failed to reconcile EOD cash payments"))?;
+    let movement_delta = cash_drawer_repository::movement_delta_for_date(db, tenant, branch, date)
+        .await
+        .map_err(|_| AppError::internal("failed to reconcile EOD cash movements"))?;
+    let outgoing_cash =
+        cash_drawer_repository::approved_outgoing_cash_for_date(db, tenant, branch, date)
+            .await
+            .map_err(|_| AppError::internal("failed to reconcile EOD outgoing cash"))?;
+    let snapshots: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cash_drawer_close_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3")
+        .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+        .map_err(|_| AppError::internal("failed to verify EOD close snapshots"))?;
+    let closed_drawers: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status='closed'")
+        .bind(tenant).bind(branch).bind(date).fetch_one(db).await
+        .map_err(|_| AppError::internal("failed to verify EOD closed drawers"))?;
+    let settlement_exceptions: i64 = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM pos_provider_reconciliation_runs WHERE tenant_id=$1 AND branch_id=$2 AND settlement_date=$3 AND status='review_required'")
+        .bind(tenant).bind(branch).bind(date).fetch_one(db).await.unwrap_or(0);
+
+    let invoice_payment_gap = invoices.2.saturating_sub(payment_total);
+    let invoice_accounting_gap = invoices.1.saturating_sub(invoice_journal_total);
+    let payment_accounting_gap = payment_total.saturating_sub(payment_journal_total);
+    let calculated_register = drawer
+        .1
+        .saturating_add(cash_payments)
+        .saturating_add(movement_delta)
+        .saturating_sub(outgoing_cash);
+    let register_gap = if drawer.0 == 0 {
+        cash_payments
+    } else {
+        calculated_register.saturating_sub(drawer.2)
+    };
+    let ready = drawer.3 == 0
+        && invoice_payment_gap == 0
+        && invoice_accounting_gap == 0
+        && payment_accounting_gap == 0
+        && register_gap == 0
+        && missing_invoice_journals == 0
+        && missing_payment_journals == 0
+        && unbalanced_journals == 0
+        && snapshots == closed_drawers
+        && settlement_exceptions == 0;
+    Ok(json!({
+        "ready": ready,
+        "invoiceCount": invoices.0,
+        "invoiceTotalPaise": invoices.1,
+        "invoicePaidPaise": invoices.2,
+        "paymentTotalPaise": payment_total,
+        "invoiceJournalTotalPaise": invoice_journal_total,
+        "paymentJournalTotalPaise": payment_journal_total,
+        "invoicePaymentGapPaise": invoice_payment_gap,
+        "invoiceAccountingGapPaise": invoice_accounting_gap,
+        "paymentAccountingGapPaise": payment_accounting_gap,
+        "calculatedRegisterPaise": calculated_register,
+        "storedExpectedRegisterPaise": drawer.2,
+        "registerGapPaise": register_gap,
+        "openDrawerCount": drawer.3,
+        "closedDrawerCount": closed_drawers,
+        "closeSnapshotCount": snapshots,
+        "missingInvoiceJournals": missing_invoice_journals,
+        "missingPaymentJournals": missing_payment_journals,
+        "unbalancedJournals": unbalanced_journals,
+        "settlementExceptions": settlement_exceptions
+    }))
+}
+
 pub async fn scan_risks(
     db: &PgPool,
     tenant: &str,
     branch: &str,
     date: NaiveDate,
 ) -> Result<Vec<RiskCase>, AppError> {
+    let cash_controls = cash_drawer_repository::control_settings(db, tenant, branch)
+        .await
+        .map_err(|_| AppError::internal("failed to load cash control settings"))?;
+    let eod = eod_reconciliation(db, tenant, branch, date).await?;
     let mut tx = db
         .begin()
         .await
@@ -275,18 +408,15 @@ pub async fn scan_risks(
     let drawers: Vec<(String, i64)> = sqlx::query_as("SELECT id,COALESCE(variance_paise,0)::BIGINT FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status='closed' AND COALESCE(variance_paise,0)<>0")
         .bind(tenant).bind(branch).bind(date).fetch_all(&mut *tx).await.map_err(|_| AppError::internal("failed to scan drawer variances"))?;
     for (id, variance) in drawers {
+        let high_variance = variance.abs() >= cash_controls.variance_alert_paise;
         pos_enterprise_repository::upsert_risk_case(
             &mut tx,
             tenant,
             branch,
             date,
             "CASH_VARIANCE",
-            if variance.abs() >= 10_000 {
-                "high"
-            } else {
-                "medium"
-            },
-            if variance.abs() >= 10_000 { 80 } else { 55 },
+            if high_variance { "high" } else { "medium" },
+            if high_variance { 80 } else { 55 },
             "cash_drawer",
             &id,
             variance.unsigned_abs().min(i64::MAX as u64) as i64,
@@ -294,6 +424,27 @@ pub async fn scan_risks(
         )
         .await
         .map_err(|_| AppError::internal("failed to save drawer risk"))?;
+    }
+    let current_cash = eod
+        .get("calculatedRegisterPaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    if cash_controls.max_cash_paise > 0 && current_cash > cash_controls.max_cash_paise {
+        pos_enterprise_repository::upsert_risk_case(
+            &mut tx,
+            tenant,
+            branch,
+            date,
+            "CASH_LIMIT_EXCEEDED",
+            "high",
+            85,
+            "branch",
+            branch,
+            current_cash - cash_controls.max_cash_paise,
+            json!({"currentCashPaise":current_cash,"maxCashPaise":cash_controls.max_cash_paise,"excessPaise":current_cash-cash_controls.max_cash_paise}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to save cash limit risk"))?;
     }
     let reconciliations: Vec<(String, i64, i64)> = sqlx::query_as("SELECT id,gross_difference_paise,net_difference_paise FROM pos_provider_reconciliation_runs WHERE tenant_id=$1 AND branch_id=$2 AND settlement_date=$3 AND status='review_required'")
         .bind(tenant).bind(branch).bind(date).fetch_all(&mut *tx).await.map_err(|_| AppError::internal("failed to scan settlement exceptions"))?;

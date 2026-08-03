@@ -6,7 +6,7 @@ use axum::{
     routing::{get, patch, post},
     Extension, Json, Router,
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -195,6 +195,8 @@ struct MarketingGovernanceRequest {
     quiet_end: String,
     timezone: String,
     offer_approval_threshold_bps: i32,
+    control_group_bps: Option<i32>,
+    attribution_window_days: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -215,7 +217,7 @@ async fn marketing_governance(
     )
     .await
     .map_err(|_| AppError::internal("failed to initialize marketing governance"))?;
-    let settings = sqlx::query_scalar::<_, Value>("SELECT JSONB_BUILD_OBJECT('frequencyCapDays',frequency_cap_days,'quietStart',quiet_start::TEXT,'quietEnd',quiet_end::TEXT,'timezone',timezone,'offerApprovalThresholdBps',offer_approval_threshold_bps) FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2").bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to load marketing governance"))?;
+    let settings = sqlx::query_scalar::<_, Value>("SELECT JSONB_BUILD_OBJECT('frequencyCapDays',frequency_cap_days,'quietStart',quiet_start::TEXT,'quietEnd',quiet_end::TEXT,'timezone',timezone,'offerApprovalThresholdBps',offer_approval_threshold_bps,'controlGroupBps',control_group_bps,'attributionWindowDays',attribution_window_days) FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2").bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to load marketing governance"))?;
     let exclusions = sqlx::query_scalar::<_, Value>("SELECT JSONB_BUILD_OBJECT('clientId',id,'clientName',CONCAT_WS(' ',first_name,last_name)) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND merged_into_client_id IS NULL AND marketing_sensitive_excluded=TRUE ORDER BY first_name,last_name,id").bind(&tenant_id).bind(&branch_id).fetch_all(&state.db).await.map_err(|_| AppError::internal("failed to load marketing exclusions"))?;
     Ok(Json(ApiResponse::ok(
         json!({"settings":settings,"exclusions":exclusions}),
@@ -229,8 +231,12 @@ async fn update_marketing_governance(
     Json(body): Json<MarketingGovernanceRequest>,
 ) -> ApiResult<Value> {
     require_named_permission(&claims, "marketing.manage")?;
+    let control_group_bps = body.control_group_bps.unwrap_or(0);
+    let attribution_window_days = body.attribution_window_days.unwrap_or(30);
     if !(0..=365).contains(&body.frequency_cap_days)
         || !(0..=10_000).contains(&body.offer_approval_threshold_bps)
+        || !(0..=5_000).contains(&control_group_bps)
+        || !(1..=365).contains(&attribution_window_days)
         || body.timezone.trim().is_empty()
     {
         return Err(AppError::validation(
@@ -248,7 +254,7 @@ async fn update_marketing_governance(
     if !valid_timezone {
         return Err(AppError::validation("timezone is not supported"));
     }
-    let settings = sqlx::query_scalar::<_, Value>("INSERT INTO marketing_governance_settings(tenant_id,branch_id,frequency_cap_days,quiet_start,quiet_end,timezone,offer_approval_threshold_bps,updated_by) VALUES($1,$2,$3,$4::TIME,$5::TIME,$6,$7,$8) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET frequency_cap_days=EXCLUDED.frequency_cap_days,quiet_start=EXCLUDED.quiet_start,quiet_end=EXCLUDED.quiet_end,timezone=EXCLUDED.timezone,offer_approval_threshold_bps=EXCLUDED.offer_approval_threshold_bps,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING JSONB_BUILD_OBJECT('frequencyCapDays',frequency_cap_days,'quietStart',quiet_start::TEXT,'quietEnd',quiet_end::TEXT,'timezone',timezone,'offerApprovalThresholdBps',offer_approval_threshold_bps)").bind(&tenant_id).bind(&branch_id).bind(body.frequency_cap_days).bind(body.quiet_start.trim()).bind(body.quiet_end.trim()).bind(body.timezone.trim()).bind(body.offer_approval_threshold_bps).bind(&claims.sub).fetch_one(&state.db).await.map_err(|_| AppError::validation("quiet hours are invalid"))?;
+    let settings = sqlx::query_scalar::<_, Value>("INSERT INTO marketing_governance_settings(tenant_id,branch_id,frequency_cap_days,quiet_start,quiet_end,timezone,offer_approval_threshold_bps,control_group_bps,attribution_window_days,updated_by) VALUES($1,$2,$3,$4::TIME,$5::TIME,$6,$7,$8,$9,$10) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET frequency_cap_days=EXCLUDED.frequency_cap_days,quiet_start=EXCLUDED.quiet_start,quiet_end=EXCLUDED.quiet_end,timezone=EXCLUDED.timezone,offer_approval_threshold_bps=EXCLUDED.offer_approval_threshold_bps,control_group_bps=EXCLUDED.control_group_bps,attribution_window_days=EXCLUDED.attribution_window_days,updated_by=EXCLUDED.updated_by,updated_at=NOW() RETURNING JSONB_BUILD_OBJECT('frequencyCapDays',frequency_cap_days,'quietStart',quiet_start::TEXT,'quietEnd',quiet_end::TEXT,'timezone',timezone,'offerApprovalThresholdBps',offer_approval_threshold_bps,'controlGroupBps',control_group_bps,'attributionWindowDays',attribution_window_days)").bind(&tenant_id).bind(&branch_id).bind(body.frequency_cap_days).bind(body.quiet_start.trim()).bind(body.quiet_end.trim()).bind(body.timezone.trim()).bind(body.offer_approval_threshold_bps).bind(control_group_bps).bind(attribution_window_days).bind(&claims.sub).fetch_one(&state.db).await.map_err(|_| AppError::validation("marketing governance is invalid"))?;
     security_service::record_audit(
         &state.db,
         &tenant_id,
@@ -1203,6 +1209,9 @@ struct LeadCreateRequest {
     next_follow_up_date: Option<NaiveDate>,
     notes: Option<String>,
     client_id: Option<String>,
+    capture_channel: Option<String>,
+    external_source_id: Option<String>,
+    sla_hours: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1305,6 +1314,32 @@ async fn create(
     } else {
         source
     };
+    let capture_channel = body
+        .capture_channel
+        .as_deref()
+        .unwrap_or("other")
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(
+        capture_channel.as_str(),
+        "phone"
+            | "sms"
+            | "whatsapp"
+            | "web_form"
+            | "social"
+            | "referral"
+            | "walk_in"
+            | "api"
+            | "other"
+    ) {
+        return Err(AppError::validation("captureChannel is invalid"));
+    }
+    let external_source_id =
+        optional_text(body.external_source_id.as_deref(), 200, "externalSourceId")?;
+    let sla_hours = body.sla_hours.unwrap_or(24);
+    if !(1..=720).contains(&sla_hours) {
+        return Err(AppError::validation("slaHours must be between 1 and 720"));
+    }
     let stage = body
         .stage
         .unwrap_or_else(|| "new".to_string())
@@ -1323,12 +1358,29 @@ async fn create(
     }
     let owner_user_id = optional_text(body.owner_user_id.as_deref(), 120, "ownerUserId")?;
     validate_owner(&state, &tenant_id, &branch_id, &owner_user_id).await?;
-    let client_id = body
+    let supplied_client_id = body
         .client_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    validate_client(&state, &tenant_id, &branch_id, client_id).await?;
+    if phone.is_empty()
+        && email.is_empty()
+        && supplied_client_id.is_none()
+        && external_source_id.is_empty()
+    {
+        return Err(AppError::validation(
+            "phone, email, clientId or externalSourceId is required",
+        ));
+    }
+    validate_client(&state, &tenant_id, &branch_id, supplied_client_id).await?;
+    let matched_client_id = if supplied_client_id.is_none() {
+        repo::matching_client_id(&state.db, &tenant_id, &branch_id, &phone, &email)
+            .await
+            .map_err(|_| AppError::internal("failed to match existing client"))?
+    } else {
+        None
+    };
+    let client_id = supplied_client_id.or(matched_client_id.as_deref());
     let notes = optional_text(body.notes.as_deref(), 4000, "notes")?;
     let row = repo::create(
         &state.db,
@@ -1347,6 +1399,9 @@ async fn create(
         body.next_follow_up_date,
         &notes,
         client_id,
+        &capture_channel,
+        &external_source_id,
+        Utc::now() + Duration::hours(sla_hours),
     )
     .await
     .map_err(map_write_error)?;
@@ -1356,7 +1411,7 @@ async fn create(
         &branch_id,
         &claims.sub,
         "marketing.lead.created",
-        json!({"leadId":row.id,"stage":row.stage}),
+        json!({"leadId":row.id,"stage":row.stage,"captureChannel":row.capture_channel,"clientId":row.client_id}),
     )
     .await?;
     Ok(Json(ApiResponse::ok(row)))
@@ -1506,15 +1561,39 @@ async fn convert(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    validate_client(&state, &tenant_id, &branch_id, client_id).await?;
+    let existing_client_id = repo::lead_client_id(&state.db, &tenant_id, &branch_id, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load lead client"))?;
     validate_appointment(&state, &tenant_id, &branch_id, appointment_id).await?;
+    let appointment_client_id = match appointment_id {
+        Some(id) => repo::appointment_client_id(&state.db, &tenant_id, &branch_id, id)
+            .await
+            .map_err(|_| AppError::internal("failed to validate appointment client"))?,
+        None => None,
+    };
+    if client_id.is_some()
+        && appointment_client_id
+            .as_deref()
+            .is_some_and(|id| Some(id) != client_id)
+    {
+        return Err(AppError::conflict(
+            "appointment belongs to a different client",
+        ));
+    }
+    let effective_client_id = client_id
+        .or(appointment_client_id.as_deref())
+        .or(existing_client_id.as_deref());
+    if effective_client_id.is_none() {
+        return Err(AppError::conflict("appointment is not linked to a client"));
+    }
+    validate_client(&state, &tenant_id, &branch_id, effective_client_id).await?;
     let row = repo::convert(
         &state.db,
         &tenant_id,
         &branch_id,
         &id,
         &claims.sub,
-        client_id,
+        effective_client_id,
         appointment_id,
     )
     .await
@@ -1678,7 +1757,7 @@ async fn validate_appointment(
 fn map_write_error(error: sqlx::Error) -> AppError {
     if let sqlx::Error::Database(database) = &error {
         if database.code().as_deref() == Some("23505") {
-            return AppError::conflict("an active lead with this phone already exists");
+            return AppError::conflict("this lead was already captured");
         }
     }
     AppError::internal("failed to create marketing lead")

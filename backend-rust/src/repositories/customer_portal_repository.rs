@@ -61,6 +61,18 @@ pub struct PackageCheckoutPlan {
 }
 
 #[derive(Debug, FromRow)]
+pub struct ProductCheckoutPlan {
+    pub tenant_id: String,
+    pub branch_id: String,
+    pub id: String,
+    pub name: String,
+    pub price_paise: i64,
+    pub gst_percent: i32,
+    pub hsn_code: String,
+    pub stock_quantity: i32,
+}
+
+#[derive(Debug, FromRow)]
 pub struct CustomerBranchContext {
     pub tenant_id: String,
     pub branch_id: String,
@@ -506,7 +518,7 @@ pub async fn business(db: &PgPool, branch_id: &str) -> Result<Option<Value>, sql
 }
 
 pub async fn business_services(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',s.id,'businessId',b.id::TEXT,'name',s.name,'description','','category',s.category,'durationMinutes',s.duration_minutes,'pricePaise',s.price_paise,'active',s.active,'addons',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'durationMinutes',a.duration_minutes,'pricePaise',a.price_paise,'active',a.active) ORDER BY a.created_at,a.id) FROM service_addons a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.service_id=s.id AND a.active=TRUE),'[]'::jsonb)) FROM services s JOIN branches b ON s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) JOIN tenants t ON t.id=b.tenant_id AND s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE AND s.active=TRUE ORDER BY s.category,s.name")
+    sqlx::query_scalar("SELECT jsonb_build_object('id',s.id,'businessId',b.id::TEXT,'name',s.name,'description','','category',s.category,'durationMinutes',s.duration_minutes,'processingTimeMinutes',s.processing_time_minutes,'recoveryTimeMinutes',s.recovery_time_minutes,'cleanupTimeMinutes',s.cleanup_time_minutes,'pricePaise',s.price_paise,'otherFeePaise',s.other_fee_paise,'depositPercent',s.deposit_percent,'active',s.active,'addons',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'durationMinutes',a.duration_minutes,'pricePaise',a.price_paise,'active',a.active) ORDER BY a.created_at,a.id) FROM service_addons a WHERE a.tenant_id=s.tenant_id AND a.branch_id=s.branch_id AND a.service_id=s.id AND a.active=TRUE),'[]'::jsonb)) FROM services s JOIN branches b ON s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) JOIN tenants t ON t.id=b.tenant_id AND s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE AND s.active=TRUE AND COALESCE((s.channel_availability_json->>'customerApp')::BOOLEAN,FALSE)=TRUE ORDER BY s.category,s.name")
         .bind(branch_id).fetch_all(db).await
 }
 
@@ -645,6 +657,20 @@ pub async fn business_memberships(db: &PgPool, branch_id: &str) -> Result<Vec<Va
 pub async fn business_packages(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar("SELECT jsonb_build_object('id',p.id,'branchId',p.branch_id,'name',p.name,'description',p.description,'pricePaise',p.price_paise,'validityDays',p.validity_days,'paidSessions',p.paid_sessions,'freeSessions',p.free_sessions,'serviceRows',p.service_rows_json,'serviceIds',p.service_ids_json) FROM packages p JOIN branches b ON p.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) JOIN tenants t ON t.id=b.tenant_id AND p.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE AND p.active=TRUE AND (p.show_mobile_app=TRUE OR p.show_online_booking=TRUE) ORDER BY p.name")
         .bind(branch_id).fetch_all(db).await
+}
+
+pub async fn business_products(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',item.id,'businessId',branch.id::TEXT,'name',item.name,'category',item.category,'brand',item.brand,'pricePaise',item.retail_price_paise,'availableQuantity',GREATEST(item.stock_quantity,0),'unit',item.unit,'gstPercent',item.gst_percent,'hsnCode',item.hsn_code) FROM inventory_items item JOIN branches branch ON item.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name) JOIN tenants tenant ON tenant.id=branch.tenant_id AND item.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name) WHERE $1 IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name) AND branch.active=TRUE AND tenant.status='active' AND item.active=TRUE AND item.center_available=TRUE AND item.online_sale_enabled=TRUE AND item.product_usage IN ('retail','dual_use') AND item.stock_quantity>0 AND item.retail_price_paise>0 ORDER BY item.category,item.name")
+        .bind(branch_id).fetch_all(db).await
+}
+
+pub async fn product_checkout_plan(
+    db: &PgPool,
+    product_id: &str,
+    branch_id: &str,
+) -> Result<Option<ProductCheckoutPlan>, sqlx::Error> {
+    sqlx::query_as("SELECT item.tenant_id,item.branch_id,item.id,item.name,item.retail_price_paise AS price_paise,item.gst_percent,item.hsn_code,item.stock_quantity FROM inventory_items item JOIN branches branch ON item.branch_id IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name) JOIN tenants tenant ON tenant.id=branch.tenant_id AND item.tenant_id IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name) WHERE item.id=$1 AND $2 IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name) AND branch.active=TRUE AND tenant.status='active' AND item.active=TRUE AND item.center_available=TRUE AND item.online_sale_enabled=TRUE AND item.product_usage IN ('retail','dual_use') AND item.stock_quantity>0 AND item.retail_price_paise>0")
+        .bind(product_id).bind(branch_id).fetch_optional(db).await
 }
 
 pub async fn account_bookings(db: &PgPool, account_id: &str) -> Result<Vec<Value>, sqlx::Error> {

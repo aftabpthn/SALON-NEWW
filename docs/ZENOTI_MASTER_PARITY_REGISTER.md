@@ -11,15 +11,14 @@ Route truth: [README vs mounted routes](./evidence/aura-route-truth.json)
 - Literal `UNKNOWN` values: **0**; absent evidence uses explicit `NOT_EVIDENCED_IN_PHASE_0:*` markers.
 - Help Center navigation URLs locked: **2517**
 - API changelog entries locked: **10**
-- Inventory source drift: requested 40/15/8, current register is **41/15/8** across 64 source rows. Nine duplicate source pairs are consolidated into 55 canonical rows and retained in `sourceRowIds`.
+- Inventory source drift: requested 40/15/8, current register is **63/1/0** across 64 source rows. Nine duplicate source pairs are consolidated into 55 canonical rows and retained in `sourceRowIds`.
 - Staff App register is linked by SHA-256 with **149** rows; it is not copied into a competing second register.
-- README endpoint claims: **177**; mounted **49**, future **124**, external **3**, retired **1**. Unknown classifications: **0**.
+- README endpoint claims: **178**; mounted **56**, future **118**, external **3**, retired **1**. Unknown classifications: **0**.
 
 ### Status counts
 
-- Complete: 36
-- Missing: 6
-- Partial: 13
+- Complete: 54
+- Partial: 1
 - Unmapped: 2561
 
 ### Source counts
@@ -53,4 +52,4 @@ Phase 1 authorization: **APPROVED**.
 Product owner: ____________________
 Decision: **APPROVED_BY_USER_INSTRUCTION_2026-08-02**
 Date: ____________________
-Baseline hash: `f580caa00ffd57ac97c94a4b7ed4a28b055dcc5786d62a8f3c9fbf0a37ca13e5`
+Baseline hash: `7beaf9488a070dff050b0816d1bbb9d872ef2a7a2fe7041a0161e696de0afd1a`

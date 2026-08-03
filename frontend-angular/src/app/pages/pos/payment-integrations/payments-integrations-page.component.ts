@@ -1,7 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { LanguageService } from '../../../core/i18n/language.service';
 import { AuthService } from '../../../core/services/auth.service';
@@ -41,16 +40,34 @@ type PaymentPlatformOverview = {
   operations?: {
     pending?: number;
     failed?: number;
+    unknown?: number;
     payoutsPending?: number;
   };
+  recentOperations?: PaymentOperation[];
   openDisputes?: number;
   providers?: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }>;
+};
+
+type PaymentOperation = {
+  id: string;
+  provider: string;
+  operationType: string;
+  saleId: string;
+  amountPaise: number;
+  currency: string;
+  status: string;
+  captureMethod: string;
+  providerObjectId: string;
+  uncertainSince: string | null;
+  lastReconciledAt: string | null;
+  lastError: string;
+  createdAt: string;
 };
 
 @Component({
   selector: 'app-payments-integrations-page',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './payments-integrations-page.component.html',
   styleUrls: ['./payments-integrations-page.component.css'],
 })
@@ -68,7 +85,9 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
   onboardingCurrency = 'INR';
   actionLoading = false;
   actionError = '';
-  operations = { pending: 0, failed: 0, payoutsPending: 0 };
+  operations = { pending: 0, unknown: 0, failed: 0, payoutsPending: 0 };
+  recentOperations: PaymentOperation[] = [];
+  operationActionId = '';
   openDisputes = 0;
   providerSetup: Record<string, { configured?: boolean; enabled?: boolean; webhookConfigured?: boolean }> = {};
   private readonly countryNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -122,9 +141,11 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
       this.accounts = platform.data?.accounts ?? [];
       this.operations = {
         pending: Number(platform.data?.operations?.pending) || 0,
+        unknown: Number(platform.data?.operations?.unknown) || 0,
         failed: Number(platform.data?.operations?.failed) || 0,
         payoutsPending: Number(platform.data?.operations?.payoutsPending) || 0,
       };
+      this.recentOperations = platform.data?.recentOperations ?? [];
       this.openDisputes = Number(platform.data?.openDisputes) || 0;
       this.providerSetup = platform.data?.providers ?? {};
       this.providers = (response.data ?? []).map((provider) => ({
@@ -285,6 +306,47 @@ export class PaymentsIntegrationsPageComponent implements OnInit {
       this.actionError = this.messageFor(error, `Unable to ${enabled ? 'enable' : 'disable'} payment provider`);
     } finally {
       this.actionLoading = false;
+    }
+  }
+
+  canCapture(operation: PaymentOperation): boolean {
+    return operation.operationType === 'payment'
+      && operation.captureMethod === 'manual'
+      && ['requires_capture', 'authorised', 'authorized'].includes(operation.status.toLowerCase());
+  }
+
+  canVoid(operation: PaymentOperation): boolean {
+    return operation.operationType === 'payment'
+      && operation.captureMethod === 'manual'
+      && !['succeeded', 'captured', 'canceled', 'cancelled', 'failed'].includes(operation.status.toLowerCase());
+  }
+
+  canReconcile(operation: PaymentOperation): boolean {
+    return operation.operationType === 'payment'
+      && !!operation.providerObjectId
+      && (operation.provider === 'stripe' || operation.status.toLowerCase() === 'unknown');
+  }
+
+  async runPaymentAction(operation: PaymentOperation, action: 'capture' | 'void' | 'reconcile'): Promise<void> {
+    if (this.operationActionId) return;
+    const mfaCode = action === 'reconcile' ? '' : (window.prompt(`MFA code to ${action} this payment`) ?? '').trim();
+    if (action !== 'reconcile' && !mfaCode) return;
+    this.operationActionId = operation.id;
+    this.error = '';
+    try {
+      const body = action === 'reconcile' ? {} : {
+        idempotencyKey: `${action}:${crypto.randomUUID()}`,
+        amountPaise: action === 'capture' ? operation.amountPaise : undefined,
+        currency: operation.currency,
+        mfaCode,
+      };
+      await firstValueFrom(this.api.post(`/pos/payment-platform/payments/${operation.id}/${action}`, body));
+      this.notice = `Payment ${action} request recorded`;
+      await this.load();
+    } catch (error) {
+      this.error = this.messageFor(error, `Unable to ${action} payment`);
+    } finally {
+      this.operationActionId = '';
     }
   }
 

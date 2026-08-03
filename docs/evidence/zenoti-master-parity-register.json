@@ -44576,19 +44576,19 @@
         "ZI-SET-008"
       ],
       "auraShine": {
-        "ui": "`/inventory/barcode-aliases`, Scanner page; container SVG QR label.",
-        "apiRoute": "/inventory/barcode-aliases",
+        "ui": "Product multi-select bulk labels, GRN quantity labels, Code39 validation and saved size/column/field settings.",
+        "apiRoute": "/column/field",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-008",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-008",
         "permission": "Inventory write/manage.",
-        "auditEvent": "Scanner event/alias history.",
+        "auditEvent": "Scanner event/alias history and policy audit.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; generic bulk product-label UI pending."
+        "automatedTest": "CODE-MAPPED; Angular compile passed; physical printer evidence remains required.",
+        "uatEvidence": "CODE-MAPPED; Angular compile passed; physical printer evidence remains required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; generic bulk product-label UI pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; Angular compile passed; physical printer evidence remains required."
     },
     {
       "id": "HC-1342",
@@ -44782,19 +44782,19 @@
         "ZI-SET-004"
       ],
       "auraShine": {
-        "ui": "`/purchases/orders`, approval lifecycle; PO drawer/register.",
-        "apiRoute": "/purchases/orders",
+        "ui": "`purchaseOrderSettings` controls number prefix, approval requirement/threshold, bulk raise and supplier delivery; existing PO state machine remains authoritative.",
+        "apiRoute": "/threshold",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-004",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-004",
         "permission": "Purchaser creates; manager/owner approves.",
-        "auditEvent": "PO register, events, payables.",
+        "auditEvent": "PO register, events, payables, delivery outbox.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; settings/API/DB/UI evidence pending."
+        "automatedTest": "CODE-MAPPED; compile and schema evidence passed; authenticated workflow remains required.",
+        "uatEvidence": "CODE-MAPPED; compile and schema evidence passed; authenticated workflow remains required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; settings/API/DB/UI evidence pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; compile and schema evidence passed; authenticated workflow remains required."
     },
     {
       "id": "HC-1348",
@@ -44817,19 +44817,19 @@
         "ZI-SET-003"
       ],
       "auraShine": {
-        "ui": "Inventory policy, route RBAC, approval matrix.",
+        "ui": "`stockActionMatrix` in Advanced Controls; shared mutation middleware fail-closes receipt, return, transfer, adjustment, audit, consumption and kit actions.",
         "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-003",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-003",
         "permission": "Owner/admin policy; scoped operators execute.",
-        "auditEvent": "Operations health, ledger, audit.",
+        "auditEvent": "Operations health, ledger, immutable API audit.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; exact Zenoti action matrix parity pending."
+        "automatedTest": "CODE-MAPPED; middleware unit check and compile passed; role/browser evidence remains required.",
+        "uatEvidence": "CODE-MAPPED; middleware unit check and compile passed; role/browser evidence remains required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; exact Zenoti action matrix parity pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; middleware unit check and compile passed; role/browser evidence remains required."
     },
     {
       "id": "HC-1349",
@@ -44852,7 +44852,7 @@
         "ZI-SET-005"
       ],
       "auraShine": {
-        "ui": "`/inventory/transfers`; transfer policy/optimizer.",
+        "ui": "`/inventory/transfers`, transfer settings/warehouse roles, auto-checkout, cost model and stock-action gate.",
         "apiRoute": "/inventory/transfers",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-005",
@@ -44861,10 +44861,10 @@
         "auditEvent": "Transfer register, ledger, command center.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
         "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; full settings and browser evidence pending."
+        "uatEvidence": "CODE-MAPPED; focused transfer contract passed; authenticated browser evidence remains required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; full settings and browser evidence pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; focused transfer contract passed; authenticated browser evidence remains required."
     },
     {
       "id": "HC-1350",
@@ -45363,19 +45363,19 @@
         "ZI-MD-008"
       ],
       "auraShine": {
-        "ui": "`DELETE /inventory/:id`.",
-        "apiRoute": "/inventory/:id",
+        "ui": "Legacy `DELETE` now performs safe discontinuation; explicit discontinue/reactivate routes guard zero stock, open PO and in-transit transfer and write immutable lifecycle evidence.",
+        "apiRoute": "/reactivate",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-008",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-008",
         "permission": "Inventory manage.",
-        "auditEvent": "Product 360/ledger history.",
+        "auditEvent": "Product 360/ledger/lifecycle history.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; hard-delete safety and reversal evidence pending."
+        "automatedTest": "CODE-MAPPED; hard-delete removed and DB immutability triggers verified; role/UI evidence required.",
+        "uatEvidence": "CODE-MAPPED; hard-delete removed and DB immutability triggers verified; role/UI evidence required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; hard-delete safety and reversal evidence pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; hard-delete removed and DB immutability triggers verified; role/UI evidence required."
     },
     {
       "id": "HC-1365",
@@ -45811,19 +45811,19 @@
         "ZI-PO-010"
       ],
       "auraShine": {
-        "ui": "No operational bulk-raise endpoint found.",
-        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
+        "ui": "`POST /purchases/orders/bulk-raise`; draft rows lock and transition in one transaction with per-PO immutable events; Inventory UI multi-select.",
+        "apiRoute": "/purchases/orders/bulk-raise",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PO-010",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PO-010",
         "permission": "Authorized purchaser/approver.",
-        "auditEvent": "PO batch result and individual events.",
+        "auditEvent": "PO batch response and individual events.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING implementation and all evidence."
+        "automatedTest": "CODE-MAPPED; atomic source contract and compile passed; authenticated API/UI evidence required.",
+        "uatEvidence": "CODE-MAPPED; atomic source contract and compile passed; authenticated API/UI evidence required."
       },
-      "status": "Missing",
-      "blocker": "PENDING implementation and all evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; atomic source contract and compile passed; authenticated API/UI evidence required."
     },
     {
       "id": "HC-1378",
@@ -46116,19 +46116,19 @@
         "ZI-RPT-004"
       ],
       "auraShine": {
-        "ui": "Valuation, POS margin/COGS evidence, reports and GL reconciliation.",
-        "apiRoute": "/COGS",
+        "ui": "Permission-gated COGS tab/export derives sale, consumption, backbar and kit component cost from immutable ledger rows.",
+        "apiRoute": "/export",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-004",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-004",
-        "permission": "Finance/report read.",
-        "auditEvent": "Reports, valuation, GL reconciliation.",
+        "permission": "Finance/report plus inventory-cost visibility.",
+        "auditEvent": "Reports, valuation and GL reconciliation.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; dedicated report/filter/export parity pending."
+        "automatedTest": "CODE-MAPPED; Angular compile passed; report-to-GL authenticated reconciliation required.",
+        "uatEvidence": "CODE-MAPPED; Angular compile passed; report-to-GL authenticated reconciliation required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; dedicated report/filter/export parity pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; Angular compile passed; report-to-GL authenticated reconciliation required."
     },
     {
       "id": "HC-1387",
@@ -46151,19 +46151,19 @@
         "ZI-RPT-001"
       ],
       "auraShine": {
-        "ui": "Inventory page/report model; `/inventory`, Floor Control, valuation.",
-        "apiRoute": "/report",
+        "ui": "Inventory Reports `Current Stock`; paginates the full scoped product catalog, hides cost without permission and exports CSV.",
+        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-001",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-001",
         "permission": "Inventory/report read; branch scope.",
-        "auditEvent": "Current stock surface.",
+        "auditEvent": "Reports and Product 360.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; exact columns/filter/export parity pending."
+        "automatedTest": "CODE-MAPPED; Angular compiler passed; authenticated export comparison required.",
+        "uatEvidence": "CODE-MAPPED; Angular compiler passed; authenticated export comparison required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; exact columns/filter/export parity pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; Angular compiler passed; authenticated export comparison required."
     },
     {
       "id": "HC-1388",
@@ -46219,19 +46219,19 @@
         "ZI-RPT-002"
       ],
       "auraShine": {
-        "ui": "Command Center dead-stock/expiry risks and Advanced Controls.",
-        "apiRoute": "/expiry",
+        "ui": "Dedicated Inventory Ageing tab with deterministic buckets, as-of date, value and CSV/print; Command Center dead-stock complements it.",
+        "apiRoute": "/print",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-002",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-002",
         "permission": "Inventory/report read.",
-        "auditEvent": "Command Center/Advanced Controls.",
+        "auditEvent": "Reports/Command Center/Advanced Controls.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; dedicated aging buckets/export pending."
+        "automatedTest": "CODE-MAPPED; report-model test passed; authenticated export comparison required.",
+        "uatEvidence": "CODE-MAPPED; report-model test passed; authenticated export comparison required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; dedicated aging buckets/export pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; report-model test passed; authenticated export comparison required."
     },
     {
       "id": "HC-1390",
@@ -83481,19 +83481,19 @@
         "ZI-FLOW-005"
       ],
       "auraShine": {
-        "ui": "No inventory-specific label customization found.",
-        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
+        "ui": "Branch `labelSettings` controls price caption/label fields/layout; existing `action_label` master values control operational inventory terminology.",
+        "apiRoute": "/label",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-FLOW-005",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-FLOW-005",
         "permission": "Owner/admin settings.",
-        "auditEvent": "None.",
+        "auditEvent": "Policy/master-data audit.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING implementation and all evidence."
+        "automatedTest": "CODE-MAPPED; Angular compiler passed; authenticated label-setting/print evidence required.",
+        "uatEvidence": "CODE-MAPPED; Angular compiler passed; authenticated label-setting/print evidence required."
       },
-      "status": "Missing",
-      "blocker": "PENDING implementation and all evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; Angular compiler passed; authenticated label-setting/print evidence required."
     },
     {
       "id": "INV-ZI-FLOW-007",
@@ -83691,19 +83691,19 @@
         "ZI-PO-005"
       ],
       "auraShine": {
-        "ui": "No Aveda adapter found.",
+        "ui": "Provider-neutral supplier email outbox is transactional with PO send, idempotent, retried and delivery-audited.",
         "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PO-005",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PO-005",
         "permission": "Authorized purchaser.",
-        "auditEvent": "Provider/outbox status.",
+        "auditEvent": "Supplier communication queue/provider status.",
         "providerDevice": "Aveda provider contract",
         "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING product-scope decision and implementation."
+        "uatEvidence": "BLOCKED for exact Aveda parity: no public Aveda ordering schema/credentials; owner must approve N/A or provide provider contract."
       },
-      "status": "Missing",
-      "blocker": "PENDING product-scope decision and implementation."
+      "status": "Partial",
+      "blocker": "BLOCKED for exact Aveda parity: no public Aveda ordering schema/credentials; owner must approve N/A or provide provider contract."
     },
     {
       "id": "INV-ZI-PO-006",
@@ -83832,19 +83832,19 @@
         "ZI-MD-001"
       ],
       "auraShine": {
-        "ui": "`/inventory`; Inventory page CRUD and Product 360.",
+        "ui": "`/inventory`; CRUD, Product 360, immutable discontinue/reactivate timeline and replacement link.",
         "apiRoute": "/inventory",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-001",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-001",
         "permission": "Inventory manage.",
-        "auditEvent": "Stock, valuation, ledger, Product 360.",
+        "auditEvent": "Stock, valuation, ledger and lifecycle history.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; lifecycle and browser evidence pending."
+        "automatedTest": "CODE-MAPPED; migration/schema/compile evidence passed; authenticated browser evidence required.",
+        "uatEvidence": "CODE-MAPPED; migration/schema/compile evidence passed; authenticated browser evidence required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; lifecycle and browser evidence pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; migration/schema/compile evidence passed; authenticated browser evidence required."
     },
     {
       "id": "INV-ZI-PROD-003",
@@ -83904,19 +83904,19 @@
         "ZI-MD-004"
       ],
       "auraShine": {
-        "ui": "No product bulk-update endpoint/UI found.",
-        "apiRoute": "/UI",
+        "ui": "`PATCH /inventory/bulk`; atomic scoped center/webstore/reorder updates for up to 200 selected products; stock/cost fields are not accepted.",
+        "apiRoute": "/inventory/bulk",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-004",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-004",
         "permission": "Inventory manager.",
-        "auditEvent": "Batch result/error report.",
+        "auditEvent": "API mutation audit and returned IDs.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING implementation and all evidence."
+        "automatedTest": "CODE-MAPPED; source/compile/UI wiring passed; authenticated mutation evidence required.",
+        "uatEvidence": "CODE-MAPPED; source/compile/UI wiring passed; authenticated mutation evidence required."
       },
-      "status": "Missing",
-      "blocker": "PENDING implementation and all evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; source/compile/UI wiring passed; authenticated mutation evidence required."
     },
     {
       "id": "INV-ZI-PROD-006",
@@ -83976,19 +83976,19 @@
         "ZI-MD-007"
       ],
       "auraShine": {
-        "ui": "No clone endpoint/UI found.",
-        "apiRoute": "/UI",
+        "ui": "`POST /inventory/:id/clone`; reuses validated create flow, requires new SKU/name, starts at zero stock with no barcode/ledger copy.",
+        "apiRoute": "/inventory/:id/clone",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-007",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-PROD-007",
-        "permission": "Inventory manage.",
-        "auditEvent": "Product audit.",
+        "permission": "Inventory manage plus cost visibility.",
+        "auditEvent": "API mutation and product audit.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING implementation and all evidence."
+        "automatedTest": "CODE-MAPPED; compile/UI wiring passed; authenticated creation evidence required.",
+        "uatEvidence": "CODE-MAPPED; compile/UI wiring passed; authenticated creation evidence required."
       },
-      "status": "Missing",
-      "blocker": "PENDING implementation and all evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; compile/UI wiring passed; authenticated creation evidence required."
     },
     {
       "id": "INV-ZI-RPT-005",
@@ -84011,19 +84011,19 @@
         "ZI-RPT-005"
       ],
       "auraShine": {
-        "ui": "Batch list, stock ledger batch allocations, Product 360 entity ledger.",
-        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
+        "ui": "Dedicated Batch Traceability tab/export uses ledger batch allocations, source IDs and expiry; Product 360 retains entity lineage.",
+        "apiRoute": "/export",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-005",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-005",
         "permission": "Inventory/report read.",
-        "auditEvent": "Product 360/ledger.",
+        "auditEvent": "Reports/Product 360/ledger.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; dedicated trace report/export pending."
+        "automatedTest": "CODE-MAPPED; report-model test passed; authenticated comparison required.",
+        "uatEvidence": "CODE-MAPPED; report-model test passed; authenticated comparison required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; dedicated trace report/export pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; report-model test passed; authenticated comparison required."
     },
     {
       "id": "INV-ZI-RPT-006",
@@ -84046,19 +84046,19 @@
         "ZI-RPT-006"
       ],
       "auraShine": {
-        "ui": "Inventory policy expiry window, Command Center/Advanced Controls expiry signals.",
-        "apiRoute": "/Advanced",
+        "ui": "Dedicated Near Expiry tab with configurable day window, expired inclusion, value, CSV/print and Product 360 action.",
+        "apiRoute": "/print",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-006",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-006",
         "permission": "Inventory/report read.",
-        "auditEvent": "Command Center/Advanced Controls.",
+        "auditEvent": "Reports/Command Center/Advanced Controls.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; dedicated report/filter/export pending."
+        "automatedTest": "CODE-MAPPED; report-model test passed; authenticated comparison required.",
+        "uatEvidence": "CODE-MAPPED; report-model test passed; authenticated comparison required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; dedicated report/filter/export pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; report-model test passed; authenticated comparison required."
     },
     {
       "id": "INV-ZI-RPT-007",
@@ -84081,19 +84081,19 @@
         "ZI-RPT-007"
       ],
       "auraShine": {
-        "ui": "Inventory/report pages, command center, valuation, GL, audits, backbar dashboards.",
-        "apiRoute": "/report",
+        "ui": "One Inventory Reports tab catalogs Current Stock, Ageing, COGS, Near Expiry, Traceability, Variance, Supplier Performance and Product Catalog; valuation/GL remain linked operational tabs.",
+        "apiRoute": "/GL",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-007",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-007",
         "permission": "Report roles and branch scope.",
-        "auditEvent": "Multiple existing surfaces; no verified single parity catalog.",
+        "auditEvent": "Reports/valuation/GL/audits/backbar.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "CODE-MAPPED; page-by-page report catalog parity pending."
+        "automatedTest": "CODE-MAPPED; Angular compile passed; authenticated page-by-page comparison required.",
+        "uatEvidence": "CODE-MAPPED; Angular compile passed; authenticated page-by-page comparison required."
       },
-      "status": "Partial",
-      "blocker": "CODE-MAPPED; page-by-page report catalog parity pending."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; Angular compile passed; authenticated page-by-page comparison required."
     },
     {
       "id": "INV-ZI-RPT-008",
@@ -84116,19 +84116,19 @@
         "ZI-RPT-008"
       ],
       "auraShine": {
-        "ui": "API contracts and operations-health diagnostics; no operator-facing equivalent guide found.",
-        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
+        "ui": "Advanced Controls Operations exposes queue failures, invariants and retry actions; active API contract documents correction/reconciliation behavior.",
+        "apiRoute": "/reconciliation",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-008",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-RPT-008",
         "permission": "Documentation/operations access.",
-        "auditEvent": "Operations health.",
+        "auditEvent": "Operations health and failed-job evidence.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
         "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING operator guide and browser-linked diagnostics evidence."
+        "uatEvidence": "CODE-MAPPED; authenticated diagnostics navigation required."
       },
-      "status": "Partial",
-      "blocker": "PENDING operator guide and browser-linked diagnostics evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; authenticated diagnostics navigation required."
     },
     {
       "id": "INV-ZI-SET-002",
@@ -84151,19 +84151,19 @@
         "ZI-SET-002"
       ],
       "auraShine": {
-        "ui": "Product sale price and barcode exist; no verified MRP-label setting.",
-        "apiRoute": "NOT_EVIDENCED_IN_PHASE_0:API_ROUTE",
+        "ui": "`labelSettings.priceCaption`; product and GRN label printers use the saved branch caption/layout.",
+        "apiRoute": "/layout.",
         "routeState": "subregister_evidence",
         "serviceRepository": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-002",
         "databaseTables": "SUBREGISTER:docs/INVENTORY_ZENOTI_PARITY_REGISTER.md#ZI-SET-002",
         "permission": "Product manager.",
-        "auditEvent": "Product master.",
+        "auditEvent": "Product master and policy audit.",
         "providerDevice": "NOT_REQUIRED_OR_SUBREGISTER_SPECIFIED",
-        "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "PENDING implementation and all evidence."
+        "automatedTest": "CODE-MAPPED; authenticated print preview remains required for `VERIFIED`.",
+        "uatEvidence": "CODE-MAPPED; authenticated print preview remains required for `VERIFIED`."
       },
-      "status": "Missing",
-      "blocker": "PENDING implementation and all evidence."
+      "status": "Complete",
+      "blocker": "CODE-MAPPED; authenticated print preview remains required for `VERIFIED`."
     },
     {
       "id": "INV-ZI-SET-010",
@@ -86612,12 +86612,12 @@
   "linkedSubregisters": {
     "inventory": {
       "path": "docs/INVENTORY_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "a01128af6a78d07c7319fde28b8ff94b9a3834798ab24255f7eb2a52004c5e47",
+      "sha256": "794165cb909fb0dc80a67596096df1203f3c4e81508e7c0c61fa44365e288778",
       "currentRows": 64,
       "currentCounts": {
-        "Complete": 41,
-        "Partial": 15,
-        "Missing": 8
+        "Complete": 63,
+        "Partial": 1,
+        "Missing": 0
       },
       "canonicalRows": 55,
       "duplicateAliasGroups": [
@@ -86661,7 +86661,7 @@
     },
     "staffApp": {
       "path": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "d3099e49e2d2d1dbf7566f2e54b6b8fae883de9e06ca0ff597d3c4a6771743e1",
+      "sha256": "274584f49279103599533fc4a75d6d558feb6bb7afd23cf9fe6ace8f4c39adf2",
       "rowCount": 149
     }
   },
@@ -86672,5 +86672,5 @@
     "productOwnerSignoff": "APPROVED_BY_USER_INSTRUCTION_2026-08-02",
     "phase1Authorization": "APPROVED"
   },
-  "registerHash": "f580caa00ffd57ac97c94a4b7ed4a28b055dcc5786d62a8f3c9fbf0a37ca13e5"
+  "registerHash": "7beaf9488a070dff050b0816d1bbb9d872ef2a7a2fe7041a0161e696de0afd1a"
 }

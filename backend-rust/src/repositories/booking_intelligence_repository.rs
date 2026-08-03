@@ -44,7 +44,7 @@ pub async fn service_timings(
     branch_id: &str,
     service_ids: &[String],
 ) -> Result<Vec<ServiceTiming>, sqlx::Error> {
-    sqlx::query_as("SELECT id,name,duration_minutes,price_paise::BIGINT AS price_paise,wait_time_minutes,cleanup_time_minutes,buffer_time_minutes FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND id=ANY($3)")
+    sqlx::query_as("SELECT id,name,duration_minutes,price_paise::BIGINT AS price_paise,GREATEST(processing_time_minutes,wait_time_minutes) AS wait_time_minutes,cleanup_time_minutes,buffer_time_minutes FROM services WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND id=ANY($3)")
         .bind(tenant_id).bind(branch_id).bind(service_ids).fetch_all(db).await
 }
 

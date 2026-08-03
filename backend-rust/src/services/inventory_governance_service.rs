@@ -46,6 +46,12 @@ pub struct PolicyWrite {
     pub transfer_delay_cost_per_unit_day_paise: Option<i64>,
     pub transfer_expected_days: Option<i32>,
     pub approval_matrix: Value,
+    #[serde(default = "default_stock_action_matrix")]
+    pub stock_action_matrix: Value,
+    #[serde(default = "default_purchase_order_settings")]
+    pub purchase_order_settings: Value,
+    #[serde(default = "default_label_settings")]
+    pub label_settings: Value,
 }
 fn default_reorder_history_days() -> i32 {
     60
@@ -67,6 +73,15 @@ fn default_true() -> bool {
 }
 fn default_edit_lock_days() -> i32 {
     90
+}
+fn default_stock_action_matrix() -> Value {
+    json!({"receipt":true,"transfer":true,"adjustment":true,"audit":true,"consumption":true,"returns":true,"kit":true})
+}
+fn default_purchase_order_settings() -> Value {
+    json!({"numberPrefix":"PO","approvalRequired":true,"approvalThresholdPaise":0,"bulkRaiseEnabled":true,"supplierElectronicDelivery":false})
+}
+fn default_label_settings() -> Value {
+    json!({"priceCaption":"MRP","showName":true,"showPrice":true,"showSku":true,"showBatch":true,"showExpiry":true,"widthMm":76,"heightMm":32,"columns":5,"terms":{"product":"Product","retail":"Retail","consumable":"Consumable","stock":"Stock"}})
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -234,7 +249,7 @@ fn text(value: &str, name: &str, max: usize) -> Result<String, AppError> {
 }
 
 pub async fn policy(db: &PgPool, t: &str, b: &str) -> Result<Value, AppError> {
-    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","autoCheckoutRetailSales":true,"autoCheckoutServiceConsumption":true,"valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"countValueVarianceThresholdPaise":10000,"allowZeroUnauditedAudit":false,"reorderHistoryDays":60,"reorderCoverageDays":30,"partialDeliveryPolicy":"allow","financialLockDate":null,"editLockDays":90,"masterEditLock":false,"excessReceivingPolicy":"permission_required","priceDifferencePrompt":true,"priceDifferenceThresholdBps":0,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"}})))
+    Ok(repo::policy(db,t,b).await.map_err(|e|db_error(e,"failed to load inventory policy"))?.unwrap_or_else(||json!({"negativeStockRule":"block","autoCheckoutRetailSales":true,"autoCheckoutServiceConsumption":true,"valuationMethod":"weighted_average","expiryWindowDays":30,"countVarianceThresholdBps":500,"countValueVarianceThresholdPaise":10000,"allowZeroUnauditedAudit":false,"reorderHistoryDays":60,"reorderCoverageDays":30,"partialDeliveryPolicy":"allow","financialLockDate":null,"editLockDays":90,"masterEditLock":false,"excessReceivingPolicy":"permission_required","priceDifferencePrompt":true,"priceDifferenceThresholdBps":0,"transferBaseTransportCostPaise":null,"transferCostPerKmPaise":null,"transferHandlingCostPerUnitPaise":null,"transferDelayCostPerUnitDayPaise":null,"transferExpectedDays":null,"approvalMatrix":{"negativeStock":"owner","stockCount":"inventory_manager","backbarOverride":"owner"},"stockActionMatrix":default_stock_action_matrix(),"purchaseOrderSettings":default_purchase_order_settings(),"labelSettings":default_label_settings()})))
 }
 pub async fn save_policy(
     db: &PgPool,
@@ -278,6 +293,9 @@ pub async fn save_policy(
         || !(14..=365).contains(&p.reorder_history_days)
         || !(7..=180).contains(&p.reorder_coverage_days)
         || !p.approval_matrix.is_object()
+        || !valid_stock_action_matrix(&p.stock_action_matrix)
+        || !valid_purchase_order_settings(&p.purchase_order_settings)
+        || !valid_label_settings(&p.label_settings)
         || (transfer_cost_fields.iter().any(|value| *value)
             && !transfer_cost_fields.iter().all(|value| *value))
         || p.transfer_base_transport_cost_paise
@@ -293,6 +311,30 @@ pub async fn save_policy(
     {
         return Err(AppError::validation("inventory policy values are invalid"));
     }
+    let existing = repo::policy(db, t, b)
+        .await
+        .map_err(|e| db_error(e, "failed to load inventory policy"))?;
+    let saved_i64 = |key: &str| {
+        existing
+            .as_ref()
+            .and_then(|value| value.get(key))
+            .and_then(Value::as_i64)
+    };
+    let transfer_base_transport_cost_paise = p
+        .transfer_base_transport_cost_paise
+        .or_else(|| saved_i64("transferBaseTransportCostPaise"));
+    let transfer_cost_per_km_paise = p
+        .transfer_cost_per_km_paise
+        .or_else(|| saved_i64("transferCostPerKmPaise"));
+    let transfer_handling_cost_per_unit_paise = p
+        .transfer_handling_cost_per_unit_paise
+        .or_else(|| saved_i64("transferHandlingCostPerUnitPaise"));
+    let transfer_delay_cost_per_unit_day_paise = p
+        .transfer_delay_cost_per_unit_day_paise
+        .or_else(|| saved_i64("transferDelayCostPerUnitDayPaise"));
+    let transfer_expected_days = p
+        .transfer_expected_days
+        .or_else(|| saved_i64("transferExpectedDays").and_then(|value| i32::try_from(value).ok()));
     repo::save_policy(
         db,
         t,
@@ -314,16 +356,90 @@ pub async fn save_policy(
         &p.excess_receiving_policy,
         p.price_difference_prompt,
         p.price_difference_threshold_bps,
-        p.transfer_base_transport_cost_paise,
-        p.transfer_cost_per_km_paise,
-        p.transfer_handling_cost_per_unit_paise,
-        p.transfer_delay_cost_per_unit_day_paise,
-        p.transfer_expected_days,
+        transfer_base_transport_cost_paise,
+        transfer_cost_per_km_paise,
+        transfer_handling_cost_per_unit_paise,
+        transfer_delay_cost_per_unit_day_paise,
+        transfer_expected_days,
         &p.approval_matrix,
         p.allow_zero_unaudited_audit,
+        &p.stock_action_matrix,
+        &p.purchase_order_settings,
+        &p.label_settings,
     )
     .await
     .map_err(|e| db_error(e, "failed to save inventory policy"))
+}
+
+fn valid_stock_action_matrix(value: &Value) -> bool {
+    [
+        "receipt",
+        "transfer",
+        "adjustment",
+        "audit",
+        "consumption",
+        "returns",
+        "kit",
+    ]
+    .into_iter()
+    .all(|key| value.get(key).is_some_and(Value::is_boolean))
+}
+
+fn valid_purchase_order_settings(value: &Value) -> bool {
+    let Some(prefix) = value.get("numberPrefix").and_then(Value::as_str) else {
+        return false;
+    };
+    !prefix.is_empty()
+        && prefix.len() <= 12
+        && prefix
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && value.get("approvalRequired").is_some_and(Value::is_boolean)
+        && value.get("bulkRaiseEnabled").is_some_and(Value::is_boolean)
+        && value
+            .get("supplierElectronicDelivery")
+            .is_some_and(Value::is_boolean)
+        && value
+            .get("approvalThresholdPaise")
+            .and_then(Value::as_i64)
+            .is_some_and(|v| (0..=1_000_000_000_000).contains(&v))
+}
+
+fn valid_label_settings(value: &Value) -> bool {
+    value
+        .get("priceCaption")
+        .and_then(Value::as_str)
+        .is_some_and(|v| !v.trim().is_empty() && v.chars().count() <= 30)
+        && [
+            "showName",
+            "showPrice",
+            "showSku",
+            "showBatch",
+            "showExpiry",
+        ]
+        .into_iter()
+        .all(|key| value.get(key).is_some_and(Value::is_boolean))
+        && value
+            .get("widthMm")
+            .and_then(Value::as_i64)
+            .is_some_and(|v| (20..=100).contains(&v))
+        && value
+            .get("heightMm")
+            .and_then(Value::as_i64)
+            .is_some_and(|v| (15..=80).contains(&v))
+        && value
+            .get("columns")
+            .and_then(Value::as_i64)
+            .is_some_and(|v| (1..=8).contains(&v))
+        && ["product", "retail", "consumable", "stock"]
+            .into_iter()
+            .all(|key| {
+                value
+                    .get("terms")
+                    .and_then(|terms| terms.get(key))
+                    .and_then(Value::as_str)
+                    .is_some_and(|term| !term.trim().is_empty() && term.chars().count() <= 30)
+            })
 }
 pub async fn supplier_governance(
     db: &PgPool,

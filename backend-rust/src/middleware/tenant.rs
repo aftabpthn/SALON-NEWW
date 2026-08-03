@@ -14,7 +14,10 @@ use uuid::Uuid;
 use crate::{
     middleware::security_headers,
     models::common::AppError,
-    repositories::auth_repository::{self, AuthAuditInput},
+    repositories::{
+        auth_repository::{self, AuthAuditInput},
+        inventory_governance_repository,
+    },
     services::{
         auth_service::{self, AuthClaims},
         entitlement_service, security_service,
@@ -102,6 +105,8 @@ const APPOINTMENT_PREFIXES: &[&str] = &[
     "/appointment-lifecycle",
     "/appointment-resources",
     "/appointments",
+    "/fitness",
+    "/kiosk",
     "/audit/appointments",
 ];
 const BOOKING_PREFIXES: &[&str] = &[
@@ -430,6 +435,25 @@ pub async fn require_inventory_idempotency(
         .branch_id
         .as_deref()
         .ok_or_else(|| AppError::forbidden("branch-scoped session is required"))?;
+    if let Some(action) = inventory_stock_action(&route_path) {
+        let policy =
+            inventory_governance_repository::policy(&state.db, &claims.tenant_id, branch_id)
+                .await
+                .map_err(|_| {
+                    AppError::internal("failed to enforce inventory stock-action policy")
+                })?;
+        if policy
+            .as_ref()
+            .and_then(|value| value.get("stockActionMatrix"))
+            .and_then(|matrix| matrix.get(action))
+            .and_then(serde_json::Value::as_bool)
+            == Some(false)
+        {
+            return Err(AppError::forbidden(format!(
+                "inventory {action} action is disabled for this branch"
+            )));
+        }
+    }
     let request_path = req
         .uri()
         .path_and_query()
@@ -681,6 +705,33 @@ fn normalize_route_path(path: &str) -> &str {
 #[inline]
 fn path_starts_with(path: &str, prefix: &str) -> bool {
     path == prefix || (path.starts_with(prefix) && path.as_bytes().get(prefix.len()) == Some(&b'/'))
+}
+
+fn inventory_stock_action(path: &str) -> Option<&'static str> {
+    let path = normalize_route_path(path);
+    if path_starts_with(path, "/purchases/grn") {
+        Some("receipt")
+    } else if path_starts_with(path, "/purchases/returns") || path.contains("/quarantine/") {
+        Some("returns")
+    } else if path_starts_with(path, "/inventory/transfers") {
+        Some("transfer")
+    } else if path_starts_with(path, "/inventory/adjustments")
+        || path_starts_with(path, "/inventory/negative-stock-requests")
+    {
+        Some("adjustment")
+    } else if path_starts_with(path, "/inventory/stock-audits") {
+        Some("audit")
+    } else if path_starts_with(path, "/inventory/backbar-usage")
+        || path_starts_with(path, "/inventory/color-bowls")
+        || path_starts_with(path, "/inventory/checkouts")
+        || path_starts_with(path, "/inventory/conversions")
+    {
+        Some("consumption")
+    } else if path.ends_with("/kit") || path.ends_with("/assemble") || path.ends_with("/unbundle") {
+        Some("kit")
+    } else {
+        None
+    }
 }
 
 fn requires_platform_access(path: &str, method: &Method) -> bool {
@@ -1029,6 +1080,13 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             )
         } else {
             access(FINANCE_WRITE_ROLES, &["finance.write"])
+        });
+    }
+    if path_starts_with(path, "/settings/organization") {
+        return Some(if is_read_method(method) {
+            access(TENANT_ADMIN_ROLES, &["settings.read", "settings.manage"])
+        } else {
+            access(TENANT_ADMIN_ROLES, &["settings.manage"])
         });
     }
     if path_starts_with(path, "/settings/branches")
@@ -1613,7 +1671,7 @@ fn client_access(path: &str, method: &Method) -> RouteAccess {
             ],
         );
     }
-    if path.ends_with("/merge") {
+    if path.contains("/merge") {
         return access(
             MANAGEMENT_ROLES,
             &["clients.merge", "clients.manage", "front_desk.write"],
@@ -1762,12 +1820,40 @@ pub async fn require_platform_admin(req: Request<Body>, next: Next) -> Result<Re
 #[cfg(test)]
 mod tests {
     use super::{
-        body_idempotency_key, distance_meters, normalize_route_path, requires_platform_access,
-        role_matches_tenant_context, role_or_permissions_allowed, route_access,
-        staff_geofence_bypass, valid_idempotency_key, MANAGEMENT_ROLES, TENANT_ROLES,
+        body_idempotency_key, distance_meters, inventory_stock_action, normalize_route_path,
+        requires_platform_access, role_matches_tenant_context, role_or_permissions_allowed,
+        route_access, staff_geofence_bypass, valid_idempotency_key, MANAGEMENT_ROLES,
+        TENANT_ADMIN_ROLES, TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
+
+    #[test]
+    fn inventory_mutations_map_to_branch_stock_actions() {
+        assert_eq!(
+            inventory_stock_action("/api/v1/purchases/grn"),
+            Some("receipt")
+        );
+        assert_eq!(
+            inventory_stock_action("/api/v1/inventory/transfers/1/ship"),
+            Some("transfer")
+        );
+        assert_eq!(
+            inventory_stock_action("/api/v1/inventory/stock-audits/1/approve"),
+            Some("audit")
+        );
+        assert_eq!(inventory_stock_action("/api/v1/inventory/1"), None);
+    }
+
+    #[test]
+    fn organization_control_plane_requires_tenant_admin_or_settings_permission() {
+        let read = route_access("/settings/organization/control-plane", &Method::GET).unwrap();
+        let write = route_access("/settings/organization/profile", &Method::PUT).unwrap();
+        assert_eq!(read.roles, TENANT_ADMIN_ROLES);
+        assert_eq!(write.roles, TENANT_ADMIN_ROLES);
+        assert!(read.permissions.contains(&"settings.read"));
+        assert!(write.permissions.contains(&"settings.manage"));
+    }
 
     #[test]
     fn phase1_staff_geofence_distance_and_recovery_paths_are_safe() {
@@ -1833,6 +1919,12 @@ mod tests {
     fn protected_domains_have_named_permission_mappings() {
         for (path, method, permission) in [
             ("/api/v1/appointments", Method::GET, "appointments.read"),
+            ("/api/v1/fitness/summary", Method::GET, "appointments.read"),
+            (
+                "/api/v1/fitness/class-sessions",
+                Method::POST,
+                "appointments.manage",
+            ),
             (
                 "/api/v1/appointments/1/no-show-charge",
                 Method::POST,
@@ -1993,6 +2085,42 @@ mod tests {
     }
 
     #[test]
+    fn phase_three_security_control_plane_is_fail_closed_and_permission_mapped() {
+        for (path, method, permission) in [
+            (
+                "/api/v1/security/data-governance",
+                Method::GET,
+                "security.read",
+            ),
+            (
+                "/api/v1/security/pii-exports",
+                Method::POST,
+                "security.manage",
+            ),
+            (
+                "/api/v1/security/privacy-requests/request-1/execute-deletion",
+                Method::POST,
+                "security.manage",
+            ),
+            (
+                "/api/v1/security/compliance-evidence/soc2/access-control",
+                Method::PUT,
+                "security.manage",
+            ),
+            (
+                "/api/v1/security/pen-test-findings/finding-1",
+                Method::PATCH,
+                "security.manage",
+            ),
+        ] {
+            let access = route_access(normalize_route_path(path), &method)
+                .unwrap_or_else(|| panic!("{path} is not permission mapped"));
+            assert!(access.permissions.contains(&permission), "{path}");
+        }
+        assert!(route_access("/unregistered-privileged-action", &Method::POST).is_none());
+    }
+
+    #[test]
     fn tenant_saas_is_owner_or_admin_only() {
         let access = route_access(normalize_route_path("/api/v1/saas/context"), &Method::GET)
             .expect("tenant SaaS route is mapped");
@@ -2018,6 +2146,23 @@ mod tests {
             assert!(access.roles.contains(&"admin"));
             assert!(access.roles.contains(&"manager"));
             assert!(access.permissions.contains(&"management.write"));
+        }
+    }
+
+    #[test]
+    fn kiosk_management_routes_require_appointment_management() {
+        for (path, method) in [
+            ("/api/v1/kiosk/devices", Method::GET),
+            ("/api/v1/kiosk/devices", Method::POST),
+            ("/api/v1/kiosk/devices/device-1", Method::PATCH),
+            ("/api/v1/kiosk/devices/device-1/revoke", Method::POST),
+        ] {
+            let access = route_access(normalize_route_path(path), &method)
+                .unwrap_or_else(|| panic!("{path} is not permission mapped"));
+            assert!(
+                access.permissions.contains(&"appointments.manage"),
+                "{path}"
+            );
         }
     }
 

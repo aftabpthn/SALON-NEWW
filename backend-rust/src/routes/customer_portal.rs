@@ -3,12 +3,12 @@ use std::net::SocketAddr;
 use axum::{
     body::Body,
     extract::{ConnectInfo, Path, Query, State},
-    http::{header, HeaderMap, HeaderValue},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
 };
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -87,6 +87,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/customer/packages",
             get(customer_packages).post(purchase_customer_package),
+        )
+        .route(
+            "/customer/products/checkout",
+            post(purchase_customer_product),
         )
         .route(
             "/customer/gift-cards",
@@ -172,6 +176,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/marketplace/businesses/:id/packages",
             get(business_packages),
+        )
+        .route(
+            "/marketplace/businesses/:id/products",
+            get(business_products),
         )
         .route(
             "/marketplace/businesses/:id/availability",
@@ -338,6 +346,8 @@ struct BookingRequest {
     #[serde(default)]
     service_selections: Vec<appointments::AppointmentServiceSelection>,
     client_id: Option<String>,
+    #[serde(default)]
+    additional_client_ids: Vec<String>,
     package_credit_id: Option<String>,
     staff_id: Option<String>,
     start_at: String,
@@ -350,6 +360,7 @@ struct BookingRequest {
     payment_mode: String,
     #[serde(default)]
     card_guarantee_accepted: bool,
+    idempotency_key: Option<String>,
 }
 
 fn default_payment_mode() -> String {
@@ -432,6 +443,16 @@ struct PackagePurchaseRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ProductPurchaseRequest {
+    product_id: String,
+    branch_id: String,
+    quantity: i64,
+    coupon_code: Option<String>,
+    idempotency_key: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GiftCardClaimRequest {
     code: String,
     branch_id: Option<String>,
@@ -474,6 +495,10 @@ struct CustomerBookingContactlessRequest {
 #[serde(rename_all = "camelCase")]
 struct CustomerBookingCheckInRequest {
     eta_minutes: i32,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    accuracy_meters: Option<f64>,
+    idempotency_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1096,6 +1121,7 @@ async fn purchase_customer_membership(
         "customer_membership_purchase",
         &body.idempotency_key,
         line,
+        None,
     )
     .await?;
     Ok(Json(ApiResponse::ok(checkout)))
@@ -1277,6 +1303,66 @@ async fn purchase_customer_package(
         "customer_package_purchase",
         &body.idempotency_key,
         pos::customer_package_checkout_line(package.id, package.name, package.price_paise),
+        None,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(checkout)))
+}
+
+async fn purchase_customer_product(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ProductPurchaseRequest>,
+) -> ApiResult<pos::CustomerCommerceCheckout> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    validate_commerce_idempotency_key(&body.idempotency_key)?;
+    if !(1..=20).contains(&body.quantity) {
+        return Err(AppError::validation("quantity must be between 1 and 20"));
+    }
+    let coupon_code = clean_optional(body.coupon_code.as_deref(), 80, "couponCode")?;
+    let product =
+        repo::product_checkout_plan(&state.db, body.product_id.trim(), body.branch_id.trim())
+            .await
+            .map_err(|_| AppError::internal("failed to load Webstore product"))?
+            .ok_or_else(|| AppError::not_found("available Webstore product was not found"))?;
+    if i64::from(product.stock_quantity) < body.quantity {
+        return Err(AppError::conflict(
+            "requested product quantity is not available",
+        ));
+    }
+    if pos::configured_customer_payment_provider(&state, &product.tenant_id, &product.branch_id)
+        .await?
+        .is_none()
+    {
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_NOT_CONFIGURED",
+            "online product checkout is not configured for this location",
+        ));
+    }
+    let account = repo::account(&state.db, &claims.sub)
+        .await
+        .map_err(|_| AppError::internal("failed to load customer account"))?
+        .ok_or_else(|| AppError::unauthenticated("customer account is not active"))?;
+    let client_id =
+        repo::ensure_client_link(&state.db, &account, &product.tenant_id, &product.branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to link customer to product branch"))?;
+    let checkout = pos::create_customer_commerce_checkout(
+        &state,
+        &product.tenant_id,
+        &product.branch_id,
+        &client_id,
+        "customer_product_purchase",
+        &body.idempotency_key,
+        pos::customer_product_checkout_line(
+            product.id,
+            product.name,
+            body.quantity,
+            product.price_paise,
+            product.gst_percent,
+            product.hsn_code,
+        ),
+        (!coupon_code.is_empty()).then_some(coupon_code.as_str()),
     )
     .await?;
     Ok(Json(ApiResponse::ok(checkout)))
@@ -1317,6 +1403,7 @@ async fn purchase_customer_gift_card(
         "customer_gift_card_purchase",
         &body.idempotency_key,
         pos::customer_gift_card_checkout_line(body.amount_paise),
+        None,
     )
     .await?;
     Ok(Json(ApiResponse::ok(checkout)))
@@ -2033,12 +2120,16 @@ async fn business(State(state): State<AppState>, Path(id): Path<String>) -> ApiR
     let memberships = repo::business_memberships(&state.db, &id)
         .await
         .map_err(|_| AppError::internal("failed to load membership plans"))?;
+    let products = repo::business_products(&state.db, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load Webstore products"))?;
     decorate_marketplace_payment_modes(&state, &mut profile);
     if let Some(object) = profile.as_object_mut() {
         object.insert("services".to_string(), json!(services));
         object.insert("staff".to_string(), json!(staff));
         object.insert("reviews".to_string(), json!(reviews));
         object.insert("membershipPlans".to_string(), json!(memberships));
+        object.insert("products".to_string(), json!(products));
     }
     Ok(Json(ApiResponse::ok(profile)))
 }
@@ -2091,6 +2182,17 @@ async fn business_packages(
         repo::business_packages(&state.db, &id)
             .await
             .map_err(|_| AppError::internal("failed to load package plans"))?,
+    )))
+}
+
+async fn business_products(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Vec<Value>> {
+    Ok(Json(ApiResponse::ok(
+        repo::business_products(&state.db, &id)
+            .await
+            .map_err(|_| AppError::internal("failed to load Webstore products"))?,
     )))
 }
 
@@ -2301,6 +2403,25 @@ async fn create_customer_booking(
         )
         .await?;
     }
+    if !body.additional_client_ids.is_empty() {
+        if !package_credit_id.trim().is_empty() {
+            return Err(appointments::ApiError::bad_request(
+                "package credit cannot be shared across a group booking",
+            ));
+        }
+        return create_customer_group_booking(
+            &state,
+            headers,
+            &claims.sub,
+            booking_tenant_id,
+            booking_branch_id,
+            &client_id,
+            &booking_source,
+            &payment_mode,
+            &body,
+        )
+        .await;
+    }
     let token = appointments::issue_public_booking_token(
         &state,
         booking_tenant_id,
@@ -2374,6 +2495,252 @@ async fn create_customer_booking(
         .ok_or_else(|| {
             appointments::ApiError::internal("created customer booking was not found")
         })?;
+    Ok(Json(json!({"success":true,"data":booking})))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn create_customer_group_booking(
+    state: &AppState,
+    mut headers: HeaderMap,
+    account_id: &str,
+    tenant_id: &str,
+    branch_id: &str,
+    primary_client_id: &str,
+    source: &str,
+    payment_mode: &str,
+    body: &BookingRequest,
+) -> Result<Json<Value>, appointments::ApiError> {
+    if body.service_ids.len() != 1 {
+        return Err(appointments::ApiError::bad_request(
+            "couple and group Webstore bookings require one service per participant",
+        ));
+    }
+    let mut client_ids = vec![primary_client_id.to_string()];
+    for requested in &body.additional_client_ids {
+        let client_id = repo::customer_booking_client_id(
+            &state.db,
+            account_id,
+            tenant_id,
+            branch_id,
+            requested.trim(),
+        )
+        .await
+        .map_err(|_| appointments::ApiError::internal("failed to validate group profile"))?
+        .ok_or_else(|| {
+            appointments::ApiError::bad_request("group profile is not available for booking")
+        })?;
+        if client_ids.iter().any(|existing| existing == &client_id) {
+            return Err(appointments::ApiError::bad_request(
+                "group booking profiles must be unique",
+            ));
+        }
+        client_ids.push(client_id);
+    }
+    if !(2..=6).contains(&client_ids.len()) {
+        return Err(appointments::ApiError::bad_request(
+            "couple/group booking requires two to six guests",
+        ));
+    }
+    let start_at = DateTime::parse_from_rfc3339(&body.start_at)
+        .map_err(|_| appointments::ApiError::bad_request("startAt must be RFC3339"))?
+        .with_timezone(&Utc);
+    let end_at = DateTime::parse_from_rfc3339(&body.end_at)
+        .map_err(|_| appointments::ApiError::bad_request("endAt must be RFC3339"))?
+        .with_timezone(&Utc);
+    let service_id = body.service_ids[0].trim();
+    let candidate_rows = sqlx::query(
+        "SELECT staff.id FROM staff WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE AND (EXISTS(SELECT 1 FROM staff_service_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.service_id=$3) OR EXISTS(SELECT 1 FROM staff_catalog_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.item_type='service' AND assignment.item_id=$3)) ORDER BY CASE WHEN staff.id=$4 THEN 0 ELSE 1 END,staff.appointment_display_name,staff.first_name",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(service_id)
+    .bind(body.staff_id.as_deref().unwrap_or_default())
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| appointments::ApiError::internal("failed to load group providers"))?;
+    let candidates = candidate_rows
+        .into_iter()
+        .filter_map(|row| row.try_get::<String, _>("id").ok())
+        .collect::<Vec<_>>();
+    let mut used_staff: Vec<String> = Vec::new();
+    for index in 0..client_ids.len() {
+        let required = (index == 0)
+            .then(|| body.staff_id.as_deref().unwrap_or_default().trim())
+            .filter(|value| !value.is_empty());
+        let mut selected = None;
+        for staff_id in candidates.iter().filter(|candidate| {
+            !used_staff.contains(candidate)
+                && required.map_or(true, |required_id| candidate.as_str() == required_id)
+        }) {
+            match appointments::validate_staff_blackout(
+                state, tenant_id, branch_id, staff_id, start_at, end_at,
+            )
+            .await
+            {
+                Ok(()) => {}
+                Err(error) if error.status_code() == StatusCode::CONFLICT => continue,
+                Err(error) => return Err(error),
+            }
+            match appointments::validate_staff_booking_availability(
+                state,
+                tenant_id,
+                branch_id,
+                staff_id,
+                &body.service_ids,
+                start_at,
+                end_at,
+                None,
+            )
+            .await
+            {
+                Ok(()) => {
+                    selected = Some(staff_id.clone());
+                    break;
+                }
+                Err(error) if error.status_code() == StatusCode::CONFLICT => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        used_staff.push(selected.ok_or_else(|| {
+            appointments::ApiError::conflict(
+                "enough distinct providers are not available for this group slot",
+            )
+        })?);
+    }
+    let selection = body
+        .service_selections
+        .iter()
+        .find(|selection| selection.service_id == service_id);
+    let group_id = uuid::Uuid::new_v4().to_string();
+    let lines = client_ids
+        .iter()
+        .zip(used_staff.iter())
+        .enumerate()
+        .map(
+            |(index, (client_id, staff_id))| appointments::AppointmentBatchLinePayload {
+                appointment_id: String::new(),
+                expected_version: None,
+                client_id: client_id.clone(),
+                staff_id: staff_id.clone(),
+                requested_staff_id: if index == 0 {
+                    body.staff_id.clone().unwrap_or_default()
+                } else {
+                    String::new()
+                },
+                staff_preference: if index == 0
+                    && body
+                        .staff_id
+                        .as_deref()
+                        .is_some_and(|id| !id.trim().is_empty())
+                {
+                    "preferred".into()
+                } else {
+                    "first_available".into()
+                },
+                staff_change_approval: String::new(),
+                staff_change_reason: String::new(),
+                recommended_staff_id: String::new(),
+                recommendation_override_reason: String::new(),
+                service_id: service_id.to_string(),
+                start_at: body.start_at.clone(),
+                end_at: body.end_at.clone(),
+                chair_room_id: String::new(),
+                notes: body.notes.clone().unwrap_or_default(),
+                variant_id: selection
+                    .map(|value| value.variant_id.clone())
+                    .unwrap_or_default(),
+                addon_ids: selection
+                    .map(|value| value.addon_ids.clone())
+                    .unwrap_or_default(),
+                price_override_paise: None,
+                price_override_reason: String::new(),
+                service_mode: String::new(),
+                segment_label: String::new(),
+                sequence_no: Some(index as i32 + 1),
+            },
+        )
+        .collect();
+    headers.insert(
+        "x-tenant-id",
+        HeaderValue::from_str(tenant_id)
+            .map_err(|_| appointments::ApiError::bad_request("tenantId is invalid"))?,
+    );
+    headers.insert(
+        "x-branch-id",
+        HeaderValue::from_str(branch_id)
+            .map_err(|_| appointments::ApiError::bad_request("branchId is invalid"))?,
+    );
+    let Json(created) = appointments::save_appointment_batch(
+        State(state.clone()),
+        headers,
+        Json(appointments::AppointmentBatchPayload {
+            client_id: primary_client_id.to_string(),
+            status: "booked".into(),
+            booking_group_id: group_id.clone(),
+            removed_appointment_ids: Vec::new(),
+            recurrence_count: None,
+            recurrence_interval_days: None,
+            lines,
+            advance_payment: None,
+            idempotency_key: body
+                .idempotency_key
+                .clone()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            booking_type: if client_ids.len() == 2 {
+                "couple"
+            } else {
+                "group"
+            }
+            .into(),
+            day_package_id: String::new(),
+            host_client_id: primary_client_id.to_string(),
+            group_name: String::new(),
+            group_notes: body.notes.clone().unwrap_or_default(),
+            is_surprise: false,
+            virtual_meeting_url: String::new(),
+            outside_hours_override_reason: String::new(),
+        }),
+    )
+    .await?;
+    let appointment_ids = created
+        .iter()
+        .map(|appointment| appointment.id.clone())
+        .collect::<Vec<_>>();
+    sqlx::query("UPDATE appointments SET source_channel='customer-app',source=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND booking_group_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(&group_id).bind(source).execute(&state.db).await
+        .map_err(|_| appointments::ApiError::internal("failed to preserve group booking source"))?;
+    if payment_mode == "online" {
+        for appointment in &created {
+            let owned = repo::OwnedBooking {
+                tenant_id: tenant_id.to_string(),
+                branch_id: branch_id.to_string(),
+                client_id: appointment.client_id.clone(),
+            };
+            create_owned_booking_payment_link(
+                state,
+                HeaderMap::new(),
+                account_id,
+                &appointment.id,
+                &owned,
+            )
+            .await?;
+        }
+    }
+    let mut booking = repo::account_booking(&state.db, account_id, &appointment_ids[0])
+        .await
+        .map_err(|_| appointments::ApiError::internal("failed to load created group booking"))?
+        .ok_or_else(|| appointments::ApiError::internal("created group booking was not found"))?;
+    if let Some(object) = booking.as_object_mut() {
+        object.insert("groupBookingIds".into(), json!(appointment_ids));
+        object.insert(
+            "bookingType".into(),
+            json!(if client_ids.len() == 2 {
+                "couple"
+            } else {
+                "group"
+            }),
+        );
+    }
     Ok(Json(json!({"success":true,"data":booking})))
 }
 
@@ -2632,6 +2999,19 @@ async fn customer_booking_check_in(
     if !(0..=240).contains(&body.eta_minutes) {
         return Err(AppError::validation("etaMinutes must be between 0 and 240"));
     }
+    if let Some(key) = body.idempotency_key.as_deref() {
+        validate_commerce_idempotency_key(key)?;
+    }
+    let distance = crate::services::kiosk_service::validate_customer_geofence(
+        &state,
+        &owned.tenant_id,
+        &owned.branch_id,
+        body.eta_minutes,
+        body.latitude,
+        body.longitude,
+        body.accuracy_meters,
+    )
+    .await?;
     let appointment = sqlx::query("SELECT staff_id,start_at FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND client_id=$4")
         .bind(&owned.tenant_id)
         .bind(&owned.branch_id)
@@ -2642,12 +3022,14 @@ async fn customer_booking_check_in(
         .map_err(|_| AppError::internal("failed to load customer booking"))?
         .ok_or_else(|| AppError::not_found("customer booking was not found"))?;
     let staff_id: String = appointment.try_get("staff_id").unwrap_or_default();
-    let saved: Value = sqlx::query_scalar("INSERT INTO appointment_arrival_updates (tenant_id,branch_id,appointment_id,client_id,eta_minutes,status) VALUES ($1,$2,$3,$4,$5,CASE WHEN $5=0 THEN 'arrived' ELSE 'arriving' END) RETURNING jsonb_build_object('appointmentId',appointment_id,'etaMinutes',eta_minutes,'status',status,'updatedAt',updated_at)")
+    let saved: Value = sqlx::query_scalar("INSERT INTO appointment_arrival_updates (tenant_id,branch_id,appointment_id,client_id,eta_minutes,status,source,distance_meters,idempotency_key) VALUES ($1,$2,$3,$4,$5,CASE WHEN $5=0 THEN 'arrived' ELSE 'arriving' END,'customer_app',$6,$7) ON CONFLICT (tenant_id,branch_id,appointment_id,idempotency_key) WHERE idempotency_key IS NOT NULL DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING jsonb_build_object('appointmentId',appointment_id,'etaMinutes',eta_minutes,'status',status,'distanceMeters',distance_meters,'updatedAt',updated_at)")
         .bind(&owned.tenant_id)
         .bind(&owned.branch_id)
         .bind(&id)
         .bind(&owned.client_id)
         .bind(body.eta_minutes)
+        .bind(distance.map(|value| value.round() as i32))
+        .bind(body.idempotency_key.as_deref())
         .fetch_one(&state.db)
         .await
         .map_err(|_| AppError::internal("failed to save customer check-in"))?;
@@ -3058,9 +3440,11 @@ async fn reschedule_customer_booking(
     }
     let _ = appointments::reschedule_appointment(
         State(state.clone()),
+        None,
         headers,
         Path(id.clone()),
         Json(appointments::ReschedulePayload {
+            expected_version: None,
             start_at: body.start_at,
             end_at: body.end_at,
             reason: body.reason.unwrap_or_default(),
@@ -3073,6 +3457,7 @@ async fn reschedule_customer_booking(
             booking_group_id: String::new(),
             change_mode: "official".to_string(),
             actor_source: "client".to_string(),
+            outside_hours_override_reason: String::new(),
         }),
     )
     .await?;

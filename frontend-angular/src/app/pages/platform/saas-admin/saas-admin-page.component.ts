@@ -11,9 +11,9 @@ type Overview = { activePlans: number; activeSubscriptions: number; pastDueSubsc
 type SaasReport = { periodDays: number; periodStart: string; periodEnd: string; mrrPaise: number; arrPaise: number; trialEligible: number; trialConverted: number; trialConversionPercent: number; churnedSubscriptions: number; churnRatePercent: number; renewalRiskCount: number; renewalRiskMrrPaise: number; outstandingInvoiceCount: number; outstandingPaise: number; usageOverageRevenuePaise: number; supportTickets: number; averageFirstResponseMinutes: number; averageResolutionMinutes: number; slaBreachedTickets: number; slaBreachPercent: number; renewalRisk: Array<{ subscriptionId: string; tenantId: string; tenantName: string; planName: string; status: string; periodEnd: string; outstandingPaise: number; mrrPaise: number; riskLevel: string; reason: string }>; supportAgents: Array<{ agentId: string; assignedTickets: number; resolvedTickets: number; averageFirstResponseMinutes: number; averageResolutionMinutes: number; slaBreachPercent: number; csatAverage: number }> };
 type Sla = { severity: string; firstResponseMinutes: number; resolutionMinutes: number; businessHoursOnly: boolean };
 type Plan = { id: string; code: string; name: string; billingInterval: string; basePricePaise: number; includedBranches: number; includedUsers: number; includedAppointments: number; overageBranchPaise: number; overageUserPaise: number; overageAppointmentPaise: number; features: string[]; active: boolean; version: number; sla: Sla[]; activeSubscriptions: number };
-type Tenant = { id: string; name: string; slug: string; status: string; branchCount: number; subBranchCount: number; centralBranchName: string; activeUserCount: number; ownerCount: number; adminCount: number; branchAdminCount: number; staffCount: number; subscriptionStatus: string; subscriptionPlan: string; subscriptionPeriodEnd?: string };
+type Tenant = { id: string; name: string; slug: string; status: string; businessType?: string; gracePeriodEndsAt?: string; lifecycleReason?: string; lifecycleVersion?: number; branchCount: number; subBranchCount: number; centralBranchName: string; activeUserCount: number; ownerCount: number; adminCount: number; branchAdminCount: number; staffCount: number; subscriptionStatus: string; subscriptionPlan: string; subscriptionPeriodEnd?: string };
 type Subscription = { id: string; tenantId: string; tenantName: string; planId: string; planName: string; status: string; currentPeriodStart: string; currentPeriodEnd: string; trialEndsAt?: string; cancelAtPeriodEnd: boolean; provider: string; providerCustomerRef: string; providerSubscriptionRef: string; providerStatus: string; checkoutUrl: string; pendingPlanId?: string; pendingPlanEffective: string; version: number };
-type Usage = { branchCount: number; activeUserCount: number; appointmentCount: number; apiCalls: number; messages: number; storageMb: number };
+type Usage = { branchCount: number; activeUserCount: number; appointmentCount: number; apiCalls: number; messages: number; storageMb: number; providerCostPaise?: number; communicationCostPaise?: number; quotaOveragePaise?: number };
 type UsageRow = { subscription: Subscription; usage: Usage };
 type ProviderPayment = { id: string; provider: string; providerPaymentRef: string; amountPaise: number; status: string; reconciliationStatus: string; refundedPaise: number };
 type Invoice = { id: string; tenantId: string; tenantName: string; subscriptionId: string; planName: string; invoiceNumber: string; periodStart: string; periodEnd: string; baseAmountPaise: number; usageAmountPaise: number; taxAmountPaise: number; totalPaise: number; paidPaise: number; status: string; dueAt: string; issuedAt: string; paidAt?: string; providerPayments: ProviderPayment[]; creditNotes: Array<{ id: string; creditNoteNumber: string; amountPaise: number; reason: string; issuedAt: string }> };
@@ -24,6 +24,12 @@ type Message = { id: string; authorId: string; authorType: string; visibility: s
 type TicketDetail = { ticket: Ticket; messages: Message[]; events: Array<{ id: string; eventType: string; fromStatus: string; toStatus: string; actorId: string; createdAt: string }> };
 type TenantContext = { subscription?: Subscription; usage?: Usage; invoices: Invoice[]; tickets: Ticket[]; plans: Plan[] };
 type TenantAdmin = { id: string; fullName: string; loginId: string; email: string; active: boolean; mustChangePassword: boolean; branchCount: number; createdAt: string };
+type TenantControl = {
+  tenant: { id: string; name: string; status: string; businessType: string; gracePeriodEndsAt?: string; lifecycleReason: string; lifecycleVersion: number };
+  locations: Array<{ id: string; name: string; code: string; timeZone: string; currencyCode: string }>;
+  featureOverrides: Array<{ featureKey: string; enabled: boolean; expiresAt?: string; reason: string; version: number }>;
+  usageQuotas: Array<{ id: string; subscriptionId: string; metric: string; includedQuantity: number; hardLimitQuantity?: number; overageUnitPaise: number; version: number }>;
+};
 
 @Component({
     selector: 'page-saas-admin', imports: [CommonModule, FormsModule, DatePickerComponent],
@@ -48,7 +54,7 @@ export class SaasAdminPageComponent implements OnInit {
   reportDays = 30; report: SaasReport = this.emptyReport();
   plans: Plan[] = []; tenants: Tenant[] = []; tenantAdmins: TenantAdmin[] = []; subscriptions: Subscription[] = []; usageRows: UsageRow[] = []; invoices: Invoice[] = []; tickets: Ticket[] = [];
   tenantSubscription?: Subscription; tenantUsage?: Usage; ticketDetail?: TicketDetail;
-  drawer: 'onboarding' | 'tenantAdmin' | 'plan' | 'subscription' | 'invoice' | 'billingRun' | 'payment' | 'refund' | 'ticket' | 'ticketDetail' | '' = '';
+  drawer: 'onboarding' | 'tenantAdmin' | 'tenantControl' | 'plan' | 'subscription' | 'invoice' | 'billingRun' | 'payment' | 'refund' | 'ticket' | 'ticketDetail' | '' = '';
   editingPlanId = ''; editingSubscriptionId = ''; selectedInvoice?: Invoice; selectedProviderPayment?: ProviderPayment;
   planDraft = this.emptyPlan(); subscriptionDraft = this.emptySubscription(); invoiceDraft = { subscriptionId: '', taxPercent: '', dueDays: '7' };
   billingRunDraft = { taxPercent: '', dueDays: '7' };
@@ -62,6 +68,12 @@ export class SaasAdminPageComponent implements OnInit {
   ticketUpdate = { status: 'open', priority: 'normal', assignedTo: '' };
   ticketAction = { action: 'duplicate', targetTicketId: '', reason: '' };
   csatDraft = { rating: '', comment: '' };
+  selectedTenant?: Tenant;
+  tenantControl?: TenantControl;
+  lifecycleDraft = { status: 'active', graceDate: '', graceTime: '23:59', reason: '' };
+  featureDraft = { key: '', enabled: true, expiresDate: '', expiresTime: '23:59', reason: '' };
+  quotaDraft = { subscriptionId: '', metric: 'api_calls', includedQuantity: '', hardLimitQuantity: '', overageRupees: '' };
+  readonly usageMetrics = ['api_calls', 'messages', 'storage_mb', 'provider_units', 'sms', 'whatsapp', 'email', 'ai_tokens', 'custom'];
 
   get tabs() { return this.isPlatform ? this.platformTabs : this.tenantTabs; }
   get filteredTenants() { const q=this.search.trim().toLowerCase(); return this.tenants.filter((row)=>!q||[row.name,row.slug,row.subscriptionStatus,row.subscriptionPlan].join(' ').toLowerCase().includes(q)); }
@@ -92,6 +104,42 @@ export class SaasAdminPageComponent implements OnInit {
     this.overview={activePlans:this.tenantSubscription?1:0,activeSubscriptions:this.tenantSubscription&&['trialing','active'].includes(this.tenantSubscription.status)?1:0,pastDueSubscriptions:this.tenantSubscription?.status==='past_due'?1:0,outstandingPaise:this.invoices.reduce((sum,row)=>sum+Math.max(row.totalPaise-row.paidPaise,0),0),openTickets:this.tickets.filter((row)=>!['resolved','closed'].includes(row.status)).length,breachedTickets:this.tickets.filter((row)=>row.resolutionBreached).length};
   }
   async reloadReport() { await this.run(async()=>{this.report=await this.get<SaasReport>(`/platform/saas/reports?days=${this.reportDays}`);},'SaaS reports could not be loaded'); }
+
+  async openTenantControl(tenant: Tenant) {
+    this.selectedTenant=tenant;
+    await this.run(async()=>{
+      this.tenantControl=await this.get<TenantControl>(`/platform/saas/tenants/${tenant.id}/control-plane`);
+      this.lifecycleDraft={status:this.tenantControl.tenant.status,graceDate:this.tenantControl.tenant.gracePeriodEndsAt?.slice(0,10)||'',graceTime:'23:59',reason:''};
+      this.featureDraft={key:'',enabled:true,expiresDate:'',expiresTime:'23:59',reason:''};
+      this.quotaDraft={subscriptionId:this.subscriptions.find((row)=>row.tenantId===tenant.id)?.id||'',metric:'api_calls',includedQuantity:'',hardLimitQuantity:'',overageRupees:''};
+      this.drawer='tenantControl';
+    },'Tenant control plane could not be loaded');
+  }
+
+  async saveTenantLifecycle() {
+    if(!this.selectedTenant||!this.tenantControl)return;
+    const gracePeriodEndsAt=this.lifecycleDraft.status==='grace'&&this.lifecycleDraft.graceDate?new Date(`${this.lifecycleDraft.graceDate}T${this.lifecycleDraft.graceTime||'23:59'}:00`).toISOString():null;
+    await this.saveTenantControl(()=>this.patch<TenantControl>(`/platform/saas/tenants/${this.selectedTenant!.id}/lifecycle`,{status:this.lifecycleDraft.status,gracePeriodEndsAt,reason:this.lifecycleDraft.reason,expectedVersion:this.tenantControl!.tenant.lifecycleVersion}),'Tenant lifecycle saved');
+  }
+
+  async saveTenantFeature() {
+    if(!this.selectedTenant||!this.tenantControl)return;
+    const current=this.tenantControl.featureOverrides.find((row)=>row.featureKey===this.featureDraft.key);
+    const expiresAt=this.featureDraft.expiresDate?new Date(`${this.featureDraft.expiresDate}T${this.featureDraft.expiresTime||'23:59'}:00`).toISOString():null;
+    await this.saveTenantControl(()=>this.put<TenantControl>(`/platform/saas/tenants/${this.selectedTenant!.id}/features/${encodeURIComponent(this.featureDraft.key)}`,{enabled:this.featureDraft.enabled,expiresAt,reason:this.featureDraft.reason,expectedVersion:current?.version||0}),'Feature override saved');
+  }
+
+  editTenantFeature(row:{featureKey:string;enabled:boolean;expiresAt?:string;reason:string}) { this.featureDraft={key:row.featureKey,enabled:row.enabled,expiresDate:row.expiresAt?.slice(0,10)||'',expiresTime:'23:59',reason:''}; }
+
+  async saveTenantQuota() {
+    if(!this.selectedTenant||!this.tenantControl)return;
+    const current=this.tenantControl.usageQuotas.find((row)=>row.subscriptionId===this.quotaDraft.subscriptionId&&row.metric===this.quotaDraft.metric);
+    await this.saveTenantControl(()=>this.put<TenantControl>(`/platform/saas/tenants/${this.selectedTenant!.id}/usage-quotas`,{subscriptionId:this.quotaDraft.subscriptionId,metric:this.quotaDraft.metric,includedQuantity:Number(this.quotaDraft.includedQuantity),hardLimitQuantity:this.quotaDraft.hardLimitQuantity===''?null:Number(this.quotaDraft.hardLimitQuantity),overageUnitPaise:this.toPaise(this.quotaDraft.overageRupees),expectedVersion:current?.version||0}),'Usage quota saved');
+  }
+
+  editTenantQuota(row:{subscriptionId:string;metric:string;includedQuantity:number;hardLimitQuantity?:number;overageUnitPaise:number}) { this.quotaDraft={subscriptionId:row.subscriptionId,metric:row.metric,includedQuantity:String(row.includedQuantity),hardLimitQuantity:row.hardLimitQuantity==null?'':String(row.hardLimitQuantity),overageRupees:String(row.overageUnitPaise/100)}; }
+
+  private async saveTenantControl(action:()=>Promise<TenantControl>,success:string) { await this.run(async()=>{this.tenantControl=await action();if(this.selectedTenant){this.selectedTenant.status=this.tenantControl.tenant.status;this.selectedTenant.businessType=this.tenantControl.tenant.businessType;this.selectedTenant.gracePeriodEndsAt=this.tenantControl.tenant.gracePeriodEndsAt;this.selectedTenant.lifecycleVersion=this.tenantControl.tenant.lifecycleVersion;}this.message=success;},success+' failed'); }
 
   openOnboarding() { this.onboardingDraft=this.emptyOnboarding(); this.drawer='onboarding'; }
   async onboardSalon() { await this.mutate(this.api.post('/saas/onboarding',{...this.onboardingDraft,idempotencyKey:crypto.randomUUID(),domain:this.onboardingDraft.domain||undefined}),'Salon and initial Owner created'); }
@@ -141,7 +189,7 @@ export class SaasAdminPageComponent implements OnInit {
   async selectAttachments(event:Event,target:'ticket'|'reply') { const files=Array.from((event.target as HTMLInputElement).files||[]);const draft=target==='ticket'?this.ticketDraft.attachments:this.replyDraft.attachments;for(const file of files){if(draft.length>=10||file.size>5*1024*1024){this.error='Up to 10 attachments of 5 MB each are allowed';break;}draft.push({fileName:file.name,contentType:file.type||'application/octet-stream',dataBase64:await this.fileData(file),sizeBytes:file.size});}(event.target as HTMLInputElement).value=''; }
   removeAttachment(target:'ticket'|'reply',index:number) { (target==='ticket'?this.ticketDraft.attachments:this.replyDraft.attachments).splice(index,1); }
   async downloadAttachment(file:TicketAttachment) { if(!this.ticketDetail)return;await this.run(async()=>{const scope=this.isPlatform?'/platform/saas':'/saas';const blob=await firstValueFrom(this.api.getBlob(`${scope}/tickets/${this.ticketDetail!.ticket.id}/attachments/${file.id}`));const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=file.fileName;link.click();URL.revokeObjectURL(url);},'Attachment could not be downloaded'); }
-  closeDrawer() { if(!this.busy){this.drawer='';this.ticketDetail=undefined;this.selectedInvoice=undefined;this.selectedProviderPayment=undefined;} }
+  closeDrawer() { if(!this.busy){this.drawer='';this.ticketDetail=undefined;this.selectedInvoice=undefined;this.selectedProviderPayment=undefined;this.selectedTenant=undefined;this.tenantControl=undefined;} }
   planName(id?: string) { return this.plans.find((row)=>row.id===id)?.name||'—'; }
   tenantName(id?: string) { return this.tenants.find((row)=>row.id===id)?.name||id||'—'; }
   label(value?: string) { return value?value.replaceAll('_',' ').replace(/\b\w/g,(letter)=>letter.toUpperCase()):'—'; }
@@ -166,5 +214,6 @@ export class SaasAdminPageComponent implements OnInit {
   private async get<T>(path:string) { const response=await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if(response.data===undefined)throw new Error(response.error?.message||'API response missing data'); return response.data; }
   private async post<T>(path:string,body:unknown) { const response=await firstValueFrom(this.api.post<ApiEnvelope<T>>(path,body)); if(response.data===undefined)throw new Error(response.error?.message||'API response missing data'); return response.data; }
   private async patch<T>(path:string,body:unknown) { const response=await firstValueFrom(this.api.patch<ApiEnvelope<T>>(path,body)); if(response.data===undefined)throw new Error(response.error?.message||'API response missing data'); return response.data; }
+  private async put<T>(path:string,body:unknown) { const response=await firstValueFrom(this.api.put<ApiEnvelope<T>>(path,body)); if(response.data===undefined)throw new Error(response.error?.message||'API response missing data'); return response.data; }
   private errorMessage(error:any,fallback:string) { return error?.error?.error?.message||error?.error?.message||error?.message||fallback; }
 }

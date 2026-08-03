@@ -129,7 +129,7 @@ function mergeInventory(rows, inventory) {
       row = makeRow({ id: `INV-${canonical}`, feature: primary.feature, url: primary.url, sourceType: 'inventory_subregister' });
       rows.push(row);
     }
-    row.sourceType = row.sourceType === 'help_center_navigation' ? 'help_center+inventory_subregister' : 'inventory_subregister';
+    row.sourceType = row.sourceType.includes('help_center') ? 'help_center+inventory_subregister' : 'inventory_subregister';
     row.sourceRowIds = aliases.map((alias) => alias.id);
     row.status = aliases.reduce((worst, alias) => severity[alias.status] > severity[worst] ? alias.status : worst, 'Complete');
     row.auraShine = {
@@ -310,37 +310,54 @@ async function sync() {
   return { rows: rows.length, helpLinks: helpLinks.length, apiEntries: apiLinks.length, inventorySourceRows: inventorySourceRows.length, inventoryCanonicalRows: inventory.groups.size, staffRows: register.linkedSubregisters.staffApp.rowCount, readmeClaims: truth.claims.length, readmeGhosts: truth.claims.filter((claim) => claim.state === 'ghost').length, registerHash: register.registerHash };
 }
 
-function approvePhase1() {
+function reconcileLinks(approvePhase1 = false) {
   const register = JSON.parse(readFileSync(registerPath, 'utf8'));
-  register.exitGate.productOwnerSignoff = 'APPROVED_BY_USER_INSTRUCTION_2026-08-02';
-  register.exitGate.phase1Authorization = 'APPROVED';
+  if (approvePhase1) {
+    register.exitGate.productOwnerSignoff = 'APPROVED_BY_USER_INSTRUCTION_2026-08-02';
+    register.exitGate.phase1Authorization = 'APPROVED';
+  }
   const truth = routeTruth();
   const inventory = inventoryRows();
+  mergeInventory(register.rows, inventory);
   const staff = readFileSync(resolve(root, register.linkedSubregisters.staffApp.path), 'utf8');
-  register.linkedSubregisters.inventory.sha256 = sha256(inventory.source);
-  register.linkedSubregisters.staffApp.sha256 = sha256(staff);
-  delete register.registerHash;
-  register.registerHash = sha256(JSON.stringify(register));
   const sourceRows = [...inventory.groups.values()].flat();
   const currentCounts = Object.fromEntries(['Complete', 'Partial', 'Missing'].map((status) => [status, sourceRows.filter((row) => row.status === status).length]));
+  register.linkedSubregisters.inventory.sha256 = sha256(inventory.source);
+  register.linkedSubregisters.inventory.currentRows = sourceRows.length;
+  register.linkedSubregisters.inventory.currentCounts = currentCounts;
+  register.linkedSubregisters.inventory.canonicalRows = inventory.groups.size;
+  register.linkedSubregisters.staffApp.sha256 = sha256(staff);
+  register.linkedSubregisters.staffApp.rowCount = staff.split(/\r?\n/).filter((line) => /^\| [A-F]\d{2} \|/.test(line)).length;
+  delete register.registerHash;
+  register.registerHash = sha256(JSON.stringify(register));
+  const errors = validate(register);
+  if (errors.length) throw new Error(errors.join('\n'));
   writeFileSync(registerPath, `${JSON.stringify(register, null, 2)}\n`);
+  writeFileSync(csvPath, csv(register.rows));
   writeFileSync(routeTruthPath, `${JSON.stringify(truth, null, 2)}\n`);
   writeFileSync(reportPath, reconciledSummary(register, truth, { currentRows: sourceRows.length, currentCounts, canonicalRows: inventory.groups.size }).replace(/[ \t]+$/gm, ''));
-  return { phase1Authorization: register.exitGate.phase1Authorization, routeClassifications: Object.fromEntries(['mounted', 'future', 'external', 'retired'].map((state) => [state, truth.claims.filter((claim) => claim.state === state).length])), registerHash: register.registerHash };
+  return { rows: register.rows.length, inventoryRows: sourceRows.length, staffRows: register.linkedSubregisters.staffApp.rowCount, phase1Authorization: register.exitGate.phase1Authorization, routeClassifications: Object.fromEntries(['mounted', 'future', 'external', 'retired'].map((state) => [state, truth.claims.filter((claim) => claim.state === state).length])), registerHash: register.registerHash };
 }
 
 function verify() {
   const register = JSON.parse(readFileSync(registerPath, 'utf8'));
   const errors = validate(register);
+  const { registerHash, ...unsignedRegister } = register;
+  if (sha256(JSON.stringify(unsignedRegister)) !== registerHash) errors.push('Register hash mismatch; evidence was changed without reconciliation.');
+  if (readFileSync(csvPath, 'utf8') !== csv(register.rows)) errors.push('CSV register does not match JSON register.');
   const inventory = inventoryRows();
   const staff = readFileSync(resolve(root, register.linkedSubregisters.staffApp.path), 'utf8');
-  if (sha256(inventory.source) !== register.linkedSubregisters.inventory.sha256) errors.push('Inventory subregister hash drift; run --sync.');
-  if (sha256(staff) !== register.linkedSubregisters.staffApp.sha256) errors.push('Staff App subregister hash drift; run --sync.');
+  if (sha256(inventory.source) !== register.linkedSubregisters.inventory.sha256) errors.push('Inventory subregister hash drift; run --reconcile-links.');
+  if (sha256(staff) !== register.linkedSubregisters.staffApp.sha256) errors.push('Staff App subregister hash drift; run --reconcile-links.');
   const truth = JSON.parse(readFileSync(routeTruthPath, 'utf8'));
+  if (JSON.stringify(truth.claims) !== JSON.stringify(routeTruth().claims)) errors.push('README route truth drift; run --reconcile-links.');
   if (/\bUNKNOWN\b/i.test(JSON.stringify(truth))) errors.push('Route truth contains UNKNOWN.');
   if (errors.length) throw new Error(errors.join('\n'));
   return { rows: register.rows.length, duplicateRows: 0, unknownValues: 0, inventoryRows: register.linkedSubregisters.inventory.currentRows, staffRows: register.linkedSubregisters.staffApp.rowCount, readmeClaims: truth.claims.length, readmeGhosts: truth.claims.filter((claim) => claim.state === 'ghost').length, technicalGate: register.exitGate.technicalRegister, phase1Authorization: register.exitGate.phase1Authorization, registerHash: register.registerHash };
 }
 
-const result = process.argv.includes('--sync') ? await sync() : process.argv.includes('--approve-phase1') ? approvePhase1() : verify();
+const result = process.argv.includes('--sync') ? await sync()
+  : process.argv.includes('--approve-phase1') ? reconcileLinks(true)
+    : process.argv.includes('--reconcile-links') ? reconcileLinks()
+      : verify();
 console.log(JSON.stringify(result, null, 2));

@@ -5,9 +5,10 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/services/auth.service';
 import { ApiService } from '../../shared/services/api.service';
+import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { LANGUAGE_OPTIONS, LanguageService, TenantLanguageSettings } from '../../core/i18n/language.service';
 
-type SettingsPanel = 'appointments' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language';
+type SettingsPanel = 'appointments' | 'organization' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language' | 'kiosk';
 
 type SettingsSection = {
   code: string;
@@ -43,7 +44,7 @@ type AppointmentSettings = {
   colors: AppointmentColorSetting[];
 };
 
-type ChairRoomOption = { id: string; name: string; kind: string; department: string };
+type ChairRoomOption = { id: string; name: string; kind: string; department: string; capacity: number };
 type AuthPermissionOption = {
   code: string;
   label: string;
@@ -169,6 +170,12 @@ type AiGovernanceSettings = {
   transcriptRetentionDays: number;
   promptVersion: string;
   bookingUrl: string;
+  defaultActionOwnerUserId: string;
+  maxRequestsPerMinute: number;
+  maxLatencyMs: number;
+  monthlyCostBudgetPaise: number;
+  evaluationRetentionDays: number;
+  modelAllowlist: string[];
 };
 
 type ClientFormFieldSetting = {
@@ -186,10 +193,32 @@ type ClientFormSettings = {
   fields: ClientFormFieldSetting[];
   settings: Record<string, Record<string, boolean>>;
 };
+type KioskDevice = { id: string; name: string; branchId: string; selectedBranchId: string; allowedBranchIds: string[]; active: boolean; activatedAt: string | null; lastUsedAt: string | null; revokedAt: string | null; version: number; branding: { appName?: string; primaryColor?: string; accentColor?: string }; config: { allowGroupCheckIn: boolean; allowSameDayBooking: boolean; allowAddOnRequest: boolean; checkoutMode: 'mirror' | 'self_pay'; requireGeofence: boolean; geofenceRadiusMeters: number } };
+
+type OrganizationBrand = { id: string; code: string; name: string; active: boolean; version: number; updatedAt: string };
+type OrganizationHour = { weekday: number; opensAt: string | null; closesAt: string | null; closed: boolean; version: number };
+type OrganizationHoliday = { id: string; holidayDate: string; name: string; closed: boolean; opensAt: string | null; closesAt: string | null; version: number };
+type OrganizationDepartment = { id: string; brandId: string | null; code: string; name: string; active: boolean; version: number };
+type OrganizationLocation = ManagedBranch & { brandId: string | null; timeZone: string; currencyCode: string; operatingHours: OrganizationHour[]; holidays: OrganizationHoliday[]; departments: OrganizationDepartment[] };
+type OrganizationUnit = { id: string; branchId: string | null; kind: 'business_unit' | 'revenue_center'; code: string; name: string; active: boolean; version: number };
+type OrganizationConfigHistory = { id: string; branchId: string | null; configKey: string; value: Record<string, unknown>; version: number; allowLocationOverride: boolean; active: boolean; reason: string; sourceVersion: number | null; createdBy: string; createdAt: string };
+type EnterpriseVerticalPolicy = { enabledVerticals: string[]; taxJurisdiction: string; dataResidencyRegion: string; terminology: { guest: string; staff: string; appointment: string; location: string } };
+type OrganizationSnapshot = {
+  configBranchId: string;
+  tenant: { id: string; name: string; slug: string; status: string; businessType: string; gracePeriodEndsAt: string | null; lifecycleReason: string; lifecycleVersion: number };
+  brands: OrganizationBrand[];
+  locations: OrganizationLocation[];
+  units: OrganizationUnit[];
+  costCenters: Array<{ id: string; branchId: string; code: string; name: string; kind: string; active: boolean }>;
+  centralConfig: Record<string, Record<string, unknown>>;
+  locationConfig: Record<string, Record<string, unknown>>;
+  effectiveConfig: Record<string, Record<string, unknown>>;
+  configHistory: OrganizationConfigHistory[];
+};
 
 @Component({
     selector: 'page-settings',
-    imports: [CommonModule, FormsModule, RouterLink],
+    imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
     templateUrl: './settings-page.component.html',
     styleUrls: ['./settings-page.component.css']
 })
@@ -204,8 +233,9 @@ export class SettingsPageComponent implements OnInit {
   saving = false;
   chairRooms: ChairRoomOption[] = [];
   chairRoomName = '';
-  chairRoomKind: 'chair' | 'room' | 'workstation' = 'chair';
+  chairRoomKind: 'chair' | 'room' | 'workstation' | 'bed' | 'machine' | 'equipment' = 'chair';
   chairRoomDepartment = 'Hair';
+  chairRoomCapacity = '';
   readonly resourceDepartments = ['Hair', 'Nails', 'Skin', 'Spa', 'Reception'];
   chairRoomError = '';
   chairRoomSaving = false;
@@ -241,6 +271,15 @@ export class SettingsPageComponent implements OnInit {
   branchSaving = false;
   branchError = '';
   branchStatus = '';
+  kioskDevices: KioskDevice[] = [];
+  kioskName = '';
+  kioskAdminPin = '';
+  kioskAppName = '';
+  kioskLoading = false;
+  kioskSaving = false;
+  kioskError = '';
+  kioskStatus = '';
+  kioskActivationCode = '';
   franchiseCentralBranchId = '';
   franchisePersistedCentralBranchId = '';
   franchiseAllowedOverrides: string[] = [];
@@ -267,7 +306,7 @@ export class SettingsPageComponent implements OnInit {
   serviceSettingsSaving = false;
   serviceSettingsError = '';
   serviceSettingsStatus = '';
-  aiGovernance: AiGovernanceSettings = { enabled: false, allowedChannels: [], requireBookingConfirmation: true, redactSensitiveData: true, transcriptRetentionDays: 90, promptVersion: 'receptionist-v1', bookingUrl: '' };
+  aiGovernance: AiGovernanceSettings = { enabled: false, allowedChannels: [], requireBookingConfirmation: true, redactSensitiveData: true, transcriptRetentionDays: 90, promptVersion: 'receptionist-v1', bookingUrl: '', defaultActionOwnerUserId: '', maxRequestsPerMinute: 60, maxLatencyMs: 15000, monthlyCostBudgetPaise: 0, evaluationRetentionDays: 90, modelAllowlist: [] };
   aiGovernanceLoading = false;
   aiGovernanceSaving = false;
   aiGovernanceError = '';
@@ -286,14 +325,39 @@ export class SettingsPageComponent implements OnInit {
   languageError = '';
   languageStatus = '';
   canManageLanguageTenant = false;
+  organization: OrganizationSnapshot | null = null;
+  organizationLoading = false;
+  organizationSaving = false;
+  organizationError = '';
+  organizationStatus = '';
+  organizationBusinessType = 'salon';
+  organizationLocationId = '';
+  organizationBrandDraft = { id: '', code: '', name: '', active: true, version: 0 };
+  organizationDepartmentDraft = { id: '', branchId: '', brandId: '', code: '', name: '', active: true, version: 0 };
+  organizationUnitDraft = { id: '', branchId: '', kind: 'business_unit' as 'business_unit' | 'revenue_center', code: '', name: '', active: true, version: 0 };
+  organizationLocationBrandId = '';
+  organizationTimeZone = 'Asia/Kolkata';
+  organizationCurrency = 'INR';
+  organizationHours = this.defaultOrganizationHours();
+  organizationHoliday = { holidayDate: '', name: '', closed: true, opensAt: '', closesAt: '' };
+  centralBranding = { brandName: '', logoUrl: '', primaryColor: '' };
+  localBranding = { brandName: '', logoUrl: '', primaryColor: '' };
+  centralAllowOverride = true;
+  brandingReason = '';
+  centralEnterprisePolicy: EnterpriseVerticalPolicy = this.defaultEnterpriseVerticalPolicy();
+  localEnterprisePolicy: EnterpriseVerticalPolicy = this.defaultEnterpriseVerticalPolicy();
+  enterpriseAllowOverride = true;
+  enterpriseReason = '';
 
   readonly weekStartOptions = ['Sunday', 'Monday'];
   readonly slotOptions = [10, 15, 30, 60];
   readonly timeFormatOptions = ['12 Hours', '24 Hours'];
   readonly languageOptions = LANGUAGE_OPTIONS;
+  readonly organizationVerticalOptions = ['salon', 'spa', 'medspa', 'fitness', 'barbershop'];
   readonly regionOptions = [{ code: 'IN', label: 'India' }, { code: 'US', label: 'United States' }, { code: 'GB', label: 'United Kingdom' }, { code: 'AE', label: 'United Arab Emirates' }, { code: 'CA', label: 'Canada' }, { code: 'AU', label: 'Australia' }, { code: 'SG', label: 'Singapore' }];
   readonly currencyOptions = ['INR', 'USD', 'GBP', 'AED', 'CAD', 'AUD', 'SGD', 'EUR'];
   readonly timezoneOptions = ['Asia/Kolkata', 'UTC', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney'];
+  readonly weekdayOptions = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   readonly clientFormSettingGroups = [
     { key: 'clientFormMasterRules', label: 'Client master rules' },
     { key: 'personalDetailRules', label: 'Personal details' },
@@ -305,12 +369,14 @@ export class SettingsPageComponent implements OnInit {
 
   readonly sections: SettingsSection[] = [
     { code: 'LANG', title: 'Language & Region', panel: 'language' },
+    { code: 'ORG', title: 'Organization control plane', panel: 'organization' },
     { code: 'BR', title: 'Branches', panel: 'branches' },
     { code: 'FR', title: 'Franchise controls', panel: 'franchise' },
     { code: 'ST', title: 'Staff', route: '/staff' },
     { code: 'SV', title: 'Services', panel: 'services' },
     { code: 'CL', title: 'Clients', route: '/clients' },
     { code: 'CF', title: 'Client form settings', panel: 'clientForms' },
+    { code: 'KS', title: 'Customer kiosk', panel: 'kiosk' },
     { code: 'AP', title: 'Appointments', panel: 'appointments' },
     { code: 'POS', title: 'POS', route: '/pos' },
     { code: 'INV', title: 'Invoice settings', route: '/settings/invoice' },
@@ -345,10 +411,12 @@ export class SettingsPageComponent implements OnInit {
     const query = this.search.trim().toLowerCase();
     return this.sections.filter((item) => {
       if (item.panel === 'branches' && !this.auth.hasRole('owner')) return false;
+      if (item.panel === 'organization' && !this.auth.hasRole('owner', 'admin') && !this.auth.hasPermission('settings.manage')) return false;
       if (item.panel === 'franchise' && !this.auth.hasRole('owner', 'admin')) return false;
       if (item.panel === 'roles' && !this.auth.hasRole('owner', 'admin')) return false;
       if (item.panel === 'ai' && !this.auth.hasRole('owner', 'admin', 'manager')) return false;
       if (item.panel === 'clientForms' && !this.auth.hasRole('owner', 'admin', 'manager')) return false;
+      if (item.panel === 'kiosk' && !this.auth.hasRole('owner', 'admin', 'manager') && !this.auth.hasPermission('appointments.manage')) return false;
       if (item.panel === 'services'
         && !this.auth.hasRole('owner', 'admin', 'manager')
         && !this.auth.hasPermission('services.manage', 'management.write')) return false;
@@ -408,12 +476,45 @@ export class SettingsPageComponent implements OnInit {
     this.saveStatus = '';
     this.saveError = '';
     if (panel === 'branches') await this.loadBranches();
+    if (panel === 'organization') await this.loadOrganization();
     if (panel === 'franchise') await Promise.all([this.loadFranchiseControls(), this.loadSharingPolicy()]);
     if (panel === 'roles') await this.loadRoles();
     if (panel === 'services') await this.loadServiceSettings();
     if (panel === 'ai') await this.loadAiGovernance();
     if (panel === 'clientForms') await this.loadClientFormSettings();
     if (panel === 'language') await this.loadLanguageSettings();
+    if (panel === 'kiosk') await this.loadKioskDevices();
+  }
+
+  async loadKioskDevices() {
+    this.kioskLoading = true; this.kioskError = '';
+    try { const result = await firstValueFrom(this.api.get<any>('/api/v1/kiosk/devices')); this.kioskDevices = result?.data ?? result ?? []; }
+    catch (error: any) { this.kioskDevices = []; this.kioskError = error?.error?.error?.message || error?.message || 'Unable to load kiosk devices'; }
+    finally { this.kioskLoading = false; }
+  }
+
+  async createKioskDevice() {
+    if (this.kioskSaving || !this.kioskName.trim() || !/^\d{4,8}$/.test(this.kioskAdminPin)) { this.kioskError = 'Name and a 4 to 8 digit admin PIN are required'; return; }
+    this.kioskSaving = true; this.kioskError = ''; this.kioskStatus = ''; this.kioskActivationCode = '';
+    try {
+      const result = await firstValueFrom(this.api.post<any>('/api/v1/kiosk/devices', { name: this.kioskName.trim(), adminPin: this.kioskAdminPin, branding: { appName: this.kioskAppName.trim() || this.kioskName.trim() }, config: { allowGroupCheckIn: true, allowSameDayBooking: true, allowAddOnRequest: true, checkoutMode: 'mirror', requireGeofence: true, geofenceRadiusMeters: 300 } }));
+      const saved = result?.data ?? result; this.kioskActivationCode = saved?.activationCode || ''; this.kioskName = ''; this.kioskAdminPin = ''; this.kioskAppName = ''; await this.loadKioskDevices(); this.kioskStatus = 'Device created';
+    } catch (error: any) { this.kioskError = error?.error?.error?.message || error?.message || 'Unable to create kiosk device'; }
+    finally { this.kioskSaving = false; }
+  }
+
+  async saveKioskDevice(device: KioskDevice) {
+    if (this.kioskSaving) return; this.kioskSaving = true; this.kioskError = ''; this.kioskStatus = '';
+    try { await firstValueFrom(this.api.patch(`/api/v1/kiosk/devices/${encodeURIComponent(device.id)}`, { name: device.name, selectedBranchId: device.selectedBranchId, allowedBranchIds: device.allowedBranchIds, branding: device.branding, config: device.config })); await this.loadKioskDevices(); this.kioskStatus = 'Device configuration saved'; }
+    catch (error: any) { this.kioskError = error?.error?.error?.message || error?.message || 'Unable to save kiosk device'; }
+    finally { this.kioskSaving = false; }
+  }
+
+  async revokeKioskDevice(device: KioskDevice) {
+    if (this.kioskSaving || !window.confirm(`Revoke ${device.name}?`)) return; this.kioskSaving = true; this.kioskError = '';
+    try { await firstValueFrom(this.api.post(`/api/v1/kiosk/devices/${encodeURIComponent(device.id)}/revoke`, {})); await this.loadKioskDevices(); this.kioskStatus = 'Device revoked'; }
+    catch (error: any) { this.kioskError = error?.error?.error?.message || error?.message || 'Unable to revoke kiosk device'; }
+    finally { this.kioskSaving = false; }
   }
 
   closePanel() {
@@ -461,6 +562,254 @@ export class SettingsPageComponent implements OnInit {
     finally { this.languageSaving = false; }
   }
 
+  get selectedOrganizationLocation() {
+    return this.organization?.locations.find((location) => location.id === this.organizationLocationId) ?? null;
+  }
+
+  async loadOrganization(branchId = '') {
+    this.organizationLoading = true;
+    this.organizationError = '';
+    this.organizationStatus = '';
+    try {
+      const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+      const response = await firstValueFrom(this.api.get<any>(`/api/v1/settings/organization/control-plane${query}`));
+      this.applyOrganization(response?.data ?? response);
+    } catch (error) {
+      this.organization = null;
+      this.organizationError = this.apiError(error, 'Unable to load organization control plane');
+    } finally { this.organizationLoading = false; }
+  }
+
+  async saveOrganizationProfile() {
+    if (!this.organization) return;
+    await this.mutateOrganization(() => firstValueFrom(this.api.put('/api/v1/settings/organization/profile', {
+      businessType: this.organizationBusinessType,
+      expectedVersion: this.organization!.tenant.lifecycleVersion,
+    })), 'Organization profile saved');
+  }
+
+  editOrganizationBrand(brand?: OrganizationBrand) {
+    this.organizationBrandDraft = brand
+      ? { id: brand.id, code: brand.code, name: brand.name, active: brand.active, version: brand.version }
+      : { id: '', code: '', name: '', active: true, version: 0 };
+  }
+
+  async saveOrganizationBrand() {
+    const draft = this.organizationBrandDraft;
+    const payload = { code: draft.code, name: draft.name, active: draft.active, expectedVersion: draft.id ? draft.version : null };
+    const path = `/api/v1/settings/organization/brands${draft.id ? `/${draft.id}` : ''}`;
+    await this.mutateOrganization(
+      () => firstValueFrom(draft.id ? this.api.patch(path, payload) : this.api.post(path, payload)),
+      'Brand saved',
+    );
+    if (!this.organizationError) this.editOrganizationBrand();
+  }
+
+  editOrganizationDepartment(department?: OrganizationDepartment) {
+    this.organizationDepartmentDraft = department
+      ? { id: department.id, branchId: this.organizationLocationId, brandId: department.brandId ?? '', code: department.code, name: department.name, active: department.active, version: department.version }
+      : { id: '', branchId: this.organizationLocationId, brandId: '', code: '', name: '', active: true, version: 0 };
+  }
+
+  async saveOrganizationDepartment() {
+    const draft = this.organizationDepartmentDraft;
+    const payload = { branchId: draft.branchId, brandId: draft.brandId || null, code: draft.code, name: draft.name, active: draft.active, expectedVersion: draft.id ? draft.version : null };
+    const path = `/api/v1/settings/organization/departments${draft.id ? `/${draft.id}` : ''}`;
+    await this.mutateOrganization(
+      () => firstValueFrom(draft.id ? this.api.patch(path, payload) : this.api.post(path, payload)),
+      'Department saved',
+    );
+    if (!this.organizationError) this.editOrganizationDepartment();
+  }
+
+  editOrganizationUnit(unit?: OrganizationUnit) {
+    this.organizationUnitDraft = unit
+      ? { id: unit.id, branchId: unit.branchId ?? '', kind: unit.kind, code: unit.code, name: unit.name, active: unit.active, version: unit.version }
+      : { id: '', branchId: this.organizationLocationId, kind: 'business_unit', code: '', name: '', active: true, version: 0 };
+  }
+
+  async saveOrganizationUnit() {
+    const draft = this.organizationUnitDraft;
+    const payload = { branchId: draft.branchId || null, kind: draft.kind, code: draft.code, name: draft.name, active: draft.active, expectedVersion: draft.id ? draft.version : null };
+    const path = `/api/v1/settings/organization/units${draft.id ? `/${draft.id}` : ''}`;
+    await this.mutateOrganization(
+      () => firstValueFrom(draft.id ? this.api.patch(path, payload) : this.api.post(path, payload)),
+      'Organization unit saved',
+    );
+    if (!this.organizationError) this.editOrganizationUnit();
+  }
+
+  async selectOrganizationLocation(locationId: string) {
+    this.organizationLocationId = locationId;
+    if (this.organization && this.organization.configBranchId !== locationId) {
+      await this.loadOrganization(locationId);
+      return;
+    }
+    const location = this.selectedOrganizationLocation;
+    if (!location) return;
+    this.organizationLocationBrandId = location.brandId ?? '';
+    this.organizationTimeZone = location.timeZone || 'Asia/Kolkata';
+    this.organizationCurrency = location.currencyCode || 'INR';
+    this.organizationHours = this.defaultOrganizationHours().map((fallback) => {
+      const saved = location.operatingHours.find((hour) => hour.weekday === fallback.weekday);
+      return saved ? { ...saved, opensAt: saved.opensAt?.slice(0, 5) ?? '', closesAt: saved.closesAt?.slice(0, 5) ?? '' } : fallback;
+    });
+    this.organizationDepartmentDraft.branchId = location.id;
+    this.organizationUnitDraft.branchId = location.id;
+    this.localBranding = this.brandingValue(this.organization?.locationConfig['branding']);
+    this.localEnterprisePolicy = this.enterprisePolicyValue(
+      this.organization?.locationConfig['enterprise_verticals'] ?? this.organization?.centralConfig['enterprise_verticals'],
+      this.organizationBusinessType,
+    );
+  }
+
+  async saveOrganizationLocation() {
+    if (!this.organizationLocationId) return;
+    await this.mutateOrganization(() => firstValueFrom(this.api.put(
+      `/api/v1/settings/organization/locations/${this.organizationLocationId}/operations`,
+      {
+        brandId: this.organizationLocationBrandId || null,
+        timeZone: this.organizationTimeZone,
+        currencyCode: this.organizationCurrency,
+        operatingHours: this.organizationHours.map((hour) => ({
+          weekday: hour.weekday,
+          closed: hour.closed,
+          opensAt: hour.closed ? null : hour.opensAt,
+          closesAt: hour.closed ? null : hour.closesAt,
+        })),
+      },
+    )), 'Location operations saved');
+  }
+
+  async saveOrganizationHoliday() {
+    if (!this.organizationLocationId) return;
+    const holiday = this.organizationHoliday;
+    await this.mutateOrganization(() => firstValueFrom(this.api.put(
+      `/api/v1/settings/organization/locations/${this.organizationLocationId}/holidays`,
+      { ...holiday, opensAt: holiday.closed ? null : holiday.opensAt, closesAt: holiday.closed ? null : holiday.closesAt },
+    )), 'Holiday saved');
+    if (!this.organizationError) this.organizationHoliday = { holidayDate: '', name: '', closed: true, opensAt: '', closesAt: '' };
+  }
+
+  async saveOrganizationBranding(locationId?: string) {
+    const path = locationId
+      ? `/api/v1/settings/organization/locations/${locationId}/config/branding`
+      : '/api/v1/settings/organization/config/branding';
+    await this.mutateOrganization(() => firstValueFrom(this.api.put(path, {
+      value: locationId ? this.localBranding : this.centralBranding,
+      expectedVersion: this.configVersion(locationId ?? null),
+      allowLocationOverride: !locationId && this.centralAllowOverride,
+      reason: this.brandingReason,
+    })), locationId ? 'Location branding override saved' : 'Central branding saved');
+  }
+
+  async rollbackOrganizationBranding(item: OrganizationConfigHistory) {
+    const base = item.branchId
+      ? `/api/v1/settings/organization/locations/${item.branchId}`
+      : '/api/v1/settings/organization';
+    await this.mutateOrganization(() => firstValueFrom(this.api.post(
+      `${base}/config/branding/rollback/${item.version}`,
+      { expectedVersion: this.configVersion(item.branchId), reason: this.brandingReason },
+    )), `Branding rolled back to version ${item.version}`);
+  }
+
+  toggleOrganizationVertical(policy: EnterpriseVerticalPolicy, vertical: string, enabled: boolean) {
+    policy.enabledVerticals = enabled
+      ? [...new Set([...policy.enabledVerticals, vertical])]
+      : policy.enabledVerticals.filter((item) => item !== vertical);
+  }
+
+  async saveOrganizationEnterprise(locationId?: string) {
+    const path = locationId
+      ? `/api/v1/settings/organization/locations/${locationId}/config/enterprise_verticals`
+      : '/api/v1/settings/organization/config/enterprise_verticals';
+    await this.mutateOrganization(() => firstValueFrom(this.api.put(path, {
+      value: locationId ? this.localEnterprisePolicy : this.centralEnterprisePolicy,
+      expectedVersion: this.configVersion(locationId ?? null, 'enterprise_verticals'),
+      allowLocationOverride: !locationId && this.enterpriseAllowOverride,
+      reason: this.enterpriseReason,
+    })), locationId ? 'Location enterprise policy saved' : 'Central enterprise policy saved');
+  }
+
+  async rollbackOrganizationEnterprise(item: OrganizationConfigHistory) {
+    const base = item.branchId
+      ? `/api/v1/settings/organization/locations/${item.branchId}`
+      : '/api/v1/settings/organization';
+    await this.mutateOrganization(() => firstValueFrom(this.api.post(
+      `${base}/config/enterprise_verticals/rollback/${item.version}`,
+      { expectedVersion: this.configVersion(item.branchId, 'enterprise_verticals'), reason: this.enterpriseReason },
+    )), `Enterprise policy rolled back to version ${item.version}`);
+  }
+
+  private async mutateOrganization(request: () => Promise<any>, message: string) {
+    if (this.organizationSaving) return;
+    this.organizationSaving = true;
+    this.organizationError = '';
+    this.organizationStatus = '';
+    try {
+      const response = await request();
+      this.applyOrganization(response?.data ?? response);
+      this.organizationStatus = message;
+    } catch (error) {
+      this.organizationError = this.apiError(error, 'Unable to save organization control plane');
+    } finally { this.organizationSaving = false; }
+  }
+
+  private applyOrganization(snapshot: OrganizationSnapshot) {
+    this.organization = snapshot;
+    this.organizationBusinessType = snapshot.tenant.businessType;
+    this.centralBranding = this.brandingValue(snapshot.centralConfig['branding']);
+    this.centralEnterprisePolicy = this.enterprisePolicyValue(snapshot.centralConfig['enterprise_verticals'], snapshot.tenant.businessType);
+    const current = snapshot.locations.some((location) => location.id === this.organizationLocationId)
+      ? this.organizationLocationId
+      : snapshot.configBranchId || snapshot.locations[0]?.id || '';
+    this.selectOrganizationLocation(current);
+  }
+
+  private configVersion(branchId: string | null, key = 'branding') {
+    return this.organization?.configHistory.find((item) => item.active && item.configKey === key && item.branchId === branchId)?.version ?? 0;
+  }
+
+  private brandingValue(value: Record<string, unknown> | undefined) {
+    return {
+      brandName: String(value?.['brandName'] ?? ''),
+      logoUrl: String(value?.['logoUrl'] ?? ''),
+      primaryColor: String(value?.['primaryColor'] ?? ''),
+    };
+  }
+
+  private defaultEnterpriseVerticalPolicy(businessType = 'salon'): EnterpriseVerticalPolicy {
+    return {
+      enabledVerticals: this.organizationVerticalOptions?.includes(businessType) ? [businessType] : ['salon'],
+      taxJurisdiction: this.languageSettings.region === 'IN' ? 'IN-GST' : `${this.languageSettings.region}-GENERAL`,
+      dataResidencyRegion: 'provider-managed',
+      terminology: { guest: 'Guest', staff: 'Provider', appointment: 'Appointment', location: 'Location' },
+    };
+  }
+
+  private enterprisePolicyValue(value: Record<string, unknown> | undefined, businessType: string): EnterpriseVerticalPolicy {
+    const fallback = this.defaultEnterpriseVerticalPolicy(businessType);
+    const verticals = Array.isArray(value?.['enabledVerticals'])
+      ? value!['enabledVerticals'].filter((item): item is string => typeof item === 'string' && this.organizationVerticalOptions.includes(item))
+      : fallback.enabledVerticals;
+    const terms = value?.['terminology'] && typeof value['terminology'] === 'object' ? value['terminology'] as Record<string, unknown> : {};
+    return {
+      enabledVerticals: [...new Set(verticals)],
+      taxJurisdiction: String(value?.['taxJurisdiction'] ?? fallback.taxJurisdiction),
+      dataResidencyRegion: String(value?.['dataResidencyRegion'] ?? fallback.dataResidencyRegion),
+      terminology: {
+        guest: String(terms['guest'] ?? fallback.terminology.guest),
+        staff: String(terms['staff'] ?? fallback.terminology.staff),
+        appointment: String(terms['appointment'] ?? fallback.terminology.appointment),
+        location: String(terms['location'] ?? fallback.terminology.location),
+      },
+    };
+  }
+
+  private defaultOrganizationHours(): Array<OrganizationHour & { opensAt: string; closesAt: string }> {
+    return Array.from({ length: 7 }, (_, weekday) => ({ weekday, opensAt: '09:00', closesAt: '18:00', closed: false, version: 0 }));
+  }
+
   hasAiChannel(channel: string) { return this.aiGovernance.allowedChannels.includes(channel); }
 
   toggleAiChannel(channel: string) {
@@ -479,13 +828,16 @@ export class SettingsPageComponent implements OnInit {
         enabled: Boolean(data.enabled), allowedChannels: Array.isArray(data.allowedChannels) ? data.allowedChannels : [],
         requireBookingConfirmation: data.requireBookingConfirmation !== false, redactSensitiveData: data.redactSensitiveData !== false,
         transcriptRetentionDays: Number(data.transcriptRetentionDays || 90), promptVersion: String(data.promptVersion || 'receptionist-v1'), bookingUrl: String(data.bookingUrl || ''),
+        defaultActionOwnerUserId: String(data.defaultActionOwnerUserId || ''), maxRequestsPerMinute: Number(data.maxRequestsPerMinute || 60),
+        maxLatencyMs: Number(data.maxLatencyMs || 15000), monthlyCostBudgetPaise: Number(data.monthlyCostBudgetPaise || 0),
+        evaluationRetentionDays: Number(data.evaluationRetentionDays || 90), modelAllowlist: Array.isArray(data.modelAllowlist) ? data.modelAllowlist.map(String) : [],
       };
     } catch (error) { this.aiGovernanceError = this.apiError(error, 'Unable to load AI governance'); }
     finally { this.aiGovernanceLoading = false; }
   }
 
   async saveAiGovernance() {
-    if (this.aiGovernanceSaving || !this.aiGovernance.allowedChannels.length) return;
+    if (this.aiGovernanceSaving || (this.aiGovernance.enabled && !this.aiGovernance.allowedChannels.length)) return;
     this.aiGovernanceSaving = true;
     this.aiGovernanceError = '';
     this.aiGovernanceStatus = '';
@@ -1095,8 +1447,10 @@ export class SettingsPageComponent implements OnInit {
         name,
         kind: this.chairRoomKind,
         department: this.chairRoomDepartment,
+        capacity: Math.max(1, Math.min(100, Math.trunc(Number(this.chairRoomCapacity) || 1))),
       }));
       this.chairRoomName = '';
+      this.chairRoomCapacity = '';
       await this.loadChairRooms();
     } catch {
       this.chairRoomError = 'Unable to add area resource';
@@ -1115,6 +1469,7 @@ export class SettingsPageComponent implements OnInit {
           name: String(item?.name || ''),
           kind: String(item?.kind || 'chair'),
           department: String(item?.department || 'Unassigned'),
+          capacity: Math.max(1, Number(item?.capacity) || 1),
         }))
         .filter((item) => item.id && item.name);
     } catch {

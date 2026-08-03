@@ -53,6 +53,18 @@ pub fn router() -> Router<AppState> {
             "/package-enterprise/alerts",
             axum::routing::get(get_package_alerts),
         )
+        .route(
+            "/package-enterprise/credits/:id/freeze",
+            axum::routing::post(freeze_package_credit),
+        )
+        .route(
+            "/package-enterprise/credits/:id/resume",
+            axum::routing::post(resume_package_credit),
+        )
+        .route(
+            "/package-enterprise/credits/:id/transfer",
+            axum::routing::post(transfer_package_credit),
+        )
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +104,15 @@ pub struct PackageWriteRequest {
     pub show_mobile_app: Option<bool>,
     pub show_online_booking: Option<bool>,
     pub active: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PackageCreditLifecycleRequest {
+    reason: String,
+    idempotency_key: String,
+    target_client_id: Option<String>,
+    frozen_until: Option<NaiveDate>,
 }
 
 #[derive(Debug, Serialize)]
@@ -285,13 +306,81 @@ async fn get_package_settings(
 
 async fn save_package_settings(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> ApiResult<Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        package_service::save_settings(&state.db, &tenant_id, &branch_id, payload).await?,
-    )))
+    let saved = package_service::save_settings(&state.db, &tenant_id, &branch_id, payload).await?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "package.settings.updated",
+        serde_json::json!({}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(saved)))
+}
+
+async fn freeze_package_credit(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PackageCreditLifecycleRequest>,
+) -> ApiResult<Value> {
+    change_package_credit(&state, &claims, &headers, &id, "freeze", payload).await
+}
+
+async fn resume_package_credit(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PackageCreditLifecycleRequest>,
+) -> ApiResult<Value> {
+    change_package_credit(&state, &claims, &headers, &id, "resume", payload).await
+}
+
+async fn transfer_package_credit(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PackageCreditLifecycleRequest>,
+) -> ApiResult<Value> {
+    change_package_credit(&state, &claims, &headers, &id, "transfer", payload).await
+}
+
+async fn change_package_credit(
+    state: &AppState,
+    claims: &AuthClaims,
+    headers: &HeaderMap,
+    id: &str,
+    action: &str,
+    payload: PackageCreditLifecycleRequest,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(headers)?;
+    let result = package_service::change_credit_state(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        id,
+        action,
+        payload.target_client_id.as_deref(),
+        payload.frozen_until,
+        &payload.reason,
+        &payload.idempotency_key,
+        &claims.sub,
+    )
+    .await?;
+    security_service::record_audit(
+        &state.db, &tenant_id, &branch_id, &claims.sub, &format!("package.credit.{action}"),
+        serde_json::json!({"creditId":id,"reason":payload.reason,"targetClientId":payload.target_client_id}),
+    ).await?;
+    Ok(Json(ApiResponse::ok(result)))
 }
 
 async fn get_package_report(

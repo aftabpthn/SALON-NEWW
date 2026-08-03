@@ -16,10 +16,11 @@ type Package = {
   rules?: { packageType?: string; groupName?: string };
 };
 type Service = { id: string; name: string; active: boolean };
+type Client = { id: string; firstName: string; lastName: string; active: boolean };
 type ReportRow = {
   id: string; clientName: string; contact: string; packageName: string; serviceName: string; invoiceNumber: string;
   totalQty: number; redeemedQty: number; pendingQty: number; issuedValuePaise: number; redeemedValuePaise: number;
-  pendingValuePaise: number; soldAt: string; expiresAt?: string; status: string;
+  clientId: string; pendingValuePaise: number; soldAt: string; expiresAt?: string; frozenAt?: string; frozenUntil?: string; status: string;
 };
 type ReportSummary = { totalRows: number; totalQty: number; redeemedQty: number; pendingQty: number; issuedValuePaise: number; redeemedValuePaise: number; pendingValuePaise: number };
 type PackageReport = { status: ReportStatus; summary: ReportSummary; rows: ReportRow[]; total: number };
@@ -51,6 +52,7 @@ export class PackagesPageComponent implements OnInit {
   activeDesk: Desk = 'catalog';
   packages: Package[] = [];
   services: Service[] = [];
+  clients: Client[] = [];
   report = this.blankReport('pending');
   settings = this.blankSettings();
   alerts: PackageAlert[] = [];
@@ -78,7 +80,7 @@ export class PackagesPageComponent implements OnInit {
 
   async loadWorkspace() {
     this.loading = true; this.error = '';
-    await Promise.all([this.loadPackages(), this.loadServices(), this.loadSettings()]);
+    await Promise.all([this.loadPackages(), this.loadServices(), this.loadClients(), this.loadSettings()]);
     if (this.activeDesk === 'alerts') await this.loadAlerts();
     else if (this.activeDesk !== 'catalog' && this.activeDesk !== 'settings') await this.loadReport();
     this.loading = false;
@@ -174,6 +176,17 @@ export class PackagesPageComponent implements OnInit {
     finally { this.saving = false; }
   }
   async searchReport() { await this.loadReport(); }
+  async changeCredit(item: ReportRow, action: 'freeze' | 'resume' | 'transfer', reason: string, targetClientId = '') {
+    if (!reason.trim()) { this.error = 'Reason required'; return; }
+    if (action === 'transfer' && (!targetClientId || targetClientId === item.clientId)) { this.error = 'Choose a different client'; return; }
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<unknown>>(`/package-enterprise/credits/${item.id}/${action}`, { reason: reason.trim(), targetClientId: targetClientId || null, idempotencyKey: globalThis.crypto.randomUUID() }));
+      if (!result.success) throw new Error(result.error?.message || `Package ${action} failed`);
+      await this.loadReport(); this.message = `Package credit ${action === 'freeze' ? 'frozen' : action === 'resume' ? 'resumed' : 'transferred'}`;
+    } catch (error) { this.error = error instanceof Error ? error.message : `Package ${action} failed`; }
+    finally { this.saving = false; }
+  }
   async exportReport(format: 'csv' | 'pdf') {
     const status = this.reportStatus();
     try {
@@ -194,6 +207,10 @@ export class PackagesPageComponent implements OnInit {
   private async loadServices() {
     try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Service[]>>('/services')); this.services = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; }
     catch { this.services = []; }
+  }
+  private async loadClients() {
+    try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')); this.clients = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; }
+    catch { this.clients = []; }
   }
   private async loadSettings() {
     try { const result = await firstValueFrom(this.api.get<ApiEnvelope<PackageSettings>>('/package-enterprise/settings')); this.settings = result.success && result.data ? this.mergeSettings(result.data) : this.blankSettings(); }

@@ -3,7 +3,6 @@ use axum::{
     http::{HeaderMap, StatusCode},
     Json, Router,
 };
-use chrono::TimeZone;
 use chrono::{DateTime, Duration, Utc};
 use rand_core::{OsRng, RngCore};
 use serde::Deserialize;
@@ -45,6 +44,8 @@ struct PublicSessionBody {
 
 #[derive(Deserialize)]
 pub(crate) struct SlotRequest {
+    #[serde(rename = "tenantId")]
+    pub(crate) tenant_id: Option<String>,
     #[serde(rename = "branchId")]
     pub(crate) branch_id: Option<String>,
     #[serde(rename = "serviceIds")]
@@ -58,6 +59,8 @@ pub(crate) struct SlotRequest {
 
 #[derive(Deserialize)]
 struct NearbyAlternativesRequest {
+    #[serde(rename = "tenantId")]
+    tenant_id: Option<String>,
     #[serde(rename = "branchId")]
     branch_id: Option<String>,
     #[serde(rename = "serviceIds")]
@@ -76,6 +79,8 @@ struct OtpVerifyRequest {
 
 #[derive(Deserialize)]
 struct HoldRequest {
+    #[serde(rename = "tenantId")]
+    tenant_id: Option<String>,
     #[serde(rename = "branchId")]
     branch_id: Option<String>,
     #[serde(rename = "slotId")]
@@ -135,6 +140,8 @@ struct QuoteRequest {
     staff_id: String,
     #[serde(rename = "startsAt")]
     starts_at: String,
+    #[serde(default, rename = "clientId")]
+    client_id: String,
 }
 
 #[derive(Deserialize)]
@@ -304,7 +311,7 @@ async fn booking_portal_v2_create_session(
             Err(_) => scope_for_query(&headers, None, body.branch_id.as_deref()),
         };
     let id = Uuid::new_v4().to_string();
-    let source = body.source.unwrap_or_else(|| "portal".to_string());
+    let source = normalize_public_booking_source(body.source.as_deref())?;
     let device_type = body.device_type.unwrap_or_default();
     sqlx::query("INSERT INTO public_booking_sessions (id,tenant_id,branch_id,source,device_type) VALUES ($1,$2,$3,$4,$5)")
         .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&source).bind(&device_type)
@@ -415,7 +422,9 @@ async fn booking_portal_v2_services(
         "SELECT service.id, service.name, service.category, service.duration_minutes, service.price_paise,
                 COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',item.id,'name',item.name,'priceDeltaPaise',item.price_delta_paise,'durationDeltaMinutes',item.duration_delta_minutes) ORDER BY item.created_at,item.id) FROM service_variants item WHERE item.tenant_id=service.tenant_id AND item.branch_id=service.branch_id AND item.service_id=service.id AND item.active=TRUE),'[]'::jsonb) AS variants,
                 COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',item.id,'name',item.name,'pricePaise',item.price_paise,'durationMinutes',item.duration_minutes) ORDER BY item.created_at,item.id) FROM service_addons item WHERE item.tenant_id=service.tenant_id AND item.branch_id=service.branch_id AND item.service_id=service.id AND item.active=TRUE),'[]'::jsonb) AS addons
-           FROM services service WHERE service.tenant_id=$1 AND service.branch_id=$2 AND service.active=true ORDER BY service.name LIMIT 200",
+           FROM services service WHERE service.tenant_id=$1 AND service.branch_id=$2 AND service.active=true
+             AND COALESCE((service.channel_availability_json->>'webstore')::BOOLEAN,FALSE)=TRUE
+           ORDER BY service.name LIMIT 200",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -488,8 +497,11 @@ pub(crate) async fn booking_portal_v2_slots(
     headers: HeaderMap,
     Json(payload): Json<SlotRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, branch_id) =
-        required_scope_for_query(&headers, None, payload.branch_id.as_deref())?;
+    let (tenant_id, branch_id) = required_scope_for_query(
+        &headers,
+        payload.tenant_id.as_deref(),
+        payload.branch_id.as_deref(),
+    )?;
     let service_ids = payload.service_ids.unwrap_or_default();
     if service_ids.is_empty() {
         return Err(ApiError::bad_request("serviceIds are required"));
@@ -525,8 +537,11 @@ async fn booking_portal_v2_nearby_alternatives(
     headers: HeaderMap,
     Json(payload): Json<NearbyAlternativesRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, origin_branch_id) =
-        required_scope_for_query(&headers, None, payload.branch_id.as_deref())?;
+    let (tenant_id, origin_branch_id) = required_scope_for_query(
+        &headers,
+        payload.tenant_id.as_deref(),
+        payload.branch_id.as_deref(),
+    )?;
     let service_ids = payload.service_ids.unwrap_or_default();
     if service_ids.is_empty() {
         return Err(ApiError::bad_request("serviceIds are required"));
@@ -636,8 +651,11 @@ async fn booking_portal_v2_holds(
     headers: HeaderMap,
     Json(payload): Json<HoldRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let (tenant_id, branch_id) =
-        required_scope_for_query(&headers, None, payload.branch_id.as_deref())?;
+    let (tenant_id, branch_id) = required_scope_for_query(
+        &headers,
+        payload.tenant_id.as_deref(),
+        payload.branch_id.as_deref(),
+    )?;
     let start_at = payload
         .start_at
         .ok_or_else(|| ApiError::bad_request("startAt is required for hold"))?;
@@ -1177,6 +1195,8 @@ async fn booking_portal_v2_confirm(
         DateTime::parse_from_rfc3339(&start_at)
             .map_err(|_| ApiError::bad_request("startAt must be RFC3339"))?
             .with_timezone(&Utc),
+        &client_id,
+        "webstore",
     )
     .await?;
     let deposit_quote =
@@ -1185,18 +1205,7 @@ async fn booking_portal_v2_confirm(
             .map_err(|_| ApiError::internal("failed to load booking deposit policy"))?;
     let deposit_amount = deposit_quote.deposit_paise;
     let deposit = deposit_quote.as_json();
-    let source = payload
-        .source
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| {
-            matches!(
-                *value,
-                "website" | "instagram" | "facebook" | "google" | "whatsapp" | "voice"
-            )
-        })
-        .unwrap_or("public-booking")
-        .to_string();
+    let source = normalize_public_booking_source(payload.source.as_deref())?;
     let create = AppointmentCreatePayload {
         tenant_id: Some(tenant_id),
         branch_id: Some(branch_id.clone()),
@@ -1288,6 +1297,8 @@ async fn booking_portal_v2_quote(
         &payload.service_ids,
         &payload.service_selections,
         starts_at,
+        &payload.client_id,
+        "webstore",
     )
     .await?;
     let quote = booking_service::deposit_quote(
@@ -1676,7 +1687,7 @@ pub(crate) async fn marketplace_availability(
     count: Option<i64>,
 ) -> Result<Value, ApiError> {
     let row = sqlx::query(
-        "SELECT COALESCE(NULLIF(t.slug,''),t.name,b.tenant_id::TEXT) AS tenant_id, COALESCE(NULLIF(b.code,''),b.name,b.id::TEXT) AS branch_id FROM branches b JOIN tenants t ON t.id=b.tenant_id WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE",
+        "SELECT t.id::TEXT AS tenant_id, b.id::TEXT AS branch_id FROM branches b JOIN tenants t ON t.id=b.tenant_id WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE",
     )
     .bind(branch_id)
     .fetch_optional(&state.db)
@@ -1719,16 +1730,24 @@ async fn generate_slots(
     count: i64,
     duration_minutes: i64,
 ) -> Result<Vec<Value>, ApiError> {
-    let now = Utc::now();
-    let day = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-        .unwrap_or_else(|_| now.date_naive())
-        .and_hms_opt(9, 0, 0)
-        .unwrap_or_else(|| chrono::NaiveDateTime::default());
-    let staff_rows = sqlx::query(
-        "SELECT id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=true ORDER BY appointment_display_name, first_name LIMIT 200",
+    let booking_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map_err(|_| ApiError::bad_request("date must be YYYY-MM-DD"))?;
+    let day_start = sqlx::query_scalar::<_, DateTime<Utc>>(
+        "SELECT ($3::DATE::TIMESTAMP AT TIME ZONE branch.time_zone) FROM branches branch JOIN tenants tenant ON tenant.id=branch.tenant_id WHERE $1 IN (tenant.id::TEXT,COALESCE(tenant.slug,''),tenant.name) AND $2 IN (branch.id::TEXT,COALESCE(branch.code,''),branch.name) AND branch.active=TRUE",
     )
     .bind(tenant_id)
     .bind(&branch_id)
+    .bind(booking_date)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to resolve location time zone"))?
+    .ok_or_else(|| ApiError::not_found("location was not found"))?;
+    let staff_rows = sqlx::query(
+        "SELECT staff.id FROM staff WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE AND NOT EXISTS(SELECT 1 FROM UNNEST($3::TEXT[]) requested(service_id) WHERE NOT EXISTS(SELECT 1 FROM staff_service_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.service_id=requested.service_id) AND NOT EXISTS(SELECT 1 FROM staff_catalog_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.item_type='service' AND assignment.item_id=requested.service_id)) ORDER BY staff.appointment_display_name,staff.first_name LIMIT 200",
+    )
+    .bind(tenant_id)
+    .bind(&branch_id)
+    .bind(&service_ids)
     .fetch_all(&state.db)
     .await
     .map_err(|_| ApiError::internal("failed to load staff availability"))?;
@@ -1741,30 +1760,54 @@ async fn generate_slots(
     }
 
     let mut slots = Vec::new();
-    for idx in 0..count {
-        let step = duration_minutes.max(15);
-        let minutes = idx * step;
-        let slot_start = Utc
-            .from_utc_datetime(&(day + chrono::Duration::hours((minutes / 60) as i64)))
-            + Duration::minutes(minutes % 60);
-        let slot_end = slot_start + Duration::minutes(step);
-        let busy_rows = sqlx::query("SELECT staff_id FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND status NOT IN ('cancelled','no-show') AND start_at < $4 AND end_at > $3 AND staff_id <> ''")
-                .bind(tenant_id)
-                .bind(&branch_id)
-                .bind(slot_start)
-                .bind(slot_end)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|_| ApiError::internal("failed to load appointment conflicts"))?;
-        let busy_staff = busy_rows
-            .into_iter()
-            .filter_map(|row| row.try_get::<String, _>("staff_id").ok())
-            .collect::<std::collections::HashSet<_>>();
-        let available_staff = staff_ids
-            .iter()
-            .filter(|id| !busy_staff.contains(*id))
-            .cloned()
-            .collect::<Vec<_>>();
+    for minutes in (0..24 * 60).step_by(15) {
+        if slots.len() >= count.max(0) as usize {
+            break;
+        }
+        let slot_start = day_start + Duration::minutes(minutes);
+        let slot_end = slot_start + Duration::minutes(duration_minutes.max(1));
+        if slot_start <= Utc::now() {
+            continue;
+        }
+        if let Err(error) = appointments::validate_branch_operating_hours(
+            state, tenant_id, &branch_id, slot_start, slot_end, "", None,
+        )
+        .await
+        {
+            if error.status_code() == StatusCode::CONFLICT {
+                continue;
+            }
+            return Err(error);
+        }
+        let mut available_staff = Vec::new();
+        for staff_id in &staff_ids {
+            if let Err(error) = appointments::validate_staff_blackout(
+                state, tenant_id, &branch_id, staff_id, slot_start, slot_end,
+            )
+            .await
+            {
+                if error.status_code() == StatusCode::CONFLICT {
+                    continue;
+                }
+                return Err(error);
+            }
+            match appointments::validate_staff_booking_availability(
+                state,
+                tenant_id,
+                &branch_id,
+                staff_id,
+                &service_ids,
+                slot_start,
+                slot_end,
+                None,
+            )
+            .await
+            {
+                Ok(()) => available_staff.push(staff_id.clone()),
+                Err(error) if error.status_code() == StatusCode::CONFLICT => continue,
+                Err(error) => return Err(error),
+            }
+        }
         if available_staff.is_empty() {
             continue;
         }
@@ -1779,4 +1822,51 @@ async fn generate_slots(
         }));
     }
     Ok(slots)
+}
+
+fn normalize_public_booking_source(value: Option<&str>) -> Result<String, ApiError> {
+    let source = value.unwrap_or("website").trim().to_ascii_lowercase();
+    if matches!(
+        source.as_str(),
+        "website" | "instagram" | "facebook" | "google" | "whatsapp" | "voice"
+    ) {
+        return Ok(source);
+    }
+    let parts = source.split(':').collect::<Vec<_>>();
+    if parts.len() == 3
+        && parts[0] == "marketing_campaign"
+        && parts[1..].iter().all(|part| {
+            !part.is_empty()
+                && part.len() <= 128
+                && part.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || matches!(character, '-' | '_')
+                })
+        })
+    {
+        return Ok(source);
+    }
+    Err(ApiError::bad_request("booking source is invalid"))
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::normalize_public_booking_source;
+
+    #[test]
+    fn accepts_supported_channels_and_traceable_campaigns_only() {
+        assert_eq!(
+            normalize_public_booking_source(Some("Google"))
+                .ok()
+                .as_deref(),
+            Some("google")
+        );
+        assert!(
+            normalize_public_booking_source(Some("marketing_campaign:campaign-1:client_2")).is_ok()
+        );
+        assert!(
+            normalize_public_booking_source(Some("marketing_campaign:campaign-1:client:2"))
+                .is_err()
+        );
+        assert!(normalize_public_booking_source(Some("unknown")).is_err());
+    }
 }

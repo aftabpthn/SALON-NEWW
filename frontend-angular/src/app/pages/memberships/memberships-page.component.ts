@@ -34,6 +34,7 @@ type RewardEntry = { id: string; clientId: string; clientName: string; sourceSal
 type RewardsRoi = { metrics: { totalRewardClients: number; totalPointsEarned: number; totalPointsRedeemed: number; rewardUsersRevenuePaise: number; nonRewardUsersRevenuePaise: number } };
 type LoyaltyTier = { code: string; name: string; minimumPoints: number | string };
 type EnterpriseReport = { metrics: { membershipSalesPaise: number; commissionPaise: number; serviceCostPaise: number; redeemedValuePaise: number; netProfitPaise: number; contributionPaise: number; creditLiability: number }; customerSales: Array<{ clientId: string; clientName: string; saleCount: number; revenuePaise: number }>; redemption: Array<{ clientId: string; clientName: string; membershipName: string; serviceName: string; quantity: number; visitCount: number }>; profitability: Array<{ membershipId: string; membershipName: string; soldCount: number; revenuePaise: number; commissionPaise: number; redeemedCredits: number; redeemedValuePaise: number; serviceCostPaise: number; netProfitPaise: number }> };
+type LiabilityReport = { domain: { membershipPaise: number; packagePaise: number; giftCardPaise: number; walletPaise: number; storeCreditPaise: number; loyaltyPoints: number; loyaltyPaise: number }; accounting: { deferredRevenuePaise: number; customerCreditPaise: number; loyaltyPaise: number }; difference: { deferredRevenuePaise: number; customerCreditPaise: number; loyaltyPaise: number }; balanced: boolean };
 type MembershipSettings = {
   membershipCatalog: { membershipSalesEnabled: boolean; visibleInPos: boolean; visibleOnline: boolean; freeMembershipEnabled: boolean; paidMembershipEnabled: boolean };
   creditsBenefits: { serviceCreditsEnabled: boolean; walletCreditsEnabled: boolean; rewardPointsEnabled: boolean; rewardPointsPer100Rupees: number | string; rewardPointValuePaise: number | string; discountBenefitsEnabled: boolean; allowBenefitStacking: boolean };
@@ -42,7 +43,7 @@ type MembershipSettings = {
   redemptionRules: { blockRedemptionWhenExpired: boolean; requireStaffConfirmation: boolean; allowPartialCredits: boolean; allowFamilySharing: boolean };
   crossLocation: { enabled: boolean; acceptInbound: boolean; scope: 'tenant' | 'region' | 'zone' | 'cluster'; allowDiscounts: boolean; allowServiceCredits: boolean };
   notificationsRisk: { renewalReminder: boolean; lowCreditReminder: boolean; ownerAlertForHighBalance: boolean; highBalanceThreshold: number };
-  loyaltyTiers: { enabled: boolean; tiers: LoyaltyTier[] };
+  loyaltyTiers: { enabled: boolean; expiryDays: number | string; tiers: LoyaltyTier[] };
   referrals: { enabled: boolean; referrerRewardPoints: number | string; referredRewardPoints: number | string };
   defaults: { defaultStatus: string; defaultMembershipType: string };
 };
@@ -105,6 +106,7 @@ export class MembershipsPageComponent implements OnInit {
   settings = this.defaultSettings();
   report: MembershipReport = { activeMembers: 0, expiredMembers: 0, cancelledMembers: 0, creditLiability: 0, membershipSalesPaise: 0, redeemedCredits: 0, atRiskMembers: 0, autoRenewFailed: 0, commissionPaise: 0 };
   enterpriseReport: EnterpriseReport = this.emptyEnterpriseReport();
+  liabilityReport: LiabilityReport = this.emptyLiabilityReport();
   services: Service[] = [];
   clients: Client[] = [];
   selectedMember: ActiveMembership | null = null;
@@ -336,6 +338,18 @@ export class MembershipsPageComponent implements OnInit {
     catch { this.error = 'Family member remove failed'; }
   }
 
+  async transferGiftCard(item: GiftCard, targetClientId: string, reason: string) {
+    if (!targetClientId || targetClientId === item.clientId) { this.error = 'Choose a different client'; return; }
+    if (!reason.trim()) { this.error = 'Transfer reason required'; return; }
+    this.saving = true; this.error = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<GiftCard>>(`/retention/gift-cards/${item.id}/transfer`, { targetClientId, reason: reason.trim(), idempotencyKey: globalThis.crypto.randomUUID() }));
+      if (!result.success) throw new Error(result.error?.message || 'Gift card transfer failed');
+      await this.loadGiftCards(); this.message = 'Gift card transferred';
+    } catch (error) { this.error = error instanceof Error ? error.message : 'Gift card transfer failed'; }
+    finally { this.saving = false; }
+  }
+
   async submitSelfServiceRequest() {
     if (!this.selectedMember) return;
     if (this.workflowForm.requestType === 'credit_adjustment' && (!this.workflowForm.serviceId || Number(this.workflowForm.creditDelta) === 0)) { this.error = 'Service and non-zero credit adjustment required'; return; }
@@ -441,13 +455,14 @@ export class MembershipsPageComponent implements OnInit {
 
   async loadWorkspace() {
     this.loading = true; this.error = '';
-    await Promise.all([this.loadMemberships(), this.loadActiveMemberships(), this.loadGiftCards(), this.loadCoupons(), this.loadLifecycle(), this.loadAutoRenew(), this.loadPlanChanges(), this.loadFamilyMembers(), this.loadSelfServiceRequests(), this.loadAutoRenewAttempts(), this.loadReminders(), this.loadCommission(), this.loadRisk(), this.loadRewards(), this.loadSettings(), this.loadReport(), this.loadEnterpriseReport(), this.loadServices(), this.loadClients()]);
+    await Promise.all([this.loadMemberships(), this.loadActiveMemberships(), this.loadGiftCards(), this.loadCoupons(), this.loadLifecycle(), this.loadAutoRenew(), this.loadPlanChanges(), this.loadFamilyMembers(), this.loadSelfServiceRequests(), this.loadAutoRenewAttempts(), this.loadReminders(), this.loadCommission(), this.loadRisk(), this.loadRewards(), this.loadSettings(), this.loadReport(), this.loadEnterpriseReport(), this.loadLiabilityReport(), this.loadServices(), this.loadClients()]);
     this.loading = false;
   }
 
   async loadMemberships() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Membership[]>>('/memberships')); this.memberships = result.success && Array.isArray(result.data) ? result.data.map((item) => ({ ...item, code: item.code || '', planType: item.planType || 'discount', pricePaise: Number(item.pricePaise || 0), serviceIds: Array.isArray(item.serviceIds) ? item.serviceIds : [], benefitRules: item.benefitRules && typeof item.benefitRules === 'object' ? item.benefitRules : {} })) : []; } catch { this.memberships = []; } }
   private async loadActiveMemberships() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<ActiveMembership[]>>('/membership-enterprise/active')); this.activeMemberships = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.activeMemberships = []; } }
   private async loadGiftCards() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<GiftCard[]>>('/retention/gift-cards')); this.giftCards = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.giftCards = []; } }
+  private async loadLiabilityReport() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<LiabilityReport>>('/membership-enterprise/reports/liabilities')); this.liabilityReport = result.success && result.data ? result.data : this.emptyLiabilityReport(); } catch { this.liabilityReport = this.emptyLiabilityReport(); } }
   private async loadCoupons() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Coupon[]>>('/api/v1/pos/coupons')); this.coupons = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.coupons = []; } }
   private async loadLifecycle() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<LifecycleRow[]>>('/membership-enterprise/ledger?limit=250')); this.lifecycleRows = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.lifecycleRows = []; } }
   private async loadAutoRenew() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<RenewalRow[]>>('/membership-enterprise/auto-renew/queue?days=30')); this.autoRenewRows = result.success && Array.isArray(result.data) ? result.data : []; } catch { this.autoRenewRows = []; } }
@@ -466,7 +481,8 @@ export class MembershipsPageComponent implements OnInit {
   private async loadServices() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Service[]>>('/services')); this.services = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.services = []; } }
   private async loadClients() { try { const result = await firstValueFrom(this.api.get<ApiEnvelope<Client[]>>('/clients?pageSize=500')); this.clients = result.success && Array.isArray(result.data) ? result.data.filter((item) => item.active !== false) : []; } catch { this.clients = []; } }
   private blankForm() { return { name: '', code: '', planType: 'discount' as PlanType, specialOfferPrice: '' as string | number, actualPrice: '' as string | number, pointsRequired: '' as string | number, discountPercent: '' as string | number, validityDays: '' as string | number, creditAmount: '' as string | number, familyLimit: '' as string | number, gstPercent: '' as string | number, notes: '', serviceIds: [] as string[], mobileVisible: false, bookingPageVisible: false, birthdayBenefit: false, anniversaryBenefit: false, priorityBooking: false, active: true }; }
-  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
+  private defaultSettings(): MembershipSettings { return { membershipCatalog: { membershipSalesEnabled: true, visibleInPos: true, visibleOnline: true, freeMembershipEnabled: true, paidMembershipEnabled: true }, creditsBenefits: { serviceCreditsEnabled: true, walletCreditsEnabled: true, rewardPointsEnabled: true, rewardPointsPer100Rupees: '', rewardPointValuePaise: 100, discountBenefitsEnabled: true, allowBenefitStacking: false }, renewalExpiry: { autoRenewEnabled: false, expiryDaysEnabled: true, defaultValidityDays: 365, renewalReminderDays: 30, expiredBenefitAction: 'block' }, paymentBilling: { allowDueOnMembershipSale: true, membershipTaxApplicable: true, taxInclusiveMembershipPrice: false, invoiceMembershipSnapshot: true }, redemptionRules: { blockRedemptionWhenExpired: true, requireStaffConfirmation: true, allowPartialCredits: true, allowFamilySharing: true }, crossLocation: { enabled: false, acceptInbound: false, scope: 'tenant', allowDiscounts: true, allowServiceCredits: true }, notificationsRisk: { renewalReminder: true, lowCreditReminder: true, ownerAlertForHighBalance: true, highBalanceThreshold: 1000000 }, loyaltyTiers: { enabled: true, expiryDays: 0, tiers: [{ code: 'bronze', name: 'Bronze', minimumPoints: 0 }, { code: 'silver', name: 'Silver', minimumPoints: 1000 }, { code: 'gold', name: 'Gold', minimumPoints: 5000 }] }, referrals: { enabled: true, referrerRewardPoints: 100, referredRewardPoints: 50 }, defaults: { defaultStatus: 'active', defaultMembershipType: 'paid' } }; }
+  private emptyLiabilityReport(): LiabilityReport { return { domain: { membershipPaise: 0, packagePaise: 0, giftCardPaise: 0, walletPaise: 0, storeCreditPaise: 0, loyaltyPoints: 0, loyaltyPaise: 0 }, accounting: { deferredRevenuePaise: 0, customerCreditPaise: 0, loyaltyPaise: 0 }, difference: { deferredRevenuePaise: 0, customerCreditPaise: 0, loyaltyPaise: 0 }, balanced: true }; }
   private navigateCheckout(intent: CheckoutIntent) { return this.router.navigate(['/pos'], { queryParams: { clientId: intent.clientId, membershipId: intent.planId, unitPricePaise: intent.pricePaise, reference: intent.referenceId || null } }); }
   private utcDay(value?: string) {
     const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/);

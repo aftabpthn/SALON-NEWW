@@ -84,7 +84,7 @@ Protected routes now resolve to named domain/action permissions before the handl
 
 | Route area | Read permission | Manage / elevated permission |
 | --- | --- | --- |
-| Appointments and booking | `appointments.read`, `bookings.read` | `appointments.manage`, `appointments.settings.manage`, `bookings.manage` |
+| Appointments and booking | `appointments.read`, `bookings.read` | `appointments.manage`, `appointments.settings.manage`, `appointments.outside_hours.override`, `appointments.fees.waive`, `bookings.manage` |
 | Clients | `clients.read` | `clients.manage` plus consent/forms/merge/audit/review action permissions |
 | POS and billing | `pos.read` | `pos.manage`, `pos.void`, `pos.refund` |
 | Inventory and purchases | `inventory.read`, `purchases.read` | `inventory.manage`, `purchases.manage`, `purchases.approve` |

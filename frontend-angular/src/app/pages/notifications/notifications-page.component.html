@@ -1,16 +1,21 @@
 <section class="inbox-page">
   <header class="page-header">
-    <div class="title-switch"><h1>SMS Center</h1><nav><button type="button" [class.active]="mode === 'center'" (click)="setMode('center')">Control</button><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Clients</button><button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button>@if (canUsePrivateStaffChat) { <button type="button" [class.active]="mode === 'private'" (click)="setMode('private')">Staff private</button> }</nav></div>
+    <div class="title-switch"><h1>Unified Communications</h1><nav><button type="button" [class.active]="mode === 'center'" (click)="setMode('center')">Control</button><button type="button" [class.active]="mode === 'client'" (click)="setMode('client')">Inbox</button>@if (canViewCalls) { <button type="button" [class.active]="mode === 'calls'" (click)="setMode('calls')">Calls</button> }<button type="button" [class.active]="mode === 'team'" (click)="setMode('team')">Team</button>@if (canUsePrivateStaffChat) { <button type="button" [class.active]="mode === 'private'" (click)="setMode('private')">Staff private</button> }</nav></div>
     <div class="provider-state">
       <span [class.ready]="providerReady('whatsapp')">WhatsApp</span>
       <span [class.ready]="providerReady('sms')">SMS</span>
       <span [class.ready]="providerReady('email')">Email</span>
+      <span [class.ready]="providerReady('voice')">Voice</span>
       <button type="button" (click)="reload()" [disabled]="loading">Refresh</button>
     </div>
   </header>
   @if (error) {
     <p class="alert">{{ error }}</p>
   }
+  <div class="sla-strip" aria-label="Communication service levels">
+    <span>Open <strong>{{ sla.openThreads }}</strong></span><span>Assigned <strong>{{ sla.assignedThreads }}</strong></span><span>Unassigned <strong>{{ sla.unassignedThreads }}</strong></span><span [class.overdue]="sla.overdueThreads">Overdue <strong>{{ sla.overdueThreads }}</strong></span><span>Resolved today <strong>{{ sla.resolvedToday }}</strong></span>
+    @if (providerStatus['messageFailuresLastHour'] || providerStatus['voiceFailuresLastHour']) { <span class="overdue">Provider failures {{ providerStatus['messageFailuresLastHour'] || 0 }}/{{ providerStatus['voiceFailuresLastHour'] || 0 }}</span> }
+  </div>
 
   @if (mode === 'center') {
     <div class="control-shell">
@@ -71,8 +76,9 @@
       <div class="inbox-shell">
         <aside class="thread-list">
           @for (thread of threads; track thread) {
-            <button type="button" [class.active]="thread.clientId === selectedClientId" (click)="selectThread(thread)">
-              <span><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }} · {{ formatDateTime(thread.occurredAt) }}</small></span>
+            <button type="button" [class.active]="thread.threadKey === selectedThreadKey" (click)="selectThread(thread)">
+              <span><strong>{{ thread.contactName || 'Inbound contact' }}</strong><small>{{ thread.channel }} · {{ formatDateTime(thread.occurredAt) }}</small></span>
+              <small [class.overdue]="thread.responseOverdue">{{ thread.threadStatus }} · {{ thread.priority }}</small>
               <small>{{ thread.body || thread.subject }}</small>
             </button>
           }
@@ -85,9 +91,12 @@
         </aside>
         <section class="conversation">
           @if (selectedThread; as thread) {
-            <header><div><strong>{{ thread.clientName || 'Client' }}</strong><small>{{ thread.channel }}</small></div></header>
+            <header class="conversation-header"><div><strong>{{ thread.contactName || 'Inbound contact' }}</strong><small>{{ thread.channel }} · {{ thread.threadStatus }} · {{ thread.priority }}</small></div><div class="context-actions">@if (thread.clientId) { <button type="button" (click)="bookSelectedClient()">Book</button> } @if (thread.leadId) { <button type="button" (click)="openLead(thread.leadId)">Lead</button> } @if (thread.appointmentId) { <button type="button" (click)="openAppointment(thread.appointmentId)">Appointment</button> } @if (thread.invoiceId) { <button type="button" (click)="openInvoice(thread.invoiceId)">Invoice</button> }</div></header>
+            @if (canManageThreads) {
+              <div class="thread-controls"><select [(ngModel)]="threadStatus"><option value="open">Open</option><option value="assigned">Assigned</option><option value="resolved">Resolved</option></select><select [(ngModel)]="threadPriority"><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select><select [(ngModel)]="threadAssignee"><option value="">Unassigned</option>@for (participant of participants; track participant.userId) { <option [value]="participant.userId">{{ participant.name }}</option> }</select><input [(ngModel)]="handoverNote" maxlength="1000" placeholder="Handover note" /><button type="button" (click)="updateThread()" [disabled]="busy">Save</button></div>
+            }
           }
-          @if (selectedClientId) {
+          @if (selectedThreadKey) {
             <div class="message-list">
               @for (message of selectedMessages; track message) {
                 <article [class.outbound]="message.direction === 'outbound'">
@@ -103,11 +112,20 @@
             <footer>
               <select [(ngModel)]="channel"><option value="whatsapp">WhatsApp</option><option value="sms">SMS</option></select>
               <textarea [(ngModel)]="reply" rows="2" maxlength="4000" placeholder="Type a reply"></textarea>
+              <select class="template-select" (change)="useTemplate($any($event.target).value)"><option value="">Saved response</option>@for (template of approvedTemplates; track template.id) { <option [value]="template.body">{{ template.name }}</option> }</select>
+              <button type="button" (click)="suggestReply()" [disabled]="busy">Suggest</button>
               <button class="primary" type="button" (click)="sendReply()" [disabled]="busy || !reply.trim() || !providerReady(channel)">{{ busy ? 'Queuing…' : 'Send' }}</button>
             </footer>
+          } @else if (selectedThreadKey) {
+            <footer class="lead-footer"><span>Link or convert this lead before outbound contact.</span>@if (selectedThread?.leadId) { <button type="button" (click)="openLead(selectedThread?.leadId)">Open lead</button> }</footer>
           }
         </section>
       </div>
+    } @else if (mode === 'calls') {
+      <section class="calls-shell">
+        <header><strong>Call logs</strong><span>Total {{ voiceReport.summary.totalCalls }} · Answered {{ voiceReport.summary.answeredCalls }} · Missed {{ voiceReport.summary.missedCalls }} · Callback {{ voiceReport.summary.callbackRequired }}</span></header>
+        <div class="history-table-wrap"><table><thead><tr><th>Caller</th><th>Direction</th><th>Status</th><th>Queue / extension</th><th>Duration</th><th>Recording</th><th>Time</th></tr></thead><tbody>@for (call of voiceReport.recentCalls; track call.id) { <tr><td><strong>{{ maskedPhone(call.callerPhone) }}</strong>@if (call.voicemail) { <small>Voicemail</small> }</td><td>{{ call.direction }}</td><td>{{ call.status }}</td><td>{{ call.callQueue || '—' }} / {{ call.extension || '—' }}</td><td>{{ formatDuration(call.conversationDurationSeconds) }}</td><td>{{ call.recordingAvailable ? call.recordingConsentStatus : '—' }}</td><td>{{ formatDateTime(call.startedAt || call.createdAt) }}</td></tr> } @if (!voiceReport.recentCalls.length) { <tr><td colspan="7" class="empty">No call logs yet</td></tr> }</tbody></table></div>
+      </section>
     } @else if (mode === 'team') {
       <section class="team-chat-shell">
         <header><div><strong>Branch team</strong><small>Internal messages</small></div></header>

@@ -84,6 +84,186 @@
   </section>
 }
 
+@if (activePanel === 'organization') {
+  <section class="settings-panel organization-panel" aria-label="Organization control plane">
+    <header>
+      <h2>Organization control plane</h2>
+      <div class="panel-actions">
+        <button type="button" [disabled]="organizationLoading || organizationSaving" (click)="loadOrganization()">Reload</button>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+    @if (organizationLoading) { <span class="status">Loading…</span> }
+    @if (organizationError) { <span class="status error" role="alert">{{ organizationError }}</span> }
+    @if (organization && !organizationLoading) {
+      <section class="setting-block role-editor">
+        <h3>Organization</h3>
+        <div class="form-grid">
+          <label>Business type<select [(ngModel)]="organizationBusinessType"><option value="salon">Salon</option><option value="spa">Spa</option><option value="medspa">Medspa</option><option value="fitness">Fitness</option><option value="barbershop">Barbershop</option><option value="wellness">Wellness</option><option value="multi_vertical">Multi vertical</option></select></label>
+          <label>Status<input [value]="organization.tenant.status" disabled /></label>
+        </div>
+        <footer><button class="primary" type="button" [disabled]="organizationSaving" (click)="saveOrganizationProfile()">Save profile</button></footer>
+      </section>
+
+      <section class="setting-block role-editor">
+        <h3>Brands</h3>
+        <div class="compact-record-list">
+          @for (brand of organization.brands; track brand.id) {
+            <button type="button" (click)="editOrganizationBrand(brand)"><b>{{ brand.name }}</b><small>{{ brand.code }} · {{ brand.active ? 'Active' : 'Inactive' }}</small></button>
+          } @empty { <span>No brands yet</span> }
+        </div>
+        <div class="form-grid">
+          <label>Code<input [ngModel]="organizationBrandDraft.code" (ngModelChange)="organizationBrandDraft.code = $event.toUpperCase()" maxlength="24" /></label>
+          <label>Name<input [ngModel]="organizationBrandDraft.name" (ngModelChange)="organizationBrandDraft.name = titleCase($event)" maxlength="120" /></label>
+          <label>State<select [(ngModel)]="organizationBrandDraft.active"><option [ngValue]="true">Active</option><option [ngValue]="false">Inactive</option></select></label>
+        </div>
+        <footer>
+          <button class="primary" type="button" [disabled]="organizationSaving || !organizationBrandDraft.code.trim() || !organizationBrandDraft.name.trim()" (click)="saveOrganizationBrand()">Save brand</button>
+          <button type="button" (click)="editOrganizationBrand()">New</button>
+        </footer>
+      </section>
+
+      <section class="setting-block role-editor">
+        <h3>Location operations</h3>
+        <div class="form-grid">
+          <label>Location<select [(ngModel)]="organizationLocationId" (ngModelChange)="selectOrganizationLocation($event)">@for (location of organization.locations; track location.id) { <option [value]="location.id">{{ location.name }} ({{ location.code }})</option> }</select></label>
+          <label>Brand<select [(ngModel)]="organizationLocationBrandId"><option value="">No brand</option>@for (brand of organization.brands; track brand.id) { <option [value]="brand.id">{{ brand.name }}</option> }</select></label>
+          <label>Timezone<input [(ngModel)]="organizationTimeZone" list="timezone-codes" maxlength="64" /></label>
+          <label>Currency<input [(ngModel)]="organizationCurrency" list="currency-codes" maxlength="3" /></label>
+        </div>
+        <div class="hours-grid">
+          @for (hour of organizationHours; track hour.weekday) {
+            <div>
+              <b>{{ weekdayOptions[hour.weekday] }}</b>
+              <label><input type="checkbox" [(ngModel)]="hour.closed" /> Closed</label>
+              <input type="time" [(ngModel)]="hour.opensAt" [disabled]="hour.closed" aria-label="Opening time" />
+              <input type="time" [(ngModel)]="hour.closesAt" [disabled]="hour.closed" aria-label="Closing time" />
+            </div>
+          }
+        </div>
+        <footer><button class="primary" type="button" [disabled]="organizationSaving || !organizationLocationId" (click)="saveOrganizationLocation()">Save location operations</button></footer>
+      </section>
+
+      <section class="setting-block role-editor">
+        <h3>Location holidays</h3>
+        <div class="form-grid">
+          <label>Date<as-date-picker [(value)]="organizationHoliday.holidayDate" ariaLabel="Holiday date" /></label>
+          <label>Name<input [ngModel]="organizationHoliday.name" (ngModelChange)="organizationHoliday.name = titleCase($event)" maxlength="120" /></label>
+          <label>State<select [(ngModel)]="organizationHoliday.closed"><option [ngValue]="true">Closed</option><option [ngValue]="false">Special hours</option></select></label>
+          @if (!organizationHoliday.closed) {
+            <label>Opens<input type="time" [(ngModel)]="organizationHoliday.opensAt" /></label>
+            <label>Closes<input type="time" [(ngModel)]="organizationHoliday.closesAt" /></label>
+          }
+        </div>
+        <footer><button class="primary" type="button" [disabled]="organizationSaving || !organizationLocationId || !organizationHoliday.holidayDate || !organizationHoliday.name.trim()" (click)="saveOrganizationHoliday()">Save holiday</button></footer>
+        @if (selectedOrganizationLocation?.holidays?.length) {
+          <div class="compact-record-list">@for (holiday of selectedOrganizationLocation?.holidays; track holiday.id) { <span><b>{{ holiday.name }}</b><small>{{ holiday.holidayDate }} · {{ holiday.closed ? 'Closed' : holiday.opensAt + '–' + holiday.closesAt }}</small></span> }</div>
+        }
+      </section>
+
+      <section class="organization-columns">
+        <section class="setting-block role-editor">
+          <h3>Departments</h3>
+          <div class="compact-record-list">@for (department of selectedOrganizationLocation?.departments ?? []; track department.id) { <button type="button" (click)="editOrganizationDepartment(department)"><b>{{ department.name }}</b><small>{{ department.code }}</small></button> } @empty { <span>No departments yet</span> }</div>
+          <div class="form-grid">
+            <label>Code<input [ngModel]="organizationDepartmentDraft.code" (ngModelChange)="organizationDepartmentDraft.code = $event.toUpperCase()" maxlength="24" /></label>
+            <label>Name<input [ngModel]="organizationDepartmentDraft.name" (ngModelChange)="organizationDepartmentDraft.name = titleCase($event)" maxlength="120" /></label>
+            <label>Brand<select [(ngModel)]="organizationDepartmentDraft.brandId"><option value="">No brand</option>@for (brand of organization.brands; track brand.id) { <option [value]="brand.id">{{ brand.name }}</option> }</select></label>
+          </div>
+          <footer><button class="primary" type="button" [disabled]="organizationSaving || !organizationLocationId || !organizationDepartmentDraft.code.trim() || !organizationDepartmentDraft.name.trim()" (click)="saveOrganizationDepartment()">Save department</button><button type="button" (click)="editOrganizationDepartment()">New</button></footer>
+        </section>
+        <section class="setting-block role-editor">
+          <h3>Business and revenue centers</h3>
+          <div class="compact-record-list">@for (unit of organization.units; track unit.id) { <button type="button" (click)="editOrganizationUnit(unit)"><b>{{ unit.name }}</b><small>{{ unit.code }} · {{ unit.kind }}</small></button> } @empty { <span>No units yet</span> }</div>
+          <div class="form-grid">
+            <label>Type<select [(ngModel)]="organizationUnitDraft.kind"><option value="business_unit">Business unit</option><option value="revenue_center">Revenue center</option></select></label>
+            <label>Code<input [ngModel]="organizationUnitDraft.code" (ngModelChange)="organizationUnitDraft.code = $event.toUpperCase()" maxlength="24" /></label>
+            <label>Name<input [ngModel]="organizationUnitDraft.name" (ngModelChange)="organizationUnitDraft.name = titleCase($event)" maxlength="120" /></label>
+          </div>
+          <footer><button class="primary" type="button" [disabled]="organizationSaving || !organizationUnitDraft.code.trim() || !organizationUnitDraft.name.trim()" (click)="saveOrganizationUnit()">Save unit</button><button type="button" (click)="editOrganizationUnit()">New</button><a routerLink="/finance/balance-sheet">Cost centers</a></footer>
+        </section>
+      </section>
+
+      <section class="setting-block role-editor">
+        <h3>Enterprise and vertical packs</h3>
+        <div class="organization-columns">
+          <div class="form-grid">
+            <strong>Central</strong>
+            <fieldset>
+              <legend>Enabled packs</legend>
+              @for (vertical of organizationVerticalOptions; track vertical) {
+                <label><input type="checkbox" [checked]="centralEnterprisePolicy.enabledVerticals.includes(vertical)" (change)="toggleOrganizationVertical(centralEnterprisePolicy, vertical, $any($event.target).checked)" /> {{ vertical | titlecase }}</label>
+              }
+            </fieldset>
+            <label>Tax jurisdiction<input [(ngModel)]="centralEnterprisePolicy.taxJurisdiction" maxlength="32" /></label>
+            <label>Data residency region<input [(ngModel)]="centralEnterprisePolicy.dataResidencyRegion" maxlength="64" /></label>
+            <label>Guest term<input [(ngModel)]="centralEnterprisePolicy.terminology.guest" maxlength="40" /></label>
+            <label>Staff term<input [(ngModel)]="centralEnterprisePolicy.terminology.staff" maxlength="40" /></label>
+            <label>Appointment term<input [(ngModel)]="centralEnterprisePolicy.terminology.appointment" maxlength="40" /></label>
+            <label>Location term<input [(ngModel)]="centralEnterprisePolicy.terminology.location" maxlength="40" /></label>
+            <label>Location override<select [(ngModel)]="enterpriseAllowOverride"><option [ngValue]="true">Allowed</option><option [ngValue]="false">Blocked</option></select></label>
+            <button class="primary" type="button" [disabled]="organizationSaving || !enterpriseReason.trim() || !centralEnterprisePolicy.enabledVerticals.length" (click)="saveOrganizationEnterprise()">Save central</button>
+          </div>
+          <div class="form-grid">
+            <strong>Selected location</strong>
+            <fieldset>
+              <legend>Enabled packs</legend>
+              @for (vertical of organizationVerticalOptions; track vertical) {
+                <label><input type="checkbox" [checked]="localEnterprisePolicy.enabledVerticals.includes(vertical)" (change)="toggleOrganizationVertical(localEnterprisePolicy, vertical, $any($event.target).checked)" /> {{ vertical | titlecase }}</label>
+              }
+            </fieldset>
+            <label>Tax jurisdiction<input [(ngModel)]="localEnterprisePolicy.taxJurisdiction" maxlength="32" /></label>
+            <label>Data residency region<input [(ngModel)]="localEnterprisePolicy.dataResidencyRegion" maxlength="64" /></label>
+            <label>Guest term<input [(ngModel)]="localEnterprisePolicy.terminology.guest" maxlength="40" /></label>
+            <label>Staff term<input [(ngModel)]="localEnterprisePolicy.terminology.staff" maxlength="40" /></label>
+            <label>Appointment term<input [(ngModel)]="localEnterprisePolicy.terminology.appointment" maxlength="40" /></label>
+            <label>Location term<input [(ngModel)]="localEnterprisePolicy.terminology.location" maxlength="40" /></label>
+            <button class="primary" type="button" [disabled]="organizationSaving || !organizationLocationId || !enterpriseReason.trim() || !localEnterprisePolicy.enabledVerticals.length" (click)="saveOrganizationEnterprise(organizationLocationId)">Save override</button>
+          </div>
+        </div>
+        <div class="form-grid"><label>Change reason<input [(ngModel)]="enterpriseReason" maxlength="240" /></label></div>
+        <div class="compact-record-list">
+          @for (item of organization.configHistory; track item.id) {
+            @if (item.configKey === 'enterprise_verticals') {
+              <span><b>Version {{ item.version }} · {{ item.branchId ? 'Location' : 'Central' }}</b><small>{{ item.reason }} · {{ item.active ? 'Active' : 'History' }}</small>@if (!item.active) { <button type="button" [disabled]="organizationSaving || !enterpriseReason.trim()" (click)="rollbackOrganizationEnterprise(item)">Rollback</button> }</span>
+            }
+          } @empty { <span>No enterprise policy history yet</span> }
+        </div>
+      </section>
+
+      <section class="setting-block role-editor">
+        <h3>White-label branding</h3>
+        <div class="organization-columns">
+          <div class="form-grid">
+            <strong>Central</strong>
+            <label>Brand name<input [(ngModel)]="centralBranding.brandName" maxlength="120" /></label>
+            <label>Logo URL<input type="url" [(ngModel)]="centralBranding.logoUrl" maxlength="500" /></label>
+            <label>Primary color<input [(ngModel)]="centralBranding.primaryColor" maxlength="32" /></label>
+            <label>Override<select [(ngModel)]="centralAllowOverride"><option [ngValue]="true">Allowed</option><option [ngValue]="false">Blocked</option></select></label>
+            <button class="primary" type="button" [disabled]="organizationSaving || !brandingReason.trim()" (click)="saveOrganizationBranding()">Save central</button>
+          </div>
+          <div class="form-grid">
+            <strong>Selected location</strong>
+            <label>Brand name<input [(ngModel)]="localBranding.brandName" maxlength="120" /></label>
+            <label>Logo URL<input type="url" [(ngModel)]="localBranding.logoUrl" maxlength="500" /></label>
+            <label>Primary color<input [(ngModel)]="localBranding.primaryColor" maxlength="32" /></label>
+            <button class="primary" type="button" [disabled]="organizationSaving || !organizationLocationId || !brandingReason.trim()" (click)="saveOrganizationBranding(organizationLocationId)">Save override</button>
+          </div>
+        </div>
+        <div class="form-grid"><label>Change reason<input [(ngModel)]="brandingReason" maxlength="240" /></label></div>
+        <div class="compact-record-list">
+          @for (item of organization.configHistory; track item.id) {
+            @if (item.configKey === 'branding') {
+              <span><b>Version {{ item.version }} · {{ item.branchId ? 'Location' : 'Central' }}</b><small>{{ item.reason }} · {{ item.active ? 'Active' : 'History' }}</small>@if (!item.active) { <button type="button" [disabled]="organizationSaving || !brandingReason.trim()" (click)="rollbackOrganizationBranding(item)">Rollback</button> }</span>
+            }
+          } @empty { <span>No branding history yet</span> }
+        </div>
+      </section>
+      <footer><span class="status">{{ organizationStatus }}</span></footer>
+    }
+  </section>
+}
+
 @if (activePanel === 'branches') {
   <section class="settings-panel" aria-label="Branch management">
     <header>
@@ -200,14 +380,18 @@
         }
         @if (!aiGovernanceLoading) {
           <section class="setting-block">
-            <h3>Receptionist controls</h3>
+            <h3>Governed AI workforce</h3>
             <div class="toggle-grid">
-              <label><input type="checkbox" [(ngModel)]="aiGovernance.enabled" /><span><b>AI receptionist</b></span></label>
+              <label><input type="checkbox" [(ngModel)]="aiGovernance.enabled" /><span><b>Tenant opt-in</b></span></label>
               <label><input type="checkbox" [(ngModel)]="aiGovernance.requireBookingConfirmation" disabled /><span><b>Booking confirmation required</b></span></label>
               <label><input type="checkbox" [(ngModel)]="aiGovernance.redactSensitiveData" /><span><b>Redact sensitive transcript data</b></span></label>
             </div>
             <div class="form-grid">
+              <label>Default action owner<input [(ngModel)]="aiGovernance.defaultActionOwnerUserId" maxlength="100" /></label>
+              <label>Requests per minute<input type="number" min="1" max="1000" [(ngModel)]="aiGovernance.maxRequestsPerMinute" /></label>
+              <label>Maximum latency ms<input type="number" min="1000" max="60000" [(ngModel)]="aiGovernance.maxLatencyMs" /></label>
               <label>Transcript retention days<input type="number" min="1" max="3650" [(ngModel)]="aiGovernance.transcriptRetentionDays" /></label>
+              <label>Evaluation retention days<input type="number" min="30" max="3650" [(ngModel)]="aiGovernance.evaluationRetentionDays" /></label>
               <label>Prompt version<input [(ngModel)]="aiGovernance.promptVersion" maxlength="80" /></label>
               <label>Public booking URL<input type="url" [(ngModel)]="aiGovernance.bookingUrl" placeholder="https://booking.example.com/book/salon" /></label>
             </div>
@@ -216,7 +400,7 @@
                 <label><input type="checkbox" [checked]="hasAiChannel(channel)" (change)="toggleAiChannel(channel)" /><span>{{ channel | titlecase }}</span></label>
               }
             </div>
-            <footer><button class="primary" type="button" [disabled]="aiGovernanceSaving || !aiGovernance.allowedChannels.length" (click)="saveAiGovernance()">{{ aiGovernanceSaving ? 'Saving…' : 'Save governance' }}</button><span class="status">{{ aiGovernanceStatus }}</span></footer>
+            <footer><button class="primary" type="button" [disabled]="aiGovernanceSaving || (aiGovernance.enabled && !aiGovernance.allowedChannels.length)" (click)="saveAiGovernance()">{{ aiGovernanceSaving ? 'Saving…' : 'Save governance' }}</button><span class="status">{{ aiGovernanceStatus }}</span></footer>
           </section>
         }
       </section>
@@ -553,6 +737,18 @@
       </section>
     }
 
+    @if (activePanel === 'kiosk') {
+      <section class="settings-panel kiosk-settings-panel" aria-label="Customer kiosk settings">
+        <header><h2>Customer kiosk</h2><div class="panel-actions"><button type="button" [disabled]="kioskLoading" (click)="loadKioskDevices()">Reload</button><button type="button" (click)="closePanel()">Close</button></div></header>
+        <section class="setting-block"><h3>Register device</h3><div class="form-grid"><label>Name<input [(ngModel)]="kioskName" maxlength="120" /></label><label>App name<input [(ngModel)]="kioskAppName" maxlength="80" /></label><label>Admin PIN<input type="password" inputmode="numeric" [(ngModel)]="kioskAdminPin" maxlength="8" /></label></div><button class="primary" type="button" [disabled]="kioskSaving" (click)="createKioskDevice()">Create activation code</button>@if (kioskActivationCode) { <div class="kiosk-activation"><span>One-time activation code</span><strong>{{ kioskActivationCode }}</strong></div> }</section>
+        @if (kioskLoading) { <span class="status">Loading…</span> }
+        @for (device of kioskDevices; track device.id) {
+          <section class="setting-block kiosk-device"><div class="kiosk-device-head"><input [(ngModel)]="device.name" maxlength="120" /><span [class.is-revoked]="device.revokedAt">{{ device.revokedAt ? 'Revoked' : device.activatedAt ? 'Active' : 'Pending activation' }}</span></div><div class="form-grid"><label>App name<input [(ngModel)]="device.branding.appName" maxlength="80" /></label><label>Checkout<select [(ngModel)]="device.config.checkoutMode"><option value="mirror">Mirror checkout</option><option value="self_pay">Self-pay status</option></select></label><label>Geofence radius (m)<input type="number" min="25" max="5000" [(ngModel)]="device.config.geofenceRadiusMeters" /></label></div><div class="toggle-grid"><label class="toggle-card"><span><b>Group check-in</b></span><input type="checkbox" [(ngModel)]="device.config.allowGroupCheckIn" /></label><label class="toggle-card"><span><b>Same-day booking</b></span><input type="checkbox" [(ngModel)]="device.config.allowSameDayBooking" /></label><label class="toggle-card"><span><b>Add-on requests</b></span><input type="checkbox" [(ngModel)]="device.config.allowAddOnRequest" /></label><label class="toggle-card"><span><b>Require geofence</b></span><input type="checkbox" [(ngModel)]="device.config.requireGeofence" /></label></div><footer><button type="button" [disabled]="kioskSaving || !!device.revokedAt" (click)="revokeKioskDevice(device)">Revoke</button><button class="primary" type="button" [disabled]="kioskSaving || !!device.revokedAt" (click)="saveKioskDevice(device)">Save</button></footer></section>
+        }
+        @if (!kioskLoading && !kioskDevices.length) { <span class="status">No kiosk devices yet</span> }
+        <span class="status" [class.error]="!!kioskError">{{ kioskStatus || kioskError }}</span>
+      </section>
+    }
     @if (activePanel === 'appointments') {
       <section class="settings-panel appointment-settings-panel" aria-label="Appointment settings">
         <header>
@@ -675,7 +871,14 @@
                 <option value="chair">Chair</option>
                 <option value="room">Room</option>
                 <option value="workstation">Workstation</option>
+                <option value="bed">Bed</option>
+                <option value="machine">Machine</option>
+                <option value="equipment">Equipment</option>
               </select>
+            </label>
+            <label>
+              Capacity
+              <input type="number" min="1" max="100" [(ngModel)]="chairRoomCapacity" placeholder="1" />
             </label>
             <label>
               Area / department
@@ -695,7 +898,7 @@
               @for (resource of chairRooms; track trackByChairRoom($index, resource)) {
                 <article>
                   <b>{{ resource.name }}</b>
-                  <small>{{ resource.department }} · {{ resource.kind }}</small>
+                  <small>{{ resource.department }} · {{ resource.kind }} · Capacity {{ resource.capacity }}</small>
                 </article>
               }
             </div>

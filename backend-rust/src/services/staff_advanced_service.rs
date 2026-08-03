@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -389,6 +389,20 @@ pub struct MobileCrashReportRequest {
     pub message: String,
     pub source_path: String,
     pub fingerprint: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileDeviceTelemetryRequest {
+    pub device_uid: String,
+    pub platform: String,
+    pub app_version: String,
+    pub event_type: String,
+    pub network_type: String,
+    pub online: bool,
+    #[serde(default)]
+    pub metadata: Value,
     pub occurred_at: DateTime<Utc>,
 }
 
@@ -1208,6 +1222,56 @@ pub async fn save_mobile_crash_report(
     .fetch_one(db)
     .await
     .map_err(internal("save mobile crash report"))
+}
+
+pub async fn record_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    user_id: &str,
+    request: MobileDeviceTelemetryRequest,
+) -> Result<String, AppError> {
+    let now = Utc::now();
+    if request.occurred_at > now + Duration::minutes(5)
+        || request.occurred_at < now - Duration::days(30)
+    {
+        return Err(AppError::validation("device telemetry time is invalid"));
+    }
+    if !request.metadata.is_object() {
+        return Err(AppError::validation("device telemetry metadata is invalid"));
+    }
+    repository::record_mobile_device_telemetry(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        user_id,
+        &required_text(&request.device_uid, 200, "device uid")?,
+        &required_enum(&request.platform, &["web", "android", "ios"], "platform")?,
+        &required_text(&request.app_version, 40, "app version")?,
+        &required_enum(
+            &request.event_type,
+            &["launch", "resume", "network_change"],
+            "telemetry event",
+        )?,
+        &required_text(&request.network_type, 40, "network type")?,
+        request.online,
+        &request.metadata,
+        request.occurred_at,
+    )
+    .await
+    .map_err(internal("save mobile device telemetry"))
+}
+
+pub async fn list_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, AppError> {
+    repository::list_mobile_device_telemetry(db, tenant_id, branch_id)
+        .await
+        .map_err(internal("load mobile device telemetry"))
 }
 
 pub async fn mobile_dashboard(

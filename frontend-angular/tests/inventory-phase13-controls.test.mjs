@@ -7,6 +7,7 @@ const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
 test('Phase 13 inventory mutations share scope, replay, audit and cost-mask controls', () => {
   const migration = read('backend-rust/migrations/0374_inventory_phase13_operational_controls.sql');
+  const completionMigration = read('backend-rust/migrations/0402_inventory_procurement_completion.sql');
   const tenant = read('backend-rust/src/middleware/tenant.rs');
   const routes = read('backend-rust/src/routes/mod.rs');
   const authService = read('backend-rust/src/services/auth_service.rs');
@@ -21,6 +22,8 @@ test('Phase 13 inventory mutations share scope, replay, audit and cost-mask cont
   const auth = read('frontend-angular/src/app/core/services/auth.service.ts');
   const page = read('frontend-angular/src/app/pages/inventory/inventory-page.component.ts');
   const template = read('frontend-angular/src/app/pages/inventory/inventory-page.component.html');
+  const governance = read('backend-rust/src/services/inventory_governance_service.rs');
+  const repository = read('backend-rust/src/repositories/inventory_repository.rs');
 
   const scopeMigration = read('backend-rust/migrations/0375_inventory_idempotency_branch_scope.sql');
   assert.match(migration, /inventory_api_idempotency/);
@@ -44,4 +47,14 @@ test('Phase 13 inventory mutations share scope, replay, audit and cost-mask cont
   assert.match(page, /canViewInventoryCost[\s\S]*unitCostPaise/);
   assert.match(page, /private async mutate[\s\S]*await this\.reload\(\)/);
   assert.match(template, /@if \(canViewInventoryCost\)/);
+  assert.match(completionMigration, /stock_action_matrix[\s\S]*purchase_order_settings[\s\S]*label_settings/);
+  assert.match(completionMigration, /inventory_product_lifecycle_events[\s\S]*immutable/);
+  assert.match(tenant, /inventory_stock_action[\s\S]*stockActionMatrix/);
+  assert.match(inventoryRoute, /\/inventory\/bulk[\s\S]*\/inventory\/:id\/clone[\s\S]*\/inventory\/:id\/discontinue/);
+  assert.match(purchases, /\/purchases\/orders\/bulk-raise/);
+  assert.match(purchaseService, /supplierElectronicDelivery[\s\S]*queue_order_email/);
+  assert.match(repository, /stock must be zero before discontinuation[\s\S]*open purchase order[\s\S]*batch balance[\s\S]*container balance/);
+  assert.match(governance, /valid_stock_action_matrix[\s\S]*valid_purchase_order_settings[\s\S]*valid_label_settings/);
+  assert.match(page, /bulkUpdateProducts[\s\S]*cloneProduct[\s\S]*changeProductLifecycle[\s\S]*bulkRaiseOrders/);
+  assert.match(template, /Current Stock[\s\S]*COGS[\s\S]*Product Catalog/);
 });

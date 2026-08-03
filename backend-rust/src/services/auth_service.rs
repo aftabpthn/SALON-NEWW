@@ -139,6 +139,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Appointments",
     },
     PermissionDefinition {
+        code: "appointments.outside_hours.override",
+        label: "Book outside location hours",
+        group: "Appointments",
+    },
+    PermissionDefinition {
+        code: "appointments.fees.waive",
+        label: "Waive appointment fees",
+        group: "Appointments",
+    },
+    PermissionDefinition {
         code: "bookings.read",
         label: "View booking operations",
         group: "Bookings",
@@ -176,6 +186,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "clients.audit.read",
         label: "View client audit history",
+        group: "Clients",
+    },
+    PermissionDefinition {
+        code: "clients.cross_location.read",
+        label: "View verified cross-location client visits",
         group: "Clients",
     },
     PermissionDefinition {
@@ -1165,6 +1180,16 @@ mod tests {
             "staff.app.payroll.deductions.read",
             "staff.app.payroll.documents.read",
             "staff.app.tips.dispute.manage",
+        ] {
+            assert!(permission_definition(code).is_some(), "missing {code}");
+        }
+    }
+
+    #[test]
+    fn appointment_book_privileged_permissions_are_registered() {
+        for code in [
+            "appointments.outside_hours.override",
+            "appointments.fees.waive",
         ] {
             assert!(permission_definition(code).is_some(), "missing {code}");
         }
