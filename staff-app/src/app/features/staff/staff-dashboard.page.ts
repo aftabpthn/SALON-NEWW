@@ -151,31 +151,41 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     this.blockingError.set("");
     if (!hasData) this.optionalErrors.set([]);
 
-    const canReadStaff = this.staff.hasPermission("read:staff");
-    const canUseAttendance = this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"]);
-    const modules: Array<{ name: DashboardModule; request: Promise<unknown> }> = [
-      { name: "enterprise", request: this.staff.enterpriseOs({}, fresh) },
-      { name: "preferences", request: this.staff.workspacePreferences(fresh) }
-    ];
-    if (canUseAttendance) modules.push(
-      { name: "today", request: this.staff.today(undefined, fresh) },
-      { name: "overtime", request: this.staff.overtimeSummary(fresh) }
-    );
-    if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances(fresh) });
+    try {
+      const dashboard = await this.staff.dashboard();
+      if (generation !== this.loadGeneration) return;
+      this.data.set(dashboard);
 
-    const dashboardRequest = this.staff.dashboard();
+      const canReadStaff = this.staff.hasPermission("read:staff");
+      const canUseAttendance = this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"]);
+      const modules: Array<{ name: DashboardModule; request: Promise<unknown> }> = [
+        { name: "enterprise", request: this.staff.enterpriseOs({}, fresh) },
+        { name: "preferences", request: this.staff.workspacePreferences(fresh) }
+      ];
+      if (canUseAttendance) modules.push(
+        { name: "today", request: this.staff.today(undefined, fresh) },
+        { name: "overtime", request: this.staff.overtimeSummary(fresh) }
+      );
+      if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances(fresh) });
 
-    const [dashboardResult, ...moduleResults] = await Promise.allSettled([
-      dashboardRequest,
-      ...modules.map((m) => m.request)
-    ]);
+      const results = await Promise.allSettled(modules.map((m) => m.request));
+      if (generation !== this.loadGeneration) return;
 
-    if (generation !== this.loadGeneration) return;
-
-    if (dashboardResult.status === "fulfilled") {
-      this.data.set(dashboardResult.value);
-    } else {
-      const error = dashboardResult.reason;
+      const errors: string[] = [];
+      results.forEach((result, index) => {
+        const name = modules[index].name;
+        if (result.status === "rejected") { errors.push(this.moduleError(name)); return; }
+        if (name === "enterprise") this.os.set(result.value as StaffEnterpriseOs);
+        if (name === "today") this.today.set(result.value as StaffToday);
+        if (name === "overtime") this.overtime.set(result.value as StaffOvertimeSummary);
+        if (name === "leave") this.leaveBalances.set(result.value as StaffLeaveBalance[]);
+        if (name === "preferences") this.preferences.set(result.value as StaffWorkspacePreferences);
+      });
+      this.optionalErrors.set(errors);
+      this.refreshWarning.set(hasData && errors.length > 0);
+      this.queuedActions.set(this.staff.offlineQueueSize());
+    } catch (error) {
+      if (generation !== this.loadGeneration) return;
       const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
       if (!hasData || this.isStaffRecordError(message) || this.isSessionError(message)) {
         this.blockingError.set(this.friendlyBlockingError(message));
@@ -183,27 +193,12 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
         this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]);
         this.refreshWarning.set(true);
       }
-      this.initialLoading.set(false);
-      this.refreshing.set(false);
-      return;
+    } finally {
+      if (generation === this.loadGeneration) {
+        this.initialLoading.set(false);
+        this.refreshing.set(false);
+      }
     }
-
-    const errors: string[] = [];
-    moduleResults.forEach((result, index) => {
-      const name = modules[index].name;
-      if (result.status === "rejected") { errors.push(this.moduleError(name)); return; }
-      if (name === "enterprise") this.os.set(result.value as StaffEnterpriseOs);
-      if (name === "today") this.today.set(result.value as StaffToday);
-      if (name === "overtime") this.overtime.set(result.value as StaffOvertimeSummary);
-      if (name === "leave") this.leaveBalances.set(result.value as StaffLeaveBalance[]);
-      if (name === "preferences") this.preferences.set(result.value as StaffWorkspacePreferences);
-    });
-
-    this.optionalErrors.set(errors);
-    this.refreshWarning.set(hasData && errors.length > 0);
-    this.queuedActions.set(this.staff.offlineQueueSize());
-    this.initialLoading.set(false);
-    this.refreshing.set(false);
   }
 
   async runAction(action: DashboardAction) {
