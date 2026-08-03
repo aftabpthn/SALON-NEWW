@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use axum::{
     body::{Body, Bytes},
     extract::{Path, Query, State},
-    http::{header, HeaderMap, HeaderValue},
-    response::Response,
+    http::{header, HeaderMap, HeaderName, HeaderValue},
+    response::{IntoResponse, Response},
     routing::get,
     Extension, Json, Router,
 };
@@ -33,7 +33,8 @@ use crate::{
     routes::context::tenant_branch,
     services::{
         auth_service::{self, AuthClaims},
-        client_service, migration_file_service, staff_enterprise_service,
+        client_export_governance_service, client_service, migration_file_service,
+        staff_enterprise_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -1069,29 +1070,83 @@ async fn list_client_automations(
     )))
 }
 
+/// Names this export in the governance ledger.
+const EXPORT_KIND_BULK: &str = "clients.bulk";
+
+fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> &'a str {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+}
+
 async fn bulk_export_clients(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(query): Query<ClientListQuery>,
-) -> ApiResult<Vec<ClientResponse>> {
+) -> Result<Response, AppError> {
     require_client_permission(&claims, "clients.read")?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let page = query.page.unwrap_or(1).max(1);
     let page_size = query.page_size.unwrap_or(1_000).clamp(1, 5_000);
+    let search = query.q.as_deref().unwrap_or("").trim();
+
+    // Authorised before the read, so a request over the day's budget never
+    // reaches the database at all.
+    let grant = client_export_governance_service::authorise(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims,
+        EXPORT_KIND_BULK,
+        page_size,
+    )
+    .await?;
+
     let rows = clients_repository::list(
         &state.db,
         &tenant_id,
         &branch_id,
-        query.q.as_deref().unwrap_or("").trim(),
+        search,
         page_size,
         (page - 1) * page_size,
     )
     .await
     .map_err(|_| AppError::internal("failed to export clients"))?;
-    Ok(Json(ApiResponse::ok(
-        rows.into_iter().map(ClientResponse::from).collect(),
-    )))
+
+    // Recorded with the rows that actually came back, not the page size asked
+    // for, so the ledger reflects data that left rather than data requested.
+    client_export_governance_service::record(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims,
+        &grant,
+        EXPORT_KIND_BULK,
+        rows.len() as i64,
+        serde_json::json!({ "search": search, "page": page, "pageSize": page_size }),
+        header_text(&headers, "x-aurashine-source-ip"),
+        header_text(&headers, header::USER_AGENT.as_str()),
+    )
+    .await?;
+
+    let body = Json(ApiResponse::ok(
+        rows.into_iter()
+            .map(ClientResponse::from)
+            .collect::<Vec<_>>(),
+    ));
+    // The watermark travels with the file. A copy that leaks points back at one
+    // export, and therefore at one person, time and filter.
+    Ok((
+        [(
+            HeaderName::from_static("x-aurashine-export-watermark"),
+            HeaderValue::from_str(&grant.watermark)
+                .unwrap_or_else(|_| HeaderValue::from_static("cx_invalid")),
+        )],
+        body,
+    )
+        .into_response())
 }
 
 async fn bulk_import_clients(

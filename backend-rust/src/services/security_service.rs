@@ -41,6 +41,18 @@ pub struct SecurityPolicy {
     pub staff_app_geofence_radius_meters: i64,
     pub staff_app_geofence_exempt_roles: Vec<String>,
     pub staff_contact_verification_required: bool,
+    /// Client rows one user may export in a day before an elevation is needed.
+    /// Sized for real work — a branch pulling its book for a campaign — not for
+    /// sweeping the whole database.
+    pub client_export_daily_row_budget: i64,
+    /// Off by default so enabling governance never breaks an existing tenant's
+    /// workflow on the day it ships. Exports are recorded either way; this only
+    /// controls whether the ceiling is enforced.
+    pub client_export_budget_enforced: bool,
+    /// An export this many times a user's own recent daily average raises a
+    /// security alert. Relative to the person, because "a lot" means something
+    /// different for a receptionist and for a marketing manager.
+    pub client_export_anomaly_multiplier: i64,
 }
 
 impl Default for SecurityPolicy {
@@ -54,6 +66,9 @@ impl Default for SecurityPolicy {
             staff_app_geofence_radius_meters: 200,
             staff_app_geofence_exempt_roles: Vec::new(),
             staff_contact_verification_required: false,
+            client_export_daily_row_budget: 2_000,
+            client_export_budget_enforced: false,
+            client_export_anomaly_multiplier: 5,
         }
     }
 }

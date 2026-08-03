@@ -24,6 +24,7 @@ pub mod booking_intelligence_service;
 pub mod booking_service;
 pub mod branch_service;
 pub mod cash_drawer_service;
+pub mod client_export_governance_service;
 pub mod client_service;
 pub mod compliance_provider_service;
 pub mod customer_portal_service;

@@ -819,6 +819,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Security",
     },
     PermissionDefinition {
+        code: "security.export.elevated",
+        label: "Export client data beyond the daily limit",
+        group: "Security",
+    },
+    PermissionDefinition {
         code: "tenant.read",
         label: "Legacy broad read access",
         group: "Compatibility",
