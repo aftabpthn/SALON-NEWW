@@ -19,12 +19,16 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
           <h1>We could not open your staff record.</h1>
           <p>{{ blockingError() }}</p>
           <div class="row-actions">
-            <button type="button" class="link-button primary-action" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button>
+            <button type="button" class="link-button primary-action" [disabled]="refreshing()" (click)="load(true)">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button>
             <button type="button" class="button" (click)="signOut()">Sign out</button>
           </div>
           <small>If retry does not work, ask your salon manager to confirm that this login is linked to an active staff profile.</small>
         </section>
-      } @else {
+      } @else if (initialLoading()) {
+        <section class="dashboard-skeleton" aria-label="Loading dashboard">
+          <div class="skeleton hero-skeleton"></div><div class="skeleton action-skeleton"></div><div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div><span class="sr-only">Loading your staff dashboard</span>
+        </section>
+      } @else if (viewModel(); as vm) {
         @if (!online()) { <section class="sync-banner offline" role="status"><b>Offline</b><span>Live data may be out of date. Supported changes will sync when you reconnect.</span></section> }
         @if (queuedActions() > 0) { <section class="sync-banner" role="status"><b>{{ queuedActions() }} pending</b><span>Staff action{{ queuedActions() === 1 ? '' : 's' }} waiting to sync.</span></section> }
         @if (refreshing() && data()) { <div staffPageState class="refresh-line" role="status" [loading]="true">Refreshing today’s data</div> }
@@ -35,29 +39,25 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
 
         @if (actionMessage()) { <section staffPageState class="notice" [class.success]="!actionFailed()" role="status">{{ actionMessage() }}</section> }
         @if (refreshWarning()) {
-          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Couldn’t refresh everything.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
+          <section class="optional-warning" role="status"><span aria-hidden="true">!</span><p>Couldn’t refresh everything.</p><button type="button" class="text-control" [disabled]="refreshing()" (click)="load(true)">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button></section>
         }
 
-        @if (initialLoading()) {
-          <section class="dashboard-skeleton" aria-label="Loading dashboard">
-            <div class="skeleton hero-skeleton"></div><div class="skeleton action-skeleton"></div><div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div><span class="sr-only">Loading your staff dashboard</span>
-          </section>
-        } @else if (viewModel(); as vm) {
-          <aura-staff-dashboard-sections
-            [viewModel]="vm"
-            [pendingAction]="pendingMutation()"
-            (actionSelected)="runAction($event)"
-          />
-        } @else if (!blockingError()) {
-          <section class="dashboard-blocking-state" role="alert">
-            <span class="state-mark" aria-hidden="true">!</span>
-            <p class="eyebrow">Staff workspace</p>
-            <h1>Loading dashboard items…</h1>
-            <div class="row-actions">
-              <button type="button" class="link-button primary-action" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Refreshing…' : 'Retry' }}</button>
-            </div>
-          </section>
-        }
+        <aura-staff-dashboard-sections
+          [viewModel]="vm"
+          [pendingAction]="pendingMutation()"
+          (actionSelected)="runAction($event)"
+        />
+      } @else {
+        <section class="dashboard-blocking-state" role="alert">
+          <span class="state-mark" aria-hidden="true">!</span>
+          <p class="eyebrow">Staff workspace</p>
+          <h1>Unable to format dashboard content</h1>
+          <p>The server returned staff data, but your workspace layout could not be prepared.</p>
+          <div class="row-actions">
+            <button type="button" class="link-button primary-action" [disabled]="refreshing()" (click)="load(true)">{{ refreshing() ? 'Retrying…' : 'Retry' }}</button>
+            <button type="button" class="button" (click)="signOut()">Sign out</button>
+          </div>
+        </section>
       }
     </section>
   `,
@@ -153,12 +153,12 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     this.loadInFlight = true;
     try {
       await this.performLoad(fresh);
+      while (this.loadQueued) {
+        this.loadQueued = false;
+        await this.performLoad(fresh);
+      }
     } finally {
       this.loadInFlight = false;
-      if (this.loadQueued) {
-        this.loadQueued = false;
-        void this.load(fresh);
-      }
     }
   }
 
@@ -173,6 +173,9 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     try {
       const dashboard = await this.staff.dashboard();
       if (generation !== this.loadGeneration) return;
+      if (!dashboard || typeof dashboard !== "object") {
+        throw new Error("Dashboard dataset is empty or invalid.");
+      }
       this.data.set(dashboard);
 
       const canReadStaff = this.staff.hasPermission("read:staff");
@@ -206,14 +209,12 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     } catch (error) {
       if (generation !== this.loadGeneration) return;
       const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
-      if (!hasData || this.isStaffRecordError(message) || this.isSessionError(message)) {
-        this.blockingError.set(this.friendlyBlockingError(message));
-      } else {
-        this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]);
-        this.refreshWarning.set(true);
-      }
+      this.blockingError.set(this.friendlyBlockingError(message));
     } finally {
       if (generation === this.loadGeneration) {
+        if (!this.data() && !this.blockingError()) {
+          this.blockingError.set("We could not load your staff workspace. Please tap Retry to reload.");
+        }
         this.initialLoading.set(false);
         this.refreshing.set(false);
       }
