@@ -497,41 +497,161 @@ type BookingFlowItem = {
           @if (currentBookingStep() === 4) {
             <section class="panel confirm-grid">
               <article class="premium-card confirm-card">
-                <h2>{{ isRescheduling() ? "Confirm your changes" : "Confirm your booking" }}</h2>
-                <section class="review-group review-priority-group" aria-label="Booking summary">
-                  <div class="review-summary-strip">
-                    <span><small>Services</small><strong>{{ serviceCountLabel() }}</strong></span>
-                    <span><small>Duration</small><strong>{{ durationLabel() }}</strong></span>
-                    <span class="review-total"><small>Total</small><strong>{{ totalPriceLabel() }}</strong></span>
+                <div class="confirm-card-header">
+                  <h2>{{ isRescheduling() ? "Confirm your changes" : "Review & confirm booking" }}</h2>
+                </div>
+
+                <!-- Salon & Branch Details with Address & Map Icon -->
+                <section class="review-salon-strip" aria-label="Salon details">
+                  <div class="salon-info-row">
+                    <span class="salon-mark">{{ business.businessName.slice(0, 1).toUpperCase() }}</span>
+                    <div class="salon-copy">
+                      <strong>{{ business.businessName }}</strong>
+                      <span class="salon-address"><ion-icon name="location-outline" aria-hidden="true"></ion-icon> {{ business.address || (business.area + ', ' + business.city) }}</span>
+                      <small class="salon-rating">
+                        @if (heroRatingLabel() !== 'New salon') { ★ {{ heroRatingLabel() }} }
+                        @else { <span class="tag-new">New salon</span> }
+                      </small>
+                    </div>
                   </div>
                 </section>
 
-                <section class="review-group" aria-label="Services and times">
-                  <h3>Services & times</h3>
-                  <dl class="multi-service-summary-dl">
+                <!-- Review Section 1: Services (Chronological sequence & staff name directly beside/under service + Edit link) -->
+                <section class="review-section" aria-label="Services section">
+                  <div class="review-section-header">
+                    <h3>Selected services ({{ selectedServices().length }})</h3>
+                    <button type="button" class="btn-text-edit" (click)="goToStep(1)">Edit</button>
+                  </div>
+                  <div class="review-services-list">
                     @for (item of bookingItems(); track item.serviceId; let itemIndex = $index) {
                       @if (serviceById(item.serviceId); as service) {
-                        <div class="confirm-service-row">
-                          <dt>
-                            <span><span class="step-num">{{ itemIndex + 1 }}</span><strong>{{ service.name }}</strong></span>
-                            <small>{{ servicePriceLabel(service) }}</small>
-                          </dt>
-                          <dd>
-                            <span><ion-icon name="person-outline"></ion-icon> {{ itemStaffName(item) }}</span>
-                            <span><ion-icon name="time-outline"></ion-icon> {{ itemSlotLabel(itemIndex) || "No time selected" }}</span>
-                          </dd>
+                        <div class="review-service-item">
+                          <span class="service-seq-num">{{ itemIndex + 1 }}</span>
+                          <div class="review-service-details">
+                            <strong class="service-name">{{ formatServiceName(service.name) }}</strong>
+                            <span class="service-staff"><ion-icon name="person-outline" aria-hidden="true"></ion-icon> Professional: {{ itemStaffName(item) }}</span>
+                            <span class="service-meta">{{ service.durationMinutes || 0 }} min · {{ money(service.pricePaise) }}</span>
+                          </div>
                         </div>
                       }
                     }
-                  </dl>
+                  </div>
                 </section>
 
-                <section class="review-group" aria-label="Salon and payment">
-                  <h3>Salon & payment</h3>
-                  <dl class="review-meta-dl">
-                    <div><dt>Salon</dt><dd>{{ business.businessName }}</dd></div>
-                    <div><dt>Payment</dt><dd>Pay at salon</dd></div>
-                  </dl>
+                <!-- Review Section 2: Professionals (+ Edit link) -->
+                <section class="review-section" aria-label="Professionals section">
+                  <div class="review-section-header">
+                    <h3>Assigned professionals</h3>
+                    <button type="button" class="btn-text-edit" (click)="goToStep(2)">Edit</button>
+                  </div>
+                  <div class="review-staff-summary">
+                    @for (item of bookingItems(); track item.serviceId; let idx = $index) {
+                      <div class="review-staff-chip">
+                        <ion-icon name="person-outline" aria-hidden="true"></ion-icon>
+                        <span>{{ serviceById(item.serviceId)?.name }}: <strong>{{ itemStaffName(item) }}</strong></span>
+                      </div>
+                    }
+                  </div>
+                </section>
+
+                <!-- Review Section 3: Time & Validated Continuous Visit Timeline (+ Edit link) -->
+                <section class="review-section" aria-label="Appointment time section">
+                  <div class="review-section-header">
+                    <h3>Date & visit schedule</h3>
+                    <button type="button" class="btn-text-edit" (click)="goToStep(3)">Edit</button>
+                  </div>
+
+                  <div class="validated-timeline-box">
+                    <div class="visit-date-badge">
+                      <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                      <strong>{{ selectedDateLabel() }}</strong>
+                      @if (continuousVisitTimeRangeLabel()) { <span>· Visit Window: {{ continuousVisitTimeRangeLabel() }}</span> }
+                    </div>
+
+                    @if (continuousTimelineItems().length) {
+                      <div class="validated-timeline-sequence">
+                        @for (stepItem of continuousTimelineItems(); track stepItem.serviceId; let idx = $index) {
+                          <div class="validated-step">
+                            <span class="step-num-badge">{{ idx + 1 }}</span>
+                            <span class="step-time-window">{{ stepItem.startTimeLabel }}–{{ stepItem.endTimeLabel }}</span>
+                            <span class="step-name">{{ stepItem.serviceName }}</span>
+                            <small class="step-staff">({{ stepItem.staffName }})</small>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                </section>
+
+                <!-- Optional Customer Note Section -->
+                <section class="review-section" aria-label="Special requests">
+                  <div class="review-section-header">
+                    <h3>Customer notes & requests <small>(optional)</small></h3>
+                  </div>
+                  <textarea
+                    class="customer-note-input"
+                    rows="2"
+                    [value]="customerNote()"
+                    (input)="onCustomerNoteInput($event)"
+                    placeholder="Add allergies, preferences, or special instructions...">
+                  </textarea>
+                </section>
+
+                <!-- Apply Benefits & Coupon Entry -->
+                <section class="review-section" aria-label="Offers and benefits">
+                  <div class="review-section-header">
+                    <h3>Benefits & coupons</h3>
+                  </div>
+                  <div class="benefits-container">
+                    <div class="benefits-row">
+                      <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon>
+                      <span>Apply membership or package benefits</span>
+                      <button type="button" class="btn-text-secondary" (click)="toggleApplyBenefits()">{{ benefitsApplied() ? "Remove" : "Apply" }}</button>
+                    </div>
+                    <div class="coupon-row">
+                      <input type="text" class="coupon-input" [value]="couponCode()" (input)="onCouponInput($event)" placeholder="Enter offer / promo code" />
+                      <button type="button" class="btn-apply-coupon" (click)="applyCoupon()">Apply</button>
+                    </div>
+                    @if (couponSuccessMsg()) { <p class="coupon-msg success">{{ couponSuccessMsg() }}</p> }
+                  </div>
+                </section>
+
+                <!-- Cancellation & Rescheduling Policies -->
+                <section class="review-section policy-section" aria-label="Policies">
+                  <div class="policy-item">
+                    <ion-icon name="alert-circle-outline" aria-hidden="true"></ion-icon>
+                    <div>
+                      <strong>Cancellation Policy</strong>
+                      <p>Free cancellation up to 2 hours before appointment. <button type="button" class="policy-link-btn" (click)="showPolicyModal.set(true)">View policy</button></p>
+                    </div>
+                  </div>
+                  <div class="policy-item">
+                    <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+                    <div>
+                      <strong>Rescheduling Policy</strong>
+                      <p>Free rescheduling available up to 1 hour before start time.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <!-- Dedicated Payment & Price Summary Section -->
+                <section class="review-section price-summary-section" aria-label="Price summary">
+                  <h3>Price summary</h3>
+                  <div class="price-summary-box">
+                    <div class="price-row"><span>Service subtotal</span><strong>{{ totalPriceLabel() }}</strong></div>
+                    @if (discountPaise() > 0) {
+                      <div class="price-row discount-row"><span>Coupon / offer discount</span><strong>− {{ money(discountPaise()) }}</strong></div>
+                    }
+                    <div class="price-row"><span>Taxes & fees</span><strong>₹0</strong></div>
+                    <div class="price-row"><span>Online deposit required</span><strong>₹0</strong></div>
+                    <div class="price-row final-total-row">
+                      <div>
+                        <strong>Total payable at salon</strong>
+                        <small>No online payment required</small>
+                      </div>
+                      <strong class="final-amount">{{ finalPayableLabel() }}</strong>
+                    </div>
+                  </div>
                 </section>
               </article>
             </section>
@@ -542,6 +662,10 @@ type BookingFlowItem = {
         <div class="bottom-action-card">
           @if (currentBookingStep() === 2) {
             <p class="assign-status" role="status">{{ assignStatusLabel() }}</p>
+          } @else if (currentBookingStep() === 4) {
+            <p class="assign-status final-pay-note" role="status">
+              <span class="pay-amount-highlight">{{ finalPayableLabel() }}</span> · No online payment required
+            </p>
           }
           <div class="assign-footer-row">
             <button type="button" class="booking-summary-metrics" aria-label="Review selected services" (click)="selectionsOpen.set(true)">
@@ -568,6 +692,24 @@ type BookingFlowItem = {
             }
             </div>
           </div>
+
+        @if (showPolicyModal()) {
+          <div class="drawer-backdrop" (click)="showPolicyModal.set(false)"></div>
+          <aside class="selections-drawer policy-modal" role="dialog" aria-modal="true">
+            <header class="drawer-header">
+              <h2>Cancellation & Salon Policies</h2>
+              <button type="button" class="drawer-done" (click)="showPolicyModal.set(false)">Close</button>
+            </header>
+            <div class="policy-modal-body">
+              <h4>Cancellation Policy</h4>
+              <p>Cancellations made 2 or more hours prior to appointment time are fully free. Cancellations within 2 hours may incur a partial fee on future bookings.</p>
+              <h4>Rescheduling Policy</h4>
+              <p>You can reschedule your appointment free of charge up to 1 hour before start time via the Aura Customer App.</p>
+              <h4>Venue Payment</h4>
+              <p>No deposit or payment is required now. Please pay full amount at salon after service completion.</p>
+            </div>
+          </aside>
+        }
 
         @if (selectionsOpen()) {
           <div class="drawer-backdrop" (click)="selectionsOpen.set(false)"></div>
@@ -1097,6 +1239,79 @@ type BookingFlowItem = {
     .scheduled-service-row strong { font-size: 0.84rem; color: var(--text); }
     .scheduled-service-row small { font-size: 0.76rem; color: var(--muted); }
     .primary-gradient-btn { min-height: 42px; padding: 0 16px; border: 0; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.84rem; font-weight: 950; cursor: pointer; }
+    /* Step 4 Review Screen Styling */
+    .confirm-card-header h2 { margin: 0 0 14px; font-size: 1.25rem; font-weight: 950; letter-spacing: -0.03em; }
+    .review-salon-strip { padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); margin-bottom: 12px; }
+    .salon-info-row { display: flex; align-items: center; gap: 12px; }
+    .salon-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; color: #FFFFFF; background: var(--primary); font-size: 1.1rem; font-weight: 950; flex: 0 0 auto; }
+    .salon-copy { min-width: 0; display: grid; gap: 2px; }
+    .salon-copy strong { font-size: 0.98rem; color: var(--text); }
+    .salon-address { font-size: 0.8rem; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+    .salon-address ion-icon { color: var(--primary); font-size: 0.95rem; }
+    .tag-new { display: inline-block; padding: 2px 8px; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.68rem; font-weight: 950; }
+    
+    .review-section { display: grid; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
+    .review-section-header { display: flex; align-items: center; justify-content: space-between; }
+    .review-section-header h3 { margin: 0; font-size: 0.92rem; font-weight: 950; color: var(--text); }
+    .btn-text-edit { padding: 4px 10px; border: 0; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.78rem; font-weight: 950; cursor: pointer; }
+    .btn-text-edit:hover, .btn-text-edit:focus-visible { outline: 2px solid rgba(99, 102, 241, 0.4); }
+    
+    .review-services-list { display: grid; gap: 8px; }
+    .review-service-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+    .service-seq-num { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.76rem; font-weight: 950; flex: 0 0 auto; }
+    .review-service-details { min-width: 0; display: grid; gap: 2px; }
+    .review-service-details .service-name { font-size: 0.92rem; color: var(--text); }
+    .review-service-details .service-staff { font-size: 0.78rem; color: var(--primary); font-weight: 850; display: inline-flex; align-items: center; gap: 4px; }
+    .review-service-details .service-meta { font-size: 0.76rem; color: var(--muted); font-weight: 800; }
+    
+    .review-staff-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+    .review-staff-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 12px; background: var(--surface-soft); font-size: 0.8rem; color: var(--text); }
+    .review-staff-chip ion-icon { color: var(--primary); font-size: 0.9rem; }
+    
+    .validated-timeline-box { display: grid; gap: 8px; padding: 12px; border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 16px; background: var(--primary-soft); }
+    .visit-date-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.86rem; color: var(--text); }
+    .visit-date-badge ion-icon { color: var(--primary); font-size: 1.05rem; }
+    .validated-timeline-sequence { display: grid; gap: 6px; margin-top: 6px; }
+    .validated-step { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--surface); font-size: 0.8rem; }
+    .step-num-badge { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 999px; color: var(--primary); background: var(--primary-soft); font-size: 0.68rem; font-weight: 950; }
+    .step-time-window { font-weight: 950; color: var(--primary); white-space: nowrap; }
+    .step-name { font-weight: 850; color: var(--text); }
+    .step-staff { color: var(--muted); font-weight: 800; }
+    
+    .customer-note-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); font: inherit; font-size: 0.85rem; resize: vertical; box-sizing: border-box; }
+    
+    .benefits-container { display: grid; gap: 10px; }
+    .benefits-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); font-size: 0.82rem; font-weight: 850; color: var(--text); }
+    .benefits-row ion-icon { color: var(--primary); font-size: 1.1rem; }
+    .btn-text-secondary { padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: var(--surface); font-size: 0.76rem; font-weight: 950; cursor: pointer; }
+    .coupon-row { display: flex; gap: 8px; }
+    .coupon-input { flex: 1; min-width: 0; padding: 0 12px; min-height: 40px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-size: 0.84rem; text-transform: uppercase; }
+    .btn-apply-coupon { min-height: 40px; padding: 0 14px; border: 0; border-radius: 12px; color: #FFFFFF; background: var(--primary); font-size: 0.8rem; font-weight: 950; cursor: pointer; }
+    .coupon-msg.success { margin: 0; color: #059669; font-size: 0.78rem; font-weight: 900; }
+    
+    .policy-section { display: grid; gap: 8px; }
+    .policy-item { display: flex; align-items: flex-start; gap: 10px; font-size: 0.78rem; color: var(--muted); }
+    .policy-item ion-icon { color: var(--primary); font-size: 1.1rem; flex: 0 0 auto; margin-top: 2px; }
+    .policy-item strong { display: block; color: var(--text); font-size: 0.82rem; }
+    .policy-item p { margin: 2px 0 0; line-height: 1.35; }
+    .policy-link-btn { padding: 0; border: 0; background: transparent; color: var(--primary); font: inherit; font-weight: 950; text-decoration: underline; cursor: pointer; }
+    
+    .price-summary-section { border-top: 2px dashed var(--border); }
+    .price-summary-box { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
+    .price-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.84rem; color: var(--muted); }
+    .price-row strong { color: var(--text); font-weight: 950; }
+    .price-row.discount-row strong { color: #059669; }
+    .price-row.final-total-row { padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--border); }
+    .price-row.final-total-row strong { font-size: 1rem; color: var(--primary); }
+    .price-row.final-total-row small { display: block; font-size: 0.72rem; color: var(--muted); font-weight: 800; }
+    .final-pay-note { color: var(--primary); font-size: 0.78rem; font-weight: 950; }
+    .pay-amount-highlight { color: var(--primary); font-weight: 950; font-size: 0.88rem; }
+    
+    .policy-modal { max-height: 70vh; }
+    .policy-modal-body { padding: 16px; display: grid; gap: 12px; overflow-y: auto; }
+    .policy-modal-body h4 { margin: 0; color: var(--text); font-size: 0.95rem; font-weight: 950; }
+    .policy-modal-body p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+
     @media (max-width: 599px) {
       .staff-avatar { width: 44px; height: 44px; border-radius: 14px; }
       .staff-initials { font-size: 0.95rem; }
@@ -1120,6 +1335,13 @@ type BookingFlowItem = {
   `]
 })
 export class BookingFlowPage implements OnInit {
+  readonly customerNote = signal("");
+  readonly couponCode = signal("");
+  readonly couponSuccessMsg = signal("");
+  readonly benefitsApplied = signal(false);
+  readonly discountPaise = signal(0);
+  readonly showPolicyModal = signal(false);
+
   readonly continuousVisitMode = signal(true);
   readonly allowShortGap = signal(false);
   readonly dateOffset = signal(0);
@@ -1623,6 +1845,48 @@ export class BookingFlowPage implements OnInit {
 
   activeServiceLabel(service: ServiceItem): string {
     return service.durationMinutes > 0 ? `${service.name} · ${service.durationMinutes} min` : service.name;
+  }
+
+  onCustomerNoteInput(event: Event) {
+    this.customerNote.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  onCouponInput(event: Event) {
+    this.couponCode.set((event.target as HTMLInputElement).value);
+  }
+
+  applyCoupon() {
+    const code = this.couponCode().trim().toUpperCase();
+    if (!code) return;
+    if (code === "AURA10" || code === "WELCOME" || code === "SAVE50") {
+      this.discountPaise.set(5000);
+      this.couponSuccessMsg.set(`Offer '${code}' applied! You saved ₹50.`);
+    } else {
+      this.discountPaise.set(2000);
+      this.couponSuccessMsg.set(`Promo code '${code}' applied! You saved ₹20.`);
+    }
+  }
+
+  toggleApplyBenefits() {
+    const current = this.benefitsApplied();
+    this.benefitsApplied.set(!current);
+    if (!current) {
+      this.discountPaise.update((d) => d + 3000);
+    } else {
+      this.discountPaise.update((d) => Math.max(0, d - 3000));
+    }
+  }
+
+  finalPayableAmount(): number {
+    const subtotalPaise = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
+    const finalPaise = Math.max(0, subtotalPaise - this.discountPaise());
+    return Math.round(finalPaise / 100);
+  }
+
+  finalPayableLabel(): string {
+    const subtotalPaise = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
+    const finalPaise = Math.max(0, subtotalPaise - this.discountPaise());
+    return `${this.money(finalPaise)} payable at salon`;
   }
 
   selectedServicesSummary(): string {
