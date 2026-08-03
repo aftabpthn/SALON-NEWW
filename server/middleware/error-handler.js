@@ -2,24 +2,30 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../utils/logger.js";
 
-function getClientIndexPath() {
+function getClientIndexPath(req) {
+  const host = String(req.hostname || req.headers.host || "").split(":")[0].replace(/^www\./i, "");
+  const homeDir = process.env.HOME || "";
   const candidates = [
+    process.env.AURA_CLIENT_DIST,
     join(process.cwd(), "customer-app", "www"),
     join(process.cwd(), "customer-app", "dist", "browser"),
     join(process.cwd(), "customer-app", "dist"),
     join(process.cwd(), "www"),
+    join(process.cwd(), "public_html"),
     join(process.cwd(), "dist", "aura-salon-crm-pos", "browser"),
     join(process.cwd(), "dist", "aura-salon-crm-pos"),
     join(process.cwd(), "dist"),
-    join(process.cwd(), "public")
-  ];
+    join(process.cwd(), "public"),
+    homeDir && host ? join(homeDir, "domains", host, "public_html") : "",
+    homeDir ? join(homeDir, "public_html") : ""
+  ].filter(Boolean);
   const dist = candidates.find((candidate) => existsSync(join(candidate, "index.html")));
   return dist ? join(dist, "index.html") : null;
 }
 
 export function notFoundHandler(req, res, next) {
   if (req.method === "GET" && !req.originalUrl.startsWith("/api") && !req.originalUrl.includes(".")) {
-    const indexPath = getClientIndexPath();
+    const indexPath = getClientIndexPath(req);
     if (indexPath) {
       res.sendFile(indexPath);
       return;
