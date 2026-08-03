@@ -192,3 +192,14 @@ variable "support_email_raw_retention_days" {
     error_message = "support_email_raw_retention_days must be between 1 and 365."
   }
 }
+
+variable "error_webhook_url" {
+  description = "Optional endpoint that receives 5xx incident reports (Sentry store URL, Slack webhook, or any JSON sink). Empty disables forwarding; failures still reach CloudWatch."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.error_webhook_url == "" || startswith(var.error_webhook_url, "https://")
+    error_message = "error_webhook_url must use HTTPS."
+  }
+}

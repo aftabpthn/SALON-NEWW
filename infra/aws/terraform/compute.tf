@@ -134,6 +134,8 @@ locals {
     "SECURITY_ENCRYPTION_KEY",
     "MIGRATION_PROOF_SIGNING_KEY",
     "SUPPORT_EMAIL_WEBHOOK_SECRET",
+    "METRICS_AUTH_TOKEN",
+    "ERROR_WEBHOOK_URL",
     "AWS_REGION",
     "AWS_S3_BUCKET",
     "CORS_ALLOWED_ORIGINS",
@@ -188,6 +190,15 @@ resource "aws_ecs_task_definition" "app" {
         { name = "MIGRATION_CLAMD_ADDRESS", value = "127.0.0.1:3310" },
         { name = "MIGRATION_FILE_STORAGE_ROOT", value = "/var/lib/aurashine/migration-files" },
         { name = "RUST_LOG", value = "info" },
+        # The deploy pipeline runs aws_ecs_task_definition.migration before
+        # touching this service, so serving tasks must not migrate again: doing
+        # so made every task in a rolling deploy queue behind the same advisory
+        # lock before it could pass a health check.
+        { name = "RUN_MIGRATIONS_ON_BOOT", value = "false" },
+        # Workers stay on here because each cycle is leader-elected through a
+        # lease in worker_leases, so extra replicas skip rather than duplicate.
+        # Flip to "false" once a dedicated single-task worker service exists.
+        { name = "RUN_WORKERS", value = "true" },
       ]
       secrets = local.backend_secrets
       mountPoints = [{
