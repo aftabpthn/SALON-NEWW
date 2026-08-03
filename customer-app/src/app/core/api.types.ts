@@ -60,6 +60,9 @@ export interface StaffMember {
   image?: string;
   nextAvailable?: string;
   bookableServiceIds?: string[];
+  gender?: string;
+  experienceYears?: number;
+  pricePaise?: number;
 }
 
 export interface BusinessReview {
