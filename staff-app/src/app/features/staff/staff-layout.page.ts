@@ -666,8 +666,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   private async loadShellData() {
     try {
       const [os, preferences] = await Promise.all([
-        this.staff.enterpriseOs(),
-        this.staff.workspacePreferences().catch(() => this.preferences())
+        this.staff.enterpriseOs({}, true),
+        this.staff.workspacePreferences(true).catch(() => this.preferences())
       ]);
       this.os.set(os);
       this.preferences.set(preferences);

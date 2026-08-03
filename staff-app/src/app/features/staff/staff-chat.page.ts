@@ -283,7 +283,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
     void this.loadConversations();
     void this.connectRealtime();
     this.pollTimer = window.setInterval(() => {
-      if (this.online() && document.visibilityState === "visible") void this.poll();
+      if (this.online() && document.visibilityState === "visible" && this.connectionState() !== "live") void this.poll();
     }, 15000);
   }
 

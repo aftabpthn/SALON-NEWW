@@ -501,6 +501,8 @@ export class StaffAppService {
   private sessionIdValue = "";
   private refreshPromise: Promise<void> | null = null;
   private flushPromise: Promise<number> | null = null;
+  private readonly responseCache = new Map<string, { value: unknown; expiresAt: number }>();
+  private readonly inFlightResponses = new Map<string, Promise<unknown>>();
   private readonly tabId = crypto.randomUUID();
   readonly loading = signal(false);
   readonly error = signal("");
@@ -632,12 +634,16 @@ export class StaffAppService {
     }
   }
 
-  async enterpriseOs(query: Record<string, string> = {}): Promise<StaffEnterpriseOs> {
-    return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query);
+  async enterpriseOs(query: Record<string, string> = {}, fresh = false): Promise<StaffEnterpriseOs> {
+    const key = `enterprise-os:${JSON.stringify(query)}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffEnterpriseOs>(key, 30_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query));
   }
 
-  async workspacePreferences(): Promise<StaffWorkspacePreferences> {
-    return this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences");
+  async workspacePreferences(fresh = false): Promise<StaffWorkspacePreferences> {
+    const key = "workspace-preferences";
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffWorkspacePreferences>(key, 30_000, () => this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences"));
   }
 
   async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
@@ -1109,6 +1115,24 @@ export class StaffAppService {
     );
   }
 
+  private async cachedGet<T>(key: string, ttlMs: number, request: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const hit = this.responseCache.get(key);
+    if (hit && hit.expiresAt > now) return hit.value as T;
+    const running = this.inFlightResponses.get(key);
+    if (running) return running as Promise<T>;
+    const promise = request().then((value) => {
+      this.responseCache.set(key, { value, expiresAt: now + ttlMs });
+      this.inFlightResponses.delete(key);
+      return value;
+    }).catch((error) => {
+      this.inFlightResponses.delete(key);
+      throw error;
+    });
+    this.inFlightResponses.set(key, promise);
+    return promise;
+  }
+
   private nativeGet<T>(url: string, headers: Record<string, string> = {}): Promise<{ data: T | ApiEnvelope<T>; status: number }> {
     return CapacitorHttp.get({ url, headers }) as Promise<{ data: T | ApiEnvelope<T>; status: number }>;
   }
@@ -1407,6 +1431,7 @@ export class StaffAppService {
 
   private clearLocalAuthState(clearBiometric: boolean): void {
     resetCsrfState();
+    this.responseCache.clear();
     this.accessTokenValue = "";
     this.tenantIdValue = "";
     this.sessionIdValue = "";
