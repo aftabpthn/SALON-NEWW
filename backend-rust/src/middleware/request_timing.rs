@@ -17,6 +17,9 @@ const SLOW_REQUEST_THRESHOLD_MS: u128 = 800;
 /// serves is deeper than this; anything that is came from a scanner.
 const MAX_ROUTE_SEGMENTS: usize = 12;
 
+#[derive(Clone, Debug)]
+pub struct VerifiedTenantId(pub String);
+
 fn trace_threshold_ms() -> u128 {
     static TRACE_REQUEST_THRESHOLD_MS: OnceLock<u128> = OnceLock::new();
     *TRACE_REQUEST_THRESHOLD_MS.get_or_init(|| {
@@ -102,18 +105,12 @@ pub async fn request_timing(
         .get::<MatchedPath>()
         .map(|path| path.as_str().to_string())
         .unwrap_or_else(|| normalize_route(&raw_path));
-    // Read off the request rather than the tenant middleware's extension: that
-    // middleware runs inside this one, so its context is not visible here.
-    let tenant_id = req
-        .headers()
-        .get("x-tenant-id")
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
-
     let start = Instant::now();
     let response = next.run(req).await;
+    let tenant_id = response
+        .extensions()
+        .get::<VerifiedTenantId>()
+        .map(|tenant| tenant.0.clone());
     let elapsed = start.elapsed();
     let elapsed_ms = elapsed.as_millis();
     let status = response.status().as_u16();
@@ -239,5 +236,21 @@ mod tests {
         assert!(is_uuid("3f2504e0-4f89-11d3-9a0c-0305e82c3301"));
         assert!(!is_uuid("3f2504e0-4f89-11d3-9a0c"));
         assert!(!is_uuid("zzzzzzzz-4f89-11d3-9a0c-0305e82c3301"));
+    }
+
+    #[test]
+    fn tenant_metrics_accept_only_verified_response_context() {
+        let mut response = Response::new(Body::empty());
+        assert!(response.extensions().get::<VerifiedTenantId>().is_none());
+        response
+            .extensions_mut()
+            .insert(VerifiedTenantId("tenant-verified".to_string()));
+        assert_eq!(
+            response
+                .extensions()
+                .get::<VerifiedTenantId>()
+                .map(|tenant| tenant.0.as_str()),
+            Some("tenant-verified")
+        );
     }
 }

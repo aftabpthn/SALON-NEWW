@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::infrastructure::metrics;
+use crate::repositories::worker_lease_repository;
 use crate::state::AppState;
 
 /// How much longer than a worker's period its lease survives. Three cycles of
@@ -64,43 +65,6 @@ fn parse_workers_flag(value: Option<&str>) -> bool {
     )
 }
 
-/// Claims or renews this process's lease on `name`.
-///
-/// The `WHERE` clause is what makes it an election: the upsert only writes when
-/// this process already holds the lease or the incumbent's has expired, so a
-/// non-leader's statement affects no rows and returns nothing.
-async fn hold_lease(
-    state: &AppState,
-    name: &str,
-    holder_id: &str,
-    lease: Duration,
-) -> Result<bool, sqlx::Error> {
-    let held: Option<String> = sqlx::query_scalar(
-        r#"
-        INSERT INTO worker_leases (worker_name, holder_id, acquired_at, renewed_at, expires_at)
-        VALUES ($1, $2, NOW(), NOW(), NOW() + make_interval(secs => $3))
-        ON CONFLICT (worker_name) DO UPDATE
-        SET holder_id = EXCLUDED.holder_id,
-            renewed_at = NOW(),
-            expires_at = EXCLUDED.expires_at,
-            acquired_at = CASE
-                WHEN worker_leases.holder_id = EXCLUDED.holder_id THEN worker_leases.acquired_at
-                ELSE NOW()
-            END
-        WHERE worker_leases.holder_id = EXCLUDED.holder_id
-           OR worker_leases.expires_at < NOW()
-        RETURNING holder_id
-        "#,
-    )
-    .bind(name)
-    .bind(holder_id)
-    .bind(lease.as_secs_f64())
-    .fetch_optional(&state.db)
-    .await?;
-
-    Ok(held.is_some())
-}
-
 /// Spawns `body` on a fixed interval, running it only on the replica that holds
 /// the lease for `name`.
 ///
@@ -132,7 +96,7 @@ where
 
             // Non-leaders stop here, at the cost of one upsert against the pool
             // and no connection checked out.
-            match hold_lease(&state, name, &holder_id, lease).await {
+            match worker_lease_repository::hold_lease(&state.db, name, &holder_id, lease).await {
                 Ok(true) => {}
                 Ok(false) => {
                     metrics::record_worker_cycle(name, "skipped", 0.0);
@@ -145,35 +109,19 @@ where
                 }
             }
 
-            let mut connection = match state.db.acquire().await {
-                Ok(connection) => connection,
-                Err(error) => {
-                    tracing::warn!(worker = name, %error, "worker could not acquire a connection");
-                    metrics::record_worker_cycle(name, "unavailable", 0.0);
-                    continue;
-                }
-            };
-
-            let acquired: bool =
-                match sqlx::query_scalar("SELECT pg_try_advisory_lock(hashtextextended($1,0))")
-                    .bind(&lock_key)
-                    .fetch_one(&mut *connection)
-                    .await
-                {
-                    Ok(acquired) => acquired,
+            let mut connection =
+                match worker_lease_repository::try_advisory_lock(&state.db, &lock_key).await {
+                    Ok(Some(connection)) => connection,
+                    Ok(None) => {
+                        metrics::record_worker_cycle(name, "contended", 0.0);
+                        continue;
+                    }
                     Err(error) => {
                         tracing::warn!(worker = name, %error, "worker leader lock failed");
                         metrics::record_worker_cycle(name, "unavailable", 0.0);
                         continue;
                     }
                 };
-
-            // Reached only when a previous leader's cycle outlived its lease and
-            // is still running; that replica finishes, this one waits a tick.
-            if !acquired {
-                metrics::record_worker_cycle(name, "contended", 0.0);
-                continue;
-            }
 
             let started = Instant::now();
             body(state.clone()).await;
@@ -182,10 +130,7 @@ where
             // Released explicitly, but dropping the connection would release it
             // too — that is what makes replica loss self-healing.
             let _ =
-                sqlx::query_scalar::<_, bool>("SELECT pg_advisory_unlock(hashtextextended($1,0))")
-                    .bind(&lock_key)
-                    .fetch_one(&mut *connection)
-                    .await;
+                worker_lease_repository::release_advisory_lock(&mut connection, &lock_key).await;
 
             metrics::record_worker_cycle(name, "ran", elapsed);
 

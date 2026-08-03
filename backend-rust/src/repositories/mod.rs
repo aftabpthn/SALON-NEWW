@@ -65,5 +65,6 @@ pub mod staff_schedule_repository;
 pub mod stock_audit_repository;
 pub mod wallet_repository;
 pub mod whatsapp_repository;
+pub mod worker_lease_repository;
 
 pub mod inventory_reorder_forecast_repository;
