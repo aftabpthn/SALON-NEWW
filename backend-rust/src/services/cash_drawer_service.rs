@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Transaction};
 
 use crate::{
@@ -112,6 +113,7 @@ pub async fn open(
     business_date: NaiveDate,
     opening_cash_paise: i64,
     notes: &str,
+    holiday_override: bool,
 ) -> Result<CashDrawerSession, AppError> {
     let mut tx = state
         .db
@@ -122,6 +124,32 @@ pub async fn open(
         .await
         .map_err(|_| AppError::internal("failed to lock business date"))?;
     ensure_business_day_unlocked(&mut tx, tenant_id, branch_id, business_date).await?;
+    if let Some((_, previous_date, status)) =
+        cash_drawer_repository::previous_unclosed(&mut tx, tenant_id, branch_id, business_date)
+            .await
+            .map_err(|_| AppError::internal("failed to validate previous cash drawer"))?
+    {
+        return Err(AppError::conflict(format!(
+            "cash drawer for {previous_date} is still {status}; close and approve it before opening a later day"
+        )));
+    }
+    let holiday_name =
+        cash_drawer_repository::closed_holiday_name(&mut tx, tenant_id, branch_id, business_date)
+            .await
+            .map_err(|_| AppError::internal("failed to validate branch holiday"))?;
+    if holiday_name.is_some() && !holiday_override {
+        return Err(AppError::conflict(
+            "this branch is closed for a holiday; manager holiday exception and notes are required",
+        ));
+    }
+    let controls = cash_drawer_repository::control_settings(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load cash control settings"))?;
+    if controls.max_cash_paise > 0 && opening_cash_paise > controls.max_cash_paise {
+        return Err(AppError::conflict(
+            "opening cash exceeds the configured branch cash limit",
+        ));
+    }
     let session = cash_drawer_repository::open(
         &mut tx,
         tenant_id,
@@ -163,7 +191,7 @@ pub async fn open(
         &session.id,
         actor_user_id,
         "drawer.opened",
-        json!({ "openingCashPaise": opening_cash_paise }),
+        json!({ "openingCashPaise": opening_cash_paise, "holidayException": holiday_override, "holidayName": holiday_name }),
     )
     .await
     .map_err(|_| AppError::internal("failed to audit cash drawer opening"))?;
@@ -223,6 +251,42 @@ pub async fn add_movement(
         return Err(AppError::validation(
             "cash movements are blocked while drawer close is pending approval",
         ));
+    }
+    if movement_type == "cash_in" {
+        let controls = cash_drawer_repository::control_settings(&state.db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load cash control settings"))?;
+        if controls.max_cash_paise > 0 {
+            let (cash_sales, movement_delta) = cash_drawer_repository::totals(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                business_date,
+                &session.id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to calculate current cash"))?;
+            let till_summary = cash_drawer_repository::till_close_summary(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                &session.id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to calculate current tills"))?;
+            let opening = if till_summary.0 > 0 {
+                till_summary.2
+            } else {
+                session.opening_cash_paise
+            };
+            if expected_cash(opening, cash_sales, movement_delta).saturating_add(amount_paise)
+                > controls.max_cash_paise
+            {
+                return Err(AppError::conflict(
+                    "cash movement would exceed the configured branch cash limit",
+                ));
+            }
+        }
     }
     let cash_drawer_till_id = resolve_open_movement_till_id(
         &mut tx,
@@ -524,6 +588,9 @@ pub async fn close(
     )
     .await
     .map_err(|_| AppError::internal("failed to save cash drawer close"))?;
+    if updated.status == "closed" {
+        persist_close_snapshot(&mut tx, tenant_id, branch_id, actor_user_id, &updated).await?;
+    }
     cash_drawer_repository::audit(&mut tx, tenant_id, branch_id, &session.id, actor_user_id, "drawer.close_requested", json!({ "countedCashPaise": counted_cash_paise, "requiresApproval": status == "pending_approval" }))
         .await.map_err(|_| AppError::internal("failed to audit cash drawer close"))?;
     tx.commit()
@@ -1045,6 +1112,7 @@ pub async fn create_till(
     drawer_session_id: &str,
     till_code: &str,
     till_name: &str,
+    terminal_id: Option<&str>,
     opening_cash_paise: i64,
     notes: &str,
 ) -> Result<cash_drawer_repository::CashDrawerTill, AppError> {
@@ -1061,6 +1129,21 @@ pub async fn create_till(
     if session.status != "open" {
         return Err(AppError::conflict("cash drawer is not open"));
     }
+    let terminal_name = if let Some(terminal_id) = terminal_id {
+        Some(
+            cash_drawer_repository::active_terminal_name(
+                &mut tx,
+                tenant_id,
+                branch_id,
+                terminal_id,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to validate till terminal"))?
+            .ok_or_else(|| AppError::not_found("active POS terminal was not found"))?,
+        )
+    } else {
+        None
+    };
     let till = cash_drawer_repository::insert_till(
         &mut tx,
         tenant_id,
@@ -1068,6 +1151,7 @@ pub async fn create_till(
         drawer_session_id,
         till_code,
         till_name,
+        terminal_id,
         opening_cash_paise,
         actor_user_id,
         notes,
@@ -1081,7 +1165,7 @@ pub async fn create_till(
         drawer_session_id,
         actor_user_id,
         "drawer.till_opened",
-        json!({"tillId":till.id,"tillCode":till_code,"openingCashPaise":opening_cash_paise}),
+        json!({"tillId":till.id,"tillCode":till_code,"terminalId":terminal_id,"terminalName":terminal_name,"openingCashPaise":opening_cash_paise}),
     )
     .await
     .map_err(|_| AppError::internal("failed to audit till opening"))?;
@@ -1217,6 +1301,7 @@ pub async fn approve(
     )
     .await
     .map_err(|_| AppError::conflict("cash drawer is not awaiting approval"))?;
+    persist_close_snapshot(&mut tx, tenant_id, branch_id, actor_user_id, &session).await?;
     cash_drawer_repository::audit(
         &mut tx,
         tenant_id,
@@ -1232,6 +1317,40 @@ pub async fn approve(
         .await
         .map_err(|_| AppError::internal("failed to commit cash drawer approval"))?;
     Ok(session)
+}
+
+async fn persist_close_snapshot(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    session: &CashDrawerSession,
+) -> Result<(), AppError> {
+    let snapshot = json!({
+        "drawerSessionId": session.id,
+        "businessDate": session.business_date,
+        "openingCashPaise": session.opening_cash_paise,
+        "expectedCashPaise": session.expected_cash_paise,
+        "countedCashPaise": session.counted_cash_paise,
+        "variancePaise": session.variance_paise,
+        "denominationBreakdown": session.denomination_breakdown_json,
+        "closeRequestedAt": session.close_requested_at,
+        "approvedAt": session.approved_at,
+        "closedAt": session.closed_at,
+    });
+    let checksum = format!("{:x}", Sha256::digest(snapshot.to_string().as_bytes()));
+    cash_drawer_repository::insert_close_snapshot(
+        tx,
+        tenant_id,
+        branch_id,
+        &session.id,
+        session.business_date,
+        snapshot,
+        &checksum,
+        actor_user_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to store immutable cash close snapshot"))
 }
 
 #[cfg(test)]

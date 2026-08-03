@@ -141,28 +141,42 @@ pub async fn mark_campaign_queued(
     db: &PgPool,
     campaign: &MarketingCampaignRecord,
     recipient_count: usize,
+    control_count: usize,
 ) -> Result<(), sqlx::Error> {
-    let status = if recipient_count == 0 {
+    let status = if recipient_count == 0 && control_count == 0 {
         "failed"
+    } else if recipient_count == 0 {
+        "delivered"
     } else {
         "queued"
     };
-    let error = if recipient_count == 0 {
+    let error = if recipient_count == 0 && control_count == 0 {
         "no consented recipients matched the audience"
     } else {
         ""
     };
     sqlx::query(
-        "UPDATE notifications SET metadata_json=jsonb_set(jsonb_set(jsonb_set(metadata_json,'{status}',to_jsonb($4::TEXT),TRUE),'{recipientCount}',to_jsonb($5::BIGINT),TRUE),'{lastError}',to_jsonb($6::TEXT),TRUE),updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND notification_type='marketing_campaign' AND metadata_json->>'status'='scheduled'",
+        "UPDATE notifications SET metadata_json=jsonb_set(jsonb_set(jsonb_set(jsonb_set(metadata_json,'{status}',to_jsonb($4::TEXT),TRUE),'{recipientCount}',to_jsonb($5::BIGINT),TRUE),'{controlGroupCount}',to_jsonb($6::BIGINT),TRUE),'{lastError}',to_jsonb($7::TEXT),TRUE),updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND notification_type='marketing_campaign' AND metadata_json->>'status'='scheduled'",
     )
     .bind(&campaign.id)
     .bind(&campaign.tenant_id)
     .bind(&campaign.branch_id)
     .bind(status)
     .bind(recipient_count as i64)
+    .bind(control_count as i64)
     .bind(error)
     .execute(db)
     .await?;
+    Ok(())
+}
+
+pub async fn record_campaign_control_member(
+    db: &PgPool,
+    campaign: &MarketingCampaignRecord,
+    client_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO marketing_campaign_control_members(tenant_id,branch_id,campaign_id,client_id) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
+        .bind(&campaign.tenant_id).bind(&campaign.branch_id).bind(&campaign.id).bind(client_id).execute(db).await?;
     Ok(())
 }
 
@@ -195,9 +209,9 @@ pub async fn refresh_marketing_campaign_statuses(db: &PgPool) -> Result<(), sqlx
              SELECT payload_json->>'campaignId' AS campaign_id,
                     COUNT(*)::BIGINT AS total,
                     COUNT(*) FILTER (WHERE status='sent')::BIGINT AS sent,
-                    COUNT(*) FILTER (WHERE status='failed' AND attempts>=max_attempts)::BIGINT AS failed,
+                    COUNT(*) FILTER (WHERE status='dead_letter')::BIGINT AS failed,
                     COUNT(*) FILTER (WHERE status='blocked')::BIGINT AS blocked,
-                    COUNT(*) FILTER (WHERE status IN ('queued','processing') OR (status='failed' AND attempts<max_attempts))::BIGINT AS pending
+                    COUNT(*) FILTER (WHERE status IN ('queued','processing','failed'))::BIGINT AS pending
                FROM benefit_notification_outbox
               WHERE source_type='marketing_campaign'
               GROUP BY payload_json->>'campaignId'
@@ -263,14 +277,20 @@ pub async fn mark_failed(
     row: &BenefitDeliveryRecord,
     error: &str,
 ) -> Result<(), sqlx::Error> {
-    let retry_minutes = if row.attempts >= row.max_attempts {
-        24 * 60
-    } else {
-        i64::from(row.attempts.max(1))
-            .saturating_mul(15)
-            .min(24 * 60)
-    };
-    sqlx::query("UPDATE benefit_notification_outbox SET status='failed',last_error=$2,next_attempt_at=NOW()+($3::BIGINT*INTERVAL '1 minute'),updated_at=NOW() WHERE id=$1")
-        .bind(&row.id).bind(error).bind(retry_minutes).execute(db).await?;
+    let terminal = row.attempts >= row.max_attempts;
+    let retry_minutes = i64::from(row.attempts.max(1))
+        .saturating_mul(15)
+        .min(24 * 60);
+    sqlx::query("UPDATE benefit_notification_outbox SET status=CASE WHEN $3 THEN 'dead_letter' ELSE 'failed' END,last_error=$2,next_attempt_at=CASE WHEN $3 THEN next_attempt_at ELSE NOW()+($4::BIGINT*INTERVAL '1 minute') END,dead_lettered_at=CASE WHEN $3 THEN NOW() ELSE NULL END,updated_at=NOW() WHERE id=$1")
+        .bind(&row.id).bind(error).bind(terminal).bind(retry_minutes).execute(db).await?;
     Ok(())
+}
+
+pub async fn marketing_outbox(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT JSONB_BUILD_OBJECT('id',id,'campaignId',COALESCE(payload_json->>'campaignId',''),'clientId',COALESCE(client_id,''),'channel',channel,'status',status,'attempts',attempts,'maxAttempts',max_attempts,'lastError',last_error,'nextAttemptAt',next_attempt_at,'deadLetteredAt',dead_lettered_at,'updatedAt',updated_at) FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND source_type='marketing_campaign' ORDER BY COALESCE(dead_lettered_at,updated_at,created_at) DESC LIMIT 500")
+        .bind(tenant_id).bind(branch_id).fetch_all(db).await
 }

@@ -276,6 +276,47 @@ pub struct ClientReviewRecord {
 
 #[derive(Debug, Serialize, FromRow)]
 #[serde(rename_all = "camelCase")]
+pub struct ClientProfile360Record {
+    pub gender: String,
+    pub address: String,
+    pub city: String,
+    pub postal_code: String,
+    pub preferred_language: String,
+    pub occupation: String,
+    pub marketing_source: String,
+    pub source_detail: String,
+    pub version: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientMergeHistoryRecord {
+    pub id: String,
+    pub source_client_id: String,
+    pub source_client_name: String,
+    pub target_client_id: String,
+    pub merged_by: String,
+    pub merged_at: DateTime<Utc>,
+    pub reversed_by: Option<String>,
+    pub reversed_at: Option<DateTime<Utc>>,
+    pub reversal_reason: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientCrossLocationVisitRecord {
+    pub branch_id: String,
+    pub branch_name: String,
+    pub client_id: String,
+    pub appointment_id: String,
+    pub start_at: DateTime<Utc>,
+    pub status: String,
+    pub service_names: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct ClientAuditRecord {
     pub id: String,
     pub event_type: String,
@@ -2681,6 +2722,212 @@ pub async fn merge_clients(
     Ok(true)
 }
 
+pub async fn list_merge_history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    target_client_id: &str,
+) -> Result<Vec<ClientMergeHistoryRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT history.id,history.source_client_id,
+                  BTRIM(CONCAT_WS(' ',history.source_snapshot->>'first_name',history.source_snapshot->>'last_name')) AS source_client_name,
+                  history.target_client_id,history.merged_by,history.merged_at,
+                  history.reversed_by,history.reversed_at,history.reversal_reason
+             FROM client_merge_history history
+            WHERE history.tenant_id=$1 AND history.branch_id=$2 AND history.target_client_id=$3
+            ORDER BY history.merged_at DESC,history.id DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(target_client_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn reverse_client_merge(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    target_client_id: &str,
+    source_client_id: &str,
+    reason: &str,
+    actor: &str,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let history_id = sqlx::query_scalar::<_, String>(
+        r#"SELECT id FROM client_merge_history
+            WHERE tenant_id=$1 AND branch_id=$2 AND source_client_id=$3
+              AND target_client_id=$4 AND reversed_at IS NULL
+            FOR UPDATE"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(source_client_id)
+    .bind(target_client_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(history_id) = history_id else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let restored = sqlx::query(
+        "UPDATE clients SET active=TRUE,merged_into_client_id=NULL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE AND merged_into_client_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(source_client_id)
+    .bind(target_client_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if restored != 1 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query("UPDATE client_merge_history SET reversed_by=$5,reversed_at=NOW(),reversal_reason=$6 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND target_client_id=$4")
+        .bind(tenant_id).bind(branch_id).bind(&history_id).bind(target_client_id).bind(actor).bind(reason)
+        .execute(&mut *tx).await?;
+    record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        target_client_id,
+        "client.merge.reversed",
+        actor,
+        serde_json::json!({"sourceClientId":source_client_id,"reason":reason}),
+    )
+    .await?;
+    record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        source_client_id,
+        "client.merge.restored",
+        actor,
+        serde_json::json!({"targetClientId":target_client_id,"reason":reason}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn get_profile_360(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Option<ClientProfile360Record>, sqlx::Error> {
+    sqlx::query_as("SELECT gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,version,updated_at FROM client_profile_360 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(db).await
+}
+
+pub async fn cross_location_visits(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    authorized_branch_ids: &[String],
+) -> Result<Vec<ClientCrossLocationVisitRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT appointment.branch_id,branch.name AS branch_name,appointment.client_id,
+                  appointment.id AS appointment_id,appointment.start_at,appointment.status,
+                  COALESCE((SELECT STRING_AGG(service.name, ', ' ORDER BY service.name)
+                    FROM services service WHERE service.tenant_id=appointment.tenant_id
+                     AND service.branch_id=appointment.branch_id
+                     AND service.id IN (SELECT JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB))),'') AS service_names
+             FROM customer_account_clients selected_link
+             JOIN customer_account_clients linked
+               ON linked.tenant_id=selected_link.tenant_id AND linked.account_id=selected_link.account_id
+             JOIN appointments appointment
+               ON appointment.tenant_id=linked.tenant_id AND appointment.branch_id=linked.branch_id
+              AND appointment.client_id=linked.client_id
+             JOIN branches branch ON branch.tenant_id::TEXT=appointment.tenant_id
+              AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=appointment.branch_id
+            WHERE selected_link.tenant_id=$1 AND selected_link.branch_id=$2 AND selected_link.client_id=$3
+              AND appointment.branch_id=ANY($4) AND appointment.branch_id<>$2
+            ORDER BY appointment.start_at DESC,appointment.id DESC LIMIT 200"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(authorized_branch_ids)
+    .fetch_all(db).await
+}
+
+pub async fn financial_exposure(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH scope_ids AS (SELECT $3::TEXT id UNION ALL SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)
+           SELECT JSONB_BUILD_OBJECT(
+             'refundTotalPaise',COALESCE((SELECT SUM(refund.amount_paise) FROM pos_invoice_refunds refund JOIN pos_sales sale ON sale.tenant_id=refund.tenant_id AND sale.branch_id=refund.branch_id AND sale.id=refund.sale_id WHERE refund.tenant_id=$1 AND refund.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),0),
+             'creditNoteTotalPaise',COALESCE((SELECT SUM(note.amount_paise) FROM pos_credit_notes note JOIN pos_sales sale ON sale.tenant_id=note.tenant_id AND sale.branch_id=note.branch_id AND sale.id=note.sale_id WHERE note.tenant_id=$1 AND note.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),0),
+             'chargebackTotalPaise',COALESCE((SELECT SUM(dispute.amount_paise) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids) AND dispute.status IN ('open','under_review','lost')),0),
+             'openChargebacks',COALESCE((SELECT COUNT(*) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids) AND dispute.status IN ('open','under_review')),0),
+             'refunds',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',refund.id,'saleId',refund.sale_id,'amountPaise',refund.amount_paise,'reason',refund.reason,'createdAt',refund.created_at) ORDER BY refund.created_at DESC) FROM pos_invoice_refunds refund JOIN pos_sales sale ON sale.tenant_id=refund.tenant_id AND sale.branch_id=refund.branch_id AND sale.id=refund.sale_id WHERE refund.tenant_id=$1 AND refund.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB),
+             'chargebacks',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',dispute.id,'saleId',dispute.sale_id,'amountPaise',dispute.amount_paise,'reason',dispute.reason,'status',dispute.status,'openedAt',dispute.opened_at) ORDER BY dispute.opened_at DESC) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB)
+           )"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(db).await
+}
+
+pub async fn client_attribution(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH scope_ids AS (SELECT $3::TEXT id UNION ALL SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)
+           SELECT JSONB_BUILD_OBJECT(
+             'leads',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',lead.id,'source',lead.source,'stage',lead.stage,'qualificationStatus',lead.qualification_status,'convertedAppointmentId',lead.converted_appointment_id,'createdAt',lead.created_at) ORDER BY lead.created_at DESC) FROM marketing_leads lead WHERE lead.tenant_id=$1 AND lead.branch_id=$2 AND lead.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB),
+             'bookingSources',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('source',source,'appointments',appointments,'firstSeenAt',first_seen_at,'lastSeenAt',last_seen_at) ORDER BY last_seen_at DESC) FROM (SELECT NULLIF(appointment.source,'') source,COUNT(*)::BIGINT appointments,MIN(appointment.created_at) first_seen_at,MAX(appointment.created_at) last_seen_at FROM appointments appointment WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.client_id IN (SELECT id FROM scope_ids) AND NULLIF(appointment.source,'') IS NOT NULL GROUP BY appointment.source) sources),'[]'::JSONB)
+           )"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_profile_360(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    gender: &str,
+    address: &str,
+    city: &str,
+    postal_code: &str,
+    preferred_language: &str,
+    occupation: &str,
+    marketing_source: &str,
+    source_detail: &str,
+    expected_version: Option<i32>,
+    actor: &str,
+) -> Result<Option<ClientProfile360Record>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as(
+        r#"INSERT INTO client_profile_360(tenant_id,branch_id,client_id,gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,updated_by)
+           SELECT $1,$2,id,$4,$5,$6,$7,$8,$9,$10,$11,$13 FROM clients
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND merged_into_client_id IS NULL
+           ON CONFLICT(tenant_id,branch_id,client_id) DO UPDATE SET
+             gender=EXCLUDED.gender,address=EXCLUDED.address,city=EXCLUDED.city,postal_code=EXCLUDED.postal_code,
+             preferred_language=EXCLUDED.preferred_language,occupation=EXCLUDED.occupation,
+             marketing_source=EXCLUDED.marketing_source,source_detail=EXCLUDED.source_detail,
+             version=client_profile_360.version+1,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+           WHERE $12::INTEGER IS NOT NULL AND client_profile_360.version=$12
+           RETURNING gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,version,updated_at"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(gender).bind(address).bind(city)
+    .bind(postal_code).bind(preferred_language).bind(occupation).bind(marketing_source)
+    .bind(source_detail).bind(expected_version).bind(actor).fetch_optional(&mut *tx).await?;
+    if row.is_some() {
+        record_audit_tx(&mut tx, tenant_id, branch_id, client_id, "client.profile_360.updated", actor,
+            serde_json::json!({"version":row.as_ref().map(|item: &ClientProfile360Record| item.version)})).await?;
+    }
+    tx.commit().await?;
+    Ok(row)
+}
+
 async fn record_audit_tx(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -2972,13 +3219,62 @@ mod tests {
     use super::{
         automation_candidates, branch_return_tracker, bulk_import, create_form_definition,
         create_form_submission, create_note, delete_treatment_photo, get_clinical_profile,
-        get_treatment_photo, list_communications, list_form_definitions, list_notes,
-        memory_relationships, save_clinical_profile, save_treatment_photo, update_treatment_photo,
+        get_treatment_photo, list_communications, list_form_definitions, list_merge_history,
+        list_notes, memory_relationships, merge_clients, reverse_client_merge,
+        save_clinical_profile, save_treatment_photo, update_treatment_photo,
     };
     use chrono::{DateTime, Utc};
     use serde_json::json;
     use sqlx::PgPool;
     use std::time::{Duration, Instant};
+
+    #[sqlx::test(migrations = false)]
+    async fn client_merge_is_reversible_without_moving_history(pool: PgPool) {
+        for statement in [
+            "CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,first_name TEXT NOT NULL,last_name TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,merged_into_client_id TEXT,updated_at TIMESTAMPTZ)",
+            "CREATE TABLE client_merge_history(id TEXT PRIMARY KEY DEFAULT 'merge-1',tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,source_client_id TEXT NOT NULL,target_client_id TEXT NOT NULL,source_snapshot JSONB NOT NULL,merged_by TEXT NOT NULL,merged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),reversed_by TEXT,reversed_at TIMESTAMPTZ,reversal_reason TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE client_audit_events(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,event_type TEXT NOT NULL,actor_user_id TEXT NOT NULL,details_json JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            "INSERT INTO clients(id,tenant_id,branch_id,first_name) VALUES('source','tenant','branch','Source'),('target','tenant','branch','Target')",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        assert!(
+            merge_clients(&pool, "tenant", "branch", "source", "target", "maker")
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            list_merge_history(&pool, "tenant", "branch", "target")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(reverse_client_merge(
+            &pool,
+            "tenant",
+            "branch",
+            "target",
+            "source",
+            "verified duplicate was incorrect",
+            "checker"
+        )
+        .await
+        .unwrap());
+        let state: (bool, Option<String>) =
+            sqlx::query_as("SELECT active,merged_into_client_id FROM clients WHERE id='source'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(state, (true, None));
+        let reversed: bool = sqlx::query_scalar(
+            "SELECT reversed_at IS NOT NULL FROM client_merge_history WHERE id='merge-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(reversed);
+    }
 
     #[sqlx::test(migrations = false)]
     async fn memory_graph_is_bounded_with_large_client_scope(pool: PgPool) {

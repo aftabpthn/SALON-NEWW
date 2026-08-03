@@ -75,6 +75,7 @@ export class StaffControlCenterPageComponent implements OnInit {
   faceExceptions: Row[] = [];
   facePolicy: Row | null = null;
   mobileConflicts: Row[] = [];
+  mobileTelemetry: Row[] = [];
   approvals: Row[] = [];
   feedbackRows: Row[] = [];
   auditRows: Row[] = [];
@@ -155,6 +156,7 @@ export class StaffControlCenterPageComponent implements OnInit {
       this.section('face attendance policy', this.loadOne('/staff-attendance/face-policy', (value) => this.facePolicy = value)),
       this.section('face attendance exceptions', this.loadList('/staff-attendance/face-exceptions', (value) => this.faceExceptions = value)),
       this.section('mobile conflicts', this.loadList('/staff/mobile/conflicts?status=open', (value) => this.mobileConflicts = value)),
+      this.section('mobile telemetry', this.loadList('/staff/mobile/telemetry', (value) => this.mobileTelemetry = value)),
       this.section('staff self dashboard', this.loadOne(`/staff/self/dashboard?date=${today}`, (value) => this.selfService = value).catch((error) => {
         if ((error as { status?: number }).status === 404) this.selfService = null;
         else throw error;

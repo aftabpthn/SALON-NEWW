@@ -238,10 +238,20 @@ async fn post_invoice_entry(
     .fetch_one(&mut **tx)
     .await
     .map_err(|_| AppError::internal("failed to calculate deferred revenue"))?;
-    if deferred_revenue_paise < 0 || deferred_revenue_paise > invoice_revenue_paise {
-        return Err(AppError::validation("invoice deferred revenue is invalid"));
-    }
-    let immediate_revenue_paise = invoice_revenue_paise - deferred_revenue_paise;
+    let gift_card_liability_paise = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(taxable_paise),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='gift_card'",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to calculate gift card liability"))?;
+    let immediate_revenue_paise = invoice_revenue_split(
+        invoice_revenue_paise,
+        deferred_revenue_paise,
+        gift_card_liability_paise,
+    )?;
     let mut lines = vec![JournalLine {
         account_code: "ACCOUNTS_RECEIVABLE",
         debit_paise: total_paise,
@@ -259,6 +269,13 @@ async fn post_invoice_entry(
             account_code: "DEFERRED_REVENUE",
             debit_paise: 0,
             credit_paise: deferred_revenue_paise,
+        });
+    }
+    if gift_card_liability_paise > 0 {
+        lines.push(JournalLine {
+            account_code: "CUSTOMER_CREDIT_LIABILITY",
+            debit_paise: 0,
+            credit_paise: gift_card_liability_paise,
         });
     }
     if cgst_paise > 0 {
@@ -322,6 +339,195 @@ async fn post_invoice_entry(
     )
     .await?;
     ensure_deferred_revenue_schedules(tx, tenant_id, branch_id, sale_id).await
+}
+
+pub async fn post_benefit_redemption(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) -> Result<(), AppError> {
+    let redeemed_paise = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE((SELECT SUM(redeemed_value_paise) FROM pos_membership_redemptions WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3),0)::BIGINT + COALESCE((SELECT SUM(redeemed_value_paise) FROM pos_package_redemptions WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3),0)::BIGINT",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to calculate redeemed benefit value"))?;
+    if redeemed_paise <= 0 {
+        return Ok(());
+    }
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "benefit_redemption",
+        sale_id,
+        "Membership and package benefit redemption",
+        vec![
+            JournalLine {
+                account_code: "DEFERRED_REVENUE",
+                debit_paise: redeemed_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: "SALES_REVENUE",
+                debit_paise: 0,
+                credit_paise: redeemed_paise,
+            },
+        ],
+    )
+    .await
+}
+
+pub async fn post_loyalty_earned(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    post_loyalty_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "loyalty_earned",
+        source_id,
+        "Loyalty points earned",
+        amount_paise,
+        "LOYALTY_EXPENSE",
+        true,
+    )
+    .await
+}
+
+pub async fn post_loyalty_redeemed(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    post_loyalty_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "loyalty_redeemed",
+        source_id,
+        "Loyalty points redeemed",
+        amount_paise,
+        "SALES_REVENUE",
+        false,
+    )
+    .await
+}
+
+pub async fn post_loyalty_expired(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    post_loyalty_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "loyalty_expired",
+        source_id,
+        "Loyalty points expired",
+        amount_paise,
+        "BREAKAGE_REVENUE",
+        false,
+    )
+    .await
+}
+
+pub async fn post_loyalty_reversal(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    post_loyalty_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "loyalty_reversal",
+        source_id,
+        "Loyalty points reversed",
+        amount_paise,
+        "LOYALTY_EXPENSE",
+        false,
+    )
+    .await
+}
+
+pub async fn post_loyalty_restored(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_id: &str,
+    amount_paise: i64,
+) -> Result<(), AppError> {
+    post_loyalty_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "loyalty_restored",
+        source_id,
+        "Loyalty points restored on refund",
+        amount_paise,
+        "SALES_RETURNS",
+        true,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn post_loyalty_entry(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    source_type: &str,
+    source_id: &str,
+    memo: &str,
+    amount_paise: i64,
+    offset_account: &str,
+    increase_liability: bool,
+) -> Result<(), AppError> {
+    if amount_paise <= 0 {
+        return Ok(());
+    }
+    let (debit, credit) = if increase_liability {
+        (offset_account, "LOYALTY_LIABILITY")
+    } else {
+        ("LOYALTY_LIABILITY", offset_account)
+    };
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        source_type,
+        source_id,
+        memo,
+        vec![
+            JournalLine {
+                account_code: debit,
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            },
+            JournalLine {
+                account_code: credit,
+                debit_paise: 0,
+                credit_paise: amount_paise,
+            },
+        ],
+    )
+    .await
 }
 
 pub async fn post_payment(
@@ -439,8 +645,50 @@ pub async fn post_refund(
     .await
 }
 
+pub async fn post_refund_with_liabilities(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    refund_id: &str,
+    settlements: &[RefundSettlement],
+    deferred_revenue_paise: i64,
+    customer_credit_paise: i64,
+) -> Result<(), AppError> {
+    let lines = refund_journal_lines_with_liabilities(
+        settlements,
+        deferred_revenue_paise,
+        customer_credit_paise,
+    )?;
+    let lines = lines
+        .iter()
+        .map(|line| JournalLine {
+            account_code: &line.account_code,
+            debit_paise: line.debit_paise,
+            credit_paise: line.credit_paise,
+        })
+        .collect();
+    post_entry(
+        tx,
+        tenant_id,
+        branch_id,
+        "refund",
+        refund_id,
+        "POS refund",
+        lines,
+    )
+    .await
+}
+
 fn refund_journal_lines(
     settlements: &[RefundSettlement],
+) -> Result<Vec<ManualJournalLine>, AppError> {
+    refund_journal_lines_with_liabilities(settlements, 0, 0)
+}
+
+fn refund_journal_lines_with_liabilities(
+    settlements: &[RefundSettlement],
+    deferred_revenue_paise: i64,
+    customer_credit_paise: i64,
 ) -> Result<Vec<ManualJournalLine>, AppError> {
     let mut credits = BTreeMap::<String, i64>::new();
     let total = settlements.iter().try_fold(0i64, |total, settlement| {
@@ -456,11 +704,29 @@ fn refund_journal_lines(
     if total <= 0 {
         return Err(AppError::validation("refund settlement is required"));
     }
-    let mut lines = vec![ManualJournalLine {
-        account_code: "SALES_RETURNS".to_string(),
-        debit_paise: total,
-        credit_paise: 0,
-    }];
+    if deferred_revenue_paise < 0
+        || customer_credit_paise < 0
+        || deferred_revenue_paise.saturating_add(customer_credit_paise) > total
+    {
+        return Err(AppError::validation("refund liability split is invalid"));
+    }
+    let mut lines = Vec::new();
+    for (account_code, amount_paise) in [
+        ("DEFERRED_REVENUE", deferred_revenue_paise),
+        ("CUSTOMER_CREDIT_LIABILITY", customer_credit_paise),
+        (
+            "SALES_RETURNS",
+            total - deferred_revenue_paise - customer_credit_paise,
+        ),
+    ] {
+        if amount_paise > 0 {
+            lines.push(ManualJournalLine {
+                account_code: account_code.to_string(),
+                debit_paise: amount_paise,
+                credit_paise: 0,
+            });
+        }
+    }
     lines.extend(
         credits
             .into_iter()
@@ -1562,6 +1828,21 @@ async fn ensure_deferred_revenue_schedules(
     Ok(())
 }
 
+fn invoice_revenue_split(
+    invoice_revenue_paise: i64,
+    deferred_revenue_paise: i64,
+    gift_card_liability_paise: i64,
+) -> Result<i64, AppError> {
+    if invoice_revenue_paise < 0
+        || deferred_revenue_paise < 0
+        || gift_card_liability_paise < 0
+        || deferred_revenue_paise.saturating_add(gift_card_liability_paise) > invoice_revenue_paise
+    {
+        return Err(AppError::validation("invoice liability split is invalid"));
+    }
+    Ok(invoice_revenue_paise - deferred_revenue_paise - gift_card_liability_paise)
+}
+
 fn is_balanced(lines: &[JournalLine<'_>]) -> bool {
     let totals = lines.iter().try_fold((0_i64, 0_i64), |totals, line| {
         if line.account_code.trim().is_empty()
@@ -1631,10 +1912,17 @@ fn payment_account(method: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        customer_credit_lines, invoice_correction_lines, is_balanced, payroll_deductions_payable,
-        purchase_grn_lines, purchase_return_lines, refund_journal_lines, reverse_lines,
+        customer_credit_lines, invoice_correction_lines, invoice_revenue_split, is_balanced,
+        payroll_deductions_payable, purchase_grn_lines, purchase_return_lines,
+        refund_journal_lines, refund_journal_lines_with_liabilities, reverse_lines,
         InvoiceAccountingTotals, JournalLine, RefundSettlement,
     };
+
+    #[test]
+    fn invoice_revenue_separates_deferred_and_gift_card_liabilities() {
+        assert_eq!(invoice_revenue_split(10_000, 4_000, 2_500).unwrap(), 3_500);
+        assert!(invoice_revenue_split(5_000, 4_000, 2_000).is_err());
+    }
 
     #[test]
     fn journal_requires_equal_debits_and_credits() {
@@ -1742,17 +2030,55 @@ mod tests {
                 method: "card".into(),
                 amount_paise: 500,
             },
+            RefundSettlement {
+                method: "store_credit".into(),
+                amount_paise: 250,
+            },
         ])
         .unwrap();
         assert!(lines
             .iter()
-            .any(|line| { line.account_code == "SALES_RETURNS" && line.debit_paise == 1_500 }));
+            .any(|line| { line.account_code == "SALES_RETURNS" && line.debit_paise == 1_750 }));
         assert!(lines
             .iter()
             .any(|line| { line.account_code == "CASH_ON_HAND" && line.credit_paise == 1_000 }));
         assert!(lines
             .iter()
             .any(|line| { line.account_code == "BANK_CLEARING" && line.credit_paise == 500 }));
+        assert!(lines.iter().any(|line| {
+            line.account_code == "CUSTOMER_CREDIT_LIABILITY" && line.credit_paise == 250
+        }));
+    }
+
+    #[test]
+    fn refund_reverses_unearned_liabilities_before_sales_returns() {
+        let lines = refund_journal_lines_with_liabilities(
+            &[RefundSettlement {
+                method: "card".into(),
+                amount_paise: 10_000,
+            }],
+            4_000,
+            2_500,
+        )
+        .unwrap();
+        assert!(lines
+            .iter()
+            .any(|line| { line.account_code == "DEFERRED_REVENUE" && line.debit_paise == 4_000 }));
+        assert!(lines.iter().any(|line| {
+            line.account_code == "CUSTOMER_CREDIT_LIABILITY" && line.debit_paise == 2_500
+        }));
+        assert!(lines
+            .iter()
+            .any(|line| line.account_code == "SALES_RETURNS" && line.debit_paise == 3_500));
+        assert!(refund_journal_lines_with_liabilities(
+            &[RefundSettlement {
+                method: "card".into(),
+                amount_paise: 1_000,
+            }],
+            800,
+            300,
+        )
+        .is_err());
     }
 
     #[test]

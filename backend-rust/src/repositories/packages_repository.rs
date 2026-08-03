@@ -85,6 +85,8 @@ pub struct PackageReportRow {
     pub pending_qty: i32,
     pub sold_at: DateTime<Utc>,
     pub expires_at: Option<NaiveDate>,
+    pub frozen_at: Option<DateTime<Utc>>,
+    pub frozen_until: Option<NaiveDate>,
     pub status: String,
 }
 
@@ -105,7 +107,7 @@ WITH redemption_totals AS (
          COALESCE(SUM(quantity),0)::INTEGER AS redeemed_qty,
          COALESCE(SUM(redeemed_value_paise),0)::BIGINT AS redeemed_value_paise
     FROM pos_package_redemptions
-   WHERE tenant_id=$1 AND branch_id=$2
+   WHERE tenant_id=$1 AND source_branch_id=$2
    GROUP BY client_package_credit_id
 ), base AS (
   SELECT cpc.*, CONCAT_WS(' ',c.first_name,c.last_name) AS client_name, c.phone AS contact,
@@ -143,7 +145,7 @@ WITH redemption_totals AS (
          GREATEST(effective_issued_value_paise-
            CASE WHEN ledger_redeemed_value_paise>0 THEN LEAST(ledger_redeemed_value_paise,effective_issued_value_paise)
                 WHEN total_qty>0 THEN (effective_issued_value_paise/total_qty)*redeemed_qty ELSE 0 END,0)::BIGINT AS pending_value_paise,
-         total_qty,redeemed_qty,pending_qty,created_at AS sold_at,expires_at,
+         total_qty,redeemed_qty,pending_qty,created_at AS sold_at,expires_at,frozen_at,frozen_until,
          CASE WHEN pending_qty=0 THEN 'completed'
               WHEN expires_at IS NOT NULL AND expires_at<CURRENT_DATE THEN 'expired'
               ELSE 'pending' END AS status

@@ -52,8 +52,9 @@ body::before {
 body::after {
   width: 420px;
   height: 420px;
-  right: -180px;
+  right: 0;
   bottom: 8%;
+  transform: translateX(180px);
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.10);
   filter: blur(8px);

@@ -1104,6 +1104,13 @@ pub async fn create_order(
     }
     let taxable = calculated.iter().map(|line| line.8).sum();
     let tax = calculated.iter().map(|line| line.9).sum();
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let number_prefix = policy
+        .as_ref()
+        .and_then(|value| value["purchaseOrderSettings"]["numberPrefix"].as_str())
+        .unwrap_or("PO");
     let mut tx = state
         .db
         .begin()
@@ -1120,6 +1127,7 @@ pub async fn create_order(
         tax,
         input.shipping_paise,
         input.handling_paise,
+        number_prefix,
         actor,
     )
     .await
@@ -1186,6 +1194,109 @@ pub async fn order_details(
     Ok(OrderDetails { order, lines })
 }
 
+pub async fn bulk_raise_orders(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    mut ids: Vec<String>,
+    note: &str,
+) -> Result<Vec<OrderDetails>, AppError> {
+    ids.iter_mut().for_each(|id| *id = id.trim().to_string());
+    ids.retain(|id| !id.is_empty());
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() || ids.len() > 100 || note.chars().count() > 500 {
+        return Err(AppError::validation(
+            "bulk purchase-order request is invalid",
+        ));
+    }
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let settings = policy
+        .as_ref()
+        .and_then(|value| value.get("purchaseOrderSettings"));
+    if settings
+        .and_then(|value| value.get("bulkRaiseEnabled"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(false)
+    {
+        return Err(AppError::forbidden(
+            "bulk purchase-order raise is disabled for this branch",
+        ));
+    }
+    let approval_required = settings
+        .and_then(|value| value.get("approvalRequired"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let threshold = settings
+        .and_then(|value| value.get("approvalThresholdPaise"))
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start bulk purchase-order transaction"))?;
+    let rows = sqlx::query_as::<_, (String,String,i64)>("SELECT id,status,total_paise FROM purchase_orders WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3) FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(&ids).fetch_all(&mut *tx).await.map_err(|_| AppError::internal("failed to lock purchase orders"))?;
+    if rows.len() != ids.len() || rows.iter().any(|row| row.1 != "draft") {
+        return Err(AppError::conflict(
+            "all selected purchase orders must exist and be draft",
+        ));
+    }
+    for (id, _, total) in &rows {
+        let to = if approval_required && (threshold == 0 || *total >= threshold) {
+            "pending_approval"
+        } else {
+            "approved"
+        };
+        if !purchase_repository::transition_order(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "draft",
+            to,
+            actor,
+            note.trim(),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to raise purchase order"))?
+        {
+            return Err(AppError::conflict(
+                "purchase order status changed; reload and try again",
+            ));
+        }
+        purchase_order_event_repository::set_timestamp(&mut tx, tenant_id, branch_id, id, to)
+            .await
+            .map_err(|_| AppError::internal("failed to timestamp bulk purchase order"))?;
+        purchase_order_event_repository::add(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "bulk_submit",
+            "draft",
+            to,
+            note.trim(),
+            actor,
+            &serde_json::json!({"batchSize":ids.len()}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to audit bulk purchase order"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit bulk purchase orders"))?;
+    let mut result = Vec::with_capacity(ids.len());
+    for id in ids {
+        result.push(order_details(state, tenant_id, branch_id, &id).await?);
+    }
+    Ok(result)
+}
+
 pub async fn transition_order(
     state: &AppState,
     tenant_id: &str,
@@ -1199,6 +1310,12 @@ pub async fn transition_order(
         .await
         .map_err(|_| AppError::internal("failed to load purchase order"))?
         .ok_or_else(|| AppError::not_found("purchase order was not found"))?;
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let order_settings = policy
+        .as_ref()
+        .and_then(|value| value.get("purchaseOrderSettings"));
     if action == "send" {
         let mut tx = state
             .db
@@ -1213,6 +1330,23 @@ pub async fn transition_order(
                 "only approved purchase orders can be sent",
             ));
         }
+        let delivery_enabled = order_settings
+            .and_then(|value| value.get("supplierElectronicDelivery"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let delivery_queued = if delivery_enabled {
+            if !purchase_repository::queue_order_email(&mut tx, tenant_id, branch_id, id, actor)
+                .await
+                .map_err(|_| AppError::internal("failed to queue purchase order delivery"))?
+            {
+                return Err(AppError::validation(
+                    "supplier email is required for electronic purchase-order delivery",
+                ));
+            }
+            true
+        } else {
+            false
+        };
         purchase_order_event_repository::add(
             &mut tx,
             tenant_id,
@@ -1223,7 +1357,7 @@ pub async fn transition_order(
             &current.status,
             note,
             actor,
-            &serde_json::json!({}),
+            &serde_json::json!({"electronicDeliveryQueued":delivery_queued}),
         )
         .await
         .map_err(|_| AppError::internal("failed to write purchase order send event"))?;
@@ -1236,7 +1370,22 @@ pub async fn transition_order(
         purchase_order_event_repository::has_receipts(&state.db, tenant_id, branch_id, id)
             .await
             .map_err(|_| AppError::internal("failed to inspect purchase order receipts"))?;
-    let to = transition_target(&current.status, action, has_receipts).ok_or_else(|| {
+    let approval_required = order_settings
+        .and_then(|value| value.get("approvalRequired"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+        && order_settings
+            .and_then(|value| value.get("approvalThresholdPaise"))
+            .and_then(serde_json::Value::as_i64)
+            .map_or(true, |threshold| {
+                threshold == 0 || current.total_paise >= threshold
+            });
+    let to = if action == "submit" && !approval_required {
+        Some("approved")
+    } else {
+        transition_target(&current.status, action, has_receipts)
+    }
+    .ok_or_else(|| {
         AppError::conflict("purchase order action is not allowed in its current state")
     })?;
     if matches!(action, "approve" | "reject") && current.created_by == actor {

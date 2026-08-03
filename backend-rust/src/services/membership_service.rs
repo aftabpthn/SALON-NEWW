@@ -12,6 +12,7 @@ use crate::{
         self, CreateMembership, MembershipRecord, UpdateMembership,
     },
     repositories::{clients_repository, membership_advanced_repository},
+    services::accounting_service,
 };
 
 #[derive(serde::Serialize)]
@@ -1083,6 +1084,43 @@ pub async fn reverse_rewards_for_refund(
         .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(refund_id)
         .bind(delta).bind(balance + delta).bind(staff_id).execute(&mut **tx).await
         .map_err(|_| AppError::internal("failed to post refund reward reversal"))?;
+    let point_value_paise = sqlx::query_scalar::<_, Value>(
+        "SELECT settings_json FROM membership_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load refund reward settings"))?
+    .and_then(|settings| {
+        settings
+            .pointer("/creditsBenefits/rewardPointValuePaise")
+            .and_then(Value::as_i64)
+    })
+    .unwrap_or(100)
+    .max(0);
+    let amount_paise = i64::from(delta)
+        .saturating_abs()
+        .saturating_mul(point_value_paise);
+    if delta < 0 {
+        accounting_service::post_loyalty_reversal(
+            tx,
+            tenant_id,
+            branch_id,
+            refund_id,
+            amount_paise,
+        )
+        .await?;
+    } else {
+        accounting_service::post_loyalty_restored(
+            tx,
+            tenant_id,
+            branch_id,
+            refund_id,
+            amount_paise,
+        )
+        .await?;
+    }
     Ok(())
 }
 
@@ -1372,6 +1410,58 @@ pub async fn enterprise_report(
     )
 }
 
+pub async fn liability_reconciliation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Value, AppError> {
+    let domain = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(r#"
+        SELECT
+          COALESCE((SELECT SUM(GREATEST(credit.issued_value_paise-COALESCE((SELECT SUM(redeemed_value_paise) FROM pos_membership_redemptions redemption WHERE redemption.tenant_id=credit.tenant_id AND redemption.client_membership_credit_id=credit.id),0),0)) FROM client_membership_credits credit WHERE credit.tenant_id=$1 AND credit.branch_id=$2 AND credit.active=TRUE),0)::BIGINT,
+          COALESCE((SELECT SUM(GREATEST(credit.issued_value_paise-COALESCE((SELECT SUM(redeemed_value_paise) FROM pos_package_redemptions redemption WHERE redemption.tenant_id=credit.tenant_id AND redemption.client_package_credit_id=credit.id),0),0)) FROM client_package_credits credit WHERE credit.tenant_id=$1 AND credit.branch_id=$2 AND credit.active=TRUE),0)::BIGINT,
+          COALESCE((SELECT SUM(balance_paise) FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND status='active'),0)::BIGINT,
+          COALESCE((SELECT SUM(wallet_balance_paise) FROM clients WHERE tenant_id=$1 AND branch_id=$2),0)::BIGINT,
+          COALESCE((SELECT SUM(balance_paise) FROM store_credits WHERE tenant_id=$1 AND branch_id=$2 AND status='active'),0)::BIGINT
+    "#).bind(tenant_id).bind(branch_id).fetch_one(db).await
+        .map_err(|_| AppError::internal("failed to calculate customer liabilities"))?;
+    let accounting = sqlx::query_as::<_, (i64, i64, i64)>(r#"
+        SELECT
+          COALESCE(SUM(line.credit_paise-line.debit_paise) FILTER (WHERE line.account_code='DEFERRED_REVENUE'),0)::BIGINT,
+          COALESCE(SUM(line.credit_paise-line.debit_paise) FILTER (WHERE line.account_code='CUSTOMER_CREDIT_LIABILITY'),0)::BIGINT,
+          COALESCE(SUM(line.credit_paise-line.debit_paise) FILTER (WHERE line.account_code='LOYALTY_LIABILITY'),0)::BIGINT
+        FROM accounting_journal_entries entry
+        JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+        WHERE entry.tenant_id=$1 AND entry.branch_id=$2
+    "#).bind(tenant_id).bind(branch_id).fetch_one(db).await
+        .map_err(|_| AppError::internal("failed to calculate accounting liabilities"))?;
+    let settings = membership_settings(db, tenant_id, branch_id).await?;
+    let point_value = settings
+        .pointer("/creditsBenefits/rewardPointValuePaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(100)
+        .max(0);
+    let loyalty_points = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COALESCE(SUM(balance_after),0)::BIGINT FROM (
+        SELECT DISTINCT ON (client_id) client_id,balance_after FROM membership_reward_ledger
+        WHERE tenant_id=$1 AND branch_id=$2 ORDER BY client_id,created_at DESC,id DESC
+    ) latest"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to calculate loyalty liability"))?;
+    let deferred_domain = domain.0.saturating_add(domain.1);
+    let customer_domain = domain.2.saturating_add(domain.3).saturating_add(domain.4);
+    let loyalty_domain = loyalty_points.saturating_mul(point_value);
+    Ok(json!({
+        "domain":{"membershipPaise":domain.0,"packagePaise":domain.1,"giftCardPaise":domain.2,"walletPaise":domain.3,"storeCreditPaise":domain.4,"loyaltyPoints":loyalty_points,"loyaltyPaise":loyalty_domain},
+        "accounting":{"deferredRevenuePaise":accounting.0,"customerCreditPaise":accounting.1,"loyaltyPaise":accounting.2},
+        "difference":{"deferredRevenuePaise":deferred_domain-accounting.0,"customerCreditPaise":customer_domain-accounting.1,"loyaltyPaise":loyalty_domain-accounting.2},
+        "balanced":deferred_domain==accounting.0 && customer_domain==accounting.1 && loyalty_domain==accounting.2
+    }))
+}
+
 fn default_membership_settings() -> Value {
     json!({
         "membershipCatalog":{"membershipSalesEnabled":true,"visibleInPos":true,"visibleOnline":true,"freeMembershipEnabled":true,"paidMembershipEnabled":true},
@@ -1381,7 +1471,7 @@ fn default_membership_settings() -> Value {
         "redemptionRules":{"blockRedemptionWhenExpired":true,"requireStaffConfirmation":true,"allowPartialCredits":true,"allowFamilySharing":true},
         "crossLocation":{"enabled":false,"acceptInbound":false,"scope":"tenant","allowDiscounts":true,"allowServiceCredits":true,"allowGiftCards":false,"allowLoyaltyPoints":false},
         "notificationsRisk":{"renewalReminder":true,"lowCreditReminder":true,"ownerAlertForHighBalance":true,"highBalanceThreshold":1000000},
-        "loyaltyTiers":{"enabled":true,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
+        "loyaltyTiers":{"enabled":true,"expiryDays":0,"tiers":[{"code":"bronze","name":"Bronze","minimumPoints":0},{"code":"silver","name":"Silver","minimumPoints":1000},{"code":"gold","name":"Gold","minimumPoints":5000}]},
         "referrals":{"enabled":true,"referrerRewardPoints":100,"referredRewardPoints":50},
         "defaults":{"defaultStatus":"active","defaultMembershipType":"paid"}
     })

@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-08-02T11:57:26.171Z",
+  "generatedAt": "2026-08-03T08:17:43.864Z",
   "scanRule": "Exact static Axum route literal in a mounted router; all other README contracts are explicitly future, external, or retired.",
-  "mountedModuleCount": 56,
-  "mountedRouteLiteralCount": 4232,
+  "mountedModuleCount": 59,
+  "mountedRouteLiteralCount": 4523,
   "claims": [
     {
       "endpoint": "/api",
@@ -317,36 +317,6 @@
     {
       "endpoint": "/api/marketplaceConnections",
       "state": "external",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/appointments",
-      "state": "future",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/billing",
-      "state": "future",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/cache-snapshots",
-      "state": "future",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/summary",
-      "state": "future",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/sync",
-      "state": "future",
-      "evidence": "Explicit README contract classification"
-    },
-    {
-      "endpoint": "/api/offline/sync-items",
-      "state": "future",
       "evidence": "Explicit README contract classification"
     },
     {
@@ -710,6 +680,16 @@
       "evidence": "Explicit README contract classification"
     },
     {
+      "endpoint": "/api/v1/pos/offline-checkout",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/pos/offline-checkout/:id",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
       "endpoint": "/api/v1/purchases/grn",
       "state": "mounted",
       "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
@@ -743,6 +723,31 @@
       "endpoint": "/api/v1/realtime/staff/status",
       "state": "future",
       "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/conflicts",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/conflicts/:id/resolve",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/sync",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/telemetry",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/self/mobile/telemetry",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
     },
     {
       "endpoint": "/api/versions",

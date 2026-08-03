@@ -269,6 +269,10 @@ pub struct CreateDraftRequest {
     /// Optional caller-supplied description; a default is used when absent.
     #[serde(default)]
     pub summary: String,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+    #[serde(default)]
+    pub source_refs: Vec<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -338,6 +342,14 @@ pub async fn create_draft(
     } else {
         request.summary.trim().chars().take(500).collect()
     };
+    if request.evidence.is_empty()
+        || request
+            .evidence
+            .iter()
+            .any(|value| value.trim().is_empty() || value.chars().count() > 500)
+    {
+        return Err(AppError::validation("action draft evidence is required"));
+    }
 
     let record = action_repository::create_draft(
         db,
@@ -348,6 +360,8 @@ pub async fn create_draft(
         kind.requires_confirmation(),
         &request.payload,
         &json!(kind.refresh_targets()),
+        &json!(request.evidence),
+        &json!(request.source_refs),
         user_id,
     )
     .await
@@ -845,6 +859,8 @@ mod phase5_action_tests {
                 action_type: "create_offer_draft".into(),
                 payload: json!({"serviceId": "svc-1", "discountPercent": 10}),
                 summary: "Create a 10% offer draft on Hair Spa".into(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -948,6 +964,8 @@ mod phase5_action_tests {
                 action_type: "create_campaign_draft".into(),
                 payload: json!({}),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1012,6 +1030,8 @@ mod phase5_action_tests {
                 action_type: "create_follow_up_task".into(),
                 payload: json!({"clientId": "c1"}),
                 summary: "Follow up with Priya".into(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1193,6 +1213,8 @@ mod controlled_action_tests {
                     "description": "Utilization is high but average bill is falling.",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1258,6 +1280,8 @@ mod controlled_action_tests {
                 action_type: "create_follow_up_task".into(),
                 payload: json!({ "description": "no title supplied" }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1315,6 +1339,8 @@ mod controlled_action_tests {
                 action_type: "create_coaching_task".into(),
                 payload: json!({ "staffId": staff_id, "title": "Coach on rebooking" }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1383,6 +1409,8 @@ mod controlled_action_tests {
                         action_type: "create_coaching_task".into(),
                         payload: json!({ "staffId": staff, "title": "Coach on add-ons" }),
                         summary: String::new(),
+                        evidence: vec!["test evidence".into()],
+                        source_refs: vec![],
                     },
                 )
                 .await
@@ -1436,6 +1464,8 @@ mod controlled_action_tests {
                 action_type: "create_offer_draft".into(),
                 payload: json!({ "staffId": staff_id, "discountPercent": 10 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1483,6 +1513,8 @@ mod controlled_action_tests {
                     "description": "Two approvers pressed confirm at the same moment.",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1559,6 +1591,8 @@ mod controlled_action_tests {
                 action_type: "create_follow_up_task".into(),
                 payload: json!({ "description": "no title supplied" }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1613,6 +1647,8 @@ mod controlled_action_tests {
                     "description": "One approver confirms while another cancels.",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1707,6 +1743,8 @@ mod controlled_action_tests {
                     "description": "The first attempt died before it could record the approval.",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1850,6 +1888,8 @@ mod controlled_action_tests {
                     "title": "Coach on add-on selling",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await
@@ -1936,6 +1976,8 @@ mod controlled_action_tests {
                     "title": "Coach on add-on selling",
                 }),
                 summary: String::new(),
+                evidence: vec!["test evidence".into()],
+                source_refs: vec![],
             },
         )
         .await

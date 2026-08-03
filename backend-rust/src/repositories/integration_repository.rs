@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
@@ -43,12 +43,15 @@ pub struct WebhookRecord {
 #[derive(Debug, FromRow)]
 pub struct WebhookDeliveryRecord {
     pub id: String,
+    pub tenant_id: String,
+    pub branch_id: String,
     pub endpoint_url: String,
     pub secret_ciphertext: String,
     pub event_type: String,
     pub event_id: String,
     pub payload_json: Value,
     pub attempts: i32,
+    pub max_attempts: i32,
 }
 
 #[derive(Debug, FromRow, Serialize)]
@@ -63,6 +66,9 @@ pub struct WebhookDeliveryLog {
     pub response_status: Option<i32>,
     pub last_error: String,
     pub delivered_at: Option<DateTime<Utc>>,
+    pub dead_lettered_at: Option<DateTime<Utc>>,
+    pub replayed_at: Option<DateTime<Utc>>,
+    pub replayed_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -128,6 +134,45 @@ pub struct ClaimedConnectorSyncJob {
     pub provider: String,
     pub attempts: i32,
     pub created_by: String,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorAccountMapping {
+    pub local_account_code: String,
+    pub external_account_id: String,
+    pub external_account_name: String,
+    pub version: i32,
+    pub updated_by: String,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct ConnectorJournalLine {
+    pub journal_entry_id: String,
+    pub business_date: NaiveDate,
+    pub source_type: String,
+    pub source_id: String,
+    pub memo: String,
+    pub account_code: String,
+    pub debit_paise: i64,
+    pub credit_paise: i64,
+    pub external_account_id: Option<String>,
+    pub external_account_name: Option<String>,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectorReconciliationRecord {
+    pub local_journal_count: i64,
+    pub local_debit_paise: i64,
+    pub local_credit_paise: i64,
+    pub synced_journal_count: i64,
+    pub synced_debit_paise: i64,
+    pub synced_credit_paise: i64,
+    pub processing_journal_count: i64,
+    pub failed_journal_count: i64,
+    pub uncertain_journal_count: i64,
 }
 
 const API_KEY_COLUMNS: &str =
@@ -233,36 +278,67 @@ pub async fn api_clients(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    limit: i64,
-) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'code',code,'firstName',first_name,'lastName',last_name,'phone',phone,'email',email,'active',active,'createdAt',created_at,'updatedAt',updated_at) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id IS NULL ORDER BY created_at DESC,id LIMIT $3")
-        .bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
+    page_size: i64,
+    offset: i64,
+) -> Result<(Vec<Value>, i64), sqlx::Error> {
+    let total = sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id IS NULL")
+        .bind(tenant_id).bind(branch_id).fetch_one(db).await?;
+    let rows = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'code',code,'firstName',first_name,'lastName',last_name,'phone',phone,'email',email,'active',active,'createdAt',created_at,'updatedAt',updated_at) FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id IS NULL ORDER BY created_at DESC,id LIMIT $3 OFFSET $4")
+        .bind(tenant_id).bind(branch_id).bind(page_size).bind(offset).fetch_all(db).await?;
+    Ok((rows, total))
 }
 pub async fn api_appointments(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    limit: i64,
-) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'clientId',client_id,'staffId',staff_id,'startAt',start_at,'endAt',end_at,'status',status,'createdAt',created_at,'updatedAt',updated_at) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 ORDER BY start_at DESC,id LIMIT $3").bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
+    page_size: i64,
+    offset: i64,
+) -> Result<(Vec<Value>, i64), sqlx::Error> {
+    let total = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM appointments WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await?;
+    let rows = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'clientId',client_id,'staffId',staff_id,'startAt',start_at,'endAt',end_at,'status',status,'createdAt',created_at,'updatedAt',updated_at) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 ORDER BY start_at DESC,id LIMIT $3 OFFSET $4").bind(tenant_id).bind(branch_id).bind(page_size).bind(offset).fetch_all(db).await?;
+    Ok((rows, total))
 }
 pub async fn api_sales(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    limit: i64,
-) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'invoiceNumber',invoice_number,'clientId',client_id,'totalPaise',total_paise,'paidPaise',paid_paise,'status',status,'createdAt',created_at,'updatedAt',updated_at) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3").bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
+    page_size: i64,
+    offset: i64,
+) -> Result<(Vec<Value>, i64), sqlx::Error> {
+    let total = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await?;
+    let rows = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'invoiceNumber',invoice_number,'clientId',client_id,'totalPaise',total_paise,'paidPaise',paid_paise,'status',status,'createdAt',created_at,'updatedAt',updated_at) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3 OFFSET $4").bind(tenant_id).bind(branch_id).bind(page_size).bind(offset).fetch_all(db).await?;
+    Ok((rows, total))
 }
 
 pub async fn api_staff(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
-    limit: i64,
-) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'employeeCode',employee_code,'firstName',first_name,'middleName',middle_name,'lastName',last_name,'appointmentDisplayName',appointment_display_name,'jobTitle',job_title,'active',active,'createdAt',created_at,'updatedAt',updated_at) FROM staff WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3")
-        .bind(tenant_id).bind(branch_id).bind(limit).fetch_all(db).await
+    page_size: i64,
+    offset: i64,
+) -> Result<(Vec<Value>, i64), sqlx::Error> {
+    let total = sqlx::query_scalar(
+        "SELECT COUNT(*)::BIGINT FROM staff WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_one(db)
+    .await?;
+    let rows = sqlx::query_scalar("SELECT jsonb_build_object('id',id,'employeeCode',employee_code,'firstName',first_name,'middleName',middle_name,'lastName',last_name,'appointmentDisplayName',appointment_display_name,'jobTitle',job_title,'active',active,'createdAt',created_at,'updatedAt',updated_at) FROM staff WHERE tenant_id=$1 AND branch_id=$2 ORDER BY created_at DESC,id LIMIT $3 OFFSET $4")
+        .bind(tenant_id).bind(branch_id).bind(page_size).bind(offset).fetch_all(db).await?;
+    Ok((rows, total))
 }
 
 pub async fn list_webhooks(
@@ -327,7 +403,7 @@ pub async fn claim_webhook_deliveries(
     limit: i64,
 ) -> Result<Vec<WebhookDeliveryRecord>, sqlx::Error> {
     let mut tx = db.begin().await?;
-    let rows=sqlx::query_as("WITH due AS (SELECT d.id FROM integration_webhook_deliveries d JOIN integration_webhook_subscriptions s ON s.id=d.subscription_id WHERE d.status IN ('queued','failed') AND d.next_attempt_at<=NOW() AND d.attempts<d.max_attempts AND s.active=TRUE ORDER BY d.next_attempt_at,d.created_at FOR UPDATE OF d SKIP LOCKED LIMIT $1) UPDATE integration_webhook_deliveries d SET status='processing',attempts=d.attempts+1,updated_at=NOW() FROM due,integration_webhook_subscriptions s WHERE d.id=due.id AND s.id=d.subscription_id RETURNING d.id,s.endpoint_url,s.secret_ciphertext,d.event_type,d.event_id,d.payload_json,d.attempts")
+    let rows=sqlx::query_as("WITH due AS (SELECT d.id FROM integration_webhook_deliveries d JOIN integration_webhook_subscriptions s ON s.id=d.subscription_id WHERE d.status IN ('queued','failed') AND d.next_attempt_at<=NOW() AND d.attempts<d.max_attempts AND s.active=TRUE ORDER BY d.next_attempt_at,d.created_at FOR UPDATE OF d SKIP LOCKED LIMIT $1) UPDATE integration_webhook_deliveries d SET status='processing',attempts=d.attempts+1,updated_at=NOW() FROM due,integration_webhook_subscriptions s WHERE d.id=due.id AND s.id=d.subscription_id RETURNING d.id,d.tenant_id,d.branch_id,s.endpoint_url,s.secret_ciphertext,d.event_type,d.event_id,d.payload_json,d.attempts,d.max_attempts")
         .bind(limit).fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(rows)
@@ -346,7 +422,7 @@ pub async fn mark_webhook_failed(
     error: &str,
 ) -> Result<(), sqlx::Error> {
     let delay = i64::from(row.attempts.max(1)).saturating_mul(5).min(360);
-    sqlx::query("UPDATE integration_webhook_deliveries SET status='failed',response_status=$2,last_error=$3,next_attempt_at=NOW()+($4::BIGINT*INTERVAL '1 minute'),updated_at=NOW() WHERE id=$1")
+    sqlx::query("UPDATE integration_webhook_deliveries SET status=CASE WHEN attempts>=max_attempts THEN 'dead_letter' ELSE 'failed' END,response_status=$2,last_error=$3,next_attempt_at=NOW()+($4::BIGINT*INTERVAL '1 minute'),dead_lettered_at=CASE WHEN attempts>=max_attempts THEN NOW() ELSE NULL END,updated_at=NOW() WHERE id=$1")
         .bind(&row.id).bind(status).bind(error).bind(delay).execute(db).await?;
     Ok(())
 }
@@ -357,8 +433,47 @@ pub async fn webhook_logs(
     branch_id: &str,
     subscription_id: Option<&str>,
 ) -> Result<Vec<WebhookDeliveryLog>, sqlx::Error> {
-    sqlx::query_as("SELECT id,subscription_id,event_type,event_id,status,attempts,response_status,last_error,delivered_at,created_at,updated_at FROM integration_webhook_deliveries WHERE tenant_id=$1 AND branch_id=$2 AND ($3::TEXT IS NULL OR subscription_id=$3) ORDER BY created_at DESC LIMIT 500")
+    sqlx::query_as("SELECT id,subscription_id,event_type,event_id,status,attempts,response_status,last_error,delivered_at,dead_lettered_at,replayed_at,replayed_by,created_at,updated_at FROM integration_webhook_deliveries WHERE tenant_id=$1 AND branch_id=$2 AND ($3::TEXT IS NULL OR subscription_id=$3) ORDER BY created_at DESC LIMIT 500")
         .bind(tenant_id).bind(branch_id).bind(subscription_id).fetch_all(db).await
+}
+
+pub async fn record_webhook_attempt(
+    db: &PgPool,
+    row: &WebhookDeliveryRecord,
+    outcome: &str,
+    response_status: Option<i32>,
+    duration_ms: i64,
+    error_code: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO integration_webhook_delivery_attempts(tenant_id,branch_id,delivery_id,attempt_no,outcome,response_status,duration_ms,error_code) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(delivery_id,attempt_no) DO NOTHING")
+        .bind(&row.tenant_id)
+        .bind(&row.branch_id)
+        .bind(&row.id)
+        .bind(row.attempts)
+        .bind(outcome)
+        .bind(response_status)
+        .bind(duration_ms.max(0))
+        .bind(error_code)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn replay_webhook_delivery(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    actor: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE integration_webhook_deliveries SET status='queued',max_attempts=attempts+8,response_status=NULL,last_error='',next_attempt_at=NOW(),dead_lettered_at=NULL,replayed_at=NOW(),replayed_by=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status IN ('failed','dead_letter')")
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(id)
+        .bind(actor)
+        .execute(db)
+        .await?
+        .rows_affected() > 0)
 }
 
 const CONNECTOR_COLUMNS: &str = "id,provider,display_name,status,external_account_id,external_account_name,scopes_json,config_json,last_synced_at,last_error,created_at,updated_at";
@@ -529,4 +644,299 @@ pub async fn fail_connector_sync(
     sqlx::query("UPDATE integration_connector_connections SET status='error',last_error=$2,updated_at=NOW() WHERE id=$1")
         .bind(&job.connection_id).bind(error).execute(&mut *tx).await?;
     tx.commit().await
+}
+
+pub async fn list_connector_account_mappings(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+) -> Result<Vec<ConnectorAccountMapping>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT local_account_code,external_account_id,external_account_name,version,updated_by,updated_at
+           FROM accounting_connector_account_mappings
+          WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3
+          ORDER BY local_account_code",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn connector_local_account_exists(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    account_code: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT EXISTS(
+           SELECT 1 FROM accounting_journal_lines line
+           JOIN accounting_journal_entries entry ON entry.id=line.journal_entry_id
+          WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND line.account_code=$3)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(account_code)
+    .fetch_one(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn upsert_connector_account_mapping(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+    local_account_code: &str,
+    external_account_id: &str,
+    external_account_name: &str,
+    actor_id: &str,
+) -> Result<ConnectorAccountMapping, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let old_value: Value = sqlx::query_scalar(
+        "SELECT COALESCE((SELECT jsonb_build_object(
+             'externalAccountId',external_account_id,'externalAccountName',external_account_name,
+             'version',version) FROM accounting_connector_account_mappings
+           WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3 AND local_account_code=$4),'{}'::JSONB)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(local_account_code)
+    .fetch_one(&mut *tx)
+    .await?;
+    let row: ConnectorAccountMapping = sqlx::query_as(
+        "INSERT INTO accounting_connector_account_mappings(
+           tenant_id,branch_id,provider,local_account_code,external_account_id,
+           external_account_name,updated_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT(tenant_id,branch_id,provider,local_account_code) DO UPDATE SET
+           external_account_id=EXCLUDED.external_account_id,
+           external_account_name=EXCLUDED.external_account_name,
+           version=accounting_connector_account_mappings.version+1,
+           updated_by=EXCLUDED.updated_by,updated_at=NOW()
+         RETURNING local_account_code,external_account_id,external_account_name,
+                   version,updated_by,updated_at",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(local_account_code)
+    .bind(external_account_id)
+    .bind(external_account_name)
+    .bind(actor_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO accounting_connector_mapping_audit(
+           tenant_id,branch_id,provider,local_account_code,old_value,new_value,actor_id)
+         VALUES($1,$2,$3,$4,$5,jsonb_build_object(
+           'externalAccountId',$6::TEXT,'externalAccountName',$7::TEXT,'version',$8::INTEGER),$9)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(local_account_code)
+    .bind(old_value)
+    .bind(external_account_id)
+    .bind(external_account_name)
+    .bind(row.version)
+    .bind(actor_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+pub async fn connector_journal_lines_to_sync(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+    limit: i64,
+) -> Result<Vec<ConnectorJournalLine>, sqlx::Error> {
+    sqlx::query_as(
+        "WITH candidates AS (
+           SELECT entry.id,entry.entry_date
+             FROM accounting_journal_entries entry
+            WHERE entry.tenant_id=$1 AND entry.branch_id=$2
+              AND NOT EXISTS (
+                SELECT 1 FROM accounting_connector_journal_syncs synced
+                 WHERE synced.tenant_id=entry.tenant_id AND synced.branch_id=entry.branch_id
+                   AND synced.provider=$3 AND synced.journal_entry_id=entry.id
+                   AND synced.status='synced')
+            ORDER BY entry.entry_date,entry.id
+            LIMIT $4)
+         SELECT entry.id AS journal_entry_id,entry.entry_date AS business_date,
+                entry.source_type,entry.source_id,entry.memo,line.account_code,
+                line.debit_paise,line.credit_paise,mapping.external_account_id,
+                mapping.external_account_name
+           FROM candidates candidate
+           JOIN accounting_journal_entries entry ON entry.id=candidate.id
+           JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+           LEFT JOIN accounting_connector_account_mappings mapping
+             ON mapping.tenant_id=entry.tenant_id AND mapping.branch_id=entry.branch_id
+            AND mapping.provider=$3 AND mapping.local_account_code=line.account_code
+          ORDER BY entry.entry_date,entry.id,line.id",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(limit.clamp(1, 100))
+    .fetch_all(db)
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn reserve_connector_journal_sync(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    connection_id: &str,
+    provider: &str,
+    journal_entry_id: &str,
+    idempotency_key: &str,
+    debit_paise: i64,
+    credit_paise: i64,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "INSERT INTO accounting_connector_journal_syncs(
+           tenant_id,branch_id,connection_id,provider,journal_entry_id,idempotency_key,
+           status,debit_paise,credit_paise)
+         VALUES($1,$2,$3,$4,$5,$6,'processing',$7,$8)
+         ON CONFLICT(tenant_id,branch_id,provider,journal_entry_id) DO UPDATE SET
+           status='processing',attempts=accounting_connector_journal_syncs.attempts+1,
+           last_error='',updated_at=NOW()
+         WHERE accounting_connector_journal_syncs.status IN ('failed','uncertain')
+         RETURNING TRUE",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(connection_id)
+    .bind(provider)
+    .bind(journal_entry_id)
+    .bind(idempotency_key)
+    .bind(debit_paise)
+    .bind(credit_paise)
+    .fetch_optional(db)
+    .await?
+    .unwrap_or(false))
+}
+
+pub async fn complete_connector_journal_sync(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+    journal_entry_id: &str,
+    external_transaction_id: &str,
+    response_sha256: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE accounting_connector_journal_syncs
+            SET status='synced',external_transaction_id=$5,response_sha256=$6,
+                last_error='',synced_at=NOW(),updated_at=NOW()
+          WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3 AND journal_entry_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(journal_entry_id)
+    .bind(external_transaction_id)
+    .bind(response_sha256)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn fail_connector_journal_sync(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+    journal_entry_id: &str,
+    status: &str,
+    error: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE accounting_connector_journal_syncs
+            SET status=$5,last_error=$6,updated_at=NOW()
+          WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3 AND journal_entry_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .bind(journal_entry_id)
+    .bind(status)
+    .bind(error)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn connector_reconciliation(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+) -> Result<ConnectorReconciliationRecord, sqlx::Error> {
+    sqlx::query_as(
+        "WITH local AS (
+           SELECT COUNT(DISTINCT entry.id)::BIGINT AS journal_count,
+                  COALESCE(SUM(line.debit_paise),0)::BIGINT AS debit_paise,
+                  COALESCE(SUM(line.credit_paise),0)::BIGINT AS credit_paise
+             FROM accounting_journal_entries entry
+             JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+            WHERE entry.tenant_id=$1 AND entry.branch_id=$2),
+         synced AS (
+           SELECT COUNT(*) FILTER (WHERE status='synced')::BIGINT AS synced_count,
+                  COALESCE(SUM(debit_paise) FILTER (WHERE status='synced'),0)::BIGINT AS synced_debit,
+                  COALESCE(SUM(credit_paise) FILTER (WHERE status='synced'),0)::BIGINT AS synced_credit,
+                  COUNT(*) FILTER (WHERE status='processing')::BIGINT AS processing_count,
+                  COUNT(*) FILTER (WHERE status='failed')::BIGINT AS failed_count,
+                  COUNT(*) FILTER (WHERE status='uncertain')::BIGINT AS uncertain_count
+             FROM accounting_connector_journal_syncs
+            WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3)
+         SELECT local.journal_count AS local_journal_count,
+                local.debit_paise AS local_debit_paise,
+                local.credit_paise AS local_credit_paise,
+                synced.synced_count AS synced_journal_count,
+                synced.synced_debit AS synced_debit_paise,
+                synced.synced_credit AS synced_credit_paise,
+                synced.processing_count AS processing_journal_count,
+                synced.failed_count AS failed_journal_count,
+                synced.uncertain_count AS uncertain_journal_count
+           FROM local CROSS JOIN synced",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn connector_unmapped_accounts(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT DISTINCT line.account_code
+           FROM accounting_journal_entries entry
+           JOIN accounting_journal_lines line ON line.journal_entry_id=entry.id
+           LEFT JOIN accounting_connector_account_mappings mapping
+             ON mapping.tenant_id=entry.tenant_id AND mapping.branch_id=entry.branch_id
+            AND mapping.provider=$3 AND mapping.local_account_code=line.account_code
+          WHERE entry.tenant_id=$1 AND entry.branch_id=$2 AND mapping.id IS NULL
+          ORDER BY line.account_code",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(provider)
+    .fetch_all(db)
+    .await
 }

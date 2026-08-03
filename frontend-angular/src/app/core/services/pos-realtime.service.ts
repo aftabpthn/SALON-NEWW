@@ -4,10 +4,14 @@ import { AuthService } from './auth.service';
 import { environment } from '../../../environments/environment';
 
 export interface PosRealtimeEvent {
+  schemaVersion: 1;
+  eventId: string;
+  occurredAt: string;
   type: 'pos.updated';
   entityType: 'invoice' | 'terminal' | 'print_job' | 'cash_drawer';
   entityId: string;
   action: string;
+  cacheTags: string[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -16,6 +20,7 @@ export class PosRealtimeService {
   private socket: WebSocket | null = null;
   private socketToken = '';
   private retryTimer = 0;
+  private retryDelayMs = 1_000;
 
   constructor(private readonly auth: AuthService) {}
 
@@ -46,6 +51,7 @@ export class PosRealtimeService {
     }
     this.socketToken = token;
     this.socket = new WebSocket(this.realtimeUrl(), ['aurashine-v1', token]);
+    this.socket.onopen = () => { this.retryDelayMs = 1_000; };
     this.socket.onmessage = ({ data }) => {
       try {
         const event = JSON.parse(String(data)) as PosRealtimeEvent;
@@ -56,7 +62,8 @@ export class PosRealtimeService {
     };
     this.socket.onclose = () => {
       this.socket = null;
-      this.retryTimer = window.setTimeout(() => this.connect(), 2_000);
+      this.retryTimer = window.setTimeout(() => this.connect(), this.retryDelayMs);
+      this.retryDelayMs = Math.min(this.retryDelayMs * 2, 30_000);
     };
   }
 }

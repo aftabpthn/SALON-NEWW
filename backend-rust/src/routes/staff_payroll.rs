@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use serde::Deserialize;
 
 use crate::{
@@ -94,8 +94,10 @@ pub fn router() -> Router<AppState> {
 #[serde(rename_all = "camelCase")]
 struct PeriodQuery {
     cycle: Option<String>,
-    year: i32,
-    month: u32,
+    year: Option<i32>,
+    month: Option<u32>,
+    period_start: Option<NaiveDate>,
+    period_end: Option<NaiveDate>,
     staff_id: Option<String>,
 }
 
@@ -104,8 +106,10 @@ struct PeriodQuery {
 #[serde(rename_all = "camelCase")]
 struct RunPayrollRequest {
     cycle: Option<String>,
-    year: i32,
-    month: u32,
+    year: Option<i32>,
+    month: Option<u32>,
+    period_start: Option<NaiveDate>,
+    period_end: Option<NaiveDate>,
     staff_id: Option<String>,
     reason: Option<String>,
 }
@@ -162,14 +166,23 @@ async fn preview(
     Query(query): Query<PeriodQuery>,
 ) -> ApiResult<staff_payroll_service::PayrollPreview> {
     let (tenant_id, branch_id) = payroll_read_context(&claims, &headers)?;
-    validate_cycle(query.cycle.as_deref())?;
-    let result = staff_payroll_service::preview(
+    let staff_id = query.staff_id.as_deref().unwrap_or("").trim();
+    let (cycle, period_start, period_end) = payroll_period(
+        query.cycle.as_deref(),
+        query.year,
+        query.month,
+        query.period_start,
+        query.period_end,
+        staff_id,
+    )?;
+    let result = staff_payroll_service::preview_period(
         &state.db,
         &tenant_id,
         &branch_id,
-        query.year,
-        query.month,
-        query.staff_id.as_deref().unwrap_or("").trim(),
+        cycle,
+        period_start,
+        period_end,
+        staff_id,
     )
     .await?;
     Ok(Json(ApiResponse::ok(result)))
@@ -201,16 +214,29 @@ async fn run_payroll(
     Json(payload): Json<RunPayrollRequest>,
 ) -> ApiResult<staff_payroll_service::PayrollRunDetail> {
     let (tenant_id, branch_id) = payroll_manage_context(&claims, &headers)?;
-    validate_cycle(payload.cycle.as_deref())?;
     let staff_id = payload.staff_id.as_deref().unwrap_or("").trim();
     let reason = payload.reason.as_deref().unwrap_or("").trim();
-    let result = staff_payroll_service::run_payroll(
+    let (cycle, period_start, period_end) = payroll_period(
+        payload.cycle.as_deref(),
+        payload.year,
+        payload.month,
+        payload.period_start,
+        payload.period_end,
+        staff_id,
+    )?;
+    if cycle != "monthly" && reason.chars().count() < 3 {
+        return Err(AppError::validation(
+            "off-cycle and final-settlement payroll require a reason",
+        ));
+    }
+    let result = staff_payroll_service::run_payroll_period(
         &state.db,
         &tenant_id,
         &branch_id,
         &claims.sub,
-        payload.year,
-        payload.month,
+        cycle,
+        period_start,
+        period_end,
         staff_id,
         reason,
     )
@@ -1098,26 +1124,95 @@ fn ensure_payroll_access(claims: &AuthClaims, permissions: &[&str]) -> Result<()
     }
 }
 
-fn validate_cycle(cycle: Option<&str>) -> Result<(), AppError> {
-    if cycle.is_some_and(|value| !value.eq_ignore_ascii_case("monthly")) {
+fn validate_cycle(cycle: Option<&str>) -> Result<&'static str, AppError> {
+    match cycle
+        .unwrap_or("monthly")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "monthly" => Ok("monthly"),
+        "off_cycle" => Ok("off_cycle"),
+        "final_settlement" => Ok("final_settlement"),
+        _ => Err(AppError::validation("payroll cycle is invalid")),
+    }
+}
+
+fn payroll_period(
+    cycle: Option<&str>,
+    year: Option<i32>,
+    month: Option<u32>,
+    period_start: Option<NaiveDate>,
+    period_end: Option<NaiveDate>,
+    staff_id: &str,
+) -> Result<(&'static str, NaiveDate, NaiveDate), AppError> {
+    let cycle = validate_cycle(cycle)?;
+    if cycle == "monthly" {
+        let (start, end) = staff_payroll_service::period(
+            year.ok_or_else(|| AppError::validation("payroll year is required"))?,
+            month.ok_or_else(|| AppError::validation("payroll month is required"))?,
+        )?;
+        return Ok((cycle, start, end));
+    }
+    if staff_id.is_empty() {
         return Err(AppError::validation(
-            "only monthly payroll cycle is supported",
+            "off-cycle and final-settlement payroll require one employee",
         ));
     }
-    Ok(())
+    let start = period_start.ok_or_else(|| AppError::validation("periodStart is required"))?;
+    let end = period_end.ok_or_else(|| AppError::validation("periodEnd is required"))?;
+    let days = end.signed_duration_since(start).num_days();
+    if !(0..=61).contains(&days) {
+        return Err(AppError::validation(
+            "payroll period must contain 1 to 62 days",
+        ));
+    }
+    if end > Utc::now().date_naive() {
+        return Err(AppError::validation(
+            "payroll period cannot end in the future",
+        ));
+    }
+    Ok((cycle, start, end))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_payroll_access, validate_cycle, RunPayrollRequest, SaveAdjustmentsRequest};
+    use super::{
+        ensure_payroll_access, payroll_period, validate_cycle, RunPayrollRequest,
+        SaveAdjustmentsRequest,
+    };
     use crate::services::auth_service::AuthClaims;
+    use chrono::NaiveDate;
     use serde_json::json;
 
     #[test]
-    fn payroll_cycle_is_monthly() {
+    fn payroll_cycles_and_custom_period_are_fail_closed() {
         assert!(validate_cycle(None).is_ok());
         assert!(validate_cycle(Some("Monthly")).is_ok());
+        assert_eq!(validate_cycle(Some("off_cycle")).unwrap(), "off_cycle");
+        assert_eq!(
+            validate_cycle(Some("final_settlement")).unwrap(),
+            "final_settlement"
+        );
         assert!(validate_cycle(Some("weekly")).is_err());
+        assert!(payroll_period(
+            Some("off_cycle"),
+            None,
+            None,
+            Some(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()),
+            Some(NaiveDate::from_ymd_opt(2026, 7, 31).unwrap()),
+            "",
+        )
+        .is_err());
+        assert!(payroll_period(
+            Some("off_cycle"),
+            None,
+            None,
+            Some(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()),
+            Some(NaiveDate::from_ymd_opt(2026, 7, 31).unwrap()),
+            "staff-1",
+        )
+        .is_ok());
     }
 
     #[test]

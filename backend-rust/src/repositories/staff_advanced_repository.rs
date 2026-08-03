@@ -1668,6 +1668,68 @@ pub async fn mobile_device_auth(
     .await
 }
 
+pub async fn record_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    user_id: &str,
+    device_uid: &str,
+    platform: &str,
+    app_version: &str,
+    event_type: &str,
+    network_type: &str,
+    online: bool,
+    metadata: &Value,
+    occurred_at: DateTime<Utc>,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO staff_mobile_device_telemetry
+           (tenant_id,branch_id,staff_id,user_id,device_uid,platform,app_version,event_type,network_type,online,metadata_json,occurred_at)
+           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+           WHERE EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)
+           RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(user_id)
+    .bind(device_uid)
+    .bind(platform)
+    .bind(app_version)
+    .bind(event_type)
+    .bind(network_type)
+    .bind(online)
+    .bind(metadata)
+    .bind(occurred_at)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn list_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+             'id',telemetry.id,'staffId',telemetry.staff_id,
+             'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),staff.id),
+             'deviceUid',telemetry.device_uid,'platform',telemetry.platform,'appVersion',telemetry.app_version,
+             'eventType',telemetry.event_type,'networkType',telemetry.network_type,'online',telemetry.online,
+             'metadata',telemetry.metadata_json,'occurredAt',telemetry.occurred_at
+           )
+           FROM staff_mobile_device_telemetry telemetry
+           JOIN staff ON staff.tenant_id=telemetry.tenant_id AND staff.branch_id=telemetry.branch_id AND staff.id=telemetry.staff_id
+           WHERE telemetry.tenant_id=$1 AND telemetry.branch_id=$2
+           ORDER BY telemetry.occurred_at DESC LIMIT 500"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
 pub async fn save_mobile_push_subscription(
     db: &PgPool,
     tenant_id: &str,

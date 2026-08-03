@@ -24,11 +24,14 @@ const SEVERITIES: &[&str] = &["low", "medium", "high", "critical"];
 const MANAGER_PERMISSION_CODES: &[&str] = &[
     "analytics.read",
     "appointments.manage",
+    "appointments.outside_hours.override",
     "appointments.read",
     "appointments.settings.manage",
+    "appointments.fees.waive",
     "bookings.manage",
     "bookings.read",
     "clients.audit.read",
+    "clients.cross_location.read",
     "clients.consent.manage",
     "clients.forms.manage",
     "clients.manage",
@@ -187,6 +190,14 @@ pub struct UsageEventInput {
     pub occurred_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub metadata: Value,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub communication_channel: String,
+    #[serde(default)]
+    pub unit_cost_paise: i64,
+    #[serde(default = "default_currency")]
+    pub currency: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -346,6 +357,9 @@ fn normal_priority() -> String {
 }
 fn customer_visibility() -> String {
     "customer".into()
+}
+fn default_currency() -> String {
+    "INR".into()
 }
 
 pub async fn platform_overview(db: &PgPool) -> Result<Value, AppError> {
@@ -1165,17 +1179,36 @@ pub async fn record_usage(
 ) -> Result<Value, AppError> {
     let metric = payload.metric.trim().to_ascii_lowercase();
     let key = payload.idempotency_key.trim();
+    let provider = payload.provider.trim().to_ascii_lowercase();
+    let channel = payload.communication_channel.trim().to_ascii_lowercase();
+    let currency = payload.currency.trim().to_ascii_uppercase();
     if !matches!(
         metric.as_str(),
-        "api_calls" | "messages" | "storage_mb" | "custom"
+        "api_calls"
+            | "messages"
+            | "storage_mb"
+            | "provider_units"
+            | "sms"
+            | "whatsapp"
+            | "email"
+            | "ai_tokens"
+            | "custom"
     ) || !(1..=1_000_000_000).contains(&payload.quantity)
         || key.is_empty()
         || key.len() > 160
         || payload.metadata.as_object().is_none()
+        || provider.len() > 80
+        || !matches!(
+            channel.as_str(),
+            "" | "sms" | "whatsapp" | "email" | "push" | "voice"
+        )
+        || !(0..=1_000_000_000).contains(&payload.unit_cost_paise)
+        || currency.len() != 3
+        || !currency.bytes().all(|byte| byte.is_ascii_uppercase())
     {
         return Err(AppError::validation("usage event is invalid"));
     }
-    let created = saas_repository::record_usage(
+    let outcome = saas_repository::record_usage(
         db,
         payload.tenant_id.trim(),
         payload.branch_id.trim(),
@@ -1185,17 +1218,34 @@ pub async fn record_usage(
         key,
         payload.occurred_at.unwrap_or_else(Utc::now),
         &payload.metadata,
+        &provider,
+        &channel,
+        payload.unit_cost_paise,
+        &currency,
     )
     .await
     .map_err(|_| AppError::internal("failed to record SaaS usage"))?;
+    use saas_repository::UsageRecordOutcome;
+    if outcome == UsageRecordOutcome::QuotaExceeded {
+        return Err(AppError::conflict("usage quota exceeded").with_details(json!({
+            "tenantId":payload.tenant_id,"subscriptionId":payload.subscription_id,"metric":metric,"quantity":payload.quantity
+        })));
+    }
+    if outcome == UsageRecordOutcome::SubscriptionUnavailable {
+        return Err(AppError::conflict(
+            "subscription does not accept usage events",
+        ));
+    }
+    let replayed = outcome == UsageRecordOutcome::Replayed;
     platform_audit(
         db,
         actor,
         "saas.usage.recorded",
-        json!({"tenantId":payload.tenant_id,"metric":metric,"replayed":!created}),
+        json!({"tenantId":payload.tenant_id,"metric":metric,"provider":provider,"communicationChannel":channel,
+          "unitCostPaise":payload.unit_cost_paise,"currency":currency,"replayed":replayed}),
     )
     .await;
-    Ok(json!({"recorded":created,"replayed":!created}))
+    Ok(json!({"recorded":!replayed,"replayed":replayed}))
 }
 
 pub async fn invoices(db: &PgPool, tenant: Option<&str>) -> Result<Vec<Value>, AppError> {
@@ -1288,7 +1338,9 @@ async fn issue_context(
         usage.branch_count,
         usage.active_user_count,
         usage.appointment_count,
-    );
+    )
+    .saturating_add(usage.provider_cost_paise)
+    .saturating_add(usage.quota_overage_paise);
     let taxable = context.base_price_paise + usage_amount;
     let tax = taxable.saturating_mul(i64::from(tax_bps)) / 10_000;
     let key = format!(

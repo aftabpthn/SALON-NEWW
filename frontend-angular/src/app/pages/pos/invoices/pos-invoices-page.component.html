@@ -368,7 +368,7 @@
         <label class="return-reason"><span>MFA code</span><input [(ngModel)]="returnMfaCode" name="returnMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
         @if (refundMethods.length > 1) {
           <label class="return-reason"><span>Refund method</span><select [(ngModel)]="refundMethod" name="refundMethod"><option value="" disabled>Select method</option>@for (method of refundMethods; track method) {
-          <option [value]="method">{{ method.replace('_', ' ') }}</option>
+          <option [value]="method">{{ method === 'exchange_credit' ? 'Exchange credit' : method === 'original_tender' ? 'Original tenders (automatic split)' : method.replace('_', ' ') }}</option>
         }</select></label>
       }
       @if (refundMethod === 'cash' && refundTills.length) {

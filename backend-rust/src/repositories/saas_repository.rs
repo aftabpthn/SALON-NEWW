@@ -239,22 +239,37 @@ pub struct UsageSnapshot {
     pub api_calls: i64,
     pub messages: i64,
     pub storage_mb: i64,
+    pub provider_cost_paise: i64,
+    pub communication_cost_paise: i64,
+    pub quota_overage_paise: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UsageRecordOutcome {
+    Recorded,
+    Replayed,
+    QuotaExceeded,
+    SubscriptionUnavailable,
 }
 
 #[derive(Debug, Clone, FromRow)]
 pub struct EntitlementContext {
-    pub tenant_status: String,
+    pub tenant_access_allowed: bool,
     pub subscription_status: Option<String>,
     pub features_json: Option<Value>,
+    pub feature_overrides_json: Value,
     pub included_branches: Option<i32>,
     pub overage_branch_paise: Option<i64>,
     pub active_branch_count: i64,
 }
 
 const ENTITLEMENT_CONTEXT_SQL: &str = r#"
-    SELECT tenant.status AS tenant_status,
+    SELECT (tenant.status='active' OR (tenant.status='grace' AND tenant.grace_period_ends_at>NOW())) AS tenant_access_allowed,
            subscription.status AS subscription_status,
            subscription.features_json,
+           COALESCE((SELECT jsonb_object_agg(feature.feature_key,feature.enabled)
+             FROM tenant_feature_overrides feature
+            WHERE feature.tenant_id=tenant.id AND (feature.expires_at IS NULL OR feature.expires_at>NOW())),'{}'::JSONB) AS feature_overrides_json,
            subscription.included_branches,
            subscription.overage_branch_paise,
            (SELECT COUNT(*) FROM branches branch
@@ -707,6 +722,8 @@ pub async fn list_tenants(db: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
         )
         SELECT jsonb_build_object(
           'id',t.tenant_scope_id,'name',t.name,'slug',COALESCE(t.slug,''),'status',t.status,
+          'businessType',t.business_type,'gracePeriodEndsAt',t.grace_period_ends_at,
+          'lifecycleReason',t.lifecycle_reason,'lifecycleVersion',t.lifecycle_version,
           'branchCount',(SELECT COUNT(*) FROM branches b WHERE b.tenant_id=t.id AND b.active=TRUE),
           'subBranchCount',(SELECT COUNT(*) FROM branches b LEFT JOIN franchise_policies fp ON fp.tenant_id=t.tenant_scope_id WHERE b.tenant_id=t.id AND b.active=TRUE AND fp.central_branch_id IS NOT NULL AND b.id::TEXT<>fp.central_branch_id),
           'centralBranchName',COALESCE((SELECT b.name FROM franchise_policies fp JOIN branches b ON b.tenant_id=t.id AND b.id::TEXT=fp.central_branch_id WHERE fp.tenant_id=t.tenant_scope_id LIMIT 1),''),
@@ -726,8 +743,12 @@ pub async fn list_tenants(db: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
 }
 
 pub async fn tenant_exists(db: &PgPool, tenant_id: &str) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM tenants WHERE COALESCE(NULLIF(scope_id,''),id::TEXT)=$1 AND status='active')")
-        .bind(tenant_id).fetch_one(db).await
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM tenants WHERE COALESCE(NULLIF(scope_id,''),id::TEXT)=$1)",
+    )
+    .bind(tenant_id)
+    .fetch_one(db)
+    .await
 }
 
 pub async fn list_plans(db: &PgPool, include_inactive: bool) -> Result<Vec<Value>, sqlx::Error> {
@@ -1098,7 +1119,13 @@ pub async fn usage_snapshot(
           (SELECT COUNT(*) FROM appointments a WHERE a.tenant_id=$1 AND a.start_at>=$3 AND a.start_at<$4 AND a.status<>'cancelled') appointment_count,
           COALESCE((SELECT SUM(e.quantity) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.metric='api_calls' AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT api_calls,
           COALESCE((SELECT SUM(e.quantity) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.metric='messages' AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT messages,
-          COALESCE((SELECT SUM(e.quantity) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.metric='storage_mb' AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT storage_mb"#,
+          COALESCE((SELECT SUM(e.quantity) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.metric='storage_mb' AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT storage_mb,
+          COALESCE((SELECT SUM(e.quantity*e.unit_cost_paise) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT provider_cost_paise,
+          COALESCE((SELECT SUM(e.quantity*e.unit_cost_paise) FROM saas_usage_events e WHERE e.tenant_id=$1 AND e.subscription_id=$2 AND e.communication_channel<>'' AND e.occurred_at>=$3 AND e.occurred_at<$4),0)::BIGINT communication_cost_paise,
+          COALESCE((SELECT SUM(GREATEST(usage.quantity-q.included_quantity,0)*q.overage_unit_paise)
+            FROM saas_usage_quotas q JOIN LATERAL (SELECT COALESCE(SUM(e.quantity),0)::BIGINT quantity FROM saas_usage_events e
+              WHERE e.tenant_id=q.tenant_id AND e.subscription_id=q.subscription_id AND e.metric=q.metric AND e.occurred_at>=$3 AND e.occurred_at<$4) usage ON TRUE
+            WHERE q.tenant_id=$1 AND q.subscription_id=$2),0)::BIGINT quota_overage_paise"#,
     ).bind(&context.tenant_id).bind(&context.subscription_id).bind(context.current_period_start).bind(context.current_period_end).fetch_one(db).await
 }
 
@@ -1112,10 +1139,54 @@ pub async fn record_usage(
     idempotency_key: &str,
     occurred_at: DateTime<Utc>,
     metadata: &Value,
-) -> Result<bool, sqlx::Error> {
-    let changed=sqlx::query("INSERT INTO saas_usage_events(tenant_id,branch_id,subscription_id,metric,quantity,idempotency_key,occurred_at,metadata_json) SELECT $1,$2,s.id,$4,$5,$6,$7,$8 FROM saas_subscriptions s WHERE s.id=$3 AND s.tenant_id=$1 AND s.status IN ('trialing','active','past_due') ON CONFLICT(tenant_id,idempotency_key) DO NOTHING")
-        .bind(tenant_id).bind(branch_id).bind(subscription_id).bind(metric).bind(quantity).bind(idempotency_key).bind(occurred_at).bind(metadata).execute(db).await?.rows_affected();
-    Ok(changed > 0)
+    provider: &str,
+    communication_channel: &str,
+    unit_cost_paise: i64,
+    currency: &str,
+) -> Result<UsageRecordOutcome, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2,0))")
+        .bind(tenant_id)
+        .bind(idempotency_key)
+        .execute(&mut *tx)
+        .await?;
+    if sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM saas_usage_events WHERE tenant_id=$1 AND idempotency_key=$2)",
+    )
+    .bind(tenant_id)
+    .bind(idempotency_key)
+    .fetch_one(&mut *tx)
+    .await?
+    {
+        tx.commit().await?;
+        return Ok(UsageRecordOutcome::Replayed);
+    }
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1 || ':' || $2 || ':' || $3,0))")
+        .bind(tenant_id)
+        .bind(subscription_id)
+        .bind(metric)
+        .execute(&mut *tx)
+        .await?;
+    let period=sqlx::query_as::<_,(DateTime<Utc>,DateTime<Utc>)>("SELECT current_period_start,current_period_end FROM saas_subscriptions WHERE id=$2 AND tenant_id=$1 AND status IN ('trialing','active','past_due') FOR SHARE")
+      .bind(tenant_id).bind(subscription_id).fetch_optional(&mut *tx).await?;
+    let Some((period_start, period_end)) = period else {
+        return Ok(UsageRecordOutcome::SubscriptionUnavailable);
+    };
+    let hard_limit=sqlx::query_scalar::<_,Option<i64>>("SELECT hard_limit_quantity FROM saas_usage_quotas WHERE tenant_id=$1 AND subscription_id=$2 AND metric=$3")
+      .bind(tenant_id).bind(subscription_id).bind(metric).fetch_optional(&mut *tx).await?.flatten();
+    if let Some(limit) = hard_limit {
+        let used=sqlx::query_scalar::<_,i64>("SELECT COALESCE(SUM(quantity),0)::BIGINT FROM saas_usage_events WHERE tenant_id=$1 AND subscription_id=$2 AND metric=$3 AND occurred_at>=$4 AND occurred_at<$5")
+        .bind(tenant_id).bind(subscription_id).bind(metric).bind(period_start).bind(period_end).fetch_one(&mut *tx).await?;
+        if used.saturating_add(quantity) > limit {
+            return Ok(UsageRecordOutcome::QuotaExceeded);
+        }
+    }
+    sqlx::query("INSERT INTO saas_usage_events(tenant_id,branch_id,subscription_id,metric,quantity,idempotency_key,occurred_at,metadata_json,provider,communication_channel,unit_cost_paise,currency) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)")
+      .bind(tenant_id).bind(branch_id).bind(subscription_id).bind(metric).bind(quantity).bind(idempotency_key)
+      .bind(occurred_at).bind(metadata).bind(provider).bind(communication_channel).bind(unit_cost_paise).bind(currency)
+      .execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(UsageRecordOutcome::Recorded)
 }
 
 pub async fn list_usage(

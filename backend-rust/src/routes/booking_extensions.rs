@@ -715,6 +715,7 @@ async fn public_booking_reschedule_options(
         State(state),
         headers,
         Json(booking_portal_v2::SlotRequest {
+            tenant_id: Some(claims.tenant_id),
             branch_id: Some(claims.branch_id),
             service_ids: Some(appointment.service_ids),
             date: (!payload.date.trim().is_empty()).then_some(payload.date),
@@ -742,9 +743,11 @@ async fn public_booking_reschedule_confirm(
         .await?;
     let appointment = appointments::reschedule_appointment(
         State(state),
+        None,
         headers,
         Path(appointment_id.to_string()),
         Json(appointments::ReschedulePayload {
+            expected_version: None,
             start_at: payload.start_at,
             end_at: (!payload.end_at.trim().is_empty()).then_some(payload.end_at),
             reason: payload.reason,
@@ -757,6 +760,7 @@ async fn public_booking_reschedule_confirm(
             booking_group_id: String::new(),
             change_mode: "official".to_string(),
             actor_source: "client".to_string(),
+            outside_hours_override_reason: String::new(),
         }),
     )
     .await?;
@@ -1938,6 +1942,8 @@ async fn appointment_deposits_multi_service_bookings(
                 std::slice::from_ref(&selection.service_id),
                 std::slice::from_ref(&selection),
                 starts_at,
+                payload.client_id.trim(),
+                "crm",
             )
             .await?,
         );
@@ -2012,6 +2018,7 @@ async fn appointment_deposits_multi_service_bookings(
             group_notes: String::new(),
             is_surprise: false,
             virtual_meeting_url: String::new(),
+            outside_hours_override_reason: String::new(),
         }),
     )
     .await?

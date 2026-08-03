@@ -32,6 +32,7 @@ interface PosLine {
   customName: string;
   quantity: string;
   unitPrice: string;
+  otherFeePaise: number;
   discount: string;
   discountType: DiscountType;
   discountSource: string;
@@ -161,6 +162,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   selectedMembershipId = '';
   selectedPackageId = '';
   giftCardAmount = '';
+  giftCardReloadCode = '';
   giftCardPaymentCode = '';
   verifiedGiftCard: GiftCardLookup | null = null;
   giftCardLookupLoading = false;
@@ -174,6 +176,12 @@ export class PosPageComponent implements OnInit, OnDestroy {
   reference = '';
   billDiscount = '';
   billDiscountType: DiscountType = 'amount';
+  discountReason = '';
+  buyerGstin = '';
+  placeOfSupplyStateCode = '';
+  reverseCharge = false;
+  separateGroupInvoice = false;
+  draftCartVersion = 0;
   couponCode = '';
   couponPreview: CouponPreview | null = null;
   couponApplying = false;
@@ -280,6 +288,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
 
   get selectedClient(): any | null { return this.clients.find((c) => String(c.id) === String(this.selectedClientId)) ?? null; }
   get subtotalPaise(): number { return this.saleLines.reduce((s, l) => s + this.lineSubtotalPaise(l), 0); }
+  get otherFeeTotalPaise(): number { return this.saleLines.reduce((sum, line) => sum + Math.max(0, line.otherFeePaise) * Math.max(0, this.num(line.quantity)), 0); }
   get lineDiscountPaise(): number { return this.saleLines.reduce((s, line) => s + this.lineDiscountPaiseValue(line), 0); }
   get manualBillDiscountPaise(): number {
     const base = Math.max(0, this.subtotalPaise - this.lineDiscountPaise);
@@ -316,6 +325,13 @@ export class PosPageComponent implements OnInit, OnDestroy {
   get membershipSalesVisible(): boolean { return this.membershipSettingsLoaded && this.membershipSettings.membershipCatalog.membershipSalesEnabled && this.membershipSettings.membershipCatalog.visibleInPos; }
   get posMemberships(): any[] { return this.memberships.filter((plan) => this.membershipPlanAllowed(plan)); }
   get giftCardPaymentPaise(): number { return this.toPaise(this.num(this.paymentInputs['gift_card'])); }
+  get manualDiscountRequiresReason(): boolean { return this.manualBillDiscountPaise > 0 || this.roundOffDiscountPaise > 0 || this.saleLines.some((line) => this.manualLineDiscountPaise(line) > 0); }
+  get selectedAppointmentGroupSize(): number {
+    const appointment = this.appointments.find((item) => String(item.id) === String(this.reference));
+    if (!appointment) return 0;
+    const groupId = String(appointment.bookingGroupId ?? appointment.booking_group_id ?? '');
+    return groupId ? this.appointments.filter((item) => String(item.bookingGroupId ?? item.booking_group_id ?? '') === groupId && !['cancelled', 'canceled', 'no-show'].includes(String(item.status ?? '').toLowerCase())).length : 1;
+  }
 
   incrementLineQty(line: PosLine): void {
     line.quantity = String(Math.max(1, this.num(line.quantity) + 1));
@@ -508,7 +524,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     else if (staffId) this.selectedStaffId = staffId;
 
     const bookingGroupId = String(appointment.bookingGroupId ?? appointment.booking_group_id ?? '');
-    const groupAppointments = bookingGroupId
+    const groupAppointments = bookingGroupId && !this.separateGroupInvoice
       ? this.appointments.filter((item) =>
           String(item.bookingGroupId ?? item.booking_group_id ?? '') === bookingGroupId
           && !['cancelled', 'canceled', 'no-show'].includes(String(item.status ?? '').toLowerCase()),
@@ -530,6 +546,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
         return line;
       });
     }
+  }
+
+  setInvoiceScope(scope: string): void {
+    this.separateGroupInvoice = scope === 'separate';
+    if (this.reference) this.setCompletedAppointment(this.reference);
   }
 
   private loadBookingAdvance(appointmentId: string): void {
@@ -561,6 +582,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     line.itemName = this.recordName(item);
     line.itemSearchText = line.itemName;
     line.unitPrice = this.paiseToInput(this.pricePaise(item));
+    line.otherFeePaise = line.lineType === 'service' ? this.firstMoney(item, ['otherFeePaise', 'other_fee_paise']) : 0;
     const tax = this.firstNumber(item, ['taxPercent', 'gstPercent', 'tax_percent', 'gst_percent']);
     line.taxPercent = tax > 0 ? String(tax) : '';
     this.activeLineItemId = null;
@@ -687,9 +709,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
     if (!this.selectedClientId) { this.error = 'Select a client before selling a gift card'; return; }
     const amountPaise = this.toPaise(this.num(this.giftCardAmount));
     if (amountPaise <= 0) return;
-    const code = `GC-${globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase() || Date.now().toString().slice(-8)}`;
-    this.addAddonLine('gift_card', { id: code, name: `Gift Card ${code}` }, amountPaise, 0);
+    const reloadCode = this.giftCardReloadCode.trim().toUpperCase();
+    const code = reloadCode || `GC-${globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase() || Date.now().toString().slice(-8)}`;
+    this.addAddonLine('gift_card', { id: reloadCode ? `RELOAD:${code}` : code, name: reloadCode ? `Gift Card Reload ${code}` : `Gift Card ${code}` }, amountPaise, 0);
     this.giftCardAmount = '';
+    this.giftCardReloadCode = '';
     this.activeAddonSale = null;
   }
 
@@ -1112,7 +1136,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.api.get<any>(`/api/v1/pos/invoices/${id}/print`).subscribe({ next: (res: any) => { if (!printInvoiceDocument(res?.data ?? res)) this.error = 'Print not available'; }, error: () => (this.error = 'Print not available') });
   }
 
-  lineSubtotalPaise(line: PosLine): number { return this.toPaise(this.num(line.unitPrice)) * Math.max(0, this.num(line.quantity)); }
+  lineSubtotalPaise(line: PosLine): number { return (this.toPaise(this.num(line.unitPrice)) + Math.max(0, line.otherFeePaise)) * Math.max(0, this.num(line.quantity)); }
   setLineDiscount(line: PosLine, value: string): void { line.discount = value; line.discountSource = ''; }
   setLineDiscountType(line: PosLine, value: DiscountType): void { line.discountType = value; line.discountSource = ''; }
   lineDiscountPaiseValue(line: PosLine): number {
@@ -1280,6 +1304,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       customName: '',
       quantity: '1',
       unitPrice: '',
+      otherFeePaise: 0,
       discount: '',
       discountType: 'amount',
       discountSource: '',
@@ -1393,6 +1418,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     const paymentError = options.forceUnpaid ? '' : this.paymentAllocationError();
     if (paymentError) { this.error = paymentError; return; }
     if (this.roundOffError) { this.error = this.roundOffError; return; }
+    if (this.manualDiscountRequiresReason && this.discountReason.trim().length < 3) { this.error = 'Enter a discount reason'; return; }
     if (status === 'draft' && this.walletCreditPaise > 0) { this.error = 'Client advance can only be applied when finalizing the invoice'; return; }
     if (!this.canSave) { this.error = 'Add at least one item'; return; }
     if (status !== 'draft' && this.hasMembershipSaleLine() && !this.membershipSettings.paymentBilling.allowDueOnMembershipSale && this.paidNowPaise < this.totalPaise) {
@@ -1400,7 +1426,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.isOnline) {
-      if (this.giftCardPaymentPaise > 0) { this.error = 'Gift card redemption requires an internet connection'; return; }
+      if (!options.forceUnpaid) { this.error = 'Payments require an internet connection. Use Save as unpaid to queue this invoice.'; return; }
       if (status === 'draft' || this.draftId) { this.error = 'Held invoices require an internet connection'; return; }
       this.queueOfflineCheckout(options);
       return;
@@ -1430,6 +1456,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   private completeSave(res: any, status: SaleStatus, afterSave?: () => void): void {
     const data = res?.data ?? res;
     this.selectedSale = data?.sale ?? data?.invoice ?? data;
+    this.draftCartVersion = this.firstNumber(data?.transactionContext ?? data?.transaction_context, ['cartVersion', 'cart_version']);
     this.draftId = status === 'draft' ? String(this.selectedSale?.id ?? this.draftId) : null;
     this.message = status === 'draft' ? 'Invoice held' : 'Invoice saved';
     this.workingDraftCommitted = true;
@@ -1450,9 +1477,15 @@ export class PosPageComponent implements OnInit, OnDestroy {
     const tenantId = localStorage.getItem('aurashine_tenant_id') || '';
     const branchId = localStorage.getItem('aurashine_branch_id') || '';
     if (!tenantId || !branchId) { this.error = 'Tenant or branch session is missing'; return; }
+    const checkout = this.salePayload('finalized', options);
+    const liabilityTypes = new Set(['membership', 'package', 'gift_card', 'redemption', 'membership_redeem', 'package_redeem']);
+    if (checkout.rewardDiscountPaise > 0 || checkout.packageRedemptions?.length || checkout.lines?.some((line: any) => liabilityTypes.has(String(line.lineType || line.type || '').toLowerCase()))) {
+      this.error = 'Membership, package, gift card and loyalty changes require an internet connection';
+      return;
+    }
     const queued: OfflineCheckout = {
       operationId: crypto.randomUUID(),
-      checkout: this.salePayload('finalized', options),
+      checkout,
       createdAt: new Date().toISOString(),
       status: 'pending',
       lastError: '',
@@ -1478,6 +1511,12 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.source = 'Counter';
     this.reference = '';
     this.billDiscount = '';
+    this.discountReason = '';
+    this.buyerGstin = '';
+    this.placeOfSupplyStateCode = '';
+    this.reverseCharge = false;
+    this.separateGroupInvoice = false;
+    this.draftCartVersion = 0;
     this.rewardPointsToRedeem = '';
     this.couponCode = '';
     this.tipAmount = '';
@@ -1507,11 +1546,17 @@ export class PosPageComponent implements OnInit, OnDestroy {
         selectedMembershipId: this.selectedMembershipId,
         selectedPackageId: this.selectedPackageId,
         giftCardAmount: this.giftCardAmount,
+        giftCardReloadCode: this.giftCardReloadCode,
         giftCardPaymentCode: this.giftCardPaymentCode,
         verifiedGiftCard: this.verifiedGiftCard,
         activeAddonSale: this.activeAddonSale,
         billDiscount: this.billDiscount,
         billDiscountType: this.billDiscountType,
+        discountReason: this.discountReason,
+        buyerGstin: this.buyerGstin,
+        placeOfSupplyStateCode: this.placeOfSupplyStateCode,
+        reverseCharge: this.reverseCharge,
+        separateGroupInvoice: this.separateGroupInvoice,
         couponCode: this.couponCode,
         couponPreview: this.couponPreview,
         tipAmount: this.tipAmount,
@@ -1546,11 +1591,17 @@ export class PosPageComponent implements OnInit, OnDestroy {
       this.selectedMembershipId = String(saved.selectedMembershipId ?? '');
       this.selectedPackageId = String(saved.selectedPackageId ?? '');
       this.giftCardAmount = String(saved.giftCardAmount ?? '');
+      this.giftCardReloadCode = String(saved.giftCardReloadCode ?? '');
       this.giftCardPaymentCode = String(saved.giftCardPaymentCode ?? '');
       this.verifiedGiftCard = saved.verifiedGiftCard?.code ? saved.verifiedGiftCard as GiftCardLookup : null;
       this.activeAddonSale = ['membership', 'package', 'gift_card'].includes(saved.activeAddonSale) ? saved.activeAddonSale : null;
       this.billDiscount = String(saved.billDiscount ?? '');
       this.billDiscountType = saved.billDiscountType === 'percent' ? 'percent' : 'amount';
+      this.discountReason = String(saved.discountReason ?? '');
+      this.buyerGstin = String(saved.buyerGstin ?? '');
+      this.placeOfSupplyStateCode = String(saved.placeOfSupplyStateCode ?? '');
+      this.reverseCharge = saved.reverseCharge === true;
+      this.separateGroupInvoice = saved.separateGroupInvoice === true;
       this.couponCode = String(saved.couponCode ?? '');
       this.couponPreview = saved.couponPreview?.key ? saved.couponPreview as CouponPreview : null;
       this.tipAmount = String(saved.tipAmount ?? '');
@@ -1567,7 +1618,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
           ...line,
           id: String(raw?.id ?? line.id), itemId: raw?.itemId ?? null,
           itemName: String(raw?.itemName ?? ''), itemSearchText: String(raw?.itemSearchText ?? ''), staffSearchText: String(raw?.staffSearchText ?? ''), customName: String(raw?.customName ?? ''),
-          quantity: String(raw?.quantity ?? '1'), unitPrice: String(raw?.unitPrice ?? ''), discount: String(raw?.discount ?? ''), discountType: raw?.discountType === 'percent' ? 'percent' : 'amount',
+          quantity: String(raw?.quantity ?? '1'), unitPrice: String(raw?.unitPrice ?? ''), otherFeePaise: Math.max(0, this.num(raw?.otherFeePaise)), discount: String(raw?.discount ?? ''), discountType: raw?.discountType === 'percent' ? 'percent' : 'amount',
           discountSource: String(raw?.discountSource ?? ''), taxPercent: String(raw?.taxPercent ?? ''), staffId: raw?.staffId ?? null, staffSplits: this.parseStaffSplits(raw?.staffSplits),
         };
       });
@@ -1674,6 +1725,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   }
 
   private restoreDraftSale(id: string, details: any, sale: any): void {
+    const context = details.transactionContext ?? details.transaction_context ?? {};
     this.draftId = id;
     this.selectedSale = sale;
     this.selectedClientId = (sale.clientId ?? sale.client_id ?? null) as any;
@@ -1691,6 +1743,12 @@ export class PosPageComponent implements OnInit, OnDestroy {
     this.rewardPointsToRedeem = rewardPoints ? String(rewardPoints) : '';
     const storedBillDiscount = this.firstMoney(sale, ['billDiscountPaise', 'bill_discount_paise']);
     this.billDiscount = this.paiseToInput(Math.max(0, storedBillDiscount - rewardPoints * this.num(this.membershipSettings.creditsBenefits.rewardPointValuePaise)));
+    this.discountReason = String(context.discountReason ?? context.discount_reason ?? '');
+    this.buyerGstin = String(context.buyerGstin ?? context.buyer_gstin ?? '');
+    this.placeOfSupplyStateCode = String(context.placeOfSupplyStateCode ?? context.place_of_supply_state_code ?? '');
+    this.reverseCharge = (context.reverseCharge ?? context.reverse_charge) === true;
+    this.separateGroupInvoice = (context.separateGroupInvoice ?? context.separate_group_invoice) === true;
+    this.draftCartVersion = Math.max(0, this.firstNumber(context, ['cartVersion', 'cart_version']));
     this.couponCode = sale.couponCode ?? sale.coupon_code ?? '';
     this.tipAmount = this.paiseToInput(this.firstMoney(sale, ['tipPaise', 'tip_paise']));
     this.saleLines = restoredLines.filter((line: any) => line !== rewardLine).map((line: any) => this.restoreLine(line));
@@ -1713,7 +1771,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
     const amountType = rawDiscountType === 'percent' ? 'percent' : 'amount';
     const discount = amountType === 'percent' ? String((this.firstMoney(line, ['discountBps', 'discount_bps']) || 0) / 100) : this.paiseToInput(this.firstMoney(line, ['discountValuePaise', 'discount_value_paise', 'discountPaise', 'discount_paise']));
     const itemName = String(line.itemName ?? line.item_name ?? '');
-    return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), discount, discountType: amountType, discountSource: rawDiscountType.startsWith('membership') ? rawDiscountType : '', taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
+    return { id: `line-${this.lineSeed++}`, lineType: type, itemId: (line.itemId ?? line.item_id ?? null) as any, itemName, itemSearchText: itemName, staffSearchText: '', customName: type === 'custom' ? itemName : '', quantity: String(line.quantity ?? 1), unitPrice: this.paiseToInput(this.firstMoney(line, ['unitPricePaise', 'unit_price_paise'])), otherFeePaise: this.firstMoney(line, ['otherFeePaise', 'other_fee_paise']), discount, discountType: amountType, discountSource: rawDiscountType.startsWith('membership') ? rawDiscountType : '', taxPercent: String(line.taxPercent ?? line.tax_percent ?? line.gstPercent ?? line.gst_percent ?? ''), staffId: (line.staffId ?? line.staff_id ?? null) as any, staffSplits: this.parseStaffSplits(line.staffSplits ?? line.staff_splits) };
   }
 
   private salePayload(status: SaleStatus, options: { forceUnpaid?: boolean } = {}): any {
@@ -1757,6 +1815,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
         quantity: this.num(line.quantity),
         unitPricePaise: this.toPaise(this.num(line.unitPrice)),
         unit_price_paise: this.toPaise(this.num(line.unitPrice)),
+        otherFeePaise: Math.max(0, line.otherFeePaise),
+        other_fee_paise: Math.max(0, line.otherFeePaise),
         discountType: discountSource,
         discount_type: discountSource,
         discountValue: discountSource.startsWith('membership') ? 0 : this.num(line.discount),
@@ -1819,6 +1879,8 @@ export class PosPageComponent implements OnInit, OnDestroy {
       reward_discount_paise: this.rewardDiscountPaise,
       billDiscountType: this.billDiscountType,
       bill_discount_type: this.billDiscountType,
+      discountReason: this.discountReason.trim() || (this.roundOffDiscountPaise > 0 ? 'Balance round-off' : null),
+      discount_reason: this.discountReason.trim() || (this.roundOffDiscountPaise > 0 ? 'Balance round-off' : null),
       couponCode: this.couponCode.trim() || null,
       coupon_code: this.couponCode.trim() || null,
       tipPaise: this.tipPaise,
@@ -1831,6 +1893,11 @@ export class PosPageComponent implements OnInit, OnDestroy {
       payments: paymentSplit,
       cashDrawerTillId: this.selectedCashTillId || null,
       terminalId: this.selectedTerminalId || null,
+      cartVersion: this.draftCartVersion || null,
+      buyerGstin: this.buyerGstin.trim().toUpperCase() || null,
+      placeOfSupplyStateCode: this.placeOfSupplyStateCode.trim() || null,
+      reverseCharge: this.reverseCharge,
+      separateGroupInvoice: this.separateGroupInvoice,
       packageRedemptions,
       subtotalPaise: this.subtotalPaise,
       gstPaise: this.gstPaise,
@@ -1884,7 +1951,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
       rewardPoints: this.rewardPointsToRedeem,
       tip: this.tipAmount,
       rounding: this.roundTotal,
-      lines: this.saleLines.map((line) => [line.lineType, line.itemId, line.quantity, line.unitPrice, line.discount, line.discountType, line.taxPercent, line.staffId]),
+      lines: this.saleLines.map((line) => [line.lineType, line.itemId, line.quantity, line.unitPrice, line.otherFeePaise, line.discount, line.discountType, line.taxPercent, line.staffId]),
       membershipRedemptions: this.membershipRedeemRows.map((row) => [row.id, row.redeemQty, row.staffId]),
       packageRedemptions: this.packageRedeemRows.map((row) => [row.id, row.redeemQty, row.staffId]),
     });

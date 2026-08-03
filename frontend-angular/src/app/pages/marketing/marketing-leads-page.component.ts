@@ -2,6 +2,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
@@ -10,7 +11,7 @@ import { AuthService } from '../../core/services/auth.service';
 type Stage = 'New' | 'Contacted' | 'Qualified' | 'Converted' | 'Lost';
 type Campaign = { id: string; title: string; body: string; metadata?: any; createdAt: string };
 type WhatsAppCampaignPlan = { id: string; campaignType: string; title: string; objective: string; messageText: string; segmentKey: string; criteriaJson: any; status: string; scheduledFor?: string; version: number; createdAt: string; updatedAt: string };
-type Lead = { id: string; firstName: string; lastName: string; phone: string; email: string; source: string; stage: string; qualificationStatus: string; score: number; ownerUserId: string; nextFollowUpDate?: string; clientId?: string; convertedAppointmentId?: string; notes: string };
+type Lead = { id: string; firstName: string; lastName: string; phone: string; email: string; source: string; stage: string; qualificationStatus: string; score: number; ownerUserId: string; nextFollowUpDate?: string; clientId?: string; convertedAppointmentId?: string; notes: string; captureChannel: string; externalSourceId: string; slaDueAt: string; firstContactedAt?: string };
 type LeadOwner = { id: string; name: string; roleName: string };
 type LeadActivity = { id: string; leadId: string; activityType: string; body: string; nextFollowUpDate?: string; createdBy: string; createdAt: string };
 type MarketingInsights = {
@@ -33,11 +34,12 @@ type OfferPerformance = { offers: OfferPerformanceRow[]; branchResults: OfferBra
 type ConsentCoverage = { audienceCount: number; whatsapp: number; sms: number; email: number };
 type MarketingAutomation = { id: string; name: string; trigger: string; status: 'active' | 'paused'; template: string; config: { conditions: string[]; exclusions: string[]; offerId?: string; channels: string[]; sendTime: string; frequencyCapDays: number; approvalMode: 'automatic' | 'manual' }; performance: { sent: number; failed: number; blocked: number } };
 type MessageTemplate = { id: string; templateKey: string; name: string; channel: string; audience: string; eventKey: string; body: string; language: string; serviceId: string; occasionKey: string; offerId: string; status: string };
-type CampaignAttribution = { id: string; title: string; audienceName: string; audience: number; sent: number; delivered: number; failed: number; opened: number; clicked: number; bookings: number; completedAppointments: number; revenuePaise: number; discountCostPaise: number; netIncrementalRevenuePaise: number; offerRedemptions: number; conversionRateBps: number; reactivationRateBps: number; roiBps: number; optOuts: number; bestService: string; bestChannel: string; bestTime: string };
+type CampaignAttribution = { id: string; title: string; audienceName: string; audience: number; controlGroupCount: number; attributionWindowDays: number; sent: number; delivered: number; failed: number; opened: number; clicked: number; bookings: number; completedAppointments: number; revenuePaise: number; discountCostPaise: number; netIncrementalRevenuePaise: number; offerRedemptions: number; conversionRateBps: number; reactivationRateBps: number; roiBps: number; optOuts: number; bestService: string; bestChannel: string; bestTime: string };
 type BranchAttribution = { branchId: string; audience: number; bookings: number; revenuePaise: number; roiBps: number };
 type MarketingAttribution = { campaigns: CampaignAttribution[]; branchPerformance: BranchAttribution[] };
 type LeadAdvice = { leadId: string; leadName: string; stage: string; priorityScore: number; reason: string; bestChannel: string; suggestedMessage: string; nextFollowUpDate: string; clientId: string; appointmentId: string; activityCount: number; source: string };
-type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: string; quietEnd: string; timezone: string; offerApprovalThresholdBps: number }; exclusions: { clientId: string; clientName: string }[] };
+type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: string; quietEnd: string; timezone: string; offerApprovalThresholdBps: number; controlGroupBps: number; attributionWindowDays: number }; exclusions: { clientId: string; clientName: string }[] };
+type MarketingOutboxItem = { id: string; campaignId: string; clientId: string; channel: string; status: string; attempts: number; maxAttempts: number; lastError: string; nextAttemptAt: string; deadLetteredAt?: string; updatedAt?: string };
 
 @Component({
     selector: 'page-marketing-leads',
@@ -48,6 +50,7 @@ type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: s
 export class MarketingLeadsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
   readonly stages: Stage[] = ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'];
   readonly segmentDefinitions = [
     ['inactive_30', '30+ days inactive'], ['inactive_60', '60+ days inactive'], ['inactive_90', '90+ days inactive'], ['service_due', 'Service due'], ['hair_colour_due', 'Hair colour / root touch-up due'], ['no_upcoming', 'No upcoming appointment'], ['new_without_second_visit', 'New client without second visit'], ['high_value_vip', 'High-value / VIP'], ['lost_client', 'Lost client'], ['frequent_cancellation_no_show', 'Frequent cancellation / no-show'], ['membership_expiring', 'Membership expiring'], ['package_balance_pending', 'Package balance pending'], ['birthday_anniversary', 'Birthday / anniversary'], ['loyalty_milestone', 'Loyalty milestone'], ['negative_review_recovery', 'Negative review recovery'], ['wallet_balance_unused', 'Wallet balance unused'], ['slow_day_eligible', 'Slow-day eligible'],
@@ -78,7 +81,8 @@ export class MarketingLeadsPageComponent implements OnInit {
   selectedAutomation?: MarketingAutomation;
   templates: MessageTemplate[] = [];
   attribution: MarketingAttribution = { campaigns: [], branchPerformance: [] };
-  governance: MarketingGovernance = { settings: { frequencyCapDays: 7, quietStart: '20:00', quietEnd: '09:00', timezone: 'Asia/Kolkata', offerApprovalThresholdBps: 1000 }, exclusions: [] };
+  governance: MarketingGovernance = { settings: { frequencyCapDays: 7, quietStart: '20:00', quietEnd: '09:00', timezone: 'Asia/Kolkata', offerApprovalThresholdBps: 1000, controlGroupBps: 0, attributionWindowDays: 30 }, exclusions: [] };
+  marketingOutbox: MarketingOutboxItem[] = [];
   exclusionClientId = '';
   templateChannel = 'all';
   templateLanguage = 'all';
@@ -135,7 +139,6 @@ export class MarketingLeadsPageComponent implements OnInit {
     for (const lead of this.leads) counts.set(lead.source || 'other', (counts.get(lead.source || 'other') || 0) + 1);
     return [...counts].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count);
   }
-  get outboxCampaigns() { return this.campaigns.filter((campaign) => (campaign.metadata?.status || 'draft') !== 'draft'); }
   get consentedWinBackCount() { return this.winBackClients.filter((client) => client.consented).length; }
   segmentCount(key: string) { return this.clientIntelligence.filter((client) => client.segmentKeys?.includes(key)).length; }
   get segmentStaffOptions() { return [...new Set(this.clientIntelligence.map((client) => client.preferredStaffName).filter(Boolean))].sort(); }
@@ -148,7 +151,7 @@ export class MarketingLeadsPageComponent implements OnInit {
     this.loading = true;
     this.error = '';
     try {
-      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, offerPerformance, automations, templates, attribution, leadAdvice, governance, whatsappPlans] = await Promise.all([
+      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, offerPerformance, automations, templates, attribution, leadAdvice, governance, whatsappPlans, marketingOutbox] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<any>>('/notifications?notificationType=marketing_campaign&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<Lead[]>>('/marketing/leads?page=1&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<LeadOwner[]>>('/marketing/leads/owners')),
@@ -165,6 +168,7 @@ export class MarketingLeadsPageComponent implements OnInit {
         firstValueFrom(this.api.get<ApiEnvelope<LeadAdvice[]>>('/marketing/leads/advice')).catch(() => ({ data: [] as LeadAdvice[] })),
         firstValueFrom(this.api.get<ApiEnvelope<MarketingGovernance>>('/marketing/governance')).catch(() => ({ data: this.governance })),
         firstValueFrom(this.api.get<ApiEnvelope<WhatsAppCampaignPlan[]>>('/whatsapp-campaign-planner/plans')).catch(() => ({ data: [] as WhatsAppCampaignPlan[] })),
+        firstValueFrom(this.api.get<ApiEnvelope<MarketingOutboxItem[]>>('/notifications/marketing-outbox')).catch(() => ({ data: [] as MarketingOutboxItem[] })),
       ]);
       this.campaigns = Array.isArray(campaigns.data?.data) ? campaigns.data.data : [];
       this.leads = Array.isArray(leads.data) ? leads.data : [];
@@ -182,6 +186,12 @@ export class MarketingLeadsPageComponent implements OnInit {
       this.leadAdvice = Array.isArray(leadAdvice.data) ? leadAdvice.data : [];
       this.governance = governance.data || this.governance;
       this.whatsappPlans = Array.isArray(whatsappPlans.data) ? whatsappPlans.data : [];
+      this.marketingOutbox = Array.isArray(marketingOutbox.data) ? marketingOutbox.data : [];
+      const routeLead = this.leads.find((lead) => lead.id === this.route.snapshot.queryParamMap.get('leadId'));
+      if (routeLead && this.selectedLead?.id !== routeLead.id) {
+        this.activeSection = 'leads';
+        void this.openActivity(routeLead);
+      }
       if (this.selectedIntelligence) this.selectedIntelligence = this.clientIntelligence.find((client) => client.clientId === this.selectedIntelligence?.clientId);
       if (this.selectedClient) this.selectedClient = this.winBackClients.find((client) => client.clientId === this.selectedClient?.clientId);
     } catch (error) { this.error = this.message(error, 'Marketing workspace could not be loaded'); }
@@ -427,7 +437,7 @@ export class MarketingLeadsPageComponent implements OnInit {
 
   async saveLead() {
     const name = this.leadDraft.name.trim().replace(/\s+/g, ' ');
-    if (!name || !this.leadDraft.phone.trim()) return;
+    if (!name || (!this.leadDraft.phone.trim() && !this.leadDraft.email.trim() && !this.leadDraft.externalSourceId.trim())) return;
     const parts = name.split(' ');
     this.busy = true;
     this.error = '';
@@ -436,6 +446,9 @@ export class MarketingLeadsPageComponent implements OnInit {
         firstName: this.titleCase(parts.shift() || ''), lastName: this.titleCase(parts.join(' ')),
         phone: this.leadDraft.phone.trim(), email: this.leadDraft.email.trim().toLowerCase(),
         source: this.leadDraft.source || 'other', ownerUserId: this.leadDraft.ownerUserId,
+        captureChannel: this.leadDraft.captureChannel,
+        externalSourceId: this.leadDraft.externalSourceId.trim() || undefined,
+        slaHours: Number(this.leadDraft.slaHours),
         qualificationStatus: this.leadDraft.qualificationStatus,
         score: this.leadDraft.score === '' ? undefined : Number(this.leadDraft.score),
         nextFollowUpDate: this.toIsoDate(this.leadDraft.followUp),
@@ -524,7 +537,7 @@ export class MarketingLeadsPageComponent implements OnInit {
       await firstValueFrom(this.api.post('/notifications', {
         notificationType: 'marketing_campaign', title: this.titleCase(this.campaignDraft.name),
         body: this.campaignDraft.message.trim(), resourceType: 'marketing_campaign',
-        metadata: { goal: this.campaignDraft.goal, channels: this.campaignChannels(), audience: this.campaignDraft.audience, offerId: this.campaignDraft.offerId || undefined, status: 'draft', approvalStatus: 'pending', scheduledAt, recurrence: this.campaignDraft.recurrence, deliveryMode: this.campaignDraft.deliveryMode, smsFallback: this.campaignDraft.smsFallback },
+        metadata: { goal: this.campaignDraft.goal, channels: this.campaignChannels(), audience: this.campaignDraft.audience, offerId: this.campaignDraft.offerId || undefined, status: 'draft', approvalStatus: 'pending', scheduledAt, recurrence: this.campaignDraft.recurrence, deliveryMode: this.campaignDraft.deliveryMode, smsFallback: this.campaignDraft.smsFallback, controlGroupBps: Number(this.campaignDraft.controlGroupPercent) * 100, attributionWindowDays: Number(this.campaignDraft.attributionWindowDays) },
       }));
       this.drawer = '';
       await this.reload();
@@ -625,8 +638,8 @@ export class MarketingLeadsPageComponent implements OnInit {
     const value = new Date(`${this.toIsoDate(this.campaignDraft.scheduledDate)}T${this.campaignDraft.scheduledTime || '09:00'}:00`);
     return Number.isNaN(value.getTime()) ? '' : value.toISOString();
   }
-  private emptyLead() { return { name: '', phone: '', email: '', source: '', followUp: '', ownerUserId: '', qualificationStatus: 'unqualified', score: '' }; }
-  private emptyCampaign() { return { name: '', goal: 'win_back', whatsapp: true, sms: false, email: false, audience: 'inactive_60', offerId: '', message: '', scheduledDate: '', scheduledTime: '09:00', recurrence: 'once', deliveryMode: 'or', smsFallback: true, testClientId: '' }; }
+  private emptyLead() { return { name: '', phone: '', email: '', source: '', captureChannel: 'other', externalSourceId: '', slaHours: '24', followUp: '', ownerUserId: '', qualificationStatus: 'unqualified', score: '' }; }
+  private emptyCampaign() { return { name: '', goal: 'win_back', whatsapp: true, sms: false, email: false, audience: 'inactive_60', offerId: '', message: '', scheduledDate: '', scheduledTime: '09:00', recurrence: 'once', deliveryMode: 'or', smsFallback: true, controlGroupPercent: String(this.governance.settings.controlGroupBps / 100), attributionWindowDays: String(this.governance.settings.attributionWindowDays), testClientId: '' }; }
   private emptyWhatsAppPlan() { return { campaignType: 'empty_slot_fill', title: '', objective: '', messageText: '', segmentKey: '', criteria: { consentRequired: true, optOutAware: true }, version: 1 }; }
   private campaignChannels() { return [this.campaignDraft.whatsapp && 'whatsapp', this.campaignDraft.sms && 'sms', this.campaignDraft.email && 'email'].filter(Boolean) as string[]; }
   private emptyActivity() { return { activityType: 'note', body: '', nextFollowUpDate: '' }; }

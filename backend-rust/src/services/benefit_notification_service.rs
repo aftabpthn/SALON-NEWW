@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 
 use crate::{
@@ -127,6 +128,9 @@ pub async fn schedule(state: &AppState) -> Result<usize, AppError> {
                 continue;
             }
             let control = automation_controls.get(&candidate.source_type);
+            if !automation_is_automatic(control) {
+                continue;
+            }
             let frequency_days = control
                 .and_then(|value| value.get("frequencyCapDays"))
                 .and_then(serde_json::Value::as_i64)
@@ -191,6 +195,22 @@ fn legacy_occasion_automation_allowed(workflow_mode: Option<&str>) -> bool {
     workflow_mode != Some("managed")
 }
 
+fn automation_is_automatic(control: Option<&serde_json::Value>) -> bool {
+    control
+        .and_then(|value| value.get("approvalMode"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("manual")
+        == "automatic"
+}
+
+fn is_control_member(campaign_id: &str, client_id: &str, control_group_bps: u16) -> bool {
+    if control_group_bps == 0 {
+        return false;
+    }
+    let digest = Sha256::digest(format!("{campaign_id}:{client_id}"));
+    u16::from_be_bytes([digest[0], digest[1]]) % 10_000 < control_group_bps
+}
+
 async fn schedule_marketing_campaigns(state: &AppState) -> Result<usize, AppError> {
     let campaigns = benefit_notification_repository::due_marketing_campaigns(&state.db, 25)
         .await
@@ -225,6 +245,12 @@ async fn schedule_marketing_campaigns(state: &AppState) -> Result<usize, AppErro
             .get("smsFallback")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
+        let control_group_bps = campaign
+            .metadata_json
+            .get("controlGroupBps")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0)
+            .min(5_000) as u16;
         let segment_ids = if matches!(campaign.audience.as_str(), "all" | "active" | "at-risk")
             || campaign.audience.starts_with("win-back-")
         {
@@ -253,6 +279,7 @@ async fn schedule_marketing_campaigns(state: &AppState) -> Result<usize, AppErro
         };
         let mut campaign_queued = 0usize;
         let mut selected_clients = HashSet::new();
+        let mut control_clients = HashSet::new();
         for channel in channels {
             let recipients = benefit_notification_repository::marketing_recipients(
                 &state.db, &campaign, channel,
@@ -265,6 +292,20 @@ async fn schedule_marketing_campaigns(state: &AppState) -> Result<usize, AppErro
                     .is_some_and(|ids| !ids.contains(&recipient.client_id))
                     || (delivery_mode == "or" && selected_clients.contains(&recipient.client_id))
                 {
+                    continue;
+                }
+                if is_control_member(&campaign.id, &recipient.client_id, control_group_bps) {
+                    if control_clients.insert(recipient.client_id.clone()) {
+                        benefit_notification_repository::record_campaign_control_member(
+                            &state.db,
+                            &campaign,
+                            &recipient.client_id,
+                        )
+                        .await
+                        .map_err(|_| {
+                            AppError::internal("failed to record campaign control member")
+                        })?;
+                    }
                     continue;
                 }
                 let source_id = format!("{}:{}", campaign.id, recipient.client_id);
@@ -310,6 +351,7 @@ async fn schedule_marketing_campaigns(state: &AppState) -> Result<usize, AppErro
             &state.db,
             &campaign,
             selected_clients.len(),
+            control_clients.len(),
         )
         .await
         .map_err(|_| AppError::internal("failed to update campaign status"))?;
@@ -349,6 +391,26 @@ pub async fn queue_appointment_event(
     {
         return Ok(0);
     }
+    let control =
+        marketing_leads_repository::active_automation_controls(&state.db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load appointment automation controls"))?
+            .into_iter()
+            .find_map(|(name, config)| (name == trigger).then_some(config));
+    if !automation_is_automatic(control.as_ref()) {
+        return Ok(0);
+    }
+    let allowed_channels = control
+        .as_ref()
+        .and_then(|value| value.get("channels"))
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::to_string)
+                .collect::<HashSet<_>>()
+        });
     let event_label = match event.as_str() {
         "BOOKED" | "CONFIRMED" => "confirmed",
         "RESCHEDULED" | "BOOKING_RESCHEDULED" | "RESCHEDULE_APPROVED" => "rescheduled",
@@ -405,7 +467,7 @@ pub async fn queue_appointment_event(
         &email,
         &format!("Your appointment is {event_label}. {start_at}"),
         &client_name,
-        None,
+        allowed_channels.as_ref(),
     )
     .await
 }
@@ -678,7 +740,11 @@ async fn refresh_occasion_delivery(
 
 #[cfg(test)]
 mod tests {
-    use super::{legacy_occasion_automation_allowed, notification_subject};
+    use super::{
+        automation_is_automatic, is_control_member, legacy_occasion_automation_allowed,
+        notification_subject,
+    };
+    use serde_json::json;
 
     #[test]
     fn managed_mode_disables_legacy_occasion_automation() {
@@ -697,5 +763,25 @@ mod tests {
             notification_subject("appointment_reminder"),
             "Appointment update"
         );
+    }
+
+    #[test]
+    fn manual_automation_never_auto_queues() {
+        assert!(!automation_is_automatic(Some(
+            &json!({"approvalMode":"manual"})
+        )));
+        assert!(automation_is_automatic(Some(
+            &json!({"approvalMode":"automatic"})
+        )));
+        assert!(!automation_is_automatic(None));
+    }
+
+    #[test]
+    fn control_group_assignment_is_deterministic() {
+        assert_eq!(
+            is_control_member("campaign", "client", 2_000),
+            is_control_member("campaign", "client", 2_000)
+        );
+        assert!(!is_control_member("campaign", "client", 0));
     }
 }

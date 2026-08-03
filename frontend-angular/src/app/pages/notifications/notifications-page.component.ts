@@ -1,22 +1,39 @@
 
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
 type InboxMessage = {
   id: string;
-  clientId: string;
-  clientName: string;
+  threadKey: string;
+  clientId?: string;
+  leadId?: string;
+  contactName: string;
   channel: string;
   direction: string;
   status: string;
   subject: string;
   body: string;
   occurredAt: string;
+  assignedTo: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  threadStatus: 'open' | 'assigned' | 'resolved';
+  slaDueAt: string;
+  firstRespondedAt?: string;
+  responseOverdue: boolean;
+  appointmentId?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
 };
+
+type SlaSummary = { openThreads: number; assignedThreads: number; unassignedThreads: number; overdueThreads: number; resolvedToday: number; avgFirstResponseSeconds?: number };
+type MessageTemplate = { id: string; name: string; channel: string; body: string; status: string };
+type VoiceCall = { id: string; direction: string; callerPhone: string; status: string; startedAt?: string; createdAt: string; conversationDurationSeconds: number; recordingAvailable: boolean; recordingConsentStatus: string; callQueue: string; extension: string; voicemail: boolean; aiSummary: string; clientId?: string; leadId?: string; appointmentId?: string; posSaleId?: string };
+type VoiceCallReport = { recentCalls: VoiceCall[]; summary: { totalCalls: number; missedCalls: number; answeredCalls: number; callbackRequired: number; humanHandoffs: number; recordings: number } };
+type StaffParticipant = { userId: string; name: string };
 
 type TeamChatMessage = {
   id: string;
@@ -76,6 +93,7 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private teamSocket: WebSocket | null = null;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   messages: InboxMessage[] = [];
@@ -83,12 +101,21 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   privateConversations: StaffChatConversation[] = [];
   privateMessages: StaffConversationMessage[] = [];
   controlCampaigns: SmsCenterCampaign[] = [];
-  providerStatus: Record<string, boolean> = {};
-  mode: 'center' | 'client' | 'team' | 'private' = 'center';
+  templates: MessageTemplate[] = [];
+  voiceReport: VoiceCallReport = { recentCalls: [], summary: { totalCalls: 0, missedCalls: 0, answeredCalls: 0, callbackRequired: 0, humanHandoffs: 0, recordings: 0 } };
+  participants: StaffParticipant[] = [];
+  sla: SlaSummary = { openThreads: 0, assignedThreads: 0, unassignedThreads: 0, overdueThreads: 0, resolvedToday: 0 };
+  providerStatus: Record<string, any> = {};
+  mode: 'center' | 'client' | 'calls' | 'team' | 'private' = 'center';
+  selectedThreadKey = '';
   selectedClientId = '';
   selectedPrivateConversationId = '';
   channel = 'whatsapp';
   reply = '';
+  threadStatus: 'open' | 'assigned' | 'resolved' = 'open';
+  threadPriority: 'low' | 'normal' | 'high' | 'urgent' = 'normal';
+  threadAssignee = '';
+  handoverNote = '';
   controlChannel = 'sms';
   controlAudience = 'clients_all';
   controlCategory = 'general';
@@ -142,45 +169,55 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
   get threads() {
     const clients = new Map<string, InboxMessage>();
-    for (const message of this.messages) if (!clients.has(message.clientId)) clients.set(message.clientId, message);
+    for (const message of this.messages) if (!clients.has(message.threadKey)) clients.set(message.threadKey, message);
     return [...clients.values()];
   }
 
   get selectedMessages() {
-    return this.messages.filter((message) => message.clientId === this.selectedClientId).slice().reverse();
+    return this.messages.filter((message) => message.threadKey === this.selectedThreadKey).slice().reverse();
   }
 
-  get selectedThread() { return this.threads.find((thread) => thread.clientId === this.selectedClientId); }
+  get selectedThread() { return this.threads.find((thread) => thread.threadKey === this.selectedThreadKey); }
+  get approvedTemplates() { return this.templates.filter((template) => template.status === 'active' && template.channel === this.channel); }
+  get canManageThreads() { return this.auth.hasRole('owner', 'admin', 'manager', 'frontdesk', 'receptionist') || this.auth.hasPermission('notifications.manage', 'front_desk.write'); }
+  get canViewCalls() { return this.auth.hasRole('owner', 'admin', 'manager', 'frontdesk', 'receptionist') || this.auth.hasPermission('ai.concierge.read', 'notifications.read'); }
 
   async reload() {
     this.loading = true;
     this.error = '';
     try {
-      const [inbox, providers, team, control] = await Promise.all([
+      const [inbox, providers, team, control, sla] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<InboxMessage[]>>('/notifications/inbox')),
         firstValueFrom(this.api.get<ApiEnvelope<Record<string, boolean>>>('/notifications/provider-status')),
         firstValueFrom(this.api.get<ApiEnvelope<TeamChatMessage[]>>('/notifications/team-chat')),
         firstValueFrom(this.api.get<ApiEnvelope<SmsCenterSummary>>(`/notifications/sms-center?audience=${this.controlAudience}&channel=${this.controlChannel}`)),
+        firstValueFrom(this.api.get<ApiEnvelope<SlaSummary>>('/notifications/inbox/sla')),
       ]);
       this.messages = Array.isArray(inbox.data) ? inbox.data : [];
       this.providerStatus = providers.data || {};
       this.teamMessages = Array.isArray(team.data) ? team.data : [];
       this.eligibleRecipients = control.data?.eligibleRecipients || 0;
       this.controlCampaigns = Array.isArray(control.data?.campaigns) ? control.data.campaigns : [];
+      this.sla = sla.data || this.sla;
       const routeClientId = this.route.snapshot.queryParamMap.get('clientId') || '';
       if (routeClientId && this.threads.some((thread) => thread.clientId === routeClientId)) {
         this.selectedClientId = routeClientId;
+        this.selectedThreadKey = `client:${routeClientId}`;
         this.mode = 'client';
       }
-      if (!this.threads.some((thread) => thread.clientId === this.selectedClientId)) {
-        this.selectedClientId = this.threads[0]?.clientId || '';
+      if (!this.threads.some((thread) => thread.threadKey === this.selectedThreadKey)) {
+        const first = this.threads[0];
+        this.selectedThreadKey = first?.threadKey || '';
+        this.selectedClientId = first?.clientId || '';
       }
+      this.copySelectedThreadState();
       if (this.canUsePrivateStaffChat) await this.reloadPrivateConversations();
+      await this.reloadCommunicationExtras();
     } catch (error) { this.error = this.message(error, 'Message inbox could not be loaded'); }
     finally { this.loading = false; }
   }
 
-  setMode(mode: 'center' | 'client' | 'team' | 'private') {
+  setMode(mode: 'center' | 'client' | 'calls' | 'team' | 'private') {
     this.mode = mode;
     this.error = '';
     if (mode === 'private' && this.selectedPrivateConversationId) void this.loadPrivateConversation(this.selectedPrivateConversationId);
@@ -251,7 +288,9 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   }
 
   selectThread(thread: InboxMessage) {
-    this.selectedClientId = thread.clientId;
+    this.selectedThreadKey = thread.threadKey;
+    this.selectedClientId = thread.clientId || '';
+    this.copySelectedThreadState();
     if (thread.channel === 'sms' || thread.channel === 'whatsapp') this.channel = thread.channel;
   }
 
@@ -304,11 +343,50 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
     finally { this.busy = false; }
   }
 
+  useTemplate(body: string) { this.reply = body; }
+
+  async suggestReply() {
+    if (!this.selectedThreadKey || this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      const response = await firstValueFrom(this.api.post<ApiEnvelope<{ body: string }>>(`/notifications/inbox/threads/${encodeURIComponent(this.selectedThreadKey)}/suggestion`, {}));
+      this.reply = response.data?.body || '';
+    } catch (error) { this.error = this.message(error, 'No approved response is available'); }
+    finally { this.busy = false; }
+  }
+
+  async updateThread() {
+    if (!this.selectedThreadKey || !this.canManageThreads || this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.api.patch(`/notifications/inbox/threads/${encodeURIComponent(this.selectedThreadKey)}`, {
+        status: this.threadStatus,
+        priority: this.threadPriority,
+        assignedTo: this.threadAssignee || undefined,
+        note: this.handoverNote || undefined,
+      }));
+      this.handoverNote = '';
+      await this.reload();
+    } catch (error) { this.error = this.message(error, 'Conversation assignment could not be updated'); }
+    finally { this.busy = false; }
+  }
+
+  bookSelectedClient() {
+    if (this.selectedClientId) void this.router.navigate(['/appointments'], { queryParams: { clientId: this.selectedClientId, openBooking: '1' } });
+  }
+
+  openLead(leadId?: string) { if (leadId) void this.router.navigate(['/marketing'], { queryParams: { leadId } }); }
+  openAppointment(appointmentId?: string) { if (appointmentId) void this.router.navigate(['/appointments'], { queryParams: { appointmentId } }); }
+  openInvoice(invoiceId?: string) { if (invoiceId) void this.router.navigate(['/billing/invoices', invoiceId]); }
+
   isOwnMessage(message: TeamChatMessage) { return message.senderUserId === this.auth.userId; }
 
   providerReady(channel: string) {
     if (channel === 'whatsapp') return !!this.providerStatus['whatsappDelivery'];
     if (channel === 'email') return !!this.providerStatus['emailDelivery'];
+    if (channel === 'voice') return !!this.providerStatus['voiceDelivery'];
     return !!this.providerStatus['smsDelivery'];
   }
 
@@ -320,6 +398,34 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
   private async reloadTeamChat() {
     const response = await firstValueFrom(this.api.get<ApiEnvelope<TeamChatMessage[]>>('/notifications/team-chat'));
     this.teamMessages = Array.isArray(response.data) ? response.data : [];
+  }
+
+  formatDuration(seconds?: number) {
+    const value = Math.max(0, Number(seconds || 0));
+    return `${Math.floor(value / 60)}m ${value % 60}s`;
+  }
+
+  maskedPhone(value: string) {
+    const digits = String(value || '').replace(/\D/g, '');
+    return digits ? `••••${digits.slice(-4)}` : 'Unknown caller';
+  }
+
+  private copySelectedThreadState() {
+    const thread = this.selectedThread;
+    this.threadStatus = thread?.threadStatus || 'open';
+    this.threadPriority = thread?.priority || 'normal';
+    this.threadAssignee = thread?.assignedTo || '';
+  }
+
+  private async reloadCommunicationExtras() {
+    const [templates, participants, calls] = await Promise.allSettled([
+      firstValueFrom(this.api.get<ApiEnvelope<MessageTemplate[]>>('/message-templates')),
+      firstValueFrom(this.api.get<ApiEnvelope<StaffParticipant[]>>('/team-chat/participants')),
+      firstValueFrom(this.api.get<ApiEnvelope<VoiceCallReport>>('/ai/concierge/calls/report')),
+    ]);
+    if (templates.status === 'fulfilled') this.templates = Array.isArray(templates.value.data) ? templates.value.data : [];
+    if (participants.status === 'fulfilled') this.participants = Array.isArray(participants.value.data) ? participants.value.data : [];
+    if (calls.status === 'fulfilled' && calls.value.data) this.voiceReport = calls.value.data;
   }
 
   private async reloadPrivateConversations() {

@@ -49,12 +49,15 @@ import {
   CustomerWaitlistEntry,
   FirebaseAuthPayload,
   JoinWaitlistPayload,
+  KioskContext,
+  KioskGuestSession,
   LiveConsultationRequest,
   LiveConsultationResponse,
   OtpRequestResponse,
   ClaimGiftCardPayload,
   PurchaseGiftCardPayload,
   PurchasePackagePayload,
+  PurchaseProductPayload,
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
   RedeemLoyaltyPayload,
@@ -63,7 +66,8 @@ import {
   SearchBusinessesParams,
   ServiceItem,
   StaffMember,
-  BusinessReview
+  BusinessReview,
+  WebstoreProduct
 } from "./api.types";
 
 type ApiResponse<T> = T | ApiEnvelope<T>;
@@ -95,6 +99,12 @@ export class CustomerApiService {
   getPublicBusinessServices(slug: string): Observable<ServiceItem[]> {
     return this.http.get<ApiResponse<ServiceItem[] | ApiList<ServiceItem>>>(`${this.baseUrl}/marketplace/businesses/${encodeURIComponent(slug)}/services`).pipe(
       map((response) => this.unwrapList<ServiceItem>(response))
+    );
+  }
+
+  getPublicBusinessProducts(slug: string): Observable<WebstoreProduct[]> {
+    return this.http.get<ApiResponse<WebstoreProduct[] | ApiList<WebstoreProduct>>>(`${this.baseUrl}/marketplace/businesses/${encodeURIComponent(slug)}/products`).pipe(
+      map((response) => this.unwrapList<WebstoreProduct>(response))
     );
   }
 
@@ -297,7 +307,10 @@ export class CustomerApiService {
   }
 
   createBooking(payload: CreateBookingPayload): Observable<Booking> {
-    return this.http.post<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings`, payload).pipe(
+    return this.http.post<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings`, {
+      ...payload,
+      idempotencyKey: payload.idempotencyKey || this.requestKey("booking")
+    }).pipe(
       map((response) => this.unwrap<Booking>(response))
     );
   }
@@ -466,6 +479,71 @@ export class CustomerApiService {
     return this.http.post<ApiResponse<CustomerCommerceCheckout>>(`${this.baseUrl}/customer/packages`, {
       ...payload,
       idempotencyKey: payload.idempotencyKey || this.requestKey("package")
+    }).pipe(
+      map((response) => this.unwrap<CustomerCommerceCheckout>(response))
+    );
+  }
+
+  activateKiosk(activationCode: string): Observable<{ deviceId: string; activated: boolean }> {
+    return this.http.post<ApiResponse<{ deviceId: string; activated: boolean }>>(`${this.baseUrl}/public/kiosk/activate`, { activationCode }, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  getKioskContext(): Observable<KioskContext> {
+    return this.http.get<ApiResponse<KioskContext>>(`${this.baseUrl}/public/kiosk/context`, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  switchKioskBranch(branchId: string): Observable<KioskContext> {
+    return this.http.post<ApiResponse<KioskContext>>(`${this.baseUrl}/public/kiosk/branch`, { branchId }, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  identifyKioskBooking(appointmentId: string, phone: string): Observable<KioskGuestSession> {
+    return this.http.post<ApiResponse<KioskGuestSession>>(`${this.baseUrl}/public/kiosk/identify`, { appointmentId, phone }, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  getKioskSession(): Observable<KioskGuestSession> {
+    return this.http.get<ApiResponse<KioskGuestSession>>(`${this.baseUrl}/public/kiosk/session`, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  kioskCheckIn(payload: object): Observable<Record<string, unknown>> {
+    return this.http.post<ApiResponse<Record<string, unknown>>>(`${this.baseUrl}/public/kiosk/check-in`, payload, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  completeKioskProfile(payload: object): Observable<Record<string, boolean>> {
+    return this.http.patch<ApiResponse<Record<string, boolean>>>(`${this.baseUrl}/public/kiosk/profile`, payload, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  requestKioskAddOn(addOnId: string): Observable<Record<string, unknown>> {
+    return this.http.post<ApiResponse<Record<string, unknown>>>(`${this.baseUrl}/public/kiosk/add-on-request`, { addOnId, idempotencyKey: this.requestKey("kiosk-add-on") }, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  getKioskCheckout(): Observable<Record<string, unknown>> {
+    return this.http.get<ApiResponse<Record<string, unknown>>>(`${this.baseUrl}/public/kiosk/checkout`, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  getKioskFormToken(definitionId: string): Observable<{ token: string; endpoint: string }> {
+    return this.http.post<ApiResponse<{ token: string; endpoint: string }>>(`${this.baseUrl}/public/kiosk/forms/${encodeURIComponent(definitionId)}/token`, {}, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  getPublicKioskForm(endpoint: string, token: string): Observable<any> {
+    return this.http.get<ApiResponse<any>>(endpoint, { headers: { "x-public-booking-token": token } }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  submitPublicKioskForm(endpoint: string, token: string, payload: object): Observable<any> {
+    return this.http.post<ApiResponse<any>>(`${endpoint}/submissions`, payload, { headers: { "x-public-booking-token": token } }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  resetKiosk(): Observable<{ reset: boolean }> {
+    return this.http.post<ApiResponse<{ reset: boolean }>>(`${this.baseUrl}/public/kiosk/reset`, {}, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  deactivateKiosk(pin: string): Observable<{ deactivated: boolean }> {
+    return this.http.post<ApiResponse<{ deactivated: boolean }>>(`${this.baseUrl}/public/kiosk/deactivate`, { pin }, { withCredentials: true }).pipe(map((response) => this.unwrap(response)));
+  }
+
+  buyProduct(payload: PurchaseProductPayload): Observable<CustomerCommerceCheckout> {
+    return this.http.post<ApiResponse<CustomerCommerceCheckout>>(`${this.baseUrl}/customer/products/checkout`, {
+      ...payload,
+      idempotencyKey: payload.idempotencyKey || this.requestKey("product")
     }).pipe(
       map((response) => this.unwrap<CustomerCommerceCheckout>(response))
     );

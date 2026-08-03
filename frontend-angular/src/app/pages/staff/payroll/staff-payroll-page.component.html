@@ -17,20 +17,21 @@
 
   @if (activeTab !== 'setup') {
   <section class="command-bar" [attr.aria-label]="'staff.ui.f932704215' | translate">
-    <label><span>{{ 'staff.ui.f5eda1b11a' | translate }}</span><select [(ngModel)]="cycle" disabled><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option></select></label>
+    <label><span>{{ 'staff.ui.f5eda1b11a' | translate }}</span><select [(ngModel)]="cycle" (ngModelChange)="changePeriod()"><option value="monthly">{{ 'staff.ui.d31edb7b8a' | translate }}</option><option value="off_cycle">Off-cycle</option><option value="final_settlement">Final settlement</option></select></label>
     <label><span>{{ 'staff.ui.1627510b24' | translate }}</span><input [value]="branchLabel" disabled /></label>
-    <label><span>{{ 'staff.ui.082bc378cd' | translate }}</span><select [(ngModel)]="month" (ngModelChange)="changePeriod()">@for (label of months; track label; let index = $index) {
+    @if (cycle === 'monthly') { <label><span>{{ 'staff.ui.082bc378cd' | translate }}</span><select [(ngModel)]="month" (ngModelChange)="changePeriod()">@for (label of months; track label; let index = $index) {
     <option [ngValue]="index + 1">{{ label }}</option>
   }</select></label>
   <label><span>{{ 'staff.ui.879e32326c' | translate }}</span><select [(ngModel)]="year" (ngModelChange)="changePeriod()">@for (option of years; track option) {
   <option [ngValue]="option">{{ option }}</option>
-}</select></label>
+}</select></label> } @else { <label><span>Period start</span><as-date-picker [(value)]="periodStart" ariaLabel="Payroll period start" (valueChange)="changePeriod()"></as-date-picker></label><label><span>Period end</span><as-date-picker [(value)]="periodEnd" ariaLabel="Payroll period end" (valueChange)="changePeriod()"></as-date-picker></label> }
 <label><span>{{ 'staff.ui.a3c686e711' | translate }}</span><select [(ngModel)]="category"><option value="">{{ 'staff.ui.060be00f4f' | translate }}</option>@for (option of categoryOptions; track option) {
 <option [value]="option">{{ option }}</option>
 }</select></label>
 <label class="employee-filter"><span>{{ 'staff.ui.079711ea16' | translate }}</span><select [(ngModel)]="staffId" (ngModelChange)="changePeriod()"><option value="">{{ 'staff.ui.c9decc4481' | translate }}</option>@for (employee of staff; track employee) {
 <option [value]="employee.id">{{ staffLabel(employee) }}</option>
 }</select></label>
+@if (cycle !== 'monthly' && salaryMode === 'generate') { <label><span>Reason</span><input maxlength="500" [(ngModel)]="cycleReason" placeholder="Required" /></label> }
 <label><span>{{ 'staff.ui.a7b93d2128' | translate }}</span><select [(ngModel)]="salaryMode" (ngModelChange)="changeMode()"><option value="preview">{{ 'staff.ui.c3f226b359' | translate }}</option><option value="generate">{{ 'staff.ui.b814a72f17' | translate }}</option><option value="history">{{ 'staff.ui.1448a25aed' | translate }}</option></select></label>
 <div class="command-actions">
   <button type="button" class="icon-button" [attr.title]="'staff.ui.56e3badc4e' | translate" [attr.aria-label]="'staff.ui.f4c5e6cb83' | translate" [disabled]="loading" (click)="refresh()"><i class="bi bi-arrow-clockwise"></i></button>

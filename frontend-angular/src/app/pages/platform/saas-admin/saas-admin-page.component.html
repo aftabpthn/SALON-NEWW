@@ -131,8 +131,8 @@
 @if (tab === 'salons' && isPlatform) {
   <section class="panel">
     <header class="panel-header toolbar-header"><h2>Salons</h2><div><input class="search-input" [(ngModel)]="search" placeholder="Search salons" /><button class="primary-button" type="button" (click)="openOnboarding()"><i class="bi bi-plus-lg"></i> Onboard salon</button></div></header>
-    <div class="table-scroll"><table><thead><tr><th>Salon</th><th>Subscription</th><th>Plan</th><th>Branches</th><th>Admins</th><th>Staff</th><th>Status</th></tr></thead><tbody>@for (row of filteredTenants; track row) {
-    <tr><td><strong>{{ row.name }}</strong><small>{{ row.slug || row.id }}</small></td><td><span class="status-chip" [attr.data-status]="row.subscriptionStatus">{{ label(row.subscriptionStatus) }}</span><small>Ends {{ date(row.subscriptionPeriodEnd) }}</small></td><td>{{ row.subscriptionPlan || 'No plan' }}</td><td>{{ row.branchCount }} active<small>{{ row.subBranchCount }} sub-branches{{ row.centralBranchName ? ' · Central ' + row.centralBranchName : '' }}</small></td><td>{{ row.ownerCount }} owner · {{ row.adminCount }} admin<small>{{ row.branchAdminCount }} branch admins</small></td><td>{{ row.staffCount }} staff<small>{{ row.activeUserCount }} active users</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span></td></tr>
+    <div class="table-scroll"><table><thead><tr><th>Salon</th><th>Subscription</th><th>Plan</th><th>Branches</th><th>Admins</th><th>Staff</th><th>Status</th><th></th></tr></thead><tbody>@for (row of filteredTenants; track row) {
+    <tr><td><strong>{{ row.name }}</strong><small>{{ row.slug || row.id }} · {{ label(row.businessType) }}</small></td><td><span class="status-chip" [attr.data-status]="row.subscriptionStatus">{{ label(row.subscriptionStatus) }}</span><small>Ends {{ date(row.subscriptionPeriodEnd) }}</small></td><td>{{ row.subscriptionPlan || 'No plan' }}</td><td>{{ row.branchCount }} active<small>{{ row.subBranchCount }} sub-branches{{ row.centralBranchName ? ' · Central ' + row.centralBranchName : '' }}</small></td><td>{{ row.ownerCount }} owner · {{ row.adminCount }} admin<small>{{ row.branchAdminCount }} branch admins</small></td><td>{{ row.staffCount }} staff<small>{{ row.activeUserCount }} active users</small></td><td><span class="status-chip" [attr.data-status]="row.status">{{ label(row.status) }}</span><small>@if (row.gracePeriodEndsAt) { Grace to {{ date(row.gracePeriodEndsAt) }} }</small></td><td><button class="utility-button" type="button" (click)="openTenantControl(row)" aria-label="Open tenant control plane"><i class="bi bi-sliders"></i></button></td></tr>
   }</tbody></table>@if (!filteredTenants.length) {
   <div class="empty-state">No salons found</div>
 }</div>
@@ -194,14 +194,14 @@
   <section class="panel">
     <header class="panel-header"><h2>Usage</h2></header>
     @if (!isPlatform && tenantUsage) {
-      <div class="usage-list tenant-usage"><div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div><div><span>API calls</span><strong>{{ tenantUsage.apiCalls }}</strong></div><div><span>Messages</span><strong>{{ tenantUsage.messages }}</strong></div><div><span>Storage</span><strong>{{ tenantUsage.storageMb }} MB</strong></div></div>
+      <div class="usage-list tenant-usage"><div><span>Branches</span><strong>{{ tenantUsage.branchCount }}</strong></div><div><span>Active users</span><strong>{{ tenantUsage.activeUserCount }}</strong></div><div><span>Appointments</span><strong>{{ tenantUsage.appointmentCount }}</strong></div><div><span>API calls</span><strong>{{ tenantUsage.apiCalls }}</strong></div><div><span>Messages</span><strong>{{ tenantUsage.messages }}</strong></div><div><span>Storage</span><strong>{{ tenantUsage.storageMb }} MB</strong></div><div><span>Provider cost</span><strong>{{ money(tenantUsage.providerCostPaise) }}</strong></div><div><span>Communication cost</span><strong>{{ money(tenantUsage.communicationCostPaise) }}</strong></div><div><span>Quota overage</span><strong>{{ money(tenantUsage.quotaOveragePaise) }}</strong></div></div>
     }
     @if (!isPlatform && !tenantUsage) {
       <div class="empty-state">No active usage period</div>
     }
     @if (isPlatform) {
-      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Branches</th><th>Users</th><th>Appointments</th><th>API calls</th><th>Messages</th><th>Storage</th></tr></thead><tbody>@for (row of usageRows; track row) {
-      <tr><td>{{ row.subscription.tenantName }}</td><td>{{ row.subscription.planName }}</td><td>{{ row.usage.branchCount }}</td><td>{{ row.usage.activeUserCount }}</td><td>{{ row.usage.appointmentCount }}</td><td>{{ row.usage.apiCalls }}</td><td>{{ row.usage.messages }}</td><td>{{ row.usage.storageMb }} MB</td></tr>
+      <div class="table-scroll"><table><thead><tr><th>Tenant</th><th>Plan</th><th>Branches</th><th>Users</th><th>Appointments</th><th>API calls</th><th>Messages</th><th>Storage</th><th>Provider cost</th><th>Comms cost</th><th>Overage</th></tr></thead><tbody>@for (row of usageRows; track row) {
+      <tr><td>{{ row.subscription.tenantName }}</td><td>{{ row.subscription.planName }}</td><td>{{ row.usage.branchCount }}</td><td>{{ row.usage.activeUserCount }}</td><td>{{ row.usage.appointmentCount }}</td><td>{{ row.usage.apiCalls }}</td><td>{{ row.usage.messages }}</td><td>{{ row.usage.storageMb }} MB</td><td>{{ money(row.usage.providerCostPaise) }}</td><td>{{ money(row.usage.communicationCostPaise) }}</td><td>{{ money(row.usage.quotaOveragePaise) }}</td></tr>
     }</tbody></table>@if (!usageRows.length) {
     <div class="empty-state">No usage periods yet</div>
   }</div>
@@ -273,6 +273,51 @@
       <label>Email<input type="email" [(ngModel)]="tenantAdminDraft.email" name="adminEmail" required autocomplete="off" /></label>
       <label>Temporary password<input type="password" [(ngModel)]="tenantAdminDraft.initialPassword" name="adminPassword" required minlength="12" maxlength="128" autocomplete="new-password" /><small>Tenant Admin receives every active branch and must change this password after first login.</small></label>
     </div></section></div><footer class="drawer-footer"><button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button><button class="primary-button" type="submit" [disabled]="busy">{{ busy ? 'Creating…' : 'Create Tenant Admin' }}</button></footer></form>
+  </aside>
+}
+
+@if (drawer === 'tenantControl' && isPlatform && selectedTenant && tenantControl) {
+  <aside class="drawer detail-drawer" role="dialog" aria-modal="true" aria-label="Tenant control plane">
+    <header class="drawer-header"><div><h2>{{ selectedTenant.name }}</h2><span class="status-chip" [attr.data-status]="tenantControl.tenant.status">{{ label(tenantControl.tenant.status) }}</span></div><button class="utility-button" type="button" (click)="closeDrawer()"><i class="bi bi-x-lg"></i></button></header>
+    <div class="drawer-body">
+      <section class="form-section">
+        <h3>Lifecycle</h3>
+        <div class="field-grid">
+          <label>Status<select [(ngModel)]="lifecycleDraft.status"><option value="active">Active</option><option value="grace">Grace period</option><option value="suspended">Suspended</option></select></label>
+          @if (lifecycleDraft.status === 'grace') { <label>Grace ends<as-date-picker [(value)]="lifecycleDraft.graceDate" ariaLabel="Grace period end date"></as-date-picker></label><label>Time<input type="time" [(ngModel)]="lifecycleDraft.graceTime" /></label> }
+          <label class="wide-field">Reason<input [(ngModel)]="lifecycleDraft.reason" minlength="3" maxlength="240" /></label>
+        </div>
+        <button class="primary-button section-action" type="button" [disabled]="busy || lifecycleDraft.reason.trim().length < 3 || (lifecycleDraft.status === 'grace' && !lifecycleDraft.graceDate)" (click)="saveTenantLifecycle()">Save lifecycle</button>
+      </section>
+
+      <section class="form-section">
+        <h3>Feature overrides</h3>
+        @if (tenantControl.featureOverrides.length) { <div class="control-records">@for (row of tenantControl.featureOverrides; track row.featureKey) { <button type="button" (click)="editTenantFeature(row)"><strong>{{ row.featureKey }}</strong><span>{{ row.enabled ? 'Enabled' : 'Blocked' }} · v{{ row.version }}</span></button> }</div> }
+        <div class="field-grid">
+          <label>Feature key<input [(ngModel)]="featureDraft.key" maxlength="80" /></label>
+          <label>Decision<select [(ngModel)]="featureDraft.enabled"><option [ngValue]="true">Enable</option><option [ngValue]="false">Block</option></select></label>
+          <label>Expires<as-date-picker [(value)]="featureDraft.expiresDate" ariaLabel="Feature override expiry date"></as-date-picker></label>
+          @if (featureDraft.expiresDate) { <label>Time<input type="time" [(ngModel)]="featureDraft.expiresTime" /></label> }
+          <label class="wide-field">Reason<input [(ngModel)]="featureDraft.reason" minlength="3" maxlength="240" /></label>
+        </div>
+        <button class="primary-button section-action" type="button" [disabled]="busy || !featureDraft.key.trim() || featureDraft.reason.trim().length < 3" (click)="saveTenantFeature()">Save feature override</button>
+      </section>
+
+      <section class="form-section">
+        <h3>Usage quotas and costs</h3>
+        @if (tenantControl.usageQuotas.length) { <div class="control-records">@for (row of tenantControl.usageQuotas; track row.id) { <button type="button" (click)="editTenantQuota(row)"><strong>{{ label(row.metric) }}</strong><span>{{ row.includedQuantity }} included · {{ row.hardLimitQuantity ?? 'No hard limit' }} · {{ money(row.overageUnitPaise) }}/unit</span></button> }</div> }
+        <div class="field-grid">
+          <label>Subscription<select [(ngModel)]="quotaDraft.subscriptionId"><option value="">Select subscription</option>@for (row of subscriptions; track row.id) { @if (row.tenantId === selectedTenant.id) { <option [value]="row.id">{{ row.planName }} · {{ label(row.status) }}</option> } }</select></label>
+          <label>Metric<select [(ngModel)]="quotaDraft.metric">@for (metric of usageMetrics; track metric) { <option [value]="metric">{{ label(metric) }}</option> }</select></label>
+          <label>Included<input type="number" min="0" step="1" [(ngModel)]="quotaDraft.includedQuantity" /></label>
+          <label>Hard limit<input type="number" min="0" step="1" [(ngModel)]="quotaDraft.hardLimitQuantity" placeholder="No limit" /></label>
+          <label>Overage per unit<input type="number" min="0" step="0.01" [(ngModel)]="quotaDraft.overageRupees" /></label>
+        </div>
+        <button class="primary-button section-action" type="button" [disabled]="busy || !quotaDraft.subscriptionId || quotaDraft.includedQuantity === ''" (click)="saveTenantQuota()">Save usage quota</button>
+      </section>
+
+      <section class="form-section"><h3>Locations</h3><div class="detail-grid">@for (location of tenantControl.locations; track location.id) { <div><dt>{{ location.name }}</dt><dd>{{ location.code }} · {{ location.timeZone }} · {{ location.currencyCode }}</dd></div> } @empty { <span>No locations yet</span> }</div></section>
+    </div>
   </aside>
 }
 

@@ -53,6 +53,7 @@ pub struct InventoryRecord {
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
     pub center_available: bool,
+    pub online_sale_enabled: bool,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -318,6 +319,7 @@ pub struct CreateInventory<'a> {
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
     pub center_available: bool,
+    pub online_sale_enabled: bool,
     pub active: bool,
 }
 
@@ -347,6 +349,7 @@ pub struct UpdateInventory<'a> {
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
     pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
     pub active: Option<bool>,
 }
 
@@ -929,15 +932,15 @@ pub async fn create(
           tenant_id, branch_id, sku, name, category, subcategory, brand, product_usage,
           unit, package_unit, units_per_package, stock_quantity, reorder_point, alert_level,
           desired_level, order_level, safety_stock_level, unit_cost_paise, retail_price_paise,
-          hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, center_available, active
+          hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, center_available, online_sale_enabled, active
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
         RETURNING
           id,tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,
           package_unit,units_per_package,stock_quantity,reorder_point,alert_level,desired_level,
           order_level,safety_stock_level,unit_cost_paise,retail_price_paise,hsn_code,gst_percent,barcode,
           CASE WHEN barcode='' THEN ARRAY[]::TEXT[] ELSE ARRAY[barcode]::TEXT[] END AS barcodes,
-          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
+          batch_tracked,dual_use_stock,center_available,online_sale_enabled,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -965,6 +968,7 @@ pub async fn create(
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
     .bind(input.center_available)
+    .bind(input.online_sale_enabled)
     .bind(input.active)
     .fetch_one(&mut **tx)
     .await
@@ -1000,7 +1004,8 @@ pub async fn update(
           batch_tracked = COALESCE($23, batch_tracked),
           dual_use_stock = COALESCE($24, dual_use_stock),
           center_available = COALESCE($25, center_available),
-          active = COALESCE($26, active),
+          online_sale_enabled = COALESCE($26, online_sale_enabled),
+          active = COALESCE($27, active),
           updated_at = NOW()
         WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
         RETURNING
@@ -1010,7 +1015,7 @@ pub async fn update(
           COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
             FROM inventory_item_barcodes entry WHERE entry.tenant_id=$1 AND entry.branch_id=$2
               AND entry.inventory_item_id=inventory_items.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
-          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
+          batch_tracked,dual_use_stock,center_available,online_sale_enabled,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -1038,6 +1043,7 @@ pub async fn update(
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
     .bind(input.center_available)
+    .bind(input.online_sale_enabled)
     .bind(input.active)
     .fetch_optional(&mut **tx)
     .await
@@ -2281,25 +2287,79 @@ pub async fn add_kit_ledger(
         .bind(unit_cost_paise).bind(stock_after_quantity).bind(assembly_id).fetch_one(&mut **tx).await
 }
 
-pub async fn delete(
+pub async fn discontinue(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
     id: &str,
-) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        DELETE FROM inventory_items
-        WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
-        "#,
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(id)
-    .execute(db)
-    .await?;
+    replacement_id: Option<&str>,
+    reason: &str,
+    actor: &str,
+) -> Result<Value, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let stock = sqlx::query_scalar::<_, i32>("SELECT stock_quantity FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_one(&mut *tx).await?;
+    if stock != 0 {
+        return Err(sqlx::Error::Protocol(
+            "product stock must be zero before discontinuation".into(),
+        ));
+    }
+    let blocked = sqlx::query_scalar::<_, bool>(r#"SELECT
+      EXISTS(SELECT 1 FROM purchase_order_lines line JOIN purchase_orders po ON po.id=line.purchase_order_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.inventory_item_id=$3 AND po.status IN ('draft','pending_approval','approved','partially_received'))
+      OR EXISTS(SELECT 1 FROM inventory_transfer_lines line JOIN inventory_transfers transfer ON transfer.id=line.transfer_id WHERE line.tenant_id=$1 AND (line.source_inventory_item_id=$3 OR line.destination_inventory_item_id=$3) AND transfer.status='in_transit')
+      OR EXISTS(SELECT 1 FROM inventory_batches batch WHERE batch.tenant_id=$1 AND batch.branch_id=$2 AND batch.inventory_item_id=$3 AND batch.quantity>0)
+      OR EXISTS(SELECT 1 FROM inventory_backbar_containers container WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.inventory_item_id=$3 AND container.remaining_quantity>0)"#)
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_one(&mut *tx).await?;
+    if blocked {
+        return Err(sqlx::Error::Protocol(
+            "product has an open purchase order, in-transit transfer, batch balance, or container balance".into(),
+        ));
+    }
+    if let Some(replacement) = replacement_id {
+        let valid = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)")
+            .bind(tenant_id).bind(branch_id).bind(replacement).fetch_one(&mut *tx).await?;
+        if !valid || replacement == id {
+            return Err(sqlx::Error::Protocol(
+                "replacement product is invalid".into(),
+            ));
+        }
+    }
+    sqlx::query("UPDATE inventory_items SET active=FALSE,center_available=FALSE,online_sale_enabled=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).execute(&mut *tx).await?;
+    let event = sqlx::query_scalar::<_, Value>("INSERT INTO inventory_product_lifecycle_events(tenant_id,branch_id,inventory_item_id,event_type,replacement_inventory_item_id,reason,actor_user_id) VALUES($1,$2,$3,'discontinued',$4,$5,$6) RETURNING jsonb_build_object('id',id,'eventType',event_type,'replacementInventoryItemId',replacement_inventory_item_id,'reason',reason,'actorUserId',actor_user_id,'createdAt',created_at)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(replacement_id).bind(reason).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(event)
+}
 
-    Ok(result.rows_affected() > 0)
+pub async fn reactivate(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    reason: &str,
+    actor: &str,
+) -> Result<Value, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let changed = sqlx::query("UPDATE inventory_items SET active=TRUE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE")
+        .bind(tenant_id).bind(branch_id).bind(id).execute(&mut *tx).await?.rows_affected();
+    if changed != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    let event = sqlx::query_scalar::<_, Value>("INSERT INTO inventory_product_lifecycle_events(tenant_id,branch_id,inventory_item_id,event_type,reason,actor_user_id) VALUES($1,$2,$3,'reactivated',$4,$5) RETURNING jsonb_build_object('id',id,'eventType',event_type,'replacementInventoryItemId',replacement_inventory_item_id,'reason',reason,'actorUserId',actor_user_id,'createdAt',created_at)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(reason).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(event)
+}
+
+pub async fn lifecycle_events(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',event.id,'eventType',event.event_type,'replacementInventoryItemId',event.replacement_inventory_item_id,'replacementProductName',replacement.name,'reason',event.reason,'actorUserId',event.actor_user_id,'createdAt',event.created_at) FROM inventory_product_lifecycle_events event LEFT JOIN inventory_items replacement ON replacement.id=event.replacement_inventory_item_id WHERE event.tenant_id=$1 AND event.branch_id=$2 AND event.inventory_item_id=$3 ORDER BY event.created_at DESC")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_all(db).await
 }
 
 fn select_sql(where_clause: &str) -> String {
@@ -2313,7 +2373,7 @@ fn select_sql(where_clause: &str) -> String {
           COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
             FROM inventory_item_barcodes entry WHERE entry.tenant_id=item.tenant_id
               AND entry.branch_id=item.branch_id AND entry.inventory_item_id=item.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
-          item.batch_tracked,item.dual_use_stock,item.center_available,item.active,item.created_at,item.updated_at
+          item.batch_tracked,item.dual_use_stock,item.center_available,item.online_sale_enabled,item.active,item.created_at,item.updated_at
         FROM inventory_items item
         {where_clause}
         "#,

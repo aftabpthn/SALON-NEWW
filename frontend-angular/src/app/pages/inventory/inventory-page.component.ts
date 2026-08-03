@@ -13,10 +13,10 @@ import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from
 import { ageingRows, AuditDetails, csvContent, nearExpiryRows, supplierPerformanceRows, traceabilityRows, varianceRows } from './inventory-report-model';
 
 type Tab = 'products' | 'batches' | 'ledger' | 'reorder' | 'valuation' | 'reports' | 'suppliers' | 'orders' | 'grn' | 'returns' | 'payables' | 'transfers';
-type ReportView = 'ageing' | 'expiry' | 'traceability' | 'variance' | 'suppliers';
+type ReportView = 'stock' | 'ageing' | 'cogs' | 'expiry' | 'traceability' | 'variance' | 'suppliers' | 'catalog';
 type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'orderHistory' | 'grn' | 'return' | 'quarantine' | 'payment' | 'transfer' | null;
 type Supplier = { id: string; code: string; name: string; gstin: string; contactName: string; phone: string; email: string; address: string; paymentTermsDays: number; active: boolean };
-type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning' };
+type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning'; purchaseOrderSettings:{ bulkRaiseEnabled:boolean }; labelSettings:{ priceCaption:string; showName:boolean; showPrice:boolean; showSku:boolean; showBatch:boolean; showExpiry:boolean; widthMm:number; heightMm:number; columns:number } };
 type SupplierGovernance = {
   priceLists: Array<{ id:string; supplierId:string; productName:string; unitCostPaise:number; discountBps:number; gstPercent:number; effectiveFrom:string }>;
   terms: Array<{ supplierId:string; inventoryItemId:string; productName?:string; vendorPartNumber:string; purchaseUnit:string; conversionQuantity:number; centerAvailable:boolean; leadTimeDays:number; minimumOrderQuantity:number; packSize:number }>;
@@ -27,7 +27,7 @@ type SupplierGovernance = {
   replacementOptions: Array<{ supplierId:string; inventoryItemId:string; productName:string; replacementSupplierId:string; replacementSupplierName:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number; unitCostPaise?:number; currentUnitCostPaise?:number; priceDifferencePaise?:number }>;
 };
 type SupplierDraft = Omit<Supplier, 'paymentTermsDays'> & { paymentTermsDays: number | null };
-type Item = { id: string; sku: string; name: string; category: string; subcategory:string; brand: string; productUsage:'retail'|'consumable'|'dual_use'; unit: string; packageUnit: string; unitsPerPackage: number; stockQuantity: number; reorderPoint: number; alertLevel:number; desiredLevel:number; orderLevel:number; safetyStockLevel:number; unitCostPaise: number; retailPricePaise: number; hsnCode: string; gstPercent: number; barcode: string; barcodes:string[]; batchTracked: boolean; dualUseStock: boolean; centerAvailable:boolean; active: boolean; createdAt: string; updatedAt?: string };
+type Item = { id: string; sku: string; name: string; category: string; subcategory:string; brand: string; productUsage:'retail'|'consumable'|'dual_use'; unit: string; packageUnit: string; unitsPerPackage: number; stockQuantity: number; reorderPoint: number; alertLevel:number; desiredLevel:number; orderLevel:number; safetyStockLevel:number; unitCostPaise: number; retailPricePaise: number; hsnCode: string; gstPercent: number; barcode: string; barcodes:string[]; batchTracked: boolean; dualUseStock: boolean; centerAvailable:boolean; onlineSaleEnabled:boolean; active: boolean; createdAt: string; updatedAt?: string };
 type InventoryMasterData = { values:Array<{ id:string; kind:string; code:string; label:string; parentCode:string; active:boolean }>; units:Array<{ code:string; label:string; dimension:string; active:boolean }> };
 type KitComponent = { componentInventoryItemId: string; componentName: string; quantity: number };
 type KitOperation = { id:string; kitInventoryItemId:string; operationType:'bundle'|'unbundle'|'receipt_unbundle'; quantity:number; comments:string; actorUserId:string; sourceReceiptId?:string; sourceReceiptLineId?:string; unitCostPaise:number; stockAfterQuantity:number; createdAt:string };
@@ -43,6 +43,7 @@ type Product360 = {
   clientUsage: Array<{ clientId:string; clientName:string; quantity:number; visits:number; lastUsedAt:string }>;
   entityLedger: Array<{ id:string; branchId:string; branchName:string; movementType:string; quantityDelta:number; unitCostPaise:number; stockBeforeQuantity:number; stockAfterQuantity:number; recordedStockAfterQuantity?:number; source:string; sourceType:string; sourceId:string; actorUserId?:string; clientId?:string; appointmentId?:string; serviceId?:string; staffId?:string; backbarContainerId?:string; batchAllocations:Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }>; provenanceComplete:boolean; snapshotStatus:'verified'|'reconstructed'|'mismatch'; createdAt:string }>;
   margin: { revenuePaise?:number; costPaise?:number; marginPaise?:number };
+  lifecycleEvents:Array<{ id:string; eventType:string; replacementInventoryItemId?:string; replacementProductName?:string; reason:string; actorUserId:string; createdAt:string }>;
 };
 type Order = { id: string; orderNumber: string; supplierId: string; supplierName: string; status: string; expectedDate?: string; notes: string; shippingPaise: number; handlingPaise: number; totalPaise: number; lineCount: number; createdAt: string };
 type OrderLine = { id: string; inventoryItemId: string; itemName: string; packageUnit: string; stockUnit: string; unitsPerPackage: number; quantity: number; receivedQuantity: number; retailQuantity:number; consumableQuantity:number; retailReceivedQuantity:number; consumableReceivedQuantity:number; unitCostPaise: number; discountBps: number; discountPaise: number; gstPercent: number; totalPaise: number };
@@ -124,7 +125,7 @@ export class InventoryPageComponent implements OnInit {
   error = '';
   notice = '';
   suppliers: Supplier[] = [];
-  inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block' };
+  inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block', purchaseOrderSettings:{ bulkRaiseEnabled:true }, labelSettings:{ priceCaption:'MRP', showName:true, showPrice:true, showSku:true, showBatch:true, showExpiry:true, widthMm:76, heightMm:32, columns:5 } };
   private readonly inventoryPageSize = 50;
   private reloadRequestId = 0;
   private readonly referenceCacheMs = 30_000;
@@ -171,8 +172,10 @@ export class InventoryPageComponent implements OnInit {
   supplierPriceDraft = { inventoryItemId: '', unitCostRupees: null as number | null, discountPercent:null as number|null, gstPercent:null as number|null, effectiveFrom: new Date().toISOString().slice(0,10) };
   supplierCommunicationDraft = { channel: 'email', destination: '', subject: '', message: '' };
   items: Item[] = [];
+  selectedProductIds = new Set<string>();
   masterData: InventoryMasterData = { values:[], units:[] };
   orders: Order[] = [];
+  selectedOrderIds = new Set<string>();
   orderHistoryOrder: Order | null = null;
   orderEvents: OrderEvent[] = [];
   orderQuery = '';
@@ -207,7 +210,7 @@ export class InventoryPageComponent implements OnInit {
   ledgerQuery = '';
   reorderPriority = '';
   valuationAsOf = new Date().toISOString().slice(0, 10);
-  reportView: ReportView = 'ageing';
+  reportView: ReportView = 'stock';
   reportAsOf = new Date().toISOString().slice(0, 10);
   reportExpiryDays = 30;
   reportAudit: AuditDetails | null = null;
@@ -289,10 +292,10 @@ export class InventoryPageComponent implements OnInit {
 
   private async loadReferences(tab: Tab, requestId: number) {
     const requests = [] as Promise<unknown>[];
-    if (['products','reorder','valuation','suppliers','orders','grn','transfers'].includes(tab)) {
+    if (['products','reorder','valuation','reports','suppliers','orders','grn','transfers'].includes(tab)) {
       requests.push(this.loadInventoryRows(tab, requestId));
     }
-    if (tab === 'products' || tab === 'reorder' || tab === 'valuation') {
+    if (['products','reorder','valuation','reports','grn','orders'].includes(tab)) {
       requests.push(this.getCached<InventoryPolicy>('inventory:policy', () => this.get<InventoryPolicy>('/inventory/policy')).then((policy) => {
         if (this.isCurrentLoad(requestId)) {
           this.inventoryPolicy = policy;
@@ -310,14 +313,18 @@ export class InventoryPageComponent implements OnInit {
   }
   private async loadInventoryRows(tab: Tab, requestId: number) {
     const requestIdSnapshot = requestId;
+    const pageSize = tab === 'reports' ? 200 : this.inventoryPageSize;
     const params = new URLSearchParams({
       page: '1',
-      pageSize: String(this.inventoryPageSize),
+      pageSize: String(pageSize),
       withCount: 'false',
     });
     const query = tab === 'products' ? this.productQuery.trim() : '';
     if (query) params.set('q', query);
     const rows = await this.get<Item[]>(`/inventory?` + params.toString());
+    if (tab === 'reports') {
+      for (let page=2, batch=rows; batch.length === pageSize; page++) { params.set('page',String(page)); batch=await this.get<Item[]>(`/inventory?${params}`); rows.push(...batch); }
+    }
     if (this.isCurrentLoad(requestIdSnapshot)) {
       this.items = rows;
       this.rebuildItemLookup();
@@ -436,8 +443,9 @@ export class InventoryPageComponent implements OnInit {
   get orderStatuses() { return this.orderStatusesCache; }
   get orderOpenValue() { return this.orderOpenValueCache; }
   get hasCurrentReportRows() {
-    return ({ ageing: this.reportAgeing, expiry: this.reportNearExpiry, traceability: this.reportTraceability, variance: this.reportVariance, suppliers: this.reportSupplierPerformance })[this.reportView].length > 0;
+    return ({ stock:this.items, ageing: this.reportAgeing, cogs:this.cogsRows, expiry: this.reportNearExpiry, traceability: this.reportTraceability, variance: this.reportVariance, suppliers: this.reportSupplierPerformance, catalog:this.items })[this.reportView].length > 0;
   }
+  get cogsRows() { return this.ledgerRows.filter(row => ['sale','consumption','backbar_consumption','kit_component_out'].includes(row.movementType) && row.quantityDelta < 0); }
   orderCount(status: string) { return this.orderStatusCounts.get(status) ?? 0; }
   orderStatusLabel(status:string) { return ({ approved:'Raised', partially_received:'Partial delivery', received:'Fully delivered', pending_approval:'Pending approval' } as Record<string,string>)[status] ?? status.replaceAll('_',' '); }
   selectOrderStage(stage: Exclude<PurchaseOrderStage, ''>) { this.orderStage = stage; this.orderStatus = ''; this.recomputeOrderViews(); }
@@ -730,12 +738,16 @@ export class InventoryPageComponent implements OnInit {
   }
 
   exportInventoryReport() {
+    if (this.reportView === 'cogs' && !this.canViewInventoryCost) { this.error='Product cost visibility permission is required'; return; }
     const exports: Record<ReportView, { headers: string[]; rows: (string | number)[][] }> = {
+      stock: this.canViewInventoryCost ? { headers:['Product','SKU','Category','Stock','Unit cost','Stock value','Reorder level'], rows:this.items.map(row => [row.name,row.sku,row.category,row.stockQuantity,row.unitCostPaise/100,row.stockQuantity*row.unitCostPaise/100,row.reorderPoint]) } : { headers:['Product','SKU','Category','Stock','Reorder level'], rows:this.items.map(row => [row.name,row.sku,row.category,row.stockQuantity,row.reorderPoint]) },
       ageing: { headers: ['Product', 'Batch', 'Received', 'Quantity', 'Age days', 'Age bucket', 'Stock value'], rows: this.reportAgeing.map((row) => [row.productName, row.batchNumber, this.date(row.receivedDate), row.quantity, row.ageDays, row.ageBucket, row.stockValuePaise / 100]) },
+      cogs: { headers:['Date','Product','Movement','Quantity','Unit cost','COGS','Source'], rows:this.cogsRows.map(row => [this.date(row.createdAt),row.itemName,row.movementType,Math.abs(row.quantityDelta),row.unitCostPaise/100,Math.abs(row.valuePaise)/100,row.source]) },
       expiry: { headers: ['Product', 'Batch', 'Expiry', 'Days remaining', 'Quantity', 'Risk value'], rows: this.reportNearExpiry.map((row) => [row.productName, row.batchNumber, this.date(row.expiryDate), row.daysRemaining, row.quantity, row.riskValuePaise / 100]) },
       traceability: { headers: ['Date', 'Product', 'Batch', 'Movement', 'Quantity', 'Source type', 'Source ID', 'Expiry'], rows: this.reportTraceability.map((row) => [this.date(row.createdAt), row.productName, row.batchNumber, row.movementType, row.quantityDelta, row.sourceType, row.sourceId, this.date(row.expiryDate)]) },
       variance: { headers: ['Product', 'SKU', 'Expected', 'Counted', 'Variance', 'Reason', 'Posted'], rows: this.reportVariance.map((row) => [row.itemName, row.sku, row.expectedQuantity ?? '', row.approvedQuantity ?? '', row.varianceQuantity ?? '', row.varianceReason, this.date(row.postedAt)]) },
       suppliers: { headers: ['Supplier', 'Purchase orders', 'Received orders', 'On-time %', 'Fill %', 'Returns', 'Returned quantity', 'Returned value', 'Expiry risk value'], rows: this.reportSupplierPerformance.map((row) => [row.supplierName, row.purchaseOrders, row.receivedOrders, row.onTimeRateBps == null ? '' : row.onTimeRateBps / 100, row.fillRateBps == null ? '' : row.fillRateBps / 100, row.returnCount, row.returnedQuantity, row.returnedValuePaise / 100, row.expiryRiskValuePaise / 100]) },
+      catalog: { headers:['Product','SKU','Category','Subcategory','Brand','Usage','Unit','Package unit','Units/package','Barcode','HSN/SAC','GST %','Retail price','Active'], rows:this.items.map(row => [row.name,row.sku,row.category,row.subcategory,row.brand,row.productUsage,row.unit,row.packageUnit,row.unitsPerPackage,row.barcode,row.hsnCode,row.gstPercent,row.retailPricePaise/100,row.active ? 'Yes':'No']) },
     };
     const report = exports[this.reportView];
     this.downloadCsv(`inventory-${this.reportView}-${this.reportAsOf}.csv`, report.headers, report.rows);
@@ -789,7 +801,7 @@ export class InventoryPageComponent implements OnInit {
       packageUnit: product.packageUnit, unitsPerPackage: product.unitsPerPackage,
       reorderPoint: product.reorderPoint, alertLevel:product.alertLevel, desiredLevel:product.desiredLevel, orderLevel:product.orderLevel, safetyStockLevel:product.safetyStockLevel, packageCostRupees: this.canViewInventoryCost ? this.packageCostPaise(product) / 100 : null, retailPriceRupees: product.retailPricePaise / 100,
       hsnCode: product.hsnCode, gstPercent: product.gstPercent, barcodesText:(product.barcodes?.length ? product.barcodes : [product.barcode]).filter(Boolean).join(', '),
-      batchTracked: product.batchTracked, centerAvailable:product.centerAvailable, active: product.active,
+      batchTracked: product.batchTracked, centerAvailable:product.centerAvailable, onlineSaleEnabled:product.onlineSaleEnabled, active: product.active,
     };
     this.productEditing = true; this.clearFeedback();
   }
@@ -810,7 +822,7 @@ export class InventoryPageComponent implements OnInit {
         retailPricePaise: this.toPaise(this.productDraft.retailPriceRupees),
         hsnCode: this.productDraft.hsnCode.trim(), gstPercent: Number(this.productDraft.gstPercent),
         barcodes: this.productDraft.barcodesText.split(',').map(value => value.trim().toUpperCase()).filter(Boolean), batchTracked: this.productDraft.batchTracked,
-        dualUseStock: this.productDraft.productUsage === 'dual_use', centerAvailable:this.productDraft.centerAvailable, active: this.productDraft.active,
+        dualUseStock: this.productDraft.productUsage === 'dual_use', centerAvailable:this.productDraft.centerAvailable, onlineSaleEnabled:this.productDraft.productUsage === 'consumable' ? false : this.productDraft.onlineSaleEnabled, active: this.productDraft.active,
       };
       const response = product
         ? await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, payload))
@@ -821,6 +833,41 @@ export class InventoryPageComponent implements OnInit {
       this.productCreating = false; this.productEditing = false; this.notice = this.language.text('inventory.message.0809e15440');
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.e52c90c1c7')); }
     finally { this.saving = false; }
+  }
+
+  toggleProductSelection(id:string, selected:boolean) { selected ? this.selectedProductIds.add(id) : this.selectedProductIds.delete(id); }
+  toggleOrderSelection(id:string, selected:boolean) { selected ? this.selectedOrderIds.add(id) : this.selectedOrderIds.delete(id); }
+
+  async bulkUpdateProducts(centerAvailable:boolean) {
+    const ids = [...this.selectedProductIds];
+    if (!ids.length || !confirm(`${centerAvailable ? 'Enable' : 'Disable'} ${ids.length} selected products at this center?`)) return;
+    await this.mutate(this.api.patch('/inventory/bulk', { ids, centerAvailable }), 'Products updated', false);
+    this.selectedProductIds.clear();
+  }
+
+  async cloneProduct() {
+    const product = this.productDetail?.product; if (!product) return;
+    const sku = prompt('New product SKU', `${product.sku}-COPY`)?.trim(); if (!sku) return;
+    const name = prompt('New product name', `${product.name} Copy`)?.trim(); if (!name) return;
+    this.saving = true; this.clearFeedback();
+    try { const response = await firstValueFrom(this.api.post<ApiEnvelope<Item>>(`/inventory/${product.id}/clone`, { sku, name })); await this.reload(); if (response.data) await this.loadProduct(response.data.id); this.notice='Product cloned'; }
+    catch (error) { this.error=this.message(error,'Product could not be cloned'); } finally { this.saving=false; }
+  }
+
+  async changeProductLifecycle(action:'discontinue'|'reactivate') {
+    const product=this.productDetail?.product; if (!product) return;
+    const reason=prompt(`${action === 'discontinue' ? 'Discontinuation' : 'Reactivation'} reason`)?.trim(); if (!reason) return;
+    let replacementInventoryItemId:string|null=null;
+    if (action === 'discontinue') { replacementInventoryItemId=prompt('Replacement product ID (optional)')?.trim() || null; }
+    await this.mutate(this.api.post(`/inventory/${product.id}/${action}`, { reason, replacementInventoryItemId }), `Product ${action === 'discontinue' ? 'discontinued' : 'reactivated'}`, false);
+    await this.loadProduct(product.id);
+  }
+
+  async bulkRaiseOrders() {
+    const ids=[...this.selectedOrderIds];
+    if (!ids.length || !confirm(`Raise ${ids.length} selected draft purchase orders?`)) return;
+    await this.mutate(this.api.post('/purchases/orders/bulk-raise', { ids, note:'' }), 'Purchase orders raised', false);
+    this.selectedOrderIds.clear();
   }
 
   async openKit(row: Item) {
@@ -872,14 +919,19 @@ export class InventoryPageComponent implements OnInit {
   }
 
   printBarcode(row: Item) {
-    const code = (row.barcode || row.sku).trim().toUpperCase();
-    if (!code || [...code].some((char) => !CODE39[char])) { this.error = this.language.text('inventory.message.e2383ff060'); return; }
-    const popup = window.open('', '_blank', 'width=520,height=420');
-    if (!popup) { this.error = this.language.text('inventory.message.d37af2b6c8'); return; }
-    popup.document.write('<!doctype html><title>Product label</title><style>body{margin:0;font:14px Arial}main{width:76mm;padding:5mm;text-align:center}h1{font-size:18px;margin:0 0 4mm}svg{width:100%;height:24mm}p{margin:2mm 0;font-weight:700}@media print{main{padding:2mm}}</style><main><h1></h1><div></div><p></p></main>');
-    popup.document.querySelector('h1')!.textContent = row.name;
-    popup.document.querySelector('div')!.innerHTML = this.code39Svg(code);
-    popup.document.querySelector('p')!.textContent = code;
+    this.printProductLabels([row]);
+  }
+
+  bulkPrintLabels() { const rows=this.items.filter(row => this.selectedProductIds.has(row.id)); if (!rows.length) return; this.printProductLabels(rows); }
+
+  private printProductLabels(rows:Item[]) {
+    const settings=this.inventoryPolicy.labelSettings;
+    const codes=rows.map(row => ({ row, code:(row.barcode || row.sku).trim().toUpperCase() }));
+    if (codes.some(({code}) => !code || [...code].some(char => !CODE39[char]))) { this.error=this.language.text('inventory.message.e2383ff060'); return; }
+    const popup=window.open('','_blank','width=980,height=720'); if (!popup) { this.error=this.language.text('inventory.message.d37af2b6c8'); return; }
+    popup.document.write(`<!doctype html><title>Product labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(${settings.columns},${settings.widthMm}mm);gap:2mm;padding:5mm}.label{width:${settings.widthMm}mm;height:${settings.heightMm}mm;border:1px solid #ddd;padding:2mm;text-align:center;box-sizing:border-box;break-inside:avoid;overflow:hidden}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:16mm}@media print{main{padding:0}.label{border:0}}</style><main></main>`);
+    const main=popup.document.querySelector('main')!;
+    for (const {row,code} of codes) { const label=popup.document.createElement('section'); label.className='label'; if (settings.showName) { const name=popup.document.createElement('strong'); name.textContent=row.name; label.append(name); } const barcode=popup.document.createElement('div'); barcode.innerHTML=this.code39Svg(code); label.append(barcode); const details=popup.document.createElement('small'); details.textContent=[settings.showSku ? row.sku : '', settings.showPrice ? `${settings.priceCaption} ${this.money(row.retailPricePaise)}` : ''].filter(Boolean).join(' · '); label.append(details); main.append(label); }
     popup.document.close(); popup.focus(); popup.print();
   }
 
@@ -1069,14 +1121,17 @@ export class InventoryPageComponent implements OnInit {
       if (rows.some(row => [...row.barcode.toUpperCase()].some(char => !CODE39[char]))) throw new Error('A received barcode is not Code 39 compatible');
       const popup = window.open('', '_blank', 'width=980,height=720');
       if (!popup) throw new Error('Allow pop-ups to print barcode labels');
-      popup.document.write('<!doctype html><title>GRN barcode labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(5,1fr);gap:2mm;padding:5mm}.label{height:32mm;border:1px solid #ddd;padding:2mm;text-align:center;break-inside:avoid}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:17mm}@media print{main{padding:0}.label{border:0}}</style><main></main>');
+      const settings=this.inventoryPolicy.labelSettings;
+      popup.document.write(`<!doctype html><title>GRN barcode labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(${settings.columns},${settings.widthMm}mm);gap:2mm;padding:5mm}.label{width:${settings.widthMm}mm;height:${settings.heightMm}mm;border:1px solid #ddd;padding:2mm;text-align:center;box-sizing:border-box;break-inside:avoid;overflow:hidden}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:16mm}@media print{main{padding:0}.label{border:0}}</style><main></main>`);
       const main = popup.document.querySelector('main')!;
       for (const row of rows) for (let index=0; index<row.retailQuantity+row.consumableQuantity+row.freeQuantity; index++) {
         const label = popup.document.createElement('section'); label.className='label';
         const name = popup.document.createElement('strong'); name.textContent=row.productName;
         const barcode = popup.document.createElement('div'); barcode.innerHTML=this.code39Svg(row.barcode.toUpperCase());
         const code = popup.document.createElement('small'); code.textContent=`${row.barcode}${row.batchNumber ? ` · ${row.batchNumber}` : ''}`;
-        label.append(name,barcode,code); main.append(label);
+        if (settings.showName) label.append(name); label.append(barcode);
+        code.textContent=[settings.showSku ? row.sku : row.barcode, settings.showBatch && row.batchNumber ? row.batchNumber : '', settings.showExpiry && row.expiryDate ? this.date(row.expiryDate) : ''].filter(Boolean).join(' · ');
+        label.append(code); main.append(label);
       }
       popup.document.close(); popup.focus(); popup.print();
     } catch (error) { this.error = this.message(error, 'Barcode labels could not be printed'); }
@@ -1616,7 +1671,7 @@ export class InventoryPageComponent implements OnInit {
     }
     return `<svg viewBox="0 0 ${x} 70" role="img" aria-label="Barcode ${code}" xmlns="http://www.w3.org/2000/svg">${bars.join('')}</svg>`;
   }
-  private emptyProduct() { return { sku: '', name: '', category: '', subcategory:'', brand: '', productUsage:'retail' as Item['productUsage'], unit: '', packageUnit: '', unitsPerPackage: 1, reorderPoint: null as number | null, alertLevel:null as number|null, desiredLevel:null as number|null, orderLevel:null as number|null, safetyStockLevel:null as number|null, packageCostRupees: null as number | null, retailPriceRupees: null as number | null, hsnCode: '', gstPercent: null as number | null, barcodesText:'', batchTracked: false, centerAvailable:true, active: true }; }
+  private emptyProduct() { return { sku: '', name: '', category: '', subcategory:'', brand: '', productUsage:'retail' as Item['productUsage'], unit: '', packageUnit: '', unitsPerPackage: 1, reorderPoint: null as number | null, alertLevel:null as number|null, desiredLevel:null as number|null, orderLevel:null as number|null, safetyStockLevel:null as number|null, packageCostRupees: null as number | null, retailPriceRupees: null as number | null, hsnCode: '', gstPercent: null as number | null, barcodesText:'', batchTracked: false, centerAvailable:true, onlineSaleEnabled:false, active: true }; }
   private toPaise(value: number | null) { return Math.round(Number(value || 0) * 100); }
   private emptyLine(): EntryLine { return { inventoryItemId: '', quantity: null, retailQuantity:null, consumableQuantity:null, unitCostRupees: null, discountPercent: null, gstPercent: null, damagedQuantity: null, rejectedQuantity: null, varianceReason: '', batchNumber: '', batchBarcode: '', expiryDate: '', requestMasterPriceUpdate:false }; }
   private emptyTransferLine(): TransferDraftLine { return { sourceInventoryItemId:'', retailQuantity:null, consumableQuantity:null, transferPriceRupees:null, discountPercent:null, gstPercent:null }; }

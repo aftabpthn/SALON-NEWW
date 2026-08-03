@@ -322,3 +322,36 @@ request-scoped transaction context on every pooled query.
   to safe status text; token bodies and upstream responses are never logged.
 - Zapier reuses scoped, hashed API keys and signed HTTPS webhooks instead of
   storing a separate Zapier secret.
+
+## 31. Privacy Data Governance
+
+- Migration `0392_security_privacy_compliance_control_plane.sql` adds branch-scoped
+  retention policies, legal holds, governed PII exports, compliance evidence
+  ownership, and pen-test findings without creating business or sample data.
+- Client PII export requires `security.manage`, an unmasked role, MFA
+  reauthentication, a reason, and a row limit of 1–10,000. A different manager
+  must approve it. The returned download token is stored only as a hash,
+  expires after 15 minutes, and can be used once.
+- Deletion requests require maker-checker approval and MFA at execution. Active
+  legal holds block execution; releasing the hold returns the approved request
+  to a runnable state.
+- Client deletion anonymizes the CRM profile, removes portal links, revokes
+  orphaned web/mobile sessions and saved payment instruments, and deletes
+  treatment photos. Immutable form submissions remain as counted legal
+  evidence and the exact outcome is recorded on the request.
+- Contact masking includes phone, email, and address fields. Clinical/medical
+  response masking uses the separate `client.clinical` role mask.
+
+## 32. Compliance and Pen-Test Evidence
+
+- SOC 1, SOC 2, ISO 27001, GDPR, HIPAA, and PCI evidence items require a real
+  owner user, status, stable control key, optional assessor, reference, and
+  optimistic version on updates.
+- Pen-test findings require severity, owner, and remediation state. Risk
+  acceptance requires a reason, accepting actor, and a future expiry.
+- `GET /api/security/data-governance` returns only the authenticated tenant and
+  branch. All privileged mutations are written to the append-only audit chain.
+- Evidence records support certification readiness; they do not claim an
+  independent certification or penetration-test pass. Assessor reports and
+  provider-vault deployment evidence must be attached from the real production
+  environment.

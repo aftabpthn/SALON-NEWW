@@ -1,5 +1,8 @@
 # Device and Browser Readiness
 
+The operational support and certification boundary is published in
+[HARDWARE_SUPPORT_MATRIX.md](./HARDWARE_SUPPORT_MATRIX.md).
+
 This gate separates automated browser coverage from physical-device acceptance. Passing Playwright proves the configured browser engines, viewport, touch mode, network simulation, frontend behavior, and real staging APIs. It does not prove a specific physical iPhone, Android handset, or carrier network.
 
 ## Automated matrix

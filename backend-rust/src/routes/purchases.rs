@@ -34,6 +34,10 @@ pub fn router() -> Router<AppState> {
         .route("/purchases/suppliers/:id/ledger", get(supplier_ledger))
         .route("/purchases/orders", get(list_orders).post(create_order))
         .route(
+            "/purchases/orders/bulk-raise",
+            axum::routing::post(bulk_raise_orders),
+        )
+        .route(
             "/purchases/orders/import",
             axum::routing::post(import_order),
         )
@@ -140,6 +144,14 @@ struct OrderLineRequest {
 #[serde(rename_all = "camelCase")]
 struct DecisionRequest {
     note: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BulkOrderRequest {
+    ids: Vec<String>,
+    #[serde(default)]
+    note: String,
 }
 
 #[derive(Deserialize)]
@@ -512,6 +524,25 @@ async fn order_action(
         )
         .await?,
     )))
+}
+
+async fn bulk_raise_orders(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<BulkOrderRequest>,
+) -> ApiResult<Vec<OrderDetails>> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let rows = purchase_service::bulk_raise_orders(
+        &state,
+        &tenant,
+        &branch,
+        &claims.sub,
+        payload.ids,
+        &payload.note,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn list_receipts(

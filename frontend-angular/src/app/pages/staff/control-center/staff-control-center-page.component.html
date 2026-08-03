@@ -399,6 +399,9 @@
 }</div>@if (objectEntries(selfService).length === 0) {
 <div class="empty">{{ 'staff.ui.e619c5b961' | translate }}</div>
 }</section>
+<section class="data-card"><header><div><h2>Mobile device telemetry</h2><span>App, device version and network evidence</span></div></header>@for (row of mobileTelemetry | slice:0:50; track trackById($index, row)) {
+<article class="record"><div><strong>{{ row['staffName'] }} · {{ row['platform'] }} {{ row['appVersion'] }}</strong><small>{{ row['eventType'] }} · {{ row['networkType'] }} · {{ formatDateTime(row['occurredAt']) }}</small></div><span class="status" [ngClass]="statusClass(row['online'] ? 'online' : 'offline')">{{ row['online'] ? 'online' : 'offline' }}</span></article>
+}@if (mobileTelemetry.length === 0) { <div class="empty">No mobile telemetry yet</div> }</section>
 }
 
 @if (activeTab === 'governance') {

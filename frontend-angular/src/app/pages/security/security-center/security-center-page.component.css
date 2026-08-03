@@ -18,7 +18,7 @@
 .panel-toolbar label { flex: 1; }
 .audit-chain-status { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 .audit-chain-status code { margin-right: auto; color: var(--text); }
-input[type='search'], input[type='number'], input[type='text'], textarea, select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--panel); font: inherit; font-weight: 400; box-sizing: border-box; }
+input[type='search'], input[type='number'], input[type='text'], input[type='datetime-local'], textarea, select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: var(--panel); font: inherit; font-weight: 400; box-sizing: border-box; }
 textarea { padding: 9px 10px; resize: vertical; }
 input:focus { border-color: var(--brand); outline: 3px solid color-mix(in srgb, var(--brand) 12%, transparent); }
 .table-wrap { overflow: auto; }

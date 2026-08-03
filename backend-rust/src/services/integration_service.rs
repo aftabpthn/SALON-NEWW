@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use std::{collections::BTreeSet, net::IpAddr};
+use std::{collections::BTreeSet, net::IpAddr, str::FromStr};
 use uuid::Uuid;
 
 use crate::{
@@ -142,6 +142,32 @@ pub struct ConnectorView {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectorAuthorize {
     pub authorization_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConnectorAccountMappingWrite {
+    pub external_account_id: String,
+    pub external_account_name: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct AccountingJournalLine {
+    account_code: String,
+    external_account_id: String,
+    external_account_name: String,
+    debit_paise: i64,
+    credit_paise: i64,
+}
+
+#[derive(Debug, Clone)]
+struct AccountingJournal {
+    id: String,
+    business_date: chrono::NaiveDate,
+    source_type: String,
+    source_id: String,
+    memo: String,
+    lines: Vec<AccountingJournalLine>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -362,13 +388,16 @@ pub async fn authenticate_api_key(
 pub async fn api_clients(
     db: &PgPool,
     credential: &ApiKeyCredential,
-    limit: i64,
-) -> Result<Vec<Value>, AppError> {
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<Value>, i64), AppError> {
+    let (page_size, offset) = public_api_page(page, page_size)?;
     integration_repository::api_clients(
         db,
         &credential.tenant_id,
         &credential.branch_id,
-        limit.clamp(1, 500),
+        page_size,
+        offset,
     )
     .await
     .map_err(|_| AppError::internal("failed to list integration clients"))
@@ -376,13 +405,16 @@ pub async fn api_clients(
 pub async fn api_appointments(
     db: &PgPool,
     credential: &ApiKeyCredential,
-    limit: i64,
-) -> Result<Vec<Value>, AppError> {
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<Value>, i64), AppError> {
+    let (page_size, offset) = public_api_page(page, page_size)?;
     integration_repository::api_appointments(
         db,
         &credential.tenant_id,
         &credential.branch_id,
-        limit.clamp(1, 500),
+        page_size,
+        offset,
     )
     .await
     .map_err(|_| AppError::internal("failed to list integration appointments"))
@@ -390,13 +422,16 @@ pub async fn api_appointments(
 pub async fn api_sales(
     db: &PgPool,
     credential: &ApiKeyCredential,
-    limit: i64,
-) -> Result<Vec<Value>, AppError> {
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<Value>, i64), AppError> {
+    let (page_size, offset) = public_api_page(page, page_size)?;
     integration_repository::api_sales(
         db,
         &credential.tenant_id,
         &credential.branch_id,
-        limit.clamp(1, 500),
+        page_size,
+        offset,
     )
     .await
     .map_err(|_| AppError::internal("failed to list integration sales"))
@@ -404,16 +439,28 @@ pub async fn api_sales(
 pub async fn api_staff(
     db: &PgPool,
     credential: &ApiKeyCredential,
-    limit: i64,
-) -> Result<Vec<Value>, AppError> {
+    page: i64,
+    page_size: i64,
+) -> Result<(Vec<Value>, i64), AppError> {
+    let (page_size, offset) = public_api_page(page, page_size)?;
     integration_repository::api_staff(
         db,
         &credential.tenant_id,
         &credential.branch_id,
-        limit.clamp(1, 500),
+        page_size,
+        offset,
     )
     .await
     .map_err(|_| AppError::internal("failed to list integration staff"))
+}
+
+fn public_api_page(page: i64, page_size: i64) -> Result<(i64, i64), AppError> {
+    if page < 1 || !(1..=500).contains(&page_size) {
+        return Err(AppError::validation(
+            "page must be at least 1 and pageSize must be between 1 and 500",
+        ));
+    }
+    Ok((page_size, (page - 1).saturating_mul(page_size)))
 }
 
 pub async fn list_webhooks(
@@ -543,6 +590,33 @@ pub async fn webhook_logs(
         .map_err(|_| AppError::internal("failed to list webhook delivery logs"))
 }
 
+pub async fn replay_webhook_delivery(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    id: &str,
+) -> Result<(), AppError> {
+    if !integration_repository::replay_webhook_delivery(db, tenant, branch, id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to replay webhook delivery"))?
+    {
+        return Err(AppError::not_found(
+            "failed or dead-letter webhook delivery was not found",
+        ));
+    }
+    let _ = security_service::record_audit(
+        db,
+        tenant,
+        branch,
+        actor,
+        "integration.webhook.replayed",
+        json!({"deliveryId": id}),
+    )
+    .await;
+    Ok(())
+}
+
 pub async fn process_webhooks(db: &PgPool, settings: &Settings) -> Result<usize, AppError> {
     let Some(encryption_key) = settings.security_encryption_key.as_deref() else {
         return Ok(0);
@@ -550,44 +624,93 @@ pub async fn process_webhooks(db: &PgPool, settings: &Settings) -> Result<usize,
     let rows = integration_repository::claim_webhook_deliveries(db, 50)
         .await
         .map_err(|_| AppError::internal("failed to claim webhook deliveries"))?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| AppError::internal("failed to initialize webhook client"))?;
     let mut delivered = 0;
     for row in rows {
         let secret = security_service::decrypt_secret(encryption_key, &row.secret_ciphertext)?;
         let body = serde_json::to_string(&row.payload_json)
             .map_err(|_| AppError::internal("failed to serialize webhook"))?;
+        let timestamp = Utc::now().timestamp();
         let signature = sign(&secret, &format!("{}.{}", row.event_id, body))?;
-        let response = reqwest::Client::new()
+        let signature_v2 = sign(&secret, &format!("{timestamp}.{}.{}", row.event_id, body))?;
+        let started = std::time::Instant::now();
+        let response = client
             .post(&row.endpoint_url)
             .header("content-type", "application/json")
             .header("x-aurashine-event", &row.event_type)
             .header("x-aurashine-delivery", &row.event_id)
             .header("x-aurashine-signature", format!("sha256={signature}"))
+            .header("x-aurashine-timestamp", timestamp)
+            .header("x-aurashine-signature-v2", format!("sha256={signature_v2}"))
             .body(body)
             .send()
             .await;
+        let duration_ms = started.elapsed().as_millis().min(i64::MAX as u128) as i64;
         match response {
             Ok(response) if response.status().is_success() => {
-                integration_repository::mark_webhook_delivered(
+                let status = response.status().as_u16() as i32;
+                integration_repository::mark_webhook_delivered(db, &row.id, status)
+                    .await
+                    .map_err(|_| AppError::internal("failed to complete webhook delivery"))?;
+                integration_repository::record_webhook_attempt(
                     db,
-                    &row.id,
-                    response.status().as_u16() as i32,
+                    &row,
+                    "delivered",
+                    Some(status),
+                    duration_ms,
+                    "",
                 )
                 .await
-                .map_err(|_| AppError::internal("failed to complete webhook delivery"))?;
+                .map_err(|_| AppError::internal("failed to audit webhook delivery"))?;
                 delivered += 1;
             }
-            Ok(response) => integration_repository::mark_webhook_failed(
-                db,
-                &row,
-                Some(response.status().as_u16() as i32),
-                "endpoint rejected webhook",
-            )
-            .await
-            .map_err(|_| AppError::internal("failed to reschedule webhook"))?,
+            Ok(response) => {
+                let status = response.status().as_u16() as i32;
+                integration_repository::mark_webhook_failed(
+                    db,
+                    &row,
+                    Some(status),
+                    "endpoint rejected webhook",
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to reschedule webhook"))?;
+                integration_repository::record_webhook_attempt(
+                    db,
+                    &row,
+                    if row.attempts >= row.max_attempts {
+                        "dead_letter"
+                    } else {
+                        "retry"
+                    },
+                    Some(status),
+                    duration_ms,
+                    "ENDPOINT_REJECTED",
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to audit webhook delivery"))?;
+            }
             Err(_) => {
                 integration_repository::mark_webhook_failed(db, &row, None, "endpoint unavailable")
                     .await
-                    .map_err(|_| AppError::internal("failed to reschedule webhook"))?
+                    .map_err(|_| AppError::internal("failed to reschedule webhook"))?;
+                integration_repository::record_webhook_attempt(
+                    db,
+                    &row,
+                    if row.attempts >= row.max_attempts {
+                        "dead_letter"
+                    } else {
+                        "retry"
+                    },
+                    None,
+                    duration_ms,
+                    "ENDPOINT_UNAVAILABLE",
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to audit webhook delivery"))?;
             }
         }
     }
@@ -977,6 +1100,112 @@ pub async fn list_connector_sync_jobs(
         .map_err(|_| AppError::internal("failed to list connector sync jobs"))
 }
 
+pub async fn list_connector_account_mappings(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    provider: ConnectorProvider,
+) -> Result<Vec<integration_repository::ConnectorAccountMapping>, AppError> {
+    require_accounting_provider(provider)?;
+    integration_repository::list_connector_account_mappings(db, tenant, branch, provider.code())
+        .await
+        .map_err(|_| AppError::internal("failed to list connector account mappings"))
+}
+
+pub async fn save_connector_account_mapping(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    provider: ConnectorProvider,
+    local_account_code: &str,
+    request: ConnectorAccountMappingWrite,
+) -> Result<integration_repository::ConnectorAccountMapping, AppError> {
+    require_accounting_provider(provider)?;
+    let local_account_code = normalized_account_code(local_account_code)?;
+    let external_account_id = request.external_account_id.trim();
+    let external_account_name = request.external_account_name.unwrap_or_default();
+    let external_account_name = external_account_name.trim();
+    if external_account_id.is_empty()
+        || external_account_id.len() > 160
+        || external_account_name.len() > 200
+    {
+        return Err(AppError::validation("external account mapping is invalid"));
+    }
+    let exists = integration_repository::connector_local_account_exists(
+        db,
+        tenant,
+        branch,
+        &local_account_code,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate local account"))?;
+    if !exists {
+        return Err(AppError::not_found(
+            "local account has no journal evidence in this branch",
+        ));
+    }
+    let row = integration_repository::upsert_connector_account_mapping(
+        db,
+        tenant,
+        branch,
+        provider.code(),
+        &local_account_code,
+        external_account_id,
+        external_account_name,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save connector account mapping"))?;
+    let _ = security_service::record_audit(
+        db,
+        tenant,
+        branch,
+        actor,
+        "integration.account_mapping.updated",
+        json!({"provider":provider.code(),"localAccountCode":local_account_code,"version":row.version}),
+    )
+    .await;
+    Ok(row)
+}
+
+pub async fn connector_reconciliation(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    provider: ConnectorProvider,
+) -> Result<Value, AppError> {
+    require_accounting_provider(provider)?;
+    let summary =
+        integration_repository::connector_reconciliation(db, tenant, branch, provider.code())
+            .await
+            .map_err(|_| AppError::internal("failed to reconcile accounting connector"))?;
+    let unmapped =
+        integration_repository::connector_unmapped_accounts(db, tenant, branch, provider.code())
+            .await
+            .map_err(|_| AppError::internal("failed to reconcile connector mappings"))?;
+    let pending = summary
+        .local_journal_count
+        .saturating_sub(summary.synced_journal_count);
+    Ok(json!({
+        "provider": provider.code(),
+        "localJournalCount": summary.local_journal_count,
+        "localDebitPaise": summary.local_debit_paise,
+        "localCreditPaise": summary.local_credit_paise,
+        "syncedJournalCount": summary.synced_journal_count,
+        "syncedDebitPaise": summary.synced_debit_paise,
+        "syncedCreditPaise": summary.synced_credit_paise,
+        "pendingJournalCount": pending,
+        "processingJournalCount": summary.processing_journal_count,
+        "failedJournalCount": summary.failed_journal_count,
+        "uncertainJournalCount": summary.uncertain_journal_count,
+        "unmappedAccountCodes": unmapped,
+        "balanced": summary.local_debit_paise == summary.local_credit_paise,
+        "reconciled": pending == 0 && summary.failed_journal_count == 0
+          && summary.uncertain_journal_count == 0 && unmapped.is_empty()
+    }))
+}
+
 pub async fn process_connector_sync_jobs(
     db: &PgPool,
     settings: &Settings,
@@ -988,6 +1217,16 @@ pub async fn process_connector_sync_jobs(
     for job in jobs {
         let result = if matches!(job.provider.as_str(), "zenoti" | "dingg") {
             crate::services::migration_provider_service::run(db, settings, &job).await
+        } else if matches!(job.provider.as_str(), "quickbooks" | "xero" | "netsuite") {
+            run_accounting_connector_sync(
+                db,
+                settings,
+                &job.tenant_id,
+                &job.branch_id,
+                &job.connection_id,
+                &job.provider,
+            )
+            .await
         } else {
             run_connector_check(db, settings, &job.tenant_id, &job.branch_id, &job.provider).await
         };
@@ -1013,6 +1252,139 @@ pub async fn process_connector_sync_jobs(
         }
     }
     Ok(completed)
+}
+
+async fn run_accounting_connector_sync(
+    db: &PgPool,
+    settings: &Settings,
+    tenant: &str,
+    branch: &str,
+    connection_id: &str,
+    provider_code: &str,
+) -> Result<(Value, String, String), AppError> {
+    let provider = ConnectorProvider::parse(provider_code)?;
+    require_accounting_provider(provider)?;
+    let (verification, account_id, account_name) =
+        run_connector_check(db, settings, tenant, branch, provider_code).await?;
+    let rows = integration_repository::connector_journal_lines_to_sync(
+        db,
+        tenant,
+        branch,
+        provider_code,
+        50,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load accounting journals for connector sync"))?;
+    let journals = grouped_accounting_journals(rows)?;
+    if journals.is_empty() {
+        return Ok((
+            json!({"verified":true,"provider":provider_code,"journalSync":{"synced":0,"remaining":0},"providerCheck":verification}),
+            account_id,
+            account_name,
+        ));
+    }
+    let credential =
+        integration_repository::connector_credential(db, tenant, branch, provider_code)
+            .await
+            .map_err(|_| AppError::internal("failed to load connector credential"))?
+            .ok_or_else(|| AppError::not_found("connector credential was not found"))?;
+    let encryption_key = settings.security_encryption_key.as_deref().ok_or_else(|| {
+        AppError::service_unavailable(
+            "SECURITY_ENCRYPTION_NOT_CONFIGURED",
+            "connector credential encryption is not configured",
+        )
+    })?;
+    let access_token =
+        current_connector_token(db, settings, provider, &credential, encryption_key).await?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|_| AppError::internal("failed to initialize connector client"))?;
+    let mut synced = 0usize;
+    for journal in &journals {
+        let debit_paise = journal
+            .lines
+            .iter()
+            .map(|line| line.debit_paise)
+            .sum::<i64>();
+        let credit_paise = journal
+            .lines
+            .iter()
+            .map(|line| line.credit_paise)
+            .sum::<i64>();
+        if debit_paise <= 0 || debit_paise != credit_paise {
+            return Err(AppError::conflict(
+                "unbalanced journal cannot be synchronized",
+            ));
+        }
+        let idempotency_key = connector_journal_idempotency(provider_code, &journal.id);
+        if !integration_repository::reserve_connector_journal_sync(
+            db,
+            tenant,
+            branch,
+            connection_id,
+            provider_code,
+            &journal.id,
+            &idempotency_key,
+            debit_paise,
+            credit_paise,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to reserve connector journal sync"))?
+        {
+            continue;
+        }
+        match send_accounting_journal(
+            &client,
+            provider,
+            &credential,
+            &account_id,
+            &access_token,
+            &idempotency_key,
+            journal,
+        )
+        .await
+        {
+            Ok((external_id, response_sha256)) => {
+                integration_repository::complete_connector_journal_sync(
+                    db,
+                    tenant,
+                    branch,
+                    provider_code,
+                    &journal.id,
+                    &external_id,
+                    &response_sha256,
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to complete connector journal sync"))?;
+                synced += 1;
+            }
+            Err((uncertain, error)) => {
+                integration_repository::fail_connector_journal_sync(
+                    db,
+                    tenant,
+                    branch,
+                    provider_code,
+                    &journal.id,
+                    if uncertain { "uncertain" } else { "failed" },
+                    &safe_connector_error(&error),
+                )
+                .await
+                .map_err(|_| AppError::internal("failed to record connector journal failure"))?;
+                return Err(error);
+            }
+        }
+    }
+    Ok((
+        json!({
+            "verified":true,
+            "provider":provider_code,
+            "providerCheck":verification,
+            "journalSync":{"synced":synced,"batchSize":journals.len()}
+        }),
+        account_id,
+        account_name,
+    ))
 }
 
 async fn run_connector_check(
@@ -1156,6 +1528,305 @@ async fn run_connector_check(
         account_id,
         account_name,
     ))
+}
+
+fn grouped_accounting_journals(
+    rows: Vec<integration_repository::ConnectorJournalLine>,
+) -> Result<Vec<AccountingJournal>, AppError> {
+    let missing = rows
+        .iter()
+        .filter(|row| {
+            row.external_account_id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or("")
+                .is_empty()
+        })
+        .map(|row| row.account_code.clone())
+        .collect::<BTreeSet<_>>();
+    if !missing.is_empty() {
+        return Err(AppError::conflict(format!(
+            "account mappings required: {}",
+            missing.into_iter().collect::<Vec<_>>().join(", ")
+        )));
+    }
+    let mut journals = Vec::<AccountingJournal>::new();
+    for row in rows {
+        if journals.last().map(|journal| journal.id.as_str()) != Some(row.journal_entry_id.as_str())
+        {
+            journals.push(AccountingJournal {
+                id: row.journal_entry_id.clone(),
+                business_date: row.business_date,
+                source_type: row.source_type.clone(),
+                source_id: row.source_id.clone(),
+                memo: row.memo.clone(),
+                lines: Vec::new(),
+            });
+        }
+        journals
+            .last_mut()
+            .expect("journal was inserted")
+            .lines
+            .push(AccountingJournalLine {
+                account_code: row.account_code,
+                external_account_id: row.external_account_id.unwrap_or_default(),
+                external_account_name: row.external_account_name.unwrap_or_default(),
+                debit_paise: row.debit_paise,
+                credit_paise: row.credit_paise,
+            });
+    }
+    Ok(journals)
+}
+
+#[allow(clippy::result_large_err)]
+async fn send_accounting_journal(
+    client: &reqwest::Client,
+    provider: ConnectorProvider,
+    credential: &ConnectorCredential,
+    verified_account_id: &str,
+    access_token: &str,
+    idempotency_key: &str,
+    journal: &AccountingJournal,
+) -> Result<(String, String), (bool, AppError)> {
+    let payload = accounting_journal_payload(provider, journal).map_err(|error| (false, error))?;
+    let (url, remote_account_id) = match provider {
+        ConnectorProvider::QuickBooks => {
+            if credential.external_account_id.is_empty() {
+                return Err((
+                    false,
+                    AppError::validation("QuickBooks company ID is missing"),
+                ));
+            }
+            (
+                format!(
+                    "https://quickbooks.api.intuit.com/v3/company/{}/journalentry?minorversion=75",
+                    credential.external_account_id
+                ),
+                credential.external_account_id.as_str(),
+            )
+        }
+        ConnectorProvider::Xero => {
+            let account = if verified_account_id.is_empty() {
+                credential.external_account_id.as_str()
+            } else {
+                verified_account_id
+            };
+            if account.is_empty() {
+                return Err((false, AppError::validation("Xero tenant ID is missing")));
+            }
+            (
+                "https://api.xero.com/api.xro/2.0/ManualJournals".into(),
+                account,
+            )
+        }
+        ConnectorProvider::NetSuite => {
+            let account = credential
+                .config_json
+                .get("accountId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if account.is_empty() {
+                return Err((
+                    false,
+                    AppError::validation("NetSuite account ID is missing"),
+                ));
+            }
+            let domain = account.to_ascii_lowercase().replace('_', "-");
+            (
+                format!(
+                    "https://{domain}.suitetalk.api.netsuite.com/services/rest/record/v1/journalentry"
+                ),
+                account,
+            )
+        }
+        _ => {
+            return Err((
+                false,
+                AppError::validation("provider does not support accounting journal sync"),
+            ))
+        }
+    };
+    let mut request = client.post(url).bearer_auth(access_token).json(&payload);
+    request = match provider {
+        ConnectorProvider::QuickBooks => request.header("Request-Id", idempotency_key),
+        ConnectorProvider::Xero => request
+            .header("xero-tenant-id", remote_account_id)
+            .header("Idempotency-Key", idempotency_key),
+        ConnectorProvider::NetSuite => {
+            request.header("X-NetSuite-Idempotency-Key", idempotency_key)
+        }
+        _ => request,
+    };
+    let response = request.send().await.map_err(|_| {
+        (
+            true,
+            AppError::service_unavailable(
+                "CONNECTOR_RESULT_UNCERTAIN",
+                "accounting provider result is uncertain; reconcile before retry",
+            ),
+        )
+    })?;
+    let status = response.status();
+    let location = response
+        .headers()
+        .get(reqwest::header::LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let body = response.text().await.map_err(|_| {
+        (
+            true,
+            AppError::service_unavailable(
+                "CONNECTOR_RESULT_UNCERTAIN",
+                "accounting provider response could not be reconciled",
+            ),
+        )
+    })?;
+    if !status.is_success() {
+        return Err((
+            false,
+            AppError::service_unavailable(
+                "CONNECTOR_REJECTED",
+                "accounting provider rejected the journal",
+            ),
+        ));
+    }
+    let value = if body.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str::<Value>(&body).map_err(|_| {
+            (
+                true,
+                AppError::service_unavailable(
+                    "CONNECTOR_RESULT_UNCERTAIN",
+                    "accounting provider returned an unreadable result",
+                ),
+            )
+        })?
+    };
+    let external_id = match provider {
+        ConnectorProvider::QuickBooks => value
+            .pointer("/JournalEntry/Id")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+        ConnectorProvider::Xero => value
+            .pointer("/ManualJournals/0/ManualJournalID")
+            .and_then(Value::as_str)
+            .unwrap_or(""),
+        ConnectorProvider::NetSuite => location.rsplit('/').next().unwrap_or(""),
+        _ => "",
+    };
+    if external_id.is_empty() {
+        return Err((
+            true,
+            AppError::service_unavailable(
+                "CONNECTOR_RESULT_UNCERTAIN",
+                "accounting provider did not return a transaction identifier",
+            ),
+        ));
+    }
+    Ok((
+        external_id.to_string(),
+        format!("{:x}", Sha256::digest(body.as_bytes())),
+    ))
+}
+
+fn accounting_journal_payload(
+    provider: ConnectorProvider,
+    journal: &AccountingJournal,
+) -> Result<Value, AppError> {
+    let note = format!(
+        "{} [{}:{}]",
+        journal.memo, journal.source_type, journal.source_id
+    );
+    match provider {
+        ConnectorProvider::QuickBooks => Ok(json!({
+            "TxnDate": journal.business_date,
+            "PrivateNote": note,
+            "Line": journal.lines.iter().map(|line| Ok(json!({
+                "Amount": paise_json(line.debit_paise.max(line.credit_paise))?,
+                "DetailType":"JournalEntryLineDetail",
+                "Description": line.external_account_name,
+                "JournalEntryLineDetail":{
+                    "PostingType":if line.debit_paise > 0 { "Debit" } else { "Credit" },
+                    "AccountRef":{"value":line.external_account_id}
+                }
+            }))).collect::<Result<Vec<Value>,AppError>>()?
+        })),
+        ConnectorProvider::Xero => Ok(json!({
+            "ManualJournals":[{
+                "Narration":note,
+                "Date":journal.business_date,
+                "Status":"POSTED",
+                "JournalLines":journal.lines.iter().map(|line| Ok(json!({
+                    "LineAmount":paise_json(line.debit_paise-line.credit_paise)?,
+                    "AccountCode":line.external_account_id,
+                    "Description":line.account_code
+                }))).collect::<Result<Vec<Value>,AppError>>()?
+            }]
+        })),
+        ConnectorProvider::NetSuite => Ok(json!({
+            "tranDate":journal.business_date,
+            "memo":note,
+            "line":{"items":journal.lines.iter().map(|line| {
+                let mut value=json!({"account":{"id":line.external_account_id},"memo":line.account_code});
+                if line.debit_paise > 0 { value["debit"]=paise_json(line.debit_paise)?; }
+                if line.credit_paise > 0 { value["credit"]=paise_json(line.credit_paise)?; }
+                Ok(value)
+            }).collect::<Result<Vec<Value>,AppError>>()?}
+        })),
+        _ => Err(AppError::validation(
+            "provider does not support accounting journal sync",
+        )),
+    }
+}
+
+fn paise_json(paise: i64) -> Result<Value, AppError> {
+    let negative = paise < 0;
+    let absolute = paise.unsigned_abs();
+    let text = format!(
+        "{}{}.{:02}",
+        if negative { "-" } else { "" },
+        absolute / 100,
+        absolute % 100
+    );
+    serde_json::Number::from_str(&text)
+        .map(Value::Number)
+        .map_err(|_| AppError::internal("failed to encode connector money"))
+}
+
+fn connector_journal_idempotency(provider: &str, journal_entry_id: &str) -> String {
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{provider}:{journal_entry_id}").as_bytes())
+    );
+    format!("as-{}", &digest[..32])
+}
+
+fn normalized_account_code(value: &str) -> Result<String, AppError> {
+    let code = value.trim().to_ascii_uppercase();
+    if code.is_empty()
+        || code.len() > 80
+        || !code
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        return Err(AppError::validation("local account code is invalid"));
+    }
+    Ok(code)
+}
+
+fn require_accounting_provider(provider: ConnectorProvider) -> Result<(), AppError> {
+    if matches!(
+        provider,
+        ConnectorProvider::QuickBooks | ConnectorProvider::Xero | ConnectorProvider::NetSuite
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::validation(
+            "provider is not an accounting connector",
+        ))
+    }
 }
 
 async fn current_connector_token(
@@ -1599,10 +2270,12 @@ fn sign(secret: &str, message: &str) -> Result<String, AppError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        connector_token_hash, ensure_source_ip_allowed, normalize_ip_allowlist, sign,
-        validate_expiry, validate_rate_limit, validate_scopes, validate_webhook, ConnectorProvider,
+        accounting_journal_payload, connector_journal_idempotency, connector_token_hash,
+        ensure_source_ip_allowed, normalize_ip_allowlist, public_api_page, sign, validate_expiry,
+        validate_rate_limit, validate_scopes, validate_webhook, AccountingJournal,
+        AccountingJournalLine, ConnectorProvider,
     };
-    use chrono::{Duration, Utc};
+    use chrono::{Duration, NaiveDate, Utc};
     use serde_json::json;
     #[test]
     fn integration_inputs_are_scoped_and_signed() {
@@ -1621,6 +2294,9 @@ mod tests {
         assert!(ensure_source_ip_allowed(&json!(["127.0.0.1"]), Some("10.0.0.1")).is_err());
         assert_eq!(validate_rate_limit(None).unwrap(), 60);
         assert!(validate_rate_limit(Some(0)).is_err());
+        assert_eq!(public_api_page(2, 100).unwrap(), (100, 100));
+        assert!(public_api_page(0, 100).is_err());
+        assert!(public_api_page(1, 501).is_err());
         assert!(validate_webhook(
             "CRM",
             "https://example.com/hook",
@@ -1635,5 +2311,42 @@ mod tests {
         );
         assert!(ConnectorProvider::parse("unknown").is_err());
         assert_eq!(connector_token_hash("state").len(), 64);
+    }
+
+    #[test]
+    fn accounting_connector_payload_preserves_exact_paise_and_balance() {
+        let journal = AccountingJournal {
+            id: "journal-1".into(),
+            business_date: NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(),
+            source_type: "invoice".into(),
+            source_id: "invoice-1".into(),
+            memo: "Invoice".into(),
+            lines: vec![
+                AccountingJournalLine {
+                    account_code: "ACCOUNTS_RECEIVABLE".into(),
+                    external_account_id: "42".into(),
+                    external_account_name: "Receivable".into(),
+                    debit_paise: 12_345,
+                    credit_paise: 0,
+                },
+                AccountingJournalLine {
+                    account_code: "SALES_REVENUE".into(),
+                    external_account_id: "84".into(),
+                    external_account_name: "Sales".into(),
+                    debit_paise: 0,
+                    credit_paise: 12_345,
+                },
+            ],
+        };
+        let payload = accounting_journal_payload(ConnectorProvider::QuickBooks, &journal).unwrap();
+        assert_eq!(payload.pointer("/Line/0/Amount"), Some(&json!(123.45)));
+        assert_eq!(
+            payload.pointer("/Line/1/JournalEntryLineDetail/PostingType"),
+            Some(&json!("Credit"))
+        );
+        assert_eq!(
+            connector_journal_idempotency("quickbooks", "journal-1"),
+            connector_journal_idempotency("quickbooks", "journal-1")
+        );
     }
 }

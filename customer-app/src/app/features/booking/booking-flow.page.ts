@@ -4,7 +4,7 @@ import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, I
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { AvailabilityDay, ServiceItem } from "../../core/api.types";
+import { AvailabilityDay, CustomerProfileExtensionRecord, ServiceItem } from "../../core/api.types";
 import { CustomerApiService } from "../../core/customer-api.service";
 
 const PENDING_BOOKING_INTENT_KEY = "auraCustomerPendingBookingIntent";
@@ -16,6 +16,7 @@ type PendingBookingIntent = {
   serviceIds?: string[];
   addonIdsByService?: Record<string, string[]>;
   clientId?: string;
+  additionalClientIds?: string[];
   packageCreditId?: string;
   staffId: string | null;
   date: string;
@@ -35,6 +36,11 @@ function splitServiceIds(value: string | null): string[] {
 function bookingDate(value: string | null): string {
   const date = new Date(String(value || ""));
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+}
+
+function localDate(): string {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 @Component({
@@ -190,6 +196,9 @@ function bookingDate(value: string | null): string {
                   @if (selectedClientId()) {
                     <div><dt>Booking for</dt><dd>Selected family profile</dd></div>
                   }
+                  @if (additionalClientIds().length) {
+                    <div><dt>Booking type</dt><dd>{{ additionalClientIds().length === 1 ? "Couple" : "Group" }} · {{ additionalClientIds().length + 1 }} guests</dd></div>
+                  }
                   @if (selectedPackageCreditId()) {
                     <div><dt>Package</dt><dd>Package credit selected</dd></div>
                   }
@@ -201,6 +210,17 @@ function bookingDate(value: string | null): string {
                   <div><dt>Time</dt><dd>{{ selectedSlotLabel() || "Not selected" }}</dd></div>
                   <div><dt>Payment</dt><dd>{{ paymentModeLabel() }}</dd></div>
                 </dl>
+                @if (groupProfiles().length) {
+                  <fieldset class="group-profiles">
+                    <legend>Add family profiles</legend>
+                    @for (profile of groupProfiles(); track profile.id) {
+                      <label>
+                        <input type="checkbox" [checked]="additionalClientIds().includes(profile.bookingClientId || '')" (change)="toggleGroupProfile(profile.bookingClientId || '', $any($event.target).checked)" />
+                        <span>{{ profile.title }} · {{ profile.relationshipType || "family" }}</span>
+                      </label>
+                    }
+                  </fieldset>
+                }
                 @if (onlinePaymentAvailable()) {
                   <div class="payment-options" aria-label="Payment method">
                     <button type="button" [class.active]="paymentMode() === 'online'" (click)="setPaymentMode('online')">Pay deposit online</button>
@@ -364,6 +384,9 @@ function bookingDate(value: string | null): string {
     dd { margin: 0; font-weight: 900; text-align: right; }
     .trust-card ion-icon { color: #10B981; font-size: 2rem; }
     .trust-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .group-profiles { display: grid; gap: 8px; margin: 18px 0; padding: 14px; border: 1px solid var(--border); border-radius: 16px; }
+    .group-profiles legend { padding: 0 6px; font-weight: 900; }
+    .group-profiles label { display: flex; align-items: center; gap: 9px; font-weight: 800; }
       .sticky-cta { bottom: calc(24px + env(safe-area-inset-bottom)); }
       .sticky-cta--confirm { bottom: calc(8px + env(safe-area-inset-bottom)); }
     @media (max-width: 599px) {
@@ -410,6 +433,8 @@ export class BookingFlowPage implements OnInit {
   readonly selectedServiceIds = signal<string[]>(this.initialServiceIds());
   readonly selectedAddonIds = signal<Record<string, string[]>>({});
   readonly selectedClientId = signal(this.initialBookingContext().clientId);
+  readonly additionalClientIds = signal<string[]>([]);
+  readonly familyProfiles = signal<CustomerProfileExtensionRecord[]>([]);
   readonly selectedPackageCreditId = signal(this.initialBookingContext().packageCreditId);
   readonly selectedStaffId = signal<string | null>(this.route.snapshot.queryParamMap.get("staffId") || null);
   readonly selectedDate = signal(bookingDate(this.route.snapshot.queryParamMap.get("after")));
@@ -440,6 +465,7 @@ export class BookingFlowPage implements OnInit {
     return (service.addons ?? []).filter((addon) => selectedIds.has(addon.id));
   }));
   readonly selectedStaff = computed(() => this.selectedStaffId() ? this.business()?.staff.find((staff) => staff.id === this.selectedStaffId()) ?? null : null);
+  readonly groupProfiles = computed(() => this.familyProfiles().filter((profile) => profile.bookingClientId && profile.bookingClientId !== this.selectedClientId()));
   readonly staffName = computed(() => this.selectedStaffId() ? this.business()?.staff.find((staff) => staff.id === this.selectedStaffId())?.name ?? "Selected staff" : "Any available professional");
   readonly selectedStaffTitle = computed(() => this.selectedStaff()?.title ?? "");
   readonly availabilityDays = computed(() => this.marketplace.availability());
@@ -462,6 +488,9 @@ export class BookingFlowPage implements OnInit {
       this.api.trackMarketingOfferClick(source[1], source[2]).subscribe({ error: () => undefined });
     }
     this.reload();
+    if (this.marketplace.isAuthenticated()) {
+      this.api.listFamily().subscribe({ next: (profiles) => this.familyProfiles.set(profiles), error: () => undefined });
+    }
   }
 
   async reload() {
@@ -623,6 +652,7 @@ export class BookingFlowPage implements OnInit {
         addonIds: (this.selectedAddonIds()[service.id] ?? []).filter((addonId) => (service.addons ?? []).some((addon) => addon.id === addonId))
       })),
       clientId: this.selectedClientId() || undefined,
+      additionalClientIds: this.additionalClientIds(),
       packageCreditId: this.selectedPackageCreditId() || undefined,
       staffId: this.selectedStaffId() || undefined,
       startAt,
@@ -656,7 +686,7 @@ export class BookingFlowPage implements OnInit {
     const business = this.business();
     const service = this.selectedService();
     if (!business || !service) return;
-    const queryDate = this.selectedDate() || new Date().toISOString().slice(0, 10);
+    const queryDate = this.selectedDate() || localDate();
     const days = await this.marketplace.loadAvailability(business.slug, {
       serviceId: service.id,
       staffId: this.selectedStaffId() || undefined,
@@ -694,6 +724,7 @@ export class BookingFlowPage implements OnInit {
       serviceIds: this.selectedServiceIds(),
       addonIdsByService: this.selectedAddonIds(),
       clientId: this.selectedClientId(),
+      additionalClientIds: this.additionalClientIds(),
       packageCreditId: this.selectedPackageCreditId(),
       staffId: this.selectedStaffId(),
       date: this.selectedDate(),
@@ -726,6 +757,7 @@ export class BookingFlowPage implements OnInit {
       }
       if (intent.addonIdsByService && typeof intent.addonIdsByService === "object") this.selectedAddonIds.set(intent.addonIdsByService);
       if (intent.clientId) this.selectedClientId.set(intent.clientId);
+      if (Array.isArray(intent.additionalClientIds)) this.additionalClientIds.set(intent.additionalClientIds.slice(0, 5));
       if (intent.packageCreditId) this.selectedPackageCreditId.set(intent.packageCreditId);
       this.selectedStaffId.set(intent.staffId || null);
       if (intent.date) this.selectedDate.set(intent.date);
@@ -744,6 +776,13 @@ export class BookingFlowPage implements OnInit {
     } catch {
       // Ignore unavailable storage.
     }
+  }
+
+  toggleGroupProfile(clientId: string, checked: boolean) {
+    if (!clientId) return;
+    this.additionalClientIds.update((ids) => checked
+      ? ids.includes(clientId) || ids.length >= 5 ? ids : [...ids, clientId]
+      : ids.filter((id) => id !== clientId));
   }
 
   private profileComplete(customer: { profileComplete?: boolean; firstName?: string; lastName?: string; email?: string; phone?: string }): boolean {

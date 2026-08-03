@@ -44,6 +44,7 @@ pub struct InventoryUpdateInput<'a> {
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
     pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<&'a str>,
     pub adjustment_evidence_reference: Option<&'a str>,
@@ -2534,6 +2535,15 @@ async fn update_in_tx(
     let Some(current) = current else {
         return Ok(None);
     };
+    if input
+        .online_sale_enabled
+        .unwrap_or(current.online_sale_enabled)
+        && input.product_usage.unwrap_or(&current.product_usage) == "consumable"
+    {
+        return Err(AppError::validation(
+            "only retail or dual-use products can be sold in Webstore",
+        ));
+    }
     let master_change_requested = input.sku.is_some()
         || input.name.is_some()
         || input.category.is_some()
@@ -2556,6 +2566,7 @@ async fn update_in_tx(
         || input.batch_tracked.is_some()
         || input.dual_use_stock.is_some()
         || input.center_available.is_some()
+        || input.online_sale_enabled.is_some()
         || input.active.is_some();
     if master_change_requested
         && inventory_repository::master_edit_locked(tx, input.tenant_id, input.branch_id)
@@ -2669,6 +2680,12 @@ async fn update_in_tx(
                 input
                     .center_available
                     .is_some_and(|value| value != current.center_available),
+            ),
+            (
+                "onlineSaleEnabled",
+                input
+                    .online_sale_enabled
+                    .is_some_and(|value| value != current.online_sale_enabled),
             ),
         ];
         for (field, changed) in candidates {
@@ -2890,6 +2907,7 @@ async fn update_in_tx(
             batch_tracked: input.batch_tracked,
             dual_use_stock: input.dual_use_stock,
             center_available: input.center_available,
+            online_sale_enabled: input.online_sale_enabled,
             active: input.active,
         },
     )
@@ -4133,6 +4151,7 @@ mod tests {
             batch_tracked: None,
             dual_use_stock: None,
             center_available: None,
+            online_sale_enabled: None,
             active: None,
             adjustment_reason: Some("Cycle count correction"),
             adjustment_evidence_reference: Some("count-sheet-1"),

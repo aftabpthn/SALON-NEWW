@@ -94,6 +94,10 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(enterprise_report),
         )
         .route(
+            "/membership-enterprise/reports/liabilities",
+            axum::routing::get(liability_report),
+        )
+        .route(
             "/membership-enterprise/reports/redeem",
             axum::routing::get(redeem_report),
         )
@@ -733,6 +737,12 @@ async fn enterprise_report(State(state): State<AppState>, headers: HeaderMap) ->
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         membership_service::enterprise_report(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+async fn liability_report(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        membership_service::liability_reconciliation(&state.db, &tenant_id, &branch_id).await?,
     )))
 }
 

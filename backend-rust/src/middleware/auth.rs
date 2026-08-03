@@ -200,6 +200,8 @@ pub async fn require_auth(
 
     if request_mutates_data(req.method()) {
         entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
+    } else {
+        entitlement_service::ensure_can_login(&state.db, &claims.tenant_id).await?;
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)
@@ -434,6 +436,13 @@ fn matched_mask<'a>(key: &str, path: &str, masked_fields: &'a [String]) -> Optio
     let has_mask = |mask: &str| masked_fields.iter().any(|value| value == mask);
     if has_mask("client.contact") && is_contact_field(key) {
         Some("client.contact")
+    } else if has_mask("client.clinical")
+        && ["client", "appointment", "form", "treatment"]
+            .iter()
+            .any(|domain| path.contains(domain))
+        && is_clinical_field(&normalized_key)
+    {
+        Some("client.clinical")
     } else if has_mask("staff.payroll")
         && path.contains("staff-payroll")
         && is_money_field(&normalized_key)
@@ -468,7 +477,27 @@ fn is_contact_field(key: &str) -> bool {
             | "workPhone"
             | "email"
             | "recipient"
+            | "address"
+            | "addressLine1"
+            | "addressLine2"
+            | "city"
+            | "postalCode"
+            | "pincode"
     )
+}
+
+fn is_clinical_field(normalized_key: &str) -> bool {
+    [
+        "clinical",
+        "medical",
+        "allerg",
+        "sensitiv",
+        "diagnos",
+        "treatmentnote",
+        "formresponse",
+    ]
+    .iter()
+    .any(|value| normalized_key.contains(value))
 }
 
 fn is_money_field(normalized_key: &str) -> bool {
@@ -484,6 +513,9 @@ fn masked_export_blocked(path: &str, masked_fields: &[String]) -> bool {
     }
     masked_fields.iter().any(|mask| match mask.as_str() {
         "client.contact" => path.contains("client"),
+        "client.clinical" => {
+            path.contains("client") || path.contains("appointment") || path.contains("form")
+        }
         "staff.payroll" => path.contains("staff-payroll") || path.contains("payslip"),
         "inventory.cost" => {
             path.contains("inventory") || path.contains("products") || path.contains("purchases")
@@ -700,20 +732,40 @@ mod tests {
     #[test]
     fn configured_profiles_mask_only_sensitive_fields() {
         let mut payload = serde_json::json!({
-            "data": { "name": "Real Name", "phone": "9999999999", "grossPaise": 2500 }
+            "data": {
+                "name": "Real Name",
+                "phone": "9999999999",
+                "address": "Real address",
+                "grossPaise": 2500
+            }
         });
         let mut hits = BTreeSet::new();
         mask_value(
             &mut payload,
             "/api/v1/staff-payroll/runs/1",
-            &["client.contact".into(), "staff.payroll".into()],
+            &[
+                "client.contact".into(),
+                "client.clinical".into(),
+                "staff.payroll".into(),
+            ],
             &mut hits,
         );
         assert_eq!(payload["data"]["name"], "Real Name");
         assert_eq!(payload["data"]["phone"], "[masked]");
+        assert_eq!(payload["data"]["address"], "[masked]");
         assert!(payload["data"]["grossPaise"].is_null());
         assert!(hits.contains(&("client.contact".into(), "phone".into())));
+        assert!(hits.contains(&("client.contact".into(), "address".into())));
         assert!(hits.contains(&("staff.payroll".into(), "grossPaise".into())));
+        let mut clinical = serde_json::json!({ "medicalHistory": "Sensitive" });
+        mask_value(
+            &mut clinical,
+            "/api/v1/clients/client-1",
+            &["client.clinical".into()],
+            &mut hits,
+        );
+        assert!(clinical["medicalHistory"].is_null());
+        assert!(hits.contains(&("client.clinical".into(), "medicalHistory".into())));
         assert!(masked_export_blocked(
             "/api/v1/staff-payroll/runs/1/export",
             &["staff.payroll".into()]

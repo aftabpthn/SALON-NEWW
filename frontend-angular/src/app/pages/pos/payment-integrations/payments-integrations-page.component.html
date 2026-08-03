@@ -41,10 +41,34 @@
       <strong>{{ operations.failed }}</strong>
     </div>
     <div>
+      <span>Unknown ops</span>
+      <strong>{{ operations.unknown }}</strong>
+    </div>
+    <div>
       <span>Open disputes</span>
       <strong>{{ openDisputes }}</strong>
     </div>
   </section>
+
+  @if (recentOperations.length) {
+    <section class="operations-card" aria-label="Recent provider operations">
+      <header><h2>Provider operations</h2><span>Latest 50</span></header>
+      <div class="operations-table">
+        @for (operation of recentOperations; track operation.id) {
+          <article [class.needs-attention]="operation.status === 'unknown' || operation.status === 'failed'">
+            <div><strong>{{ operation.provider }} · {{ operation.operationType.replace('_', ' ') }}</strong><span>{{ operation.saleId || operation.id }}</span></div>
+            <div><strong>{{ operation.amountPaise / 100 | currency:operation.currency }}</strong><span>{{ operation.captureMethod }}</span></div>
+            <div><strong>{{ operation.status.replace('_', ' ') }}</strong><span>{{ operation.lastError || (operation.createdAt | date:'dd/MM/yyyy, HH:mm') }}</span></div>
+            <div class="operation-actions">
+              @if (canCapture(operation)) { <button type="button" (click)="runPaymentAction(operation, 'capture')" [disabled]="!!operationActionId">Capture</button> }
+              @if (canVoid(operation)) { <button type="button" (click)="runPaymentAction(operation, 'void')" [disabled]="!!operationActionId">Void</button> }
+              @if (canReconcile(operation)) { <button type="button" (click)="runPaymentAction(operation, 'reconcile')" [disabled]="!!operationActionId">Reconcile</button> }
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+  }
 
   @if (!loading && providers.length) {
     <section class="catalog-controls" aria-label="Filter payment providers">

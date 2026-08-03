@@ -37,6 +37,7 @@ pub struct PaymentRequest {
     #[serde(default)]
     pub recurring: bool,
     pub application_fee_paise: Option<i64>,
+    pub capture_method: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +55,14 @@ pub struct PayoutRequest {
     pub amount_paise: i64,
     pub currency: String,
     pub reference: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentModification {
+    pub provider_action_id: String,
+    pub status: String,
+    pub payload: Value,
 }
 
 pub async fn create_onboarding(
@@ -173,6 +182,7 @@ pub async fn create_payment(
     idempotency_key: String,
 ) -> Result<Value, AppError> {
     validate_money(request.amount_paise, &request.currency)?;
+    let capture_method = payment_capture_method(request.capture_method.as_deref())?;
     match provider {
         "stripe" => {
             let mut fields = vec![
@@ -180,6 +190,7 @@ pub async fn create_payment(
                 ("currency", request.currency.to_ascii_lowercase()),
                 ("automatic_payment_methods[enabled]", "true".into()),
                 ("metadata[reference]", request.reference.clone()),
+                ("capture_method", capture_method.into()),
             ];
             if let Some(value) = clean_id(request.provider_payment_method_id.as_deref()) {
                 fields.push(("payment_method", value.into()));
@@ -226,10 +237,150 @@ pub async fn create_payment(
                 "shopperInteraction":if request.recurring {"ContAuth"} else {"Ecommerce"},
                 "recurringProcessingModel":if request.recurring {Some("Subscription")} else {None},
                 "storePaymentMethod":request.store_payment_method,
+                "captureDelayHours":if capture_method == "manual" {Some("manual")} else {None},
                 "metadata":{"merchantAccountId":account_id}
             });
             adyen_checkout(settings, "/payments", &body, Some(&idempotency_key)).await
         }
+        _ => Err(AppError::validation("provider must be stripe or adyen")),
+    }
+}
+
+pub async fn capture_payment(
+    settings: &Settings,
+    provider: &str,
+    account_id: &str,
+    provider_payment_id: &str,
+    amount_paise: i64,
+    currency: &str,
+    reference: &str,
+    idempotency_key: &str,
+) -> Result<PaymentModification, AppError> {
+    validate_money(amount_paise, currency)?;
+    let payload = match provider {
+        "stripe" => {
+            stripe_form(
+                settings,
+                Some(account_id),
+                &format!("/v1/payment_intents/{provider_payment_id}/capture"),
+                &[("amount_to_capture", amount_paise.to_string())],
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        "adyen" => {
+            adyen_checkout(
+                settings,
+                &format!("/payments/{provider_payment_id}/captures"),
+                &json!({
+                    "merchantAccount":adyen_merchant(settings)?,
+                    "amount":{"currency":currency.to_ascii_uppercase(),"value":amount_paise},
+                    "reference":reference
+                }),
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        _ => return Err(AppError::validation("provider must be stripe or adyen")),
+    };
+    payment_modification(payload, provider)
+}
+
+pub async fn void_payment(
+    settings: &Settings,
+    provider: &str,
+    account_id: &str,
+    provider_payment_id: &str,
+    reference: &str,
+    idempotency_key: &str,
+) -> Result<PaymentModification, AppError> {
+    let payload = match provider {
+        "stripe" => {
+            stripe_form(
+                settings,
+                Some(account_id),
+                &format!("/v1/payment_intents/{provider_payment_id}/cancel"),
+                &[],
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        "adyen" => {
+            adyen_checkout(
+                settings,
+                &format!("/payments/{provider_payment_id}/cancels"),
+                &json!({"merchantAccount":adyen_merchant(settings)?,"reference":reference}),
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        _ => return Err(AppError::validation("provider must be stripe or adyen")),
+    };
+    payment_modification(payload, provider)
+}
+
+pub async fn refund_payment(
+    settings: &Settings,
+    provider: &str,
+    account_id: &str,
+    provider_payment_id: &str,
+    amount_paise: i64,
+    currency: &str,
+    reference: &str,
+    idempotency_key: &str,
+) -> Result<PaymentModification, AppError> {
+    validate_money(amount_paise, currency)?;
+    let payload = match provider {
+        "stripe" => {
+            stripe_form(
+                settings,
+                Some(account_id),
+                "/v1/refunds",
+                &[
+                    ("payment_intent", provider_payment_id.to_string()),
+                    ("amount", amount_paise.to_string()),
+                    ("metadata[reference]", reference.to_string()),
+                ],
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        "adyen" => {
+            adyen_checkout(
+                settings,
+                &format!("/payments/{provider_payment_id}/refunds"),
+                &json!({
+                    "merchantAccount":adyen_merchant(settings)?,
+                    "amount":{"currency":currency.to_ascii_uppercase(),"value":amount_paise},
+                    "reference":reference
+                }),
+                Some(idempotency_key),
+            )
+            .await?
+        }
+        _ => return Err(AppError::validation("provider must be stripe or adyen")),
+    };
+    payment_modification(payload, provider)
+}
+
+pub async fn retrieve_payment(
+    settings: &Settings,
+    provider: &str,
+    account_id: &str,
+    provider_payment_id: &str,
+) -> Result<Value, AppError> {
+    match provider {
+        "stripe" => {
+            stripe_get(
+                settings,
+                &format!("/v1/payment_intents/{provider_payment_id}"),
+                Some(account_id),
+            )
+            .await
+        }
+        "adyen" => Err(AppError::conflict(
+            "Adyen payment reconciliation is webhook-authoritative; wait for the signed webhook or review it in the provider console",
+        )),
         _ => Err(AppError::validation("provider must be stripe or adyen")),
     }
 }
@@ -382,6 +533,42 @@ fn validate_money(amount: i64, currency: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+pub fn payment_capture_method(value: Option<&str>) -> Result<&'static str, AppError> {
+    match value
+        .unwrap_or("automatic")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "automatic" => Ok("automatic"),
+        "manual" => Ok("manual"),
+        _ => Err(AppError::validation(
+            "captureMethod must be automatic or manual",
+        )),
+    }
+}
+
+fn payment_modification(payload: Value, provider: &str) -> Result<PaymentModification, AppError> {
+    let provider_action_id = payload
+        .get("id")
+        .or_else(|| payload.get("pspReference"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| provider_error(&format!("{provider} modification response is incomplete")))?
+        .to_string();
+    let status = payload
+        .get("status")
+        .or_else(|| payload.get("resultCode"))
+        .and_then(Value::as_str)
+        .unwrap_or("received")
+        .to_ascii_lowercase();
+    Ok(PaymentModification {
+        provider_action_id,
+        status,
+        payload,
+    })
+}
+
 fn clean_id(value: Option<&str>) -> Option<&str> {
     value
         .map(str::trim)
@@ -521,7 +708,10 @@ async fn provider_json(
         .map_err(|_| provider_error(&format!("{provider} returned an invalid response")))?;
     if !status.is_success() {
         tracing::warn!(provider, status = %status, "payment provider request rejected");
-        return Err(provider_error(&format!("{provider} rejected the request")));
+        return Err(AppError::service_unavailable(
+            "PAYMENT_PROVIDER_REJECTED",
+            format!("{provider} rejected the request"),
+        ));
     }
     Ok(payload)
 }
@@ -577,7 +767,7 @@ fn adyen_checkout_base(settings: &Settings) -> Result<String, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::reject_raw_card_data;
+    use super::{payment_capture_method, reject_raw_card_data};
     use serde_json::json;
 
     #[test]
@@ -588,5 +778,12 @@ mod tests {
         assert!(
             reject_raw_card_data(&json!({"type":"scheme","number":"4111111111111111"})).is_err()
         );
+    }
+
+    #[test]
+    fn capture_method_is_explicit_and_fail_closed() {
+        assert_eq!(payment_capture_method(None).unwrap(), "automatic");
+        assert_eq!(payment_capture_method(Some("manual")).unwrap(), "manual");
+        assert!(payment_capture_method(Some("later")).is_err());
     }
 }

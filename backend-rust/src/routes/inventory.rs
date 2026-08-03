@@ -216,11 +216,35 @@ pub struct InventoryWriteRequest {
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
     pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<String>,
     pub adjustment_evidence_reference: Option<String>,
     pub adjustment_business_date: Option<String>,
     pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProductLifecycleRequest {
+    pub reason: String,
+    pub replacement_inventory_item_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProductCloneRequest {
+    pub sku: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BulkInventoryUpdateRequest {
+    pub ids: Vec<String>,
+    pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
+    pub reorder_point: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,6 +299,7 @@ pub struct InventoryResponse {
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
     pub center_available: bool,
+    pub online_sale_enabled: bool,
     pub active: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -305,6 +330,7 @@ pub struct Product360Response {
     pub client_usage: serde_json::Value,
     pub entity_ledger: serde_json::Value,
     pub margin: serde_json::Value,
+    pub lifecycle_events: Vec<serde_json::Value>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -386,6 +412,13 @@ pub fn router() -> Router<AppState> {
             get(service_recipe_versions),
         )
         .route("/inventory/:id/360", axum::routing::get(product_360))
+        .route(
+            "/inventory/bulk",
+            axum::routing::patch(bulk_update_inventory),
+        )
+        .route("/inventory/:id/clone", post(clone_inventory))
+        .route("/inventory/:id/discontinue", post(discontinue_inventory))
+        .route("/inventory/:id/reactivate", post(reactivate_inventory))
         .route("/inventory/:id/kit", get(get_kit).put(save_kit))
         .route("/inventory/:id/assemble", post(assemble_kit))
         .route("/inventory/:id/unbundle", post(unbundle_kit))
@@ -1139,16 +1172,24 @@ async fn product_360(
     Path(id): Path<String>,
 ) -> ApiResult<Product360Response> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let (product, summary, kit_components, kit_auto_unbundle_on_receive, kit_history, extended) =
-        tokio::try_join!(
-            inventory_repository::get(&state.db, &tenant_id, &branch_id, &id),
-            inventory_repository::product_360_summary(&state.db, &tenant_id, &branch_id, &id),
-            inventory_repository::kit_components(&state.db, &tenant_id, &branch_id, &id),
-            inventory_repository::kit_auto_unbundle_value(&state.db, &tenant_id, &branch_id, &id),
-            inventory_repository::kit_history(&state.db, &tenant_id, &branch_id, &id),
-            inventory_repository::product_360_extended(&state.db, &tenant_id, &branch_id, &id),
-        )
-        .map_err(|_| AppError::internal("failed to load product details"))?;
+    let (
+        product,
+        summary,
+        kit_components,
+        kit_auto_unbundle_on_receive,
+        kit_history,
+        extended,
+        lifecycle_events,
+    ) = tokio::try_join!(
+        inventory_repository::get(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::product_360_summary(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::kit_components(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::kit_auto_unbundle_value(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::kit_history(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::product_360_extended(&state.db, &tenant_id, &branch_id, &id),
+        inventory_repository::lifecycle_events(&state.db, &tenant_id, &branch_id, &id),
+    )
+    .map_err(|_| AppError::internal("failed to load product details"))?;
     let product = product.ok_or_else(|| AppError::not_found("inventory item was not found"))?;
 
     Ok(Json(ApiResponse::ok(Product360Response {
@@ -1174,6 +1215,7 @@ async fn product_360(
         client_usage: extended["clientUsage"].clone(),
         entity_ledger: extended["entityLedger"].clone(),
         margin: extended["margin"].clone(),
+        lifecycle_events,
     })))
 }
 
@@ -1211,6 +1253,11 @@ async fn create_inventory(
                 "retail"
             }
         }))?;
+    if payload.online_sale_enabled == Some(true) && product_usage == "consumable" {
+        return Err(AppError::validation(
+            "only retail or dual-use products can be sold in Webstore",
+        ));
+    }
     let unit = inventory_unit(payload.unit.as_deref().unwrap_or("pcs"))?;
     let package_unit = inventory_package_unit(payload.package_unit.as_deref().unwrap_or("pcs"))?;
     let units_per_package = positive_i32(payload.units_per_package, "unitsPerPackage")?;
@@ -1271,6 +1318,7 @@ async fn create_inventory(
             batch_tracked: payload.batch_tracked.unwrap_or(false),
             dual_use_stock: product_usage == "dual_use",
             center_available: payload.center_available.unwrap_or(true),
+            online_sale_enabled: payload.online_sale_enabled.unwrap_or(false),
             active: payload.active.unwrap_or(true),
         },
     )
@@ -1404,6 +1452,7 @@ async fn update_inventory(
                 .map(|value| value == "dual_use")
                 .or(payload.dual_use_stock),
             center_available: payload.center_available,
+            online_sale_enabled: payload.online_sale_enabled,
             active: payload.active,
             adjustment_reason: payload.adjustment_reason.as_deref(),
             adjustment_evidence_reference: payload.adjustment_evidence_reference.as_deref(),
@@ -1420,20 +1469,163 @@ async fn update_inventory(
 
 async fn delete_inventory(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<serde_json::Value> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let deleted = inventory_repository::delete(&state.db, &tenant_id, &branch_id, &id)
-        .await
-        .map_err(|_| AppError::internal("failed to delete inventory item"))?;
+    let event = inventory_repository::discontinue(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        None,
+        "Deactivated from inventory master",
+        &claims.sub,
+    )
+    .await
+    .map_err(product_lifecycle_error)?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"deleted": false, "deactivated": true, "id": id, "event": event}),
+    )))
+}
 
-    if deleted {
-        Ok(Json(ApiResponse::ok(
-            serde_json::json!({"deleted": true, "id": id}),
-        )))
-    } else {
-        Err(AppError::not_found("inventory item was not found"))
+async fn discontinue_inventory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ProductLifecycleRequest>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let reason = required_text(Some(payload.reason), "discontinuation reason is required")?;
+    let event = inventory_repository::discontinue(
+        &state.db,
+        &tenant,
+        &branch,
+        &id,
+        payload.replacement_inventory_item_id.as_deref(),
+        &reason,
+        &claims.sub,
+    )
+    .await
+    .map_err(product_lifecycle_error)?;
+    Ok(Json(ApiResponse::ok(event)))
+}
+
+async fn reactivate_inventory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ProductLifecycleRequest>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let reason = required_text(Some(payload.reason), "reactivation reason is required")?;
+    let event =
+        inventory_repository::reactivate(&state.db, &tenant, &branch, &id, &reason, &claims.sub)
+            .await
+            .map_err(product_lifecycle_error)?;
+    Ok(Json(ApiResponse::ok(event)))
+}
+
+async fn clone_inventory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<ProductCloneRequest>,
+) -> ApiResult<InventoryResponse> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let source = inventory_repository::get(&state.db, &tenant, &branch, &id)
+        .await
+        .map_err(|_| AppError::internal("failed to load source product"))?
+        .ok_or_else(|| AppError::not_found("source product was not found"))?;
+    create_inventory(
+        State(state),
+        Extension(claims),
+        headers,
+        Json(InventoryWriteRequest {
+            sku: Some(payload.sku),
+            name: Some(payload.name),
+            category: Some(source.category),
+            subcategory: Some(source.subcategory),
+            brand: Some(source.brand),
+            product_usage: Some(source.product_usage),
+            unit: Some(source.unit),
+            package_unit: Some(source.package_unit),
+            units_per_package: Some(source.units_per_package),
+            stock_quantity: Some(0),
+            reorder_point: Some(source.reorder_point),
+            alert_level: Some(source.alert_level),
+            desired_level: Some(source.desired_level),
+            order_level: Some(source.order_level),
+            safety_stock_level: Some(source.safety_stock_level),
+            unit_cost_paise: Some(source.unit_cost_paise),
+            retail_price_paise: Some(source.retail_price_paise),
+            hsn_code: Some(source.hsn_code),
+            gst_percent: Some(source.gst_percent),
+            barcode: None,
+            barcodes: Some(vec![]),
+            batch_tracked: Some(source.batch_tracked),
+            dual_use_stock: Some(source.dual_use_stock),
+            center_available: Some(source.center_available),
+            online_sale_enabled: Some(source.online_sale_enabled),
+            active: Some(true),
+            adjustment_reason: None,
+            adjustment_evidence_reference: None,
+            adjustment_business_date: None,
+            idempotency_key: None,
+        }),
+    )
+    .await
+}
+
+async fn bulk_update_inventory(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<BulkInventoryUpdateRequest>,
+) -> ApiResult<serde_json::Value> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    let mut ids = payload
+        .ids
+        .into_iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty()
+        || ids.len() > 200
+        || payload.reorder_point.is_some_and(|value| value < 0)
+        || (payload.center_available.is_none()
+            && payload.online_sale_enabled.is_none()
+            && payload.reorder_point.is_none())
+    {
+        return Err(AppError::validation("bulk product update is invalid"));
+    }
+    let rows = sqlx::query_scalar::<_, String>("WITH matched AS (SELECT id FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3)), updated AS (UPDATE inventory_items SET center_available=COALESCE($4,center_available),online_sale_enabled=COALESCE($5,online_sale_enabled),reorder_point=COALESCE($6,reorder_point),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id IN (SELECT id FROM matched) AND (SELECT COUNT(*) FROM matched)=CARDINALITY($3) RETURNING id) SELECT id FROM updated")
+        .bind(&tenant).bind(&branch).bind(&ids).bind(payload.center_available).bind(payload.online_sale_enabled).bind(payload.reorder_point).fetch_all(&state.db).await.map_err(|_| AppError::internal("failed to bulk update products"))?;
+    if rows.len() != ids.len() {
+        return Err(AppError::not_found(
+            "one or more inventory items were not found",
+        ));
+    }
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"updated": rows.len(), "ids": rows}),
+    )))
+}
+
+fn product_lifecycle_error(error: sqlx::Error) -> AppError {
+    match error {
+        sqlx::Error::RowNotFound => {
+            AppError::not_found("inventory item was not found or already in the requested state")
+        }
+        sqlx::Error::Protocol(message) => AppError::validation(message),
+        sqlx::Error::Database(ref value) if value.code().as_deref() == Some("23514") => {
+            AppError::validation("lifecycle reason or replacement is invalid")
+        }
+        _ => AppError::internal("inventory product lifecycle action failed"),
     }
 }
 
@@ -1599,6 +1791,7 @@ impl From<InventoryRecord> for InventoryResponse {
             batch_tracked: record.batch_tracked,
             dual_use_stock: record.dual_use_stock,
             center_available: record.center_available,
+            online_sale_enabled: record.online_sale_enabled,
             active: record.active,
             created_at: record.created_at,
             updated_at: record.updated_at,

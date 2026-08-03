@@ -3,7 +3,7 @@ import { ActivatedRoute, Router } from "@angular/router";
 import { AlertController, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { cardOutline, chatbubblesOutline, checkmarkCircleOutline, clipboardOutline, downloadOutline, logInOutline, locationOutline, receiptOutline, repeatOutline, timeOutline, walletOutline } from "ionicons/icons";
-import { CustomerProfileExtensionRecord } from "../../core/api.types";
+import { CustomerBookingCheckInPayload, CustomerProfileExtensionRecord } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
@@ -290,7 +290,7 @@ export class BookingDetailPage implements OnInit {
           handler: (value: { etaMinutes?: string }) => {
             const eta = Number(value.etaMinutes || 0);
             if (!Number.isFinite(eta) || eta < 0 || eta > 240) return false;
-            void this.marketplace.checkInBooking(booking.id, { etaMinutes: Math.round(eta) })
+            void this.checkInWithLocation(booking.id, Math.round(eta))
               .then(() => this.actionMessage.set(eta === 0 ? "You are checked in." : `ETA ${Math.round(eta)} minutes shared with the salon.`));
             return true;
           }
@@ -298,6 +298,15 @@ export class BookingDetailPage implements OnInit {
       ]
     });
     await alert.present();
+  }
+
+  private async checkInWithLocation(bookingId: string, etaMinutes: number) {
+    const payload: CustomerBookingCheckInPayload = { etaMinutes, idempotencyKey: crypto.randomUUID() };
+    if (etaMinutes === 0 && "geolocation" in navigator) {
+      const position = await new Promise<GeolocationPosition | null>((resolve) => navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }));
+      if (position) Object.assign(payload, { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy });
+    }
+    return this.marketplace.checkInBooking(bookingId, payload);
   }
 
   async selfPay() {

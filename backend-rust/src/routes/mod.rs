@@ -29,12 +29,14 @@ pub mod cash_drawer;
 pub mod clients;
 pub(crate) mod context;
 pub mod customer_portal;
+pub mod fitness;
 pub mod health;
 pub mod integrations;
 pub mod inventory;
 pub mod inventory_governance;
 pub mod inventory_transfers;
 pub mod invoice_webhooks;
+pub mod kiosk;
 pub mod language_settings;
 pub mod laundry;
 pub mod marketing_leads;
@@ -42,6 +44,7 @@ pub mod membership_enterprise;
 pub mod memberships;
 pub mod notifications;
 pub mod operations;
+pub mod organization;
 pub mod outgoing_funds;
 pub mod packages;
 pub mod payment_platform;
@@ -81,6 +84,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(ai_concierge::public_router())
         .merge(booking_portal::router())
         .merge(booking_portal_v2::router())
+        .merge(fitness::public_router())
+        .merge(kiosk::public_router())
         .merge(customer_portal::router())
         .merge(realtime::router())
         .merge(invoice_webhooks::router())
@@ -121,6 +126,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(appointment_activity::router())
         .merge(appointments::router())
         .merge(availability::router())
+        .merge(fitness::router())
+        .merge(kiosk::router())
         .merge(pos::router())
         .merge(pos_enterprise::router())
         .merge(pos_legacy_completion::router())
@@ -148,6 +155,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(marketing_leads::router())
         .merge(notifications::router())
         .merge(operations::router())
+        .merge(organization::router())
         .merge(whatsapp::router())
         .route_layer(from_fn_with_state(
             with_state.clone(),

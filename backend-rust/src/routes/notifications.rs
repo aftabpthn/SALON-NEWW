@@ -11,7 +11,10 @@ use uuid::Uuid;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
-    repositories::benefit_notification_repository::{self, NewBenefitDelivery},
+    repositories::{
+        benefit_notification_repository::{self, NewBenefitDelivery},
+        communication_repository,
+    },
     routes::context::tenant_branch,
     services::{
         auth_service::{self, AuthClaims},
@@ -32,6 +35,15 @@ pub fn router() -> Router<AppState> {
             axum::routing::get(count_unread_notifications),
         )
         .route("/notifications/inbox", axum::routing::get(list_inbox))
+        .route("/notifications/inbox/sla", axum::routing::get(inbox_sla))
+        .route(
+            "/notifications/inbox/threads/:thread_key",
+            axum::routing::patch(update_inbox_thread),
+        )
+        .route(
+            "/notifications/inbox/threads/:thread_key/suggestion",
+            axum::routing::post(suggest_approved_reply),
+        )
         .route(
             "/notifications/team-chat",
             axum::routing::get(list_team_chat).post(send_team_chat),
@@ -92,6 +104,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/notifications/marketing-events",
             axum::routing::post(marketing_event),
+        )
+        .route(
+            "/notifications/marketing-outbox",
+            axum::routing::get(marketing_outbox),
         )
         .route(
             "/notifications/:id/campaign-approval",
@@ -201,6 +217,15 @@ struct InboxReplyRequest {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InboxThreadUpdateRequest {
+    status: String,
+    priority: String,
+    assigned_to: Option<String>,
+    note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TeamChatQuery {
     before: Option<DateTime<Utc>>,
@@ -226,20 +251,6 @@ struct StaffChatAttachmentQuery {
 struct SmsCenterQuery {
     audience: Option<String>,
     channel: Option<String>,
-}
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-struct InboxMessage {
-    id: String,
-    client_id: String,
-    client_name: String,
-    channel: String,
-    direction: String,
-    status: String,
-    subject: String,
-    body: String,
-    occurred_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -588,36 +599,128 @@ async fn list_inbox(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<InboxQuery>,
-) -> ApiResult<Vec<InboxMessage>> {
+) -> ApiResult<Vec<communication_repository::UnifiedCommunication>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let client_id = query.client_id.unwrap_or_default();
+    let thread_key = query
+        .client_id
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!("client:{}", value.trim()))
+        .unwrap_or_default();
     let channel = query.channel.unwrap_or_default();
-    if !channel.is_empty() && !matches!(channel.as_str(), "whatsapp" | "sms" | "email") {
+    if !channel.is_empty()
+        && !matches!(
+            channel.as_str(),
+            "whatsapp" | "sms" | "email" | "voice" | "web_chat"
+        )
+    {
         return Err(AppError::validation("inbox channel is invalid"));
     }
-    let rows = sqlx::query_as::<_, InboxMessage>(
-        r#"SELECT communication.id,communication.client_id,
-                  TRIM(CONCAT_WS(' ',client.first_name,client.last_name)) AS client_name,
-                  communication.channel,communication.direction,communication.status,
-                  communication.subject,communication.body,communication.occurred_at
-             FROM client_communications communication
-             JOIN clients client ON client.tenant_id=communication.tenant_id
-                                AND client.branch_id=communication.branch_id
-                                AND client.id=communication.client_id
-            WHERE communication.tenant_id=$1 AND communication.branch_id=$2
-              AND ($3='' OR communication.client_id=$3)
-              AND ($4='' OR communication.channel=$4)
-            ORDER BY communication.occurred_at DESC,communication.id DESC
-            LIMIT 500"#,
+    let rows = communication_repository::list_timeline(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &thread_key,
+        &channel,
     )
-    .bind(&tenant_id)
-    .bind(&branch_id)
-    .bind(client_id)
-    .bind(channel)
-    .fetch_all(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to load message inbox"))?;
     Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn inbox_sla(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<communication_repository::SlaSummary> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let summary = communication_repository::sla_summary(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load communication SLA"))?;
+    Ok(Json(ApiResponse::ok(summary)))
+}
+
+async fn update_inbox_thread(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(thread_key): Path<String>,
+    Json(payload): Json<InboxThreadUpdateRequest>,
+) -> ApiResult<communication_repository::ThreadState> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let status = payload.status.trim().to_ascii_lowercase();
+    let priority = payload.priority.trim().to_ascii_lowercase();
+    let assigned_to = payload.assigned_to.as_deref().unwrap_or_default().trim();
+    let note = payload.note.as_deref().unwrap_or_default().trim();
+    if !matches!(status.as_str(), "open" | "assigned" | "resolved") {
+        return Err(AppError::validation(
+            "communication thread status is invalid",
+        ));
+    }
+    if !matches!(priority.as_str(), "low" | "normal" | "high" | "urgent") {
+        return Err(AppError::validation(
+            "communication thread priority is invalid",
+        ));
+    }
+    if note.chars().count() > 1_000 {
+        return Err(AppError::validation("handover note is too long"));
+    }
+    if !communication_repository::assignee_exists(&state.db, &tenant_id, &branch_id, assigned_to)
+        .await
+        .map_err(|_| AppError::internal("failed to validate communication assignee"))?
+    {
+        return Err(AppError::validation("communication assignee is invalid"));
+    }
+    let row = communication_repository::update_thread(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &thread_key,
+        &status,
+        &priority,
+        assigned_to,
+        note,
+        &claims.sub,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to update communication thread"))?
+    .ok_or_else(|| AppError::not_found("communication thread was not found"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn suggest_approved_reply(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(thread_key): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let context = communication_repository::latest_reply_context(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &thread_key,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load communication context"))?
+    .ok_or_else(|| AppError::not_found("inbound communication was not found"))?;
+    let suggestion = sqlx::query_as::<_, (String, String)>(
+        r#"SELECT name,body FROM message_templates
+            WHERE tenant_id=$1 AND branch_id IN ('',$2) AND channel=$3 AND status='active'
+            ORDER BY CASE WHEN branch_id=$2 THEN 0 ELSE 1 END,updated_at DESC,id LIMIT 1"#,
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&context.channel)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load approved response"))?
+    .ok_or_else(|| AppError::not_found("no approved response is available for this channel"))?;
+    Ok(Json(ApiResponse::ok(json!({
+        "body":suggestion.1,
+        "name":suggestion.0,
+        "source":"approved_template",
+        "channel":context.channel,
+        "clientId":context.client_id,
+        "leadId":context.lead_id
+    }))))
 }
 
 async fn reply_to_client(
@@ -703,13 +806,43 @@ async fn reply_to_client(
 }
 
 async fn provider_status(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
-    tenant_branch(&headers)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let failures =
+        communication_repository::provider_failure_counts(&state.db, &tenant_id, &branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to load provider health"))?;
+    let failover_mode = sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE(settings_json->>'failoverMode','manual') FROM message_history_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load communication failover policy"))?
+    .unwrap_or_else(|| "manual".into());
     Ok(Json(ApiResponse::ok(json!({
         "whatsappDelivery": state.settings.whatsapp_cloud_enabled() || state.settings.invoice_delivery_webhook_url.is_some(),
         "whatsappWebhook": state.settings.whatsapp_cloud_webhook_configured(),
         "smsDelivery": state.settings.invoice_delivery_webhook_url.is_some(),
-        "emailDelivery": state.settings.invoice_delivery_webhook_url.is_some()
+        "emailDelivery": state.settings.invoice_delivery_webhook_url.is_some(),
+        "voiceDelivery": state.settings.voice_provider_token.is_some(),
+        "messageFailuresLastHour": failures.0,
+        "voiceFailuresLastHour": failures.1,
+        "failoverMode": failover_mode
     }))))
+}
+
+async fn marketing_outbox(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<Value>> {
+    require_marketing_permission(&claims, "marketing.read")?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = benefit_notification_repository::marketing_outbox(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load marketing outbox"))?;
+    Ok(Json(ApiResponse::ok(rows)))
 }
 
 async fn marketing_coverage(
@@ -1174,9 +1307,17 @@ async fn create_notification(
     let resource_type = payload.resource_type.unwrap_or_default();
     let resource_id = payload.resource_id.unwrap_or_default();
     let created_by = claims.sub.clone();
-    let metadata = payload.metadata.unwrap_or_else(|| json!({}));
+    let mut metadata = payload.metadata.unwrap_or_else(|| json!({}));
     if notification_type == "marketing_campaign" {
         require_marketing_permission(&claims, "marketing.manage")?;
+        let defaults = sqlx::query_as::<_, (i32, i32)>("SELECT COALESCE((SELECT control_group_bps FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2),0),COALESCE((SELECT attribution_window_days FROM marketing_governance_settings WHERE tenant_id=$1 AND branch_id=$2),30)")
+            .bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to load campaign governance"))?;
+        if metadata.get("controlGroupBps").is_none() {
+            metadata["controlGroupBps"] = json!(defaults.0);
+        }
+        if metadata.get("attributionWindowDays").is_none() {
+            metadata["attributionWindowDays"] = json!(defaults.1);
+        }
         validate_campaign_metadata(&metadata)?;
         if let Some(offer_id) = metadata
             .get("offerId")
@@ -1511,6 +1652,19 @@ fn validate_campaign_metadata(metadata: &Value) -> Result<(), AppError> {
     ) {
         return Err(AppError::validation("campaign recurrence is invalid"));
     }
+    let control_group_bps = metadata
+        .get("controlGroupBps")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let attribution_window_days = metadata
+        .get("attributionWindowDays")
+        .and_then(Value::as_i64)
+        .unwrap_or(30);
+    if !(0..=5_000).contains(&control_group_bps) || !(1..=365).contains(&attribution_window_days) {
+        return Err(AppError::validation(
+            "campaign control group or attribution window is invalid",
+        ));
+    }
     if status == "scheduled" {
         let scheduled_at = metadata
             .get("scheduledAt")
@@ -1541,6 +1695,11 @@ mod tests {
         .is_err());
         assert!(validate_campaign_metadata(&json!({
             "channel":"email","audience":"at-risk","status":"scheduled"
+        }))
+        .is_err());
+        assert!(validate_campaign_metadata(&json!({
+            "channel":"sms","audience":"all","status":"draft",
+            "controlGroupBps":5001,"attributionWindowDays":30
         }))
         .is_err());
     }

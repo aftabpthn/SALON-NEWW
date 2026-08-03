@@ -2,10 +2,7 @@
   <aside class="booking-nav" aria-label="Booking navigation">
     <div class="brand">{{ tenant.name || 'AuraShine' }}</div>
     <button class="nav-item" [class.active]="!showMyBookings" type="button" (click)="closeMyBookings()"><i class="bi bi-calendar2-check"></i><span>Public Booking</span></button>
-    <button class="nav-item" type="button"><i class="bi bi-scissors"></i><span>Services</span></button>
-    <button class="nav-item" type="button"><i class="bi bi-people"></i><span>Staff</span></button>
     <button class="nav-item" [class.active]="showMyBookings" type="button" (click)="openMyBookings()"><i class="bi bi-calendar-week"></i><span>My Bookings</span></button>
-    <button class="nav-item nav-bottom" type="button"><i class="bi bi-gear"></i><span>Settings</span></button>
   </aside>
 
   <section class="booking-workspace">

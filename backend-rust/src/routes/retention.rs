@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
 use chrono::NaiveDate;
 use serde::Deserialize;
@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::{
     models::common::{ApiResponse, ApiResult},
     routes::context::tenant_branch,
-    services::retention_service,
+    services::{auth_service::AuthClaims, retention_service},
     state::AppState,
 };
 
@@ -40,6 +40,10 @@ pub fn router() -> Router<AppState> {
             "/retention/gift-cards/:gift_card_id/reissue",
             post(reissue_gift_card),
         )
+        .route(
+            "/retention/gift-cards/:gift_card_id/transfer",
+            post(transfer_gift_card),
+        )
 }
 
 #[derive(Deserialize)]
@@ -60,6 +64,13 @@ struct MutationRequest {
 struct ReissueRequest {
     code: Option<String>,
     expires_at: Option<NaiveDate>,
+    reason: String,
+    idempotency_key: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GiftTransferRequest {
+    target_client_id: String,
     reason: String,
     idempotency_key: String,
 }
@@ -110,6 +121,7 @@ async fn gift_card_detail(
 }
 async fn void_gift_card(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<MutationRequest>,
@@ -123,13 +135,14 @@ async fn void_gift_card(
             &id,
             &payload.reason,
             &payload.idempotency_key,
-            &actor(&headers),
+            &claims.sub,
         )
         .await?,
     )))
 }
 async fn reissue_gift_card(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ReissueRequest>,
@@ -145,13 +158,36 @@ async fn reissue_gift_card(
             payload.expires_at,
             &payload.reason,
             &payload.idempotency_key,
-            &actor(&headers),
+            &claims.sub,
+        )
+        .await?,
+    )))
+}
+async fn transfer_gift_card(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<GiftTransferRequest>,
+) -> ApiResult<crate::repositories::retention_repository::GiftCardRecord> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        retention_service::transfer_gift_card(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &id,
+            &payload.target_client_id,
+            &payload.reason,
+            &payload.idempotency_key,
+            &claims.sub,
         )
         .await?,
     )))
 }
 async fn create_referral_code(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(client_id): Path<String>,
 ) -> ApiResult<crate::repositories::retention_repository::ReferralCodeRecord> {
@@ -162,13 +198,14 @@ async fn create_referral_code(
             &tenant_id,
             &branch_id,
             &client_id,
-            &actor(&headers),
+            &claims.sub,
         )
         .await?,
     )))
 }
 async fn create_referral(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(client_id): Path<String>,
     Json(payload): Json<ReferralRequest>,
@@ -182,32 +219,20 @@ async fn create_referral(
             &client_id,
             &payload.referred_client_id,
             &payload.idempotency_key,
-            &actor(&headers),
+            &claims.sub,
         )
         .await?,
     )))
 }
 async fn complete_referral(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<crate::repositories::retention_repository::ReferralRecord> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        retention_service::complete_referral(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            &id,
-            &actor(&headers),
-        )
-        .await?,
+        retention_service::complete_referral(&state.db, &tenant_id, &branch_id, &id, &claims.sub)
+            .await?,
     )))
-}
-fn actor(headers: &HeaderMap) -> String {
-    headers
-        .get("x-user-id")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("system")
-        .to_string()
 }

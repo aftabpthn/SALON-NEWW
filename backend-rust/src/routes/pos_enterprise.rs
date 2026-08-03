@@ -490,8 +490,19 @@ async fn day_close_status(
     let report = pos_enterprise_repository::latest_z_report(&state.db, &t, &b, date)
         .await
         .map_err(|_| AppError::internal("failed to load Z-report"))?;
+    let reconciliation =
+        pos_enterprise_service::eod_reconciliation(&state.db, &t, &b, date).await?;
+    let close_snapshot = cash_drawer_repository::latest_close_snapshot(&state.db, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to load cash close snapshot"))?;
+    let events = pos_enterprise_repository::list_day_lock_events(&state.db, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to load day close history"))?;
+    let holiday = pos_enterprise_repository::branch_holiday(&state.db, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to load branch holiday"))?;
     Ok(Json(ApiResponse::ok(
-        json!({"businessDate":date,"dayLock":lock,"zReport":report}),
+        json!({"businessDate":date,"dayLock":lock,"zReport":report,"reconciliation":reconciliation,"closeSnapshot":close_snapshot,"events":events,"holiday":holiday}),
     )))
 }
 async fn lock_day(
@@ -507,6 +518,20 @@ async fn lock_day(
     }
     let date = parse_date(&date)?;
     let (t, b) = tenant_branch(&headers)?;
+    let reconciliation =
+        pos_enterprise_service::eod_reconciliation(&state.db, &t, &b, date).await?;
+    if !reconciliation
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(AppError::conflict(
+            "invoice, payment, register, and accounting totals must reconcile before locking the day",
+        ));
+    }
+    let holiday = pos_enterprise_repository::branch_holiday(&state.db, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to load branch holiday"))?;
     let mut tx = state
         .db
         .begin()
@@ -532,9 +557,26 @@ async fn lock_day(
     )
     .await
     .map_err(|_| AppError::internal("failed to lock business day"))?;
+    pos_enterprise_repository::insert_day_lock_event(
+        &mut tx,
+        &t,
+        &b,
+        &claims.sub,
+        date,
+        "locked",
+        p.reason.trim(),
+        holiday
+            .as_ref()
+            .filter(|value| value.get("closed").and_then(Value::as_bool) == Some(true))
+            .and_then(|value| value.get("name"))
+            .and_then(Value::as_str),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit business day lock"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit business day lock"))?;
+    state.publish_pos_event(&t, &b, "day_close", &date.to_string(), "day.locked");
     Ok(Json(ApiResponse::ok(row)))
 }
 async fn reopen_day(
@@ -550,6 +592,14 @@ async fn reopen_day(
     }
     let date = parse_date(&date)?;
     let (t, b) = tenant_branch(&headers)?;
+    let current = pos_enterprise_repository::get_day_lock(&state.db, &t, &b, date)
+        .await
+        .map_err(|_| AppError::internal("failed to load business day lock"))?;
+    if current.as_ref().is_none_or(|row| row.status != "locked") {
+        return Err(AppError::conflict(
+            "only a locked business day can be reopened",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
@@ -569,9 +619,22 @@ async fn reopen_day(
     )
     .await
     .map_err(|_| AppError::internal("failed to reopen business day"))?;
+    pos_enterprise_repository::insert_day_lock_event(
+        &mut tx,
+        &t,
+        &b,
+        &claims.sub,
+        date,
+        "reopened",
+        p.reason.trim(),
+        None,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit business day reopen"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit business day reopen"))?;
+    state.publish_pos_event(&t, &b, "day_close", &date.to_string(), "day.reopened");
     Ok(Json(ApiResponse::ok(row)))
 }
 async fn get_z_report(
@@ -616,15 +679,24 @@ async fn export_z_report(
         .format
         .unwrap_or_else(|| "json".into())
         .to_ascii_lowercase();
+    let accounting_lines = if matches!(format.as_str(), "tally" | "busy" | "quickbooks-desktop") {
+        pos_enterprise_repository::daily_accounting_export_lines(&state.db, &t, &b, date)
+            .await
+            .map_err(|_| AppError::internal("failed to load accounting export lines"))?
+    } else {
+        Vec::new()
+    };
     let content = match format.as_str() {
         "json" => serde_json::to_string_pretty(&row.report_json)
             .map_err(|_| AppError::internal("failed to export Z-report"))?,
         "csv" => z_report_csv(&row.report_json),
-        "tally" => tally_xml(&row.report_json, date),
-        _ => return Err(AppError::validation("format must be json, csv, or tally")),
+        "tally" => tally_xml(&accounting_lines)?,
+        "busy" => busy_csv(&accounting_lines)?,
+        "quickbooks-desktop" => quickbooks_iif(&accounting_lines)?,
+        _ => return Err(AppError::validation("format must be json, csv, tally, busy, or quickbooks-desktop")),
     };
     Ok(Json(ApiResponse::ok(
-        json!({"businessDate":date,"version":row.version,"format":format,"sha256":row.sha256,"content":content}),
+        json!({"businessDate":date,"version":row.version,"format":format,"sha256":row.sha256,"journalLineCount":accounting_lines.len(),"content":content}),
     )))
 }
 async fn post_eod_accounting(
@@ -661,7 +733,12 @@ async fn post_eod_accounting(
         })
         .unwrap_or(0);
     let journal_count:i64=sqlx::query_scalar("SELECT COUNT(*)::BIGINT FROM accounting_journal_entries WHERE tenant_id=$1 AND branch_id=$2 AND entry_date=$3").bind(&t).bind(&b).bind(date).fetch_one(&state.db).await.unwrap_or(0);
-    let id:String=sqlx::query_scalar("INSERT INTO pos_eod_accounting_batches (tenant_id,branch_id,business_date,z_report_id,z_report_version,journal_entry_count,gross_sales_paise,tax_paise,payment_total_paise,posted_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (tenant_id,branch_id,business_date,z_report_version) DO UPDATE SET journal_entry_count=EXCLUDED.journal_entry_count,gross_sales_paise=EXCLUDED.gross_sales_paise,tax_paise=EXCLUDED.tax_paise,payment_total_paise=EXCLUDED.payment_total_paise RETURNING id").bind(&t).bind(&b).bind(date).bind(&z.id).bind(z.version).bind(journal_count).bind(gross).bind(tax).bind(payments).bind(&claims.sub).fetch_one(&state.db).await.map_err(|_|AppError::internal("failed to post EOD accounting batch"))?;
+    let inserted:Option<String>=sqlx::query_scalar("INSERT INTO pos_eod_accounting_batches (tenant_id,branch_id,business_date,z_report_id,z_report_version,journal_entry_count,gross_sales_paise,tax_paise,payment_total_paise,posted_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (tenant_id,branch_id,business_date,z_report_version) DO NOTHING RETURNING id").bind(&t).bind(&b).bind(date).bind(&z.id).bind(z.version).bind(journal_count).bind(gross).bind(tax).bind(payments).bind(&claims.sub).fetch_optional(&state.db).await.map_err(|_|AppError::internal("failed to post EOD accounting batch"))?;
+    let id = if let Some(id) = inserted {
+        id
+    } else {
+        sqlx::query_scalar("SELECT id FROM pos_eod_accounting_batches WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND z_report_version=$4").bind(&t).bind(&b).bind(date).bind(z.version).fetch_one(&state.db).await.map_err(|_|AppError::internal("failed to load EOD accounting batch"))?
+    };
     Ok(Json(ApiResponse::ok(
         json!({"id":id,"businessDate":date,"zReportVersion":z.version,"journalEntryCount":journal_count,"grossSalesPaise":gross,"taxPaise":tax,"paymentTotalPaise":payments,"status":"posted"}),
     )))
@@ -1092,16 +1169,168 @@ fn z_report_csv(report: &Value) -> String {
     let sales = report.get("sales").cloned().unwrap_or_else(|| json!({}));
     format!("metric,amount_paise\nsubtotal,{}\ndiscount,{}\ntax,{}\ncgst,{}\nsgst,{}\nigst,{}\ntotal,{}\n",sales.get("subtotalPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("discountPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("taxPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("cgstPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("sgstPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("igstPaise").and_then(Value::as_i64).unwrap_or(0),sales.get("totalPaise").and_then(Value::as_i64).unwrap_or(0))
 }
-fn tally_xml(report: &Value, date: NaiveDate) -> String {
-    let total = report
-        .pointer("/sales/totalPaise")
-        .and_then(Value::as_i64)
-        .unwrap_or(0) as f64
-        / 100.0;
-    let tax = report
-        .pointer("/sales/taxPaise")
-        .and_then(Value::as_i64)
-        .unwrap_or(0) as f64
-        / 100.0;
-    format!("<ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDATA><TALLYMESSAGE><VOUCHER VCHTYPE=\"Sales\"><DATE>{}</DATE><NARRATION>POS Z Report</NARRATION><ALLLEDGERENTRIES.LIST><LEDGERNAME>Sales</LEDGERNAME><AMOUNT>-{total:.2}</AMOUNT></ALLLEDGERENTRIES.LIST><ALLLEDGERENTRIES.LIST><LEDGERNAME>Output GST</LEDGERNAME><AMOUNT>-{tax:.2}</AMOUNT></ALLLEDGERENTRIES.LIST></VOUCHER></TALLYMESSAGE></REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>",date.format("%Y%m%d"))
+fn tally_xml(
+    lines: &[pos_enterprise_repository::DailyAccountingExportLine],
+) -> Result<String, AppError> {
+    validate_accounting_export_lines(lines)?;
+    let mut body = String::new();
+    let mut current = "";
+    for line in lines {
+        if current != line.journal_entry_id {
+            if !current.is_empty() {
+                body.push_str("</VOUCHER></TALLYMESSAGE>");
+            }
+            current = &line.journal_entry_id;
+            body.push_str(&format!(
+                "<TALLYMESSAGE><VOUCHER VCHTYPE=\"Journal\"><DATE>{}</DATE><VOUCHERNUMBER>{}</VOUCHERNUMBER><NARRATION>{}</NARRATION>",
+                line.business_date.format("%Y%m%d"),
+                xml_escape(&line.source_id),
+                xml_escape(&line.memo)
+            ));
+        }
+        let signed_paise = line.debit_paise - line.credit_paise;
+        body.push_str(&format!(
+            "<ALLLEDGERENTRIES.LIST><LEDGERNAME>{}</LEDGERNAME><ISDEEMEDPOSITIVE>{}</ISDEEMEDPOSITIVE><AMOUNT>{}</AMOUNT></ALLLEDGERENTRIES.LIST>",
+            xml_escape(&line.account_code),
+            if signed_paise < 0 { "Yes" } else { "No" },
+            paise_text(signed_paise)
+        ));
+    }
+    body.push_str("</VOUCHER></TALLYMESSAGE>");
+    Ok(format!("<ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDATA>{body}</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>"))
+}
+
+fn busy_csv(
+    lines: &[pos_enterprise_repository::DailyAccountingExportLine],
+) -> Result<String, AppError> {
+    validate_accounting_export_lines(lines)?;
+    let mut content = String::from(
+        "Date,Voucher Type,Voucher Number,Account,Debit,Credit,Narration,Source Type,Source ID\r\n",
+    );
+    for line in lines {
+        content.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{}\r\n",
+            line.business_date.format("%d-%m-%Y"),
+            "Journal",
+            csv_field(&line.journal_entry_id),
+            csv_field(&line.account_code),
+            paise_text(line.debit_paise),
+            paise_text(line.credit_paise),
+            csv_field(&line.memo),
+            csv_field(&line.source_type),
+            csv_field(&line.source_id)
+        ));
+    }
+    Ok(content)
+}
+
+fn quickbooks_iif(
+    lines: &[pos_enterprise_repository::DailyAccountingExportLine],
+) -> Result<String, AppError> {
+    validate_accounting_export_lines(lines)?;
+    let mut content = String::from(
+        "!TRNS\tTRNSTYPE\tDATE\tACCNT\tAMOUNT\tDOCNUM\tMEMO\n!SPL\tTRNSTYPE\tDATE\tACCNT\tAMOUNT\tDOCNUM\tMEMO\n!ENDTRNS\n",
+    );
+    let mut current = "";
+    for line in lines {
+        let row_type = if current == line.journal_entry_id {
+            "SPL"
+        } else {
+            if !current.is_empty() {
+                content.push_str("ENDTRNS\n");
+            }
+            current = &line.journal_entry_id;
+            "TRNS"
+        };
+        content.push_str(&format!(
+            "{row_type}\tGENERAL JOURNAL\t{}\t{}\t{}\t{}\t{}\n",
+            line.business_date.format("%m/%d/%Y"),
+            tsv_field(&line.account_code),
+            paise_text(line.debit_paise - line.credit_paise),
+            tsv_field(&line.source_id),
+            tsv_field(&line.memo)
+        ));
+    }
+    content.push_str("ENDTRNS\n");
+    Ok(content)
+}
+
+fn validate_accounting_export_lines(
+    lines: &[pos_enterprise_repository::DailyAccountingExportLine],
+) -> Result<(), AppError> {
+    if lines.is_empty() {
+        return Err(AppError::conflict("no posted accounting journals exist for this date"));
+    }
+    let mut journals = std::collections::HashMap::<&str, (i64, i64)>::new();
+    for line in lines {
+        let totals = journals.entry(&line.journal_entry_id).or_default();
+        totals.0 = totals.0.saturating_add(line.debit_paise);
+        totals.1 = totals.1.saturating_add(line.credit_paise);
+    }
+    if journals
+        .values()
+        .any(|(debit, credit)| *debit <= 0 || debit != credit)
+    {
+        return Err(AppError::conflict(
+            "accounting export is blocked because journals do not balance",
+        ));
+    }
+    Ok(())
+}
+
+fn paise_text(paise: i64) -> String {
+    let negative = paise < 0;
+    let absolute = paise.unsigned_abs();
+    format!(
+        "{}{}.{:02}",
+        if negative { "-" } else { "" },
+        absolute / 100,
+        absolute % 100
+    )
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn csv_field(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn tsv_field(value: &str) -> String {
+    value.replace(['\t', '\r', '\n'], " ")
+}
+
+#[cfg(test)]
+mod accounting_export_tests {
+    use super::*;
+
+    fn line(journal: &str, account: &str, debit_paise: i64, credit_paise: i64) -> pos_enterprise_repository::DailyAccountingExportLine {
+        pos_enterprise_repository::DailyAccountingExportLine {
+            journal_entry_id: journal.into(),
+            business_date: NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(),
+            source_type: "invoice".into(),
+            source_id: "INV-1".into(),
+            memo: "Daily close".into(),
+            account_code: account.into(),
+            debit_paise,
+            credit_paise,
+        }
+    }
+
+    #[test]
+    fn accounting_exports_require_each_journal_to_balance() {
+        let balanced = vec![line("j1", "CASH", 10_050, 0), line("j1", "SALES", 0, 10_050)];
+        assert!(tally_xml(&balanced).unwrap().contains("100.50"));
+        assert!(busy_csv(&balanced).unwrap().contains("100.50"));
+        assert!(quickbooks_iif(&balanced).unwrap().contains("-100.50"));
+
+        let cross_balanced = vec![line("j1", "CASH", 10_000, 0), line("j2", "SALES", 0, 10_000)];
+        assert!(validate_accounting_export_lines(&cross_balanced).is_err());
+    }
 }

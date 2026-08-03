@@ -93,6 +93,10 @@ pub fn router() -> Router<AppState> {
             post(save_mobile_crash_report),
         )
         .route(
+            "/staff/self/mobile/telemetry",
+            post(save_mobile_device_telemetry),
+        )
+        .route(
             "/staff/self/tasks/:id/status",
             axum::routing::patch(update_self_task_status),
         )
@@ -145,6 +149,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff/mobile/sync", post(sync_mobile_mutations))
         .route("/staff/mobile/conflicts", get(list_mobile_conflicts))
+        .route("/staff/mobile/telemetry", get(list_mobile_device_telemetry))
         .route(
             "/staff/mobile/conflicts/:id/resolve",
             post(resolve_mobile_conflict),
@@ -1229,6 +1234,46 @@ async fn save_mobile_crash_report(
     )
     .await;
     Ok(Json(ApiResponse::ok(json!({ "id": id }))))
+}
+
+async fn save_mobile_device_telemetry(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<staff_advanced_service::MobileDeviceTelemetryRequest>,
+) -> ApiResult<serde_json::Value> {
+    ensure_staff_app_access(
+        &claims,
+        "staff.app.dashboard.read",
+        &["staff.self_manage", "appointments.read"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let id = staff_advanced_service::record_mobile_device_telemetry(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &claims.sub,
+        payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(json!({ "id": id }))))
+}
+
+async fn list_mobile_device_telemetry(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<serde_json::Value>> {
+    ensure_manager_access(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_advanced_service::list_mobile_device_telemetry(&state.db, &tenant_id, &branch_id)
+            .await?,
+    )))
 }
 
 async fn update_self_task_status(

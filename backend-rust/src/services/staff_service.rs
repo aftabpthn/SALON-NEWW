@@ -128,7 +128,8 @@ pub struct AuthRoleSecurityInput {
 }
 
 const AUTH_MASK_OPTIONS: &[(&str, &str)] = &[
-    ("client.contact", "Client phone and email"),
+    ("client.contact", "Client phone, email and address"),
+    ("client.clinical", "Client clinical and medical data"),
     ("staff.payroll", "Payroll amounts"),
     ("inventory.cost", "Inventory and purchase costs"),
     ("finance.amounts", "Finance and report amounts"),

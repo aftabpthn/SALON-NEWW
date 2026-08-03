@@ -67,6 +67,7 @@ pub struct CashDrawerTill {
     pub drawer_session_id: String,
     pub till_code: String,
     pub till_name: String,
+    pub terminal_id: Option<String>,
     pub opening_cash_paise: i64,
     pub expected_cash_paise: i64,
     pub counted_cash_paise: Option<i64>,
@@ -76,6 +77,14 @@ pub struct CashDrawerTill {
     pub close_requested_at: Option<DateTime<Utc>>,
     pub approved_at: Option<DateTime<Utc>>,
     pub closed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashControlSettings {
+    pub max_cash_paise: i64,
+    pub variance_alert_paise: i64,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
@@ -127,6 +136,58 @@ pub async fn is_day_locked(
         .bind(business_date)
         .fetch_one(&mut **tx)
         .await
+}
+
+pub async fn previous_unclosed(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Option<(String, NaiveDate, String)>, sqlx::Error> {
+    sqlx::query_as("SELECT id,business_date,status FROM cash_drawer_sessions WHERE tenant_id=$1 AND branch_id=$2 AND business_date<$3 AND status IN ('open','pending_approval') ORDER BY business_date LIMIT 1 FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(business_date).fetch_optional(&mut **tx).await
+}
+
+pub async fn closed_holiday_name(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT name FROM branch_holidays WHERE tenant_id::TEXT=$1 AND branch_id::TEXT=$2 AND holiday_date=$3 AND closed=TRUE")
+        .bind(tenant_id).bind(branch_id).bind(business_date).fetch_optional(&mut **tx).await
+}
+
+pub async fn control_settings(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<CashControlSettings, sqlx::Error> {
+    sqlx::query_as("SELECT max_cash_paise,variance_alert_paise,updated_at FROM pos_cash_control_settings WHERE tenant_id=$1 AND branch_id=$2")
+        .bind(tenant_id).bind(branch_id).fetch_optional(db).await
+        .map(|row| row.unwrap_or(CashControlSettings { max_cash_paise: 0, variance_alert_paise: 10_000, updated_at: Utc::now() }))
+}
+
+pub async fn save_control_settings(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    max_cash_paise: i64,
+    variance_alert_paise: i64,
+) -> Result<CashControlSettings, sqlx::Error> {
+    sqlx::query_as("INSERT INTO pos_cash_control_settings(tenant_id,branch_id,max_cash_paise,variance_alert_paise,updated_by_user_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,branch_id) DO UPDATE SET max_cash_paise=EXCLUDED.max_cash_paise,variance_alert_paise=EXCLUDED.variance_alert_paise,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=NOW() RETURNING max_cash_paise,variance_alert_paise,updated_at")
+        .bind(tenant_id).bind(branch_id).bind(max_cash_paise).bind(variance_alert_paise).bind(actor_user_id).fetch_one(db).await
+}
+
+pub async fn active_terminal_name(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    terminal_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar("SELECT terminal_name FROM pos_terminals WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='active'")
+        .bind(tenant_id).bind(branch_id).bind(terminal_id).fetch_optional(&mut **tx).await
 }
 
 pub async fn active_for_update(
@@ -479,7 +540,7 @@ pub async fn review_provider_reconciliation(
         .bind(tenant_id).bind(branch_id).bind(id).bind(actor_user_id).bind(review_note).fetch_optional(&mut **tx).await
 }
 
-const TILL_COLUMNS: &str = "id,drawer_session_id,till_code,till_name,opening_cash_paise,expected_cash_paise,counted_cash_paise,variance_paise,status,opened_at,close_requested_at,approved_at,closed_at";
+const TILL_COLUMNS: &str = "id,drawer_session_id,till_code,till_name,terminal_id,opening_cash_paise,expected_cash_paise,counted_cash_paise,variance_paise,status,opened_at,close_requested_at,approved_at,closed_at";
 
 pub async fn list_tills(
     db: &PgPool,
@@ -498,13 +559,39 @@ pub async fn insert_till(
     drawer_session_id: &str,
     till_code: &str,
     till_name: &str,
+    terminal_id: Option<&str>,
     opening_cash_paise: i64,
     actor_user_id: &str,
     notes: &str,
 ) -> Result<CashDrawerTill, sqlx::Error> {
-    sqlx::query_as(&format!("INSERT INTO cash_drawer_tills (tenant_id,branch_id,drawer_session_id,till_code,till_name,opening_cash_paise,expected_cash_paise,opened_by_user_id,notes) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8) RETURNING {TILL_COLUMNS}"))
+    sqlx::query_as(&format!("INSERT INTO cash_drawer_tills (tenant_id,branch_id,drawer_session_id,till_code,till_name,terminal_id,opening_cash_paise,expected_cash_paise,opened_by_user_id,notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9) RETURNING {TILL_COLUMNS}"))
         .bind(tenant_id).bind(branch_id).bind(drawer_session_id).bind(till_code).bind(till_name)
-        .bind(opening_cash_paise).bind(actor_user_id).bind(notes).fetch_one(&mut **tx).await
+        .bind(terminal_id).bind(opening_cash_paise).bind(actor_user_id).bind(notes).fetch_one(&mut **tx).await
+}
+
+pub async fn insert_close_snapshot(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    drawer_session_id: &str,
+    business_date: NaiveDate,
+    snapshot: Value,
+    checksum: &str,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO cash_drawer_close_snapshots(tenant_id,branch_id,drawer_session_id,business_date,snapshot_json,checksum,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(tenant_id,branch_id,drawer_session_id) DO NOTHING")
+        .bind(tenant_id).bind(branch_id).bind(drawer_session_id).bind(business_date).bind(snapshot).bind(checksum).bind(actor_user_id).execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn latest_close_snapshot(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    business_date: NaiveDate,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',id,'drawerSessionId',drawer_session_id,'businessDate',business_date,'snapshot',snapshot_json,'checksum',checksum,'createdByUserId',created_by_user_id,'createdAt',created_at) FROM cash_drawer_close_snapshots WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 ORDER BY created_at DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(business_date).fetch_optional(db).await
 }
 
 pub async fn till_for_update(

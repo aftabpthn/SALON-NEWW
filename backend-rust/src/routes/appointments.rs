@@ -6,8 +6,8 @@ use crate::{
         accounting_service,
         auth_service::{self, AuthClaims},
         benefit_notification_service, booking_intelligence_service, booking_service,
-        cash_drawer_service, payment_platform_service as platform, service_pricing_service,
-        staff_app_service, staff_enterprise_service, wallet_service,
+        cash_drawer_service, payment_platform_service as platform, security_service,
+        service_pricing_service, staff_app_service, staff_enterprise_service, wallet_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -59,6 +59,10 @@ impl ApiError {
 
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::with_status(StatusCode::INTERNAL_SERVER_ERROR, message)
+    }
+
+    pub(crate) fn status_code(&self) -> StatusCode {
+        StatusCode::from_u16(self.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
     }
 }
 
@@ -159,6 +163,22 @@ pub fn router() -> Router<AppState> {
         .route(
             "/appointments/:id/cancel",
             axum::routing::post(cancel_appointment),
+        )
+        .route(
+            "/appointments/:id/restore",
+            axum::routing::post(restore_appointment),
+        )
+        .route(
+            "/appointments/:id/fee-policy",
+            axum::routing::get(appointment_fee_policy),
+        )
+        .route(
+            "/appointments/:id/fee-waive",
+            axum::routing::post(waive_appointment_fee),
+        )
+        .route(
+            "/appointments/:id/fee-charge",
+            axum::routing::post(charge_appointment_fee),
         )
         .route(
             "/appointments/:id/remove-service",
@@ -619,6 +639,25 @@ pub(crate) struct AppointmentBatchPayload {
     pub(crate) is_surprise: bool,
     #[serde(default)]
     pub(crate) virtual_meeting_url: String,
+    #[serde(default)]
+    pub(crate) outside_hours_override_reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RestoreAppointmentPayload {
+    expected_version: Option<i32>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    outside_hours_override_reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppointmentFeeWaiverPayload {
+    #[serde(default)]
+    reason: String,
 }
 
 #[derive(Deserialize)]
@@ -761,6 +800,8 @@ struct ValidatedAdvancePayment {
 #[derive(Deserialize)]
 pub(crate) struct ReschedulePayload {
     #[serde(default)]
+    pub(crate) expected_version: Option<i32>,
+    #[serde(default)]
     pub(crate) start_at: String,
     #[serde(default)]
     pub(crate) end_at: Option<String>,
@@ -784,6 +825,8 @@ pub(crate) struct ReschedulePayload {
     pub(crate) change_mode: String,
     #[serde(default)]
     pub(crate) actor_source: String,
+    #[serde(default)]
+    pub(crate) outside_hours_override_reason: String,
 }
 
 #[derive(Deserialize)]
@@ -810,6 +853,12 @@ pub(crate) struct AppointmentResourcePayload {
     pub(crate) kind: String,
     #[serde(default)]
     pub(crate) department: String,
+    #[serde(default = "default_resource_capacity")]
+    pub(crate) capacity: i32,
+}
+
+fn default_resource_capacity() -> i32 {
+    1
 }
 
 #[derive(Serialize)]
@@ -818,6 +867,7 @@ pub(crate) struct AppointmentResourceResponse {
     name: String,
     kind: String,
     department: String,
+    capacity: i32,
     active: bool,
 }
 
@@ -1016,6 +1066,63 @@ mod blackout_tests {
         );
         payload.constraint_resource_kind = "machine".into();
         assert!(waitlist_constraint(&payload).is_err());
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn serializes_simultaneous_staff_bookings(pool: sqlx::PgPool) {
+        sqlx::raw_sql(
+            "CREATE TABLE appointments(
+                id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,
+                staff_id TEXT NOT NULL,status TEXT NOT NULL,service_ids_json TEXT NOT NULL DEFAULT '[]',
+                start_at TIMESTAMPTZ NOT NULL,end_at TIMESTAMPTZ NOT NULL,
+                staff_preference TEXT NOT NULL DEFAULT 'any'
+             );
+             CREATE TABLE services(
+                id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,
+                duration_minutes INTEGER NOT NULL DEFAULT 60,processing_time_minutes INTEGER NOT NULL DEFAULT 0,
+                wait_time_minutes INTEGER NOT NULL DEFAULT 0,cleanup_time_minutes INTEGER NOT NULL DEFAULT 0,
+                buffer_time_minutes INTEGER NOT NULL DEFAULT 0
+             );
+             CREATE TABLE appointment_branch_settings(
+                tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,allow_overlap BOOLEAN NOT NULL DEFAULT FALSE
+             );",
+        )
+        .execute(&pool)
+        .await
+        .expect("appointment collision test schema");
+        sqlx::raw_sql(include_str!(
+            "../../migrations/0395_appointment_book_scheduling_engine.sql"
+        ))
+        .execute(&pool)
+        .await
+        .expect("phase 6 migration");
+
+        let mut first = pool.begin().await.expect("first booking transaction");
+        sqlx::query("INSERT INTO appointments(id,tenant_id,branch_id,staff_id,status,start_at,end_at) VALUES('booking-a','tenant-a','branch-a','staff-a','booked','2035-01-01T10:00:00Z','2035-01-01T11:00:00Z')")
+            .execute(&mut *first).await.expect("first booking");
+        let second_pool = pool.clone();
+        let second = tokio::spawn(async move {
+            sqlx::query("INSERT INTO appointments(id,tenant_id,branch_id,staff_id,status,start_at,end_at) VALUES('booking-b','tenant-a','branch-a','staff-a','booked','2035-01-01T10:30:00Z','2035-01-01T11:30:00Z')")
+                .execute(&second_pool).await
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(75)).await;
+        assert!(
+            !second.is_finished(),
+            "second booking must wait for the staff lock"
+        );
+        first.commit().await.expect("commit first booking");
+
+        let error = second
+            .await
+            .expect("second booking task")
+            .expect_err("overlapping booking must fail");
+        assert_eq!(
+            error
+                .as_database_error()
+                .and_then(|error| error.code())
+                .as_deref(),
+            Some("23P01")
+        );
     }
 }
 
@@ -1218,6 +1325,8 @@ pub(crate) async fn validate_service_pricing(
     service_ids: &[String],
     selections: &[AppointmentServiceSelection],
     starts_at: DateTime<Utc>,
+    client_id: &str,
+    channel: &str,
 ) -> Result<i64, ApiError> {
     let selections = selections
         .iter()
@@ -1226,7 +1335,7 @@ pub(crate) async fn validate_service_pricing(
     let mut total = 0i64;
     for service_id in service_ids {
         let selection = selections.get(service_id.trim()).copied();
-        let quote = service_pricing_service::quote(
+        let quote = service_pricing_service::quote_with_context(
             &state.db,
             tenant_id,
             branch_id,
@@ -1239,6 +1348,8 @@ pub(crate) async fn validate_service_pricing(
                 .map(|value| value.addon_ids.as_slice())
                 .unwrap_or_default(),
             starts_at,
+            client_id,
+            channel,
         )
         .await
         .map_err(|_| ApiError::bad_request("service pricing selection is invalid"))?;
@@ -1437,16 +1548,170 @@ fn normalize_staff_preference(value: &str) -> Result<&str, ApiError> {
         "" | "any" => Ok("any"),
         "preferred" => Ok("preferred"),
         "required" => Ok("required"),
-        _ => Err(ApiError::bad_request(
-            "staff_preference must be any, preferred, or required",
-        )),
+        "first_available" => Ok("first_available"),
+        "gender_female" => Ok("gender_female"),
+        "gender_male" => Ok("gender_male"),
+        _ => Err(ApiError::bad_request("staff_preference is invalid")),
     }
+}
+
+fn privileged_appointment_permission(claims: Option<&AuthClaims>, permission: &str) -> bool {
+    claims.is_some_and(|claims| {
+        auth_service::staff_app_permission_allowed(
+            claims,
+            permission,
+            &["owner", "admin", "manager"],
+            &[],
+        )
+    })
+}
+
+fn booking_write_error(error: sqlx::Error, fallback: &'static str) -> ApiError {
+    if error
+        .as_database_error()
+        .and_then(|error| error.code())
+        .is_some_and(|code| code == "23P01")
+    {
+        ApiError::conflict(
+            error
+                .as_database_error()
+                .map(|value| value.message())
+                .unwrap_or("booking time is no longer available"),
+        )
+    } else {
+        ApiError::internal(fallback)
+    }
+}
+
+pub(crate) async fn validate_branch_operating_hours(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    start_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
+    override_reason: &str,
+    claims: Option<&AuthClaims>,
+) -> Result<(), ApiError> {
+    let inside = sqlx::query_scalar::<_, bool>(
+        r#"SELECT CASE
+          WHEN NOT EXISTS(SELECT 1 FROM branch_operating_hours h WHERE h.tenant_id::TEXT=$1 AND h.branch_id::TEXT=$2) THEN TRUE
+          ELSE EXISTS(
+            SELECT 1 FROM branches branch
+            CROSS JOIN LATERAL (SELECT $3 AT TIME ZONE branch.time_zone AS local_start,$4 AT TIME ZONE branch.time_zone AS local_end) local
+            JOIN branch_operating_hours hours ON hours.tenant_id=branch.tenant_id AND hours.branch_id=branch.id
+              AND hours.weekday=EXTRACT(DOW FROM local.local_start)::SMALLINT
+            LEFT JOIN branch_holidays holiday ON holiday.tenant_id=branch.tenant_id AND holiday.branch_id=branch.id
+              AND holiday.holiday_date=local.local_start::DATE
+            WHERE branch.tenant_id::TEXT=$1 AND branch.id::TEXT=$2
+              AND local.local_start::DATE=local.local_end::DATE
+              AND CASE WHEN holiday.id IS NOT NULL
+                THEN NOT holiday.closed AND local.local_start::TIME>=holiday.opens_at AND local.local_end::TIME<=holiday.closes_at
+                ELSE NOT hours.closed AND local.local_start::TIME>=hours.opens_at AND local.local_end::TIME<=hours.closes_at END
+          ) END"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(start_at)
+    .bind(end_at)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to validate location operating hours"))?;
+    if inside {
+        return Ok(());
+    }
+    if !(3..=500).contains(&override_reason.trim().chars().count()) {
+        return Err(ApiError::conflict(
+            "booking is outside location operating hours; an override reason is required",
+        ));
+    }
+    if !privileged_appointment_permission(claims, "appointments.outside_hours.override") {
+        return Err(ApiError::with_status(
+            StatusCode::FORBIDDEN,
+            "outside-hours booking override permission is required",
+        ));
+    }
+    Ok(())
+}
+
+async fn resolve_provider_preference(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    line: &mut AppointmentBatchLinePayload,
+) -> Result<(), ApiError> {
+    let preference = normalize_staff_preference(&line.staff_preference)?;
+    if !matches!(
+        preference,
+        "first_available" | "gender_female" | "gender_male"
+    ) {
+        return Ok(());
+    }
+    let start_at = parse_datetime(&line.start_at, "start_at")?;
+    let end_at = parse_datetime(&line.end_at, "end_at")?;
+    let local = sqlx::query(
+        "SELECT ($3 AT TIME ZONE branch.time_zone)::DATE local_date,($3 AT TIME ZONE branch.time_zone)::TIME local_start,($4 AT TIME ZONE branch.time_zone)::TIME local_end FROM branches branch WHERE branch.tenant_id::TEXT=$1 AND branch.id::TEXT=$2",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(start_at)
+    .bind(end_at)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to resolve location time zone"))?
+    .ok_or_else(|| ApiError::not_found("location was not found"))?;
+    let ranked = staff_enterprise_service::best_staff(
+        &state.db,
+        tenant_id,
+        branch_id,
+        staff_enterprise_service::BestStaffRequest {
+            date: local
+                .try_get("local_date")
+                .map_err(|_| ApiError::internal("invalid location date"))?,
+            start_time: local
+                .try_get("local_start")
+                .map_err(|_| ApiError::internal("invalid location time"))?,
+            end_time: local
+                .try_get("local_end")
+                .map_err(|_| ApiError::internal("invalid location time"))?,
+            service_ids: Some(vec![line.service_id.trim().to_string()]),
+            client_id: client_id.to_string(),
+            appointment_id: line.appointment_id.trim().to_string(),
+        },
+    )
+    .await
+    .map_err(|error| ApiError::with_status(error.status_code(), error.message()))?;
+    let candidate_ids = ranked
+        .into_iter()
+        .map(|candidate| candidate.staff_id)
+        .collect::<Vec<_>>();
+    let selected = if preference == "first_available" {
+        candidate_ids.first().cloned()
+    } else {
+        sqlx::query_scalar::<_, String>(
+            "SELECT staff.id::TEXT FROM UNNEST($3::TEXT[]) WITH ORDINALITY candidate(id,rank) JOIN staff ON staff.id::TEXT=candidate.id AND staff.tenant_id::TEXT=$1 AND staff.branch_id::TEXT=$2 WHERE staff.gender=$4 AND staff.active=TRUE ORDER BY candidate.rank LIMIT 1",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&candidate_ids)
+        .bind(if preference == "gender_female" { "female" } else { "male" })
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| ApiError::internal("failed to resolve gender-preferred staff"))?
+    };
+    line.staff_id = selected
+        .ok_or_else(|| ApiError::conflict("no matching provider is available for this time"))?;
+    line.requested_staff_id.clear();
+    Ok(())
 }
 
 fn booking_activity_reason(appointment: &AppointmentPayload) -> String {
     match appointment.staff_preference.as_str() {
         "preferred" => "booking saved · preferred staff requested".to_string(),
         "required" => "booking saved · required staff requested".to_string(),
+        "first_available" => "booking saved · first available staff assigned".to_string(),
+        "gender_female" => "booking saved · female provider preference applied".to_string(),
+        "gender_male" => "booking saved · male provider preference applied".to_string(),
         _ => "booking saved".to_string(),
     }
 }
@@ -1915,7 +2180,7 @@ async fn list_appointment_resources(
     headers: HeaderMap,
 ) -> Result<Json<Vec<AppointmentResourceResponse>>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
-    let rows = sqlx::query("SELECT id, name, kind, department, active FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY department, kind, name")
+    let rows = sqlx::query("SELECT id, name, kind, department, capacity, active FROM appointment_resources WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE ORDER BY department, kind, name")
         .bind(&tenant_id)
         .bind(&branch_id)
         .fetch_all(&state.db)
@@ -1928,6 +2193,7 @@ async fn list_appointment_resources(
                 name: row.try_get("name").unwrap_or_default(),
                 kind: row.try_get("kind").unwrap_or_else(|_| "chair".to_string()),
                 department: row.try_get("department").unwrap_or_default(),
+                capacity: row.try_get("capacity").unwrap_or(1),
                 active: row.try_get("active").unwrap_or(true),
             })
             .collect(),
@@ -1944,11 +2210,16 @@ async fn create_appointment_resource(
     if name.is_empty() {
         return Err(ApiError::bad_request("chair or room name is required"));
     }
-    let kind = match payload.kind.trim().to_ascii_lowercase().as_str() {
-        "room" => "room",
-        "workstation" => "workstation",
-        _ => "chair",
-    };
+    let kind = payload.kind.trim().to_ascii_lowercase();
+    if !matches!(
+        kind.as_str(),
+        "chair" | "workstation" | "room" | "bed" | "machine" | "equipment"
+    ) {
+        return Err(ApiError::bad_request("resource kind is invalid"));
+    }
+    if !(1..=100).contains(&payload.capacity) {
+        return Err(ApiError::bad_request("resource capacity must be 1-100"));
+    }
     let department = payload.department.trim();
     if department.len() > 80 {
         return Err(ApiError::bad_request("resource department is too long"));
@@ -1958,13 +2229,14 @@ async fn create_appointment_resource(
     } else {
         department
     };
-    let row = sqlx::query("INSERT INTO appointment_resources (id, tenant_id, branch_id, name, kind, department) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, kind, department, active")
+    let row = sqlx::query("INSERT INTO appointment_resources (id, tenant_id, branch_id, name, kind, department, capacity) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, kind, department, capacity, active")
         .bind(uuid::Uuid::new_v4().to_string())
         .bind(&tenant_id)
         .bind(&branch_id)
         .bind(name)
-        .bind(kind)
+        .bind(&kind)
         .bind(department)
+        .bind(payload.capacity)
         .fetch_one(&state.db)
         .await
         .map_err(|_| ApiError::conflict("chair or room already exists"))?;
@@ -1973,6 +2245,7 @@ async fn create_appointment_resource(
         name: row.try_get("name").unwrap_or_default(),
         kind: row.try_get("kind").unwrap_or_default(),
         department: row.try_get("department").unwrap_or_default(),
+        capacity: row.try_get("capacity").unwrap_or(1),
         active: row.try_get("active").unwrap_or(true),
     }))
 }
@@ -2167,9 +2440,11 @@ async fn approve_reschedule_request(
     let reason: String = row.try_get("reason").unwrap_or_default();
     let appointment = reschedule_appointment(
         State(state.clone()),
+        None,
         headers,
         Path(appointment_id),
         Json(ReschedulePayload {
+            expected_version: None,
             start_at: start_at.to_rfc3339(),
             end_at: end_at.map(|value| value.to_rfc3339()),
             reason,
@@ -2182,6 +2457,7 @@ async fn approve_reschedule_request(
             booking_group_id: String::new(),
             change_mode: "official".to_string(),
             actor_source: "approval".to_string(),
+            outside_hours_override_reason: String::new(),
         }),
     )
     .await?;
@@ -2228,14 +2504,9 @@ async fn validate_chair_room_availability(
     if chair_room_id.trim().is_empty() {
         return Ok(());
     }
-    let exists = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointment_resources WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND active=TRUE)")
+    let capacity = sqlx::query_scalar::<_, i32>("SELECT capacity FROM appointment_resources WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND active=TRUE")
         .bind(chair_room_id).bind(tenant_id).bind(branch_id).fetch_one(&state.db).await
-        .map_err(|_| ApiError::internal("failed to validate chair or room"))?;
-    if !exists {
-        return Err(ApiError::bad_request(
-            "selected chair or room is unavailable",
-        ));
-    }
+        .map_err(|_| ApiError::bad_request("selected appointment resource is unavailable"))?;
     let allow_overlap = sqlx::query_scalar::<_, bool>(
         "SELECT allow_overlap FROM appointment_branch_settings WHERE tenant_id=$1 AND branch_id=$2",
     )
@@ -2248,18 +2519,41 @@ async fn validate_chair_room_availability(
     if allow_overlap {
         return Ok(());
     }
-    let overlaps = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND chair_room_id=$3 AND status NOT IN ('cancelled','no-show') AND start_at < $5 AND end_at > $4 AND ($6='' OR id<>$6))")
+    let overlaps = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND chair_room_id=$3 AND status NOT IN ('cancelled','no-show') AND start_at < $5 AND end_at > $4 AND ($6='' OR id<>$6)")
         .bind(tenant_id).bind(branch_id).bind(chair_room_id).bind(start_at).bind(end_at).bind(exclude_appointment_id.unwrap_or_default())
         .fetch_one(&state.db).await.map_err(|_| ApiError::internal("failed to check chair or room availability"))?;
-    if overlaps {
+    if overlaps >= i64::from(capacity) {
         return Err(ApiError::conflict(
-            "chair or room is already booked for this time",
+            "appointment resource capacity is full for this time",
         ));
     }
     Ok(())
 }
 
-async fn validate_staff_blackout(
+async fn validate_service_resource_requirement(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    service_ids: &[String],
+    resource_id: &str,
+) -> Result<(), ApiError> {
+    let valid=sqlx::query_scalar::<_,bool>(
+        "SELECT NOT EXISTS(
+           SELECT 1 FROM UNNEST($3::TEXT[]) selected(service_id)
+           WHERE EXISTS(SELECT 1 FROM service_resource_requirements requirement WHERE requirement.tenant_id=$1 AND requirement.branch_id=$2 AND requirement.service_id=selected.service_id AND requirement.required=TRUE)
+             AND NOT EXISTS(SELECT 1 FROM service_resource_requirements requirement WHERE requirement.tenant_id=$1 AND requirement.branch_id=$2 AND requirement.service_id=selected.service_id AND requirement.required=TRUE AND requirement.resource_id=NULLIF($4,''))
+         )"
+    ).bind(tenant_id).bind(branch_id).bind(service_ids).bind(resource_id).fetch_one(&state.db).await
+      .map_err(|_|ApiError::internal("failed to validate service resource requirement"))?;
+    if !valid {
+        return Err(ApiError::bad_request(
+            "selected resource is not eligible for this service",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) async fn validate_staff_blackout(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -2490,7 +2784,7 @@ async fn booking_staff_busy_windows(
     }
 
     let timing = sqlx::query(
-        "SELECT duration_minutes, wait_time_minutes, cleanup_time_minutes, buffer_time_minutes
+        "SELECT duration_minutes, processing_time_minutes, wait_time_minutes, cleanup_time_minutes, buffer_time_minutes
          FROM services WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
     )
     .bind(&service_ids[0])
@@ -2504,7 +2798,12 @@ async fn booking_staff_busy_windows(
         return Ok(vec![(start_at, end_at)]);
     };
     let duration = i64::from(timing.try_get::<i32, _>("duration_minutes").unwrap_or(0));
-    let processing = i64::from(timing.try_get::<i32, _>("wait_time_minutes").unwrap_or(0));
+    let processing = i64::from(
+        timing
+            .try_get::<i32, _>("processing_time_minutes")
+            .unwrap_or(0)
+            .max(timing.try_get::<i32, _>("wait_time_minutes").unwrap_or(0)),
+    );
     let cleanup = i64::from(
         timing
             .try_get::<i32, _>("cleanup_time_minutes")
@@ -2528,7 +2827,7 @@ async fn booking_staff_busy_windows(
     Ok(windows)
 }
 
-async fn validate_staff_booking_availability(
+pub(crate) async fn validate_staff_booking_availability(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -2793,6 +3092,8 @@ pub async fn create_booking_from_smart_booking(
     if end_at <= start_at {
         return Err(ApiError::bad_request("end_at must be after start_at"));
     }
+    validate_branch_operating_hours(&state, &tenant_id, &branch_id, start_at, end_at, "", None)
+        .await?;
 
     validate_public_booking_ownership(&state, &tenant_id, &branch_id, &payload).await?;
 
@@ -2827,7 +3128,7 @@ pub async fn create_booking_from_smart_booking(
         ));
     }
     let staff_preference = normalize_staff_preference(&payload.staff_preference)?;
-    let requested_staff_id = if staff_preference == "any" {
+    let requested_staff_id = if !matches!(staff_preference, "preferred" | "required") {
         String::new()
     } else if payload.requested_staff_id.trim().is_empty() {
         payload.staff_id.trim().to_string()
@@ -2844,6 +3145,18 @@ pub async fn create_booking_from_smart_booking(
         &payload.service_ids,
         &payload.service_selections,
         start_at,
+        &payload.client_id,
+        payload
+            .source_channel
+            .as_deref()
+            .map(|value| {
+                if value == "booking-portal-v2" {
+                    "webstore"
+                } else {
+                    "crm"
+                }
+            })
+            .unwrap_or("crm"),
     )
     .await?;
     validate_staff_blackout(
@@ -2874,6 +3187,14 @@ pub async fn create_booking_from_smart_booking(
         start_at,
         end_at,
         None,
+    )
+    .await?;
+    validate_service_resource_requirement(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &payload.service_ids,
+        &payload.chair_room_id,
     )
     .await?;
 
@@ -2908,7 +3229,7 @@ pub async fn create_booking_from_smart_booking(
     .bind(Utc::now())
     .fetch_one(&state.db)
     .await
-    .map_err(|_| ApiError::internal("failed to create appointment"))?;
+    .map_err(|error| booking_write_error(error, "failed to create appointment"))?;
     let appointment = build_appointment(&row)?;
 
     insert_activity(
@@ -2999,10 +3320,10 @@ async fn list_waitlist(
 ) -> Result<Json<Vec<Value>>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let rows = sqlx::query(
-        "SELECT id, customer_id, service_ids_json, preferred_slot_at, status, notes, constraint_type, constraint_resource_kind, created_at
+        "SELECT id, customer_id, service_ids_json, preferred_slot_at, status, notes, constraint_type, constraint_resource_kind, notification_attempts, last_notified_at, cooldown_until, created_at
          FROM appointment_waitlist
-         WHERE tenant_id=$1 AND branch_id=$2 AND status='pending'
-         ORDER BY preferred_slot_at, created_at",
+         WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('pending','offered')
+         ORDER BY CASE WHEN status='offered' THEN 0 ELSE 1 END, preferred_slot_at, created_at, id",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -3019,17 +3340,21 @@ async fn list_waitlist(
         "notes": row.try_get::<String, _>("notes").unwrap_or_default(),
         "constraintType": row.try_get::<String, _>("constraint_type").unwrap_or_default(),
         "constraintResourceKind": row.try_get::<String, _>("constraint_resource_kind").unwrap_or_default(),
+        "notificationAttempts": row.try_get::<i32, _>("notification_attempts").unwrap_or_default(),
+        "lastNotifiedAt": row.try_get::<Option<DateTime<Utc>>, _>("last_notified_at").ok().flatten().map(|value| value.to_rfc3339()),
+        "cooldownUntil": row.try_get::<Option<DateTime<Utc>>, _>("cooldown_until").ok().flatten().map(|value| value.to_rfc3339()),
     })).collect()))
 }
 
 async fn delete_waitlist(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let affected = sqlx::query(
-        "DELETE FROM appointment_waitlist WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='pending'",
+        "UPDATE appointment_waitlist SET status='cancelled',updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='pending'",
     )
     .bind(&id)
     .bind(&tenant_id)
@@ -3041,7 +3366,17 @@ async fn delete_waitlist(
     if affected == 0 {
         return Err(ApiError::not_found("Waitlist entry not found"));
     }
-    Ok(Json(json!({ "id": id, "status": "deleted" })))
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "appointment.waitlist.cancelled",
+        json!({"waitlistId":id}),
+    )
+    .await
+    .map_err(|_| ApiError::internal("failed to audit waitlist cancellation"))?;
+    Ok(Json(json!({ "id": id, "status": "cancelled" })))
 }
 
 async fn promote_waitlist(
@@ -3156,12 +3491,18 @@ pub(crate) async fn offer_waitlist_for_cancelled_appointment(
         .await
         .map_err(|_| ApiError::internal("failed to start waitlist offer"))?;
     let candidate = sqlx::query(
-        "SELECT id,customer_id,notes FROM appointment_waitlist
+        "SELECT id,customer_id,notes,notification_attempts FROM appointment_waitlist
          WHERE tenant_id=$1 AND branch_id=$2 AND status='pending'
            AND service_ids_json=$3
            AND (preferred_staff_id IS NULL OR preferred_staff_id=$4)
            AND preferred_slot_at::date=$5::date
-         ORDER BY CASE WHEN preferred_staff_id=$4 THEN 0 ELSE 1 END,preferred_slot_at,created_at
+           AND notification_attempts<3
+           AND (cooldown_until IS NULL OR cooldown_until<=NOW())
+           AND (SELECT COUNT(*) FROM appointment_waitlist_offers offer
+                  JOIN appointment_waitlist queued ON queued.id=offer.waitlist_id
+                 WHERE offer.tenant_id=$1 AND queued.customer_id=appointment_waitlist.customer_id
+                   AND offer.created_at>=CURRENT_DATE)<20
+         ORDER BY CASE WHEN preferred_staff_id=$4 THEN 0 ELSE 1 END,preferred_slot_at,created_at,id
          LIMIT 1 FOR UPDATE SKIP LOCKED",
     )
     .bind(&appointment.tenant_id)
@@ -3180,6 +3521,10 @@ pub(crate) async fn offer_waitlist_for_cancelled_appointment(
         .try_get::<String, _>("customer_id")
         .unwrap_or_default();
     let notes = candidate.try_get::<String, _>("notes").unwrap_or_default();
+    let attempt_no = candidate
+        .try_get::<i32, _>("notification_attempts")
+        .unwrap_or_default()
+        + 1;
     let conflict = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND status NOT IN ('cancelled','no-show') AND start_at<$5 AND end_at>$4)",
     )
@@ -3212,10 +3557,20 @@ pub(crate) async fn offer_waitlist_for_cancelled_appointment(
     .await
     .map_err(|_| ApiError::internal("failed to reserve waitlist slot"))?;
     let offer_id = uuid::Uuid::new_v4().to_string();
-    let expires_at = Utc::now() + Duration::minutes(10);
+    let expiry_minutes = sqlx::query_scalar::<_, i64>(
+        "SELECT LEAST(1440,GREATEST(1,COALESCE((settings_json->>'waitlistOfferExpiryMinutes')::BIGINT,10)))
+           FROM appointment_branch_settings WHERE tenant_id=$1 AND branch_id=$2",
+    )
+    .bind(&appointment.tenant_id)
+    .bind(&appointment.branch_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| ApiError::internal("failed to load waitlist expiry policy"))?
+    .unwrap_or(10);
+    let expires_at = Utc::now() + Duration::minutes(expiry_minutes);
     let inserted = sqlx::query(
-        "INSERT INTO appointment_waitlist_offers (id,tenant_id,branch_id,waitlist_id,source_appointment_id,offered_appointment_id,expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (waitlist_id,source_appointment_id) DO NOTHING",
+        "INSERT INTO appointment_waitlist_offers (id,tenant_id,branch_id,waitlist_id,source_appointment_id,offered_appointment_id,expires_at,attempt_no)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",
     )
     .bind(&offer_id)
     .bind(&appointment.tenant_id)
@@ -3224,14 +3579,16 @@ pub(crate) async fn offer_waitlist_for_cancelled_appointment(
     .bind(&appointment.id)
     .bind(&offered_appointment_id)
     .bind(expires_at)
+    .bind(attempt_no)
     .execute(&mut *tx)
     .await
     .map_err(|_| ApiError::internal("failed to create waitlist offer"))?;
     if inserted.rows_affected() != 1 {
         return Ok(None);
     }
-    sqlx::query("UPDATE appointment_waitlist SET status='offered',updated_at=NOW() WHERE id=$1 AND status='pending'")
+    sqlx::query("UPDATE appointment_waitlist SET status='offered',notification_attempts=$2,last_notified_at=NOW(),cooldown_until=NULL,updated_at=NOW() WHERE id=$1 AND status='pending'")
         .bind(&waitlist_id)
+        .bind(attempt_no)
         .execute(&mut *tx)
         .await
         .map_err(|_| ApiError::internal("failed to reserve waitlist entry"))?;
@@ -3286,7 +3643,7 @@ pub(crate) async fn expire_waitlist_offers(state: &AppState) -> Result<usize, Ap
         sqlx::query("UPDATE appointments SET status='cancelled',version=version+1,updated_at=NOW() WHERE id=$1 AND status='waitlist_offer'")
             .bind(&offered_appointment_id).execute(&mut *tx).await
             .map_err(|_| ApiError::internal("failed to release expired waitlist slot"))?;
-        sqlx::query("UPDATE appointment_waitlist SET status='expired',updated_at=NOW() WHERE id=$1 AND status='offered'")
+        sqlx::query("UPDATE appointment_waitlist SET status=CASE WHEN notification_attempts<3 THEN 'pending' ELSE 'expired' END,cooldown_until=CASE WHEN notification_attempts<3 THEN NOW()+INTERVAL '10 minutes' ELSE NULL END,updated_at=NOW() WHERE id=$1 AND status='offered'")
             .bind(&waitlist_id).execute(&mut *tx).await
             .map_err(|_| ApiError::internal("failed to expire waitlist entry"))?;
         sources.push((tenant_id, branch_id, source_id));
@@ -3528,7 +3885,7 @@ async fn validate_advance_payment(
 async fn save_appointment_batch_inner(
     state: AppState,
     headers: HeaderMap,
-    payload: AppointmentBatchPayload,
+    mut payload: AppointmentBatchPayload,
     actor_claims: Option<AuthClaims>,
 ) -> Result<Json<Vec<AppointmentPayload>>, ApiError> {
     let actor_user_id = actor_claims.as_ref().map(|claims| claims.sub.as_str());
@@ -3538,7 +3895,8 @@ async fn save_appointment_batch_inner(
     {
         return Err(ApiError::bad_request("invalid booking idempotency key"));
     }
-    let client_id = payload.client_id.trim();
+    let default_client_id = payload.client_id.trim().to_string();
+    let client_id = default_client_id.as_str();
     if payload.lines.is_empty()
         || (client_id.is_empty()
             && payload
@@ -3584,6 +3942,10 @@ async fn save_appointment_batch_inner(
         return Err(ApiError::not_found(
             "one or more booking clients were not found",
         ));
+    }
+    for line in &mut payload.lines {
+        let line_client_id = booking_line_client_id(client_id, line.client_id.trim()).to_string();
+        resolve_provider_preference(&state, &tenant_id, &branch_id, &line_client_id, line).await?;
     }
     if booking_type == "day_package" {
         let service_ids = payload
@@ -3795,6 +4157,16 @@ async fn save_appointment_batch_inner(
             let offset = Duration::days(recurrence_interval_days * i64::from(occurrence));
             let start_at = base_start + offset;
             let end_at = base_end + offset;
+            validate_branch_operating_hours(
+                &state,
+                &tenant_id,
+                &branch_id,
+                start_at,
+                end_at,
+                &payload.outside_hours_override_reason,
+                actor_claims.as_ref(),
+            )
+            .await?;
             if planned_slots
                 .iter()
                 .any(|(staff_id, chair_room_id, start, end)| {
@@ -3845,6 +4217,14 @@ async fn save_appointment_batch_inner(
                 current.map(|appointment| appointment.id.as_str()),
             )
             .await?;
+            validate_service_resource_requirement(
+                &state,
+                &tenant_id,
+                &branch_id,
+                &[line.service_id.trim().to_string()],
+                line.chair_room_id.trim(),
+            )
+            .await?;
             let booked_total_paise = validate_service_pricing(
                 &state,
                 &tenant_id,
@@ -3853,6 +4233,8 @@ async fn save_appointment_batch_inner(
                 &[line.service_id.trim().to_string()],
                 std::slice::from_ref(&selection),
                 start_at,
+                &line_client_id,
+                "crm",
             )
             .await?;
             let booked_total_paise = if let Some(price) = line.price_override_paise {
@@ -3950,7 +4332,7 @@ async fn save_appointment_batch_inner(
                 planned_prices[occurrence as usize * payload.lines.len() + line_index];
             let current = current_by_id.get(line.appointment_id.trim());
             let staff_preference = normalize_staff_preference(&line.staff_preference)?;
-            let requested_staff_id = if staff_preference == "any" {
+            let requested_staff_id = if !matches!(staff_preference, "preferred" | "required") {
                 String::new()
             } else if line.requested_staff_id.trim().is_empty() {
                 line.staff_id.trim().to_string()
@@ -4024,7 +4406,7 @@ async fn save_appointment_batch_inner(
             .bind(payload.day_package_id.trim())
             .fetch_one(&mut *tx)
             .await
-            .map_err(|_| ApiError::internal("failed to update appointment service"))?
+            .map_err(|error| booking_write_error(error, "failed to update appointment service"))?
             } else {
                 let id = uuid::Uuid::new_v4().to_string();
                 sqlx::query(
@@ -4068,10 +4450,10 @@ async fn save_appointment_batch_inner(
             .bind(payload.day_package_id.trim())
             .fetch_one(&mut *tx)
             .await
-            .map_err(|_| ApiError::internal("failed to create appointment service"))?
+            .map_err(|error| booking_write_error(error, "failed to create appointment service"))?
             };
             let updated = build_appointment(&row)?;
-            let activity_reason = if line.price_override_paise.is_some() {
+            let mut activity_reason = if line.price_override_paise.is_some() {
                 format!("Price override: {}", line.price_override_reason.trim())
             } else {
                 recommendation_audit_reason(
@@ -4099,6 +4481,10 @@ async fn save_appointment_batch_inner(
                     }
                 })
             };
+            if !payload.outside_hours_override_reason.trim().is_empty() {
+                activity_reason.push_str(" · Outside-hours override: ");
+                activity_reason.push_str(payload.outside_hours_override_reason.trim());
+            }
             changes.push((
                 current.cloned(),
                 updated,
@@ -4405,16 +4791,19 @@ pub async fn set_status(
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
     let status = normalize_status(&payload.status).unwrap_or_else(|_| current.status.clone());
+    if current.status == status {
+        return Ok(Json(current));
+    }
     let booking_group_id = current.booking_group_id.clone().unwrap_or_default();
     let apply_group = payload.apply_group && !booking_group_id.trim().is_empty();
-    sqlx::query(
+    let result = sqlx::query(
         "UPDATE appointments
          SET status=$1, notes = CASE WHEN COALESCE($2,'') = '' THEN notes ELSE COALESCE(notes,'') || ' | ' || $2 END, version = version + 1, updated_at=$3
          WHERE tenant_id=$5 AND branch_id=$6
-           AND (id=$4 OR ($7 AND booking_group_id=$8))",
+           AND (id=$4 OR ($7 AND booking_group_id=$8)) AND status<>$1",
     )
     .bind(&status)
-    .bind(if payload.reason.is_empty() { None::<String> } else { Some(payload.reason) })
+    .bind(if payload.reason.is_empty() { None::<String> } else { Some(payload.reason.clone()) })
     .bind(Utc::now())
     .bind(&id)
     .bind(&tenant_id)
@@ -4426,6 +4815,9 @@ pub async fn set_status(
     .map_err(|_| ApiError::internal("failed to update appointment status"))?;
 
     let updated = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    if result.rows_affected() == 0 {
+        return Ok(Json(updated));
+    }
     insert_activity(
         &state,
         &tenant_id,
@@ -4435,6 +4827,17 @@ pub async fn set_status(
         "",
     )
     .await?;
+    if updated.status == "no-show" {
+        record_configured_appointment_fee(
+            &state,
+            &updated,
+            "no_show",
+            "pending",
+            &payload.reason,
+            "",
+        )
+        .await?;
+    }
     Ok(Json(updated))
 }
 
@@ -4472,7 +4875,8 @@ async fn cancel_appointment_inner(
         "SELECT id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at
          FROM appointments
          WHERE tenant_id=$1 AND branch_id=$2
-           AND (id=$3 OR ($4::boolean AND booking_group_id=$5))",
+           AND (id=$3 OR ($4::boolean AND booking_group_id=$5))
+           AND status NOT IN ('cancelled','no-show')",
     )
     .bind(&tenant_id)
     .bind(&branch_id)
@@ -4517,6 +4921,7 @@ async fn cancel_appointment_inner(
          SET status='cancelled', notes=COALESCE(notes,'') || $1, version=version+1, updated_at=$2
          WHERE tenant_id=$3 AND branch_id=$4
            AND (id=$5 OR ($6::boolean AND booking_group_id=$7))
+           AND status NOT IN ('cancelled','no-show')
          RETURNING id, tenant_id, branch_id, client_id, staff_id, chair_room_id, service_ids_json, start_at, end_at, status, notes, source_channel, source, booking_group_id, version, created_at, updated_at",
     )
     .bind(format!(" | {}", notes))
@@ -4548,6 +4953,15 @@ async fn cancel_appointment_inner(
             &payload.reason,
         )
         .await?;
+        record_configured_appointment_fee(
+            state,
+            appointment,
+            "cancellation",
+            "pending",
+            &payload.reason,
+            "",
+        )
+        .await?;
     }
     let mut waitlist_offers = Vec::new();
     for appointment in &updated_rows {
@@ -4560,6 +4974,308 @@ async fn cancel_appointment_inner(
         waitlist_offer: waitlist_offers.into_iter().next(),
         sales_order: None,
     }))
+}
+
+async fn configured_appointment_fee(
+    state: &AppState,
+    appointment: &AppointmentPayload,
+    fee_type: &str,
+) -> Result<(i64, i32, bool), ApiError> {
+    let row = sqlx::query(
+        "SELECT COALESCE(SUM(cancellation_fee_paise),0)::BIGINT amount_paise,COALESCE(MAX(cancellation_cutoff_hours),0)::INTEGER cutoff_hours FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3)",
+    )
+    .bind(&appointment.tenant_id)
+    .bind(&appointment.branch_id)
+    .bind(&appointment.service_ids)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load appointment fee policy"))?;
+    let amount = row.try_get::<i64, _>("amount_paise").unwrap_or(0);
+    let cutoff = row.try_get::<i32, _>("cutoff_hours").unwrap_or(0);
+    let start_at = parse_datetime(&appointment.start_at, "appointment.start_at")?;
+    let due = amount > 0
+        && (fee_type == "no_show"
+            || cutoff == 0
+            || start_at <= Utc::now() + Duration::hours(i64::from(cutoff)));
+    Ok((amount, cutoff, due))
+}
+
+async fn record_configured_appointment_fee(
+    state: &AppState,
+    appointment: &AppointmentPayload,
+    fee_type: &str,
+    status: &str,
+    reason: &str,
+    actor_user_id: &str,
+) -> Result<Option<Value>, ApiError> {
+    let (amount, _, due) = configured_appointment_fee(state, appointment, fee_type).await?;
+    if !due {
+        return Ok(None);
+    }
+    let row = sqlx::query_scalar::<_, Value>(
+        "INSERT INTO appointment_fee_events(tenant_id,branch_id,appointment_id,fee_type,configured_paise,status,reason,actor_user_id,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(tenant_id,branch_id,appointment_id,fee_type) DO UPDATE SET configured_paise=EXCLUDED.configured_paise,reason=CASE WHEN EXCLUDED.reason='' THEN appointment_fee_events.reason ELSE EXCLUDED.reason END,actor_user_id=CASE WHEN EXCLUDED.actor_user_id='' THEN appointment_fee_events.actor_user_id ELSE EXCLUDED.actor_user_id END,updated_at=NOW() WHERE appointment_fee_events.status='pending' RETURNING jsonb_build_object('id',id,'feeType',fee_type,'configuredPaise',configured_paise,'status',status,'reason',reason,'updatedAt',updated_at)",
+    )
+    .bind(&appointment.tenant_id)
+    .bind(&appointment.branch_id)
+    .bind(&appointment.id)
+    .bind(fee_type)
+    .bind(amount)
+    .bind(status)
+    .bind(reason.trim())
+    .bind(actor_user_id)
+    .bind(format!("appointment-fee:{}:{fee_type}", appointment.id))
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to record appointment fee"))?;
+    Ok(row)
+}
+
+async fn appointment_fee_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let appointment = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    let fee_type = if appointment.status == "no-show" {
+        "no_show"
+    } else {
+        "cancellation"
+    };
+    let (amount, cutoff, due) = configured_appointment_fee(&state, &appointment, fee_type).await?;
+    let event = sqlx::query_scalar::<_, Value>("SELECT jsonb_build_object('id',id,'feeType',fee_type,'configuredPaise',configured_paise,'status',status,'reason',reason,'updatedAt',updated_at) FROM appointment_fee_events WHERE tenant_id=$1 AND branch_id=$2 AND appointment_id=$3 AND fee_type=$4")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(fee_type).fetch_optional(&state.db).await
+        .map_err(|_|ApiError::internal("failed to load appointment fee event"))?;
+    Ok(Json(
+        json!({"feeType":fee_type,"amountPaise":amount,"cutoffHours":cutoff,"due":due,"event":event}),
+    ))
+}
+
+async fn waive_appointment_fee(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<AppointmentFeeWaiverPayload>,
+) -> Result<Json<Value>, ApiError> {
+    if !privileged_appointment_permission(Some(&claims), "appointments.fees.waive") {
+        return Err(ApiError::with_status(
+            StatusCode::FORBIDDEN,
+            "appointment fee waiver permission is required",
+        ));
+    }
+    if !(3..=500).contains(&payload.reason.trim().chars().count()) {
+        return Err(ApiError::bad_request(
+            "waiver reason must be between 3 and 500 characters",
+        ));
+    }
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let appointment = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    let fee_type = match appointment.status.as_str() {
+        "cancelled" => "cancellation",
+        "no-show" => "no_show",
+        _ => {
+            return Err(ApiError::conflict(
+                "only cancelled or no-show appointment fees can be waived",
+            ))
+        }
+    };
+    let (amount, _, due) = configured_appointment_fee(&state, &appointment, fee_type).await?;
+    if !due {
+        return Err(ApiError::conflict(
+            "this appointment has no configured fee to waive",
+        ));
+    }
+    let event = sqlx::query_scalar::<_,Value>("INSERT INTO appointment_fee_events(tenant_id,branch_id,appointment_id,fee_type,configured_paise,status,reason,actor_user_id,idempotency_key) VALUES($1,$2,$3,$4,$5,'waived',$6,$7,$8) ON CONFLICT(tenant_id,branch_id,appointment_id,fee_type) DO UPDATE SET status='waived',reason=EXCLUDED.reason,actor_user_id=EXCLUDED.actor_user_id,updated_at=NOW() WHERE appointment_fee_events.status IN ('pending','waived') RETURNING jsonb_build_object('id',id,'feeType',fee_type,'configuredPaise',configured_paise,'status',status,'reason',reason,'updatedAt',updated_at)")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(fee_type).bind(amount).bind(payload.reason.trim()).bind(&claims.sub).bind(format!("appointment-fee:{id}:{fee_type}"))
+        .fetch_optional(&state.db).await.map_err(|_|ApiError::internal("failed to waive appointment fee"))?
+        .ok_or_else(||ApiError::conflict("a charged fee must be refunded or voided before waiver"))?;
+    insert_activity(
+        &state,
+        &tenant_id,
+        Some(&appointment),
+        &appointment,
+        "FEE_WAIVED",
+        payload.reason.trim(),
+    )
+    .await?;
+    Ok(Json(event))
+}
+
+async fn charge_appointment_fee(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<NoShowChargePayload>,
+) -> Result<Json<Value>, ApiError> {
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let appointment = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    let fee_type = match appointment.status.as_str() {
+        "cancelled" => "cancellation",
+        "no-show" => "no_show",
+        _ => {
+            return Err(ApiError::conflict(
+                "mark the appointment cancelled or no-show before charging a fee",
+            ))
+        }
+    };
+    let (amount, _, due) = configured_appointment_fee(&state, &appointment, fee_type).await?;
+    if !due || payload.amount_paise != amount {
+        return Err(ApiError::bad_request(
+            "fee amount must match the configured appointment policy",
+        ));
+    }
+    let fee_status = sqlx::query_scalar::<_, String>("SELECT status FROM appointment_fee_events WHERE tenant_id=$1 AND branch_id=$2 AND appointment_id=$3 AND fee_type=$4")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(fee_type).fetch_optional(&state.db).await
+        .map_err(|_|ApiError::internal("failed to validate appointment fee state"))?;
+    if fee_status
+        .as_deref()
+        .is_some_and(|status| matches!(status, "waived" | "reversed"))
+    {
+        return Err(ApiError::conflict(
+            "a waived or reversed fee cannot be charged",
+        ));
+    }
+    let charge = pos::create_appointment_fee_charge(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &appointment.client_id,
+        &appointment.staff_id,
+        amount,
+        &payload.provider,
+        &payload.idempotency_key,
+        fee_type,
+    )
+    .await
+    .map_err(|error| ApiError::with_status(error.status_code(), error.message()))?;
+    let event=sqlx::query_scalar::<_,Value>("INSERT INTO appointment_fee_events(tenant_id,branch_id,appointment_id,fee_type,configured_paise,status,reason,actor_user_id,idempotency_key) VALUES($1,$2,$3,$4,$5,'charged',$6,$7,$8) ON CONFLICT(tenant_id,branch_id,appointment_id,fee_type) DO UPDATE SET status='charged',reason=EXCLUDED.reason,actor_user_id=EXCLUDED.actor_user_id,updated_at=NOW() WHERE appointment_fee_events.status IN ('pending','charged') RETURNING jsonb_build_object('id',id,'feeType',fee_type,'configuredPaise',configured_paise,'status',status,'reason',reason,'updatedAt',updated_at)")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(fee_type).bind(amount).bind(payload.reason.trim()).bind(&claims.sub).bind(format!("appointment-fee:{id}:{fee_type}"))
+        .fetch_optional(&state.db).await.map_err(|_|ApiError::internal("failed to record charged appointment fee"))?
+        .ok_or_else(||ApiError::conflict("a waived fee cannot be charged"))?;
+    insert_activity(
+        &state,
+        &tenant_id,
+        Some(&appointment),
+        &appointment,
+        "FEE_CHARGED",
+        payload.reason.trim(),
+    )
+    .await?;
+    Ok(Json(json!({"charge":charge,"fee":event})))
+}
+
+async fn restore_appointment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<RestoreAppointmentPayload>,
+) -> Result<Json<AppointmentPayload>, ApiError> {
+    if !(3..=500).contains(&payload.reason.trim().chars().count()) {
+        return Err(ApiError::bad_request(
+            "restore reason must be between 3 and 500 characters",
+        ));
+    }
+    let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
+    let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    if !matches!(current.status.as_str(), "cancelled" | "no-show") {
+        return Err(ApiError::conflict(
+            "only cancelled or no-show appointments can be restored",
+        ));
+    }
+    if payload
+        .expected_version
+        .is_some_and(|version| version != current.version)
+    {
+        return Err(ApiError::conflict(
+            "appointment changed after it was opened; reload before restoring",
+        ));
+    }
+    let start_at = parse_datetime(&current.start_at, "appointment.start_at")?;
+    let end_at = parse_datetime(&current.end_at, "appointment.end_at")?;
+    if end_at <= Utc::now() {
+        return Err(ApiError::conflict("past appointments cannot be restored"));
+    }
+    let charged=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM appointment_fee_events WHERE tenant_id=$1 AND branch_id=$2 AND appointment_id=$3 AND status='charged')")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_one(&state.db).await.map_err(|_|ApiError::internal("failed to validate appointment fee"))?;
+    if charged {
+        return Err(ApiError::conflict(
+            "refund or void the charged fee before restoring this appointment",
+        ));
+    }
+    validate_branch_operating_hours(
+        &state,
+        &tenant_id,
+        &branch_id,
+        start_at,
+        end_at,
+        &payload.outside_hours_override_reason,
+        Some(&claims),
+    )
+    .await?;
+    validate_staff_blackout(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &current.staff_id,
+        start_at,
+        end_at,
+    )
+    .await?;
+    validate_staff_booking_availability(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &current.staff_id,
+        &current.service_ids,
+        start_at,
+        end_at,
+        Some(&id),
+    )
+    .await?;
+    validate_chair_room_availability(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &current.chair_room_id,
+        start_at,
+        end_at,
+        Some(&id),
+    )
+    .await?;
+    let previous_status=sqlx::query_scalar::<_,String>("SELECT old_status FROM appointment_activity WHERE tenant_id=$1 AND appointment_id=$2 AND action IN ('CANCELLED','NO_SHOW') ORDER BY created_at DESC,id DESC LIMIT 1")
+        .bind(&tenant_id).bind(&id).fetch_optional(&state.db).await.map_err(|_|ApiError::internal("failed to load appointment restore history"))?
+        .filter(|status|matches!(status.as_str(),"draft"|"booked"|"confirmed"|"rescheduled"))
+        .unwrap_or_else(||"booked".to_string());
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| ApiError::internal("failed to start appointment restore"))?;
+    let row=sqlx::query("UPDATE appointments SET status=$1,notes=COALESCE(notes,'')||$2,version=version+1,updated_at=NOW() WHERE tenant_id=$3 AND branch_id=$4 AND id=$5 AND status IN ('cancelled','no-show') AND ($6::INTEGER IS NULL OR version=$6) RETURNING id,tenant_id,branch_id,client_id,staff_id,requested_staff_id,staff_preference,chair_room_id,service_ids_json,start_at,end_at,status,notes,source_channel,source,booking_group_id,version,created_at,updated_at")
+        .bind(&previous_status).bind(format!(" | restored: {}",payload.reason.trim())).bind(&tenant_id).bind(&branch_id).bind(&id).bind(payload.expected_version)
+        .fetch_optional(&mut *tx).await.map_err(|error|booking_write_error(error,"failed to restore appointment"))?
+        .ok_or_else(||ApiError::conflict("appointment changed after it was opened; reload before restoring"))?;
+    let restored = build_appointment(&row)?;
+    sqlx::query("UPDATE appointment_fee_events SET status='reversed',reason=CONCAT(reason,CASE WHEN reason='' THEN '' ELSE ' | ' END,$4),actor_user_id=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND appointment_id=$3 AND status IN ('pending','waived')")
+        .bind(&tenant_id).bind(&branch_id).bind(&id).bind(format!("restored: {}",payload.reason.trim())).bind(&claims.sub).execute(&mut *tx).await
+        .map_err(|_|ApiError::internal("failed to reverse appointment fee decision"))?;
+    tx.commit()
+        .await
+        .map_err(|_| ApiError::internal("failed to commit appointment restore"))?;
+    insert_activity(
+        &state,
+        &tenant_id,
+        Some(&current),
+        &restored,
+        "RESTORED",
+        payload.reason.trim(),
+    )
+    .await?;
+    Ok(Json(restored))
 }
 
 fn staff_appointment_permission(claims: &AuthClaims, permission: &str) -> bool {
@@ -4752,6 +5468,14 @@ async fn quote_self_appointment(
             (!line.appointment_id.trim().is_empty()).then_some(line.appointment_id.as_str()),
         )
         .await?;
+        validate_service_resource_requirement(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &[selection.service_id.clone()],
+            &line.chair_room_id,
+        )
+        .await?;
         let calculated = validate_service_pricing(
             &state,
             &tenant_id,
@@ -4760,6 +5484,8 @@ async fn quote_self_appointment(
             &[selection.service_id.clone()],
             std::slice::from_ref(&selection),
             start_at,
+            &payload.client_id,
+            "staffApp",
         )
         .await?;
         let price = if let Some(price) = line.price_override_paise {
@@ -5764,6 +6490,7 @@ async fn start_staff_self_provider_payment(
                 store_payment_method: payload.store_payment_method,
                 recurring: false,
                 application_fee_paise: None,
+                capture_method: None,
             },
         }),
     )
@@ -6349,9 +7076,11 @@ async fn decide_self_online_booking_request(
                 .map(ToString::to_string);
             let _ = reschedule_appointment(
                 State(state.clone()),
+                None,
                 headers.clone(),
                 Path(appointment_id.to_string()),
                 Json(ReschedulePayload {
+                    expected_version: None,
                     start_at,
                     end_at,
                     reason: payload.reason.clone(),
@@ -6364,6 +7093,7 @@ async fn decide_self_online_booking_request(
                     booking_group_id: String::new(),
                     change_mode: String::new(),
                     actor_source: "online-request".into(),
+                    outside_hours_override_reason: String::new(),
                 }),
             )
             .await?;
@@ -6524,12 +7254,21 @@ async fn remove_appointment_service(
 
 pub async fn reschedule_appointment(
     State(state): State<AppState>,
+    claims: Option<Extension<AuthClaims>>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<ReschedulePayload>,
 ) -> Result<Json<AppointmentPayload>, ApiError> {
     let (tenant_id, branch_id) = scope_from_headers(&headers, None, None);
     let current = find_appointment(&state, &tenant_id, &branch_id, &id).await?;
+    if payload
+        .expected_version
+        .is_some_and(|version| version != current.version)
+    {
+        return Err(ApiError::conflict(
+            "appointment changed after it was opened; reload before moving it",
+        ));
+    }
     let calendar_move = payload
         .change_mode
         .trim()
@@ -6549,6 +7288,16 @@ pub async fn reschedule_appointment(
     if next_end <= next_start {
         return Err(ApiError::bad_request("end_at must be after start_at"));
     }
+    validate_branch_operating_hours(
+        &state,
+        &tenant_id,
+        &branch_id,
+        next_start,
+        next_end,
+        &payload.outside_hours_override_reason,
+        claims.as_ref().map(|claims| &claims.0),
+    )
+    .await?;
 
     let next_staff = if payload.staff_id.is_empty() {
         current.staff_id.clone()
@@ -6626,6 +7375,14 @@ pub async fn reschedule_appointment(
         Some(&id),
     )
     .await?;
+    validate_service_resource_requirement(
+        &state,
+        &tenant_id,
+        &branch_id,
+        &current.service_ids,
+        &next_chair_room,
+    )
+    .await?;
     validate_staff_booking_availability(
         &state,
         &tenant_id,
@@ -6659,9 +7416,25 @@ pub async fn reschedule_appointment(
     .bind(&next_status)
     .fetch_one(&state.db)
     .await
-    .map_err(|_| ApiError::internal("failed to reschedule"))?;
+    .map_err(|error| booking_write_error(error, "failed to reschedule"))?;
 
     let updated = build_appointment(&row)?;
+    let mut activity_reason =
+        if current.staff_id != next_staff && current.requested_staff_id != next_staff {
+            if payload.staff_change_reason.trim().is_empty() {
+                payload.staff_change_approval.trim().to_string()
+            } else {
+                payload.staff_change_reason.trim().to_string()
+            }
+        } else if calendar_move {
+            "Moved on calendar".to_string()
+        } else {
+            payload.reason.trim().to_string()
+        };
+    if !payload.outside_hours_override_reason.trim().is_empty() {
+        activity_reason.push_str(" · Outside-hours override: ");
+        activity_reason.push_str(payload.outside_hours_override_reason.trim());
+    }
     insert_activity(
         &state,
         &tenant_id,
@@ -6676,19 +7449,7 @@ pub async fn reschedule_appointment(
         } else {
             "BOOKING_UPDATED"
         },
-        if current.staff_id != next_staff && current.requested_staff_id != next_staff {
-            if payload.staff_change_reason.trim().is_empty() {
-                payload.staff_change_approval.trim()
-            } else {
-                payload.staff_change_reason.trim()
-            }
-        } else {
-            if calendar_move {
-                "Moved on calendar"
-            } else {
-                payload.reason.trim()
-            }
-        },
+        &activity_reason,
     )
     .await?;
     Ok(Json(updated))
@@ -6727,7 +7488,7 @@ async fn reschedule_self_appointment(
     payload.staff_change_approval.clear();
     payload.staff_change_reason.clear();
     payload.actor_source = "staff-app".to_string();
-    reschedule_appointment(State(state), headers, Path(id), Json(payload)).await
+    reschedule_appointment(State(state), None, headers, Path(id), Json(payload)).await
 }
 
 pub(crate) async fn check_in_appointment(
@@ -6826,6 +7587,13 @@ pub(crate) async fn mark_no_show_with_charge(
         .await?
         .0
     };
+    let (configured_amount, _, configured_due) =
+        configured_appointment_fee(&state, &appointment, "no_show").await?;
+    if configured_due && payload.amount_paise != configured_amount {
+        return Err(ApiError::bad_request(
+            "fee amount must match the configured appointment policy",
+        ));
+    }
     let charge = pos::create_no_show_charge(
         &state,
         &tenant_id,
@@ -6839,6 +7607,11 @@ pub(crate) async fn mark_no_show_with_charge(
     )
     .await
     .map_err(|_| ApiError::internal("failed to create no-show payment collection"))?;
+    if configured_due {
+        sqlx::query("INSERT INTO appointment_fee_events(tenant_id,branch_id,appointment_id,fee_type,configured_paise,status,reason,actor_user_id,idempotency_key) VALUES($1,$2,$3,'no_show',$4,'charged',$5,'',$6) ON CONFLICT(tenant_id,branch_id,appointment_id,fee_type) DO UPDATE SET status='charged',reason=EXCLUDED.reason,updated_at=NOW() WHERE appointment_fee_events.status IN ('pending','charged')")
+            .bind(&tenant_id).bind(&branch_id).bind(&id).bind(configured_amount).bind(payload.reason.trim()).bind(format!("appointment-fee:{id}:no_show"))
+            .execute(&state.db).await.map_err(|_|ApiError::internal("failed to record no-show fee"))?;
+    }
     Ok(Json(json!({"appointment": appointment, "charge": charge})))
 }
 
@@ -6993,7 +7766,7 @@ async fn ensure_appointment_pos_draft(
                 lines,
             )
             .await
-            .map_err(|_| ApiError::internal("failed to create appointment invoice"))?
+            .map_err(map_pos_error)?
         }
     };
     Ok(AppointmentDraftContext {

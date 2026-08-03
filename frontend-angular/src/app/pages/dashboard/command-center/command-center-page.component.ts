@@ -7,7 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 
-type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'action-audit' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch' | 'growth' | 'forecast-revenue' | 'forecast-stock' | 'forecast-demand' | 'forecast-no-show' | 'briefing' | 'branch-anomaly';
+type Source = 'snapshot' | 'profit' | 'advanced' | 'dues' | 'appointments' | 'actions' | 'action-audit' | 'inventory-command' | 'payments' | 'payment-risk' | 'payment-providers' | 'franchise' | 'membership-settings' | 'multi-branch' | 'growth' | 'ai-workforce' | 'forecast-revenue' | 'forecast-stock' | 'forecast-demand' | 'forecast-no-show' | 'briefing' | 'branch-anomaly';
 type ForecastKind = 'revenue_forecast' | 'inventory_reorder_risk' | 'service_demand' | 'no_show_risk';
 
 type DashboardSnapshot = {
@@ -155,6 +155,14 @@ type AiBriefing = {
   quiet: boolean;
   automationActive: boolean;
   scanIntervalMinutes: number;
+};
+
+type AiWorkforceSummary = {
+  enabled: boolean;
+  status: string;
+  agents: Array<{ key: string; name: string; purpose: string; evidenceSources: string[]; actionOwnerUserId: string; status: string }>;
+  metrics: { requestCount30d: number; deniedCount30d: number; predictionCount30d: number; openRecommendations: number; recommendationOwnerGaps: number; recommendationEvidenceGaps: number };
+  latestEvaluation: { suiteVersion: string; unsafePromptTestsPassed: boolean; hallucinationTestsPassed: boolean; unauthorizedActionTestsPassed: boolean; baselineMetricBps: number | null; observedMetricBps: number | null; sampleSize: number; createdAt: string } | null;
 };
 
 type BranchAnomaly = {
@@ -544,6 +552,7 @@ const API_SOURCES: Array<{ source: Source; label: string; endpoint: string; acce
   { source: 'membership-settings', label: 'Sharing settings', endpoint: '/api/v1/membership-enterprise/settings', access: 'locations' },
   { source: 'multi-branch', label: 'Multi-branch report', endpoint: '/api/v1/settings/multi-branch/command-center', access: 'locations' },
   { source: 'growth', label: 'Growth intelligence', endpoint: '/api/v1/reports/growth-intelligence' },
+  { source: 'ai-workforce', label: 'Governed AI workforce', endpoint: '/api/v1/ai/workforce', access: 'ai' },
   ...FORECASTS.map(({ kind, source, label }) => ({ source, label, endpoint: `/api/v1/ai/predictions/${kind}/latest`, access: 'ai' as const })),
   { source: 'briefing', label: 'AI risk briefing', endpoint: '/api/v1/ai/briefing/daily', access: 'ai' },
   { source: 'branch-anomaly', label: 'Branch anomaly comparison', endpoint: '/api/v1/ai/briefing/compare', access: 'ai' },
@@ -580,6 +589,7 @@ export class CommandCenterPageComponent implements OnInit {
   multiBranch: MultiBranchCommandCenter | null = null;
   growth: GrowthIntelligence | null = null;
   forecasts: Partial<Record<ForecastKind, PredictionRun | null>> = {};
+  workforce: AiWorkforceSummary | null = null;
   briefing: AiBriefing | null = null;
   branchAnomalies: BranchAnomaly[] = [];
   branchSignal = 'margin_movement';
@@ -1348,16 +1358,24 @@ export class CommandCenterPageComponent implements OnInit {
     if (!this.canReadAi) {
       this.intelligenceLoading = false;
       this.forecasts = {};
+      this.workforce = null;
       this.briefing = null;
       return;
     }
     this.intelligenceLoading = true;
+    this.optional('ai-workforce', this.api.get<ApiEnvelope<AiWorkforceSummary> | AiWorkforceSummary>('/api/v1/ai/workforce')).subscribe((response) => {
+      this.workforce = this.unwrap(response) ?? null;
+      this.loadGovernedIntelligence(Boolean(this.workforce?.enabled));
+    });
+  }
+
+  private loadGovernedIntelligence(enabled: boolean): void {
     forkJoin({
       revenue: this.optional('forecast-revenue', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/revenue_forecast/latest')),
       stock: this.optional('forecast-stock', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/inventory_reorder_risk/latest')),
       demand: this.optional('forecast-demand', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/service_demand/latest')),
       noShow: this.optional('forecast-no-show', this.api.get<ApiEnvelope<PredictionRun | null> | PredictionRun | null>('/api/v1/ai/predictions/no_show_risk/latest')),
-      briefing: this.optional('briefing', this.api.get<ApiEnvelope<AiBriefing> | AiBriefing>('/api/v1/ai/briefing/daily')),
+      briefing: enabled ? this.optional('briefing', this.api.get<ApiEnvelope<AiBriefing> | AiBriefing>('/api/v1/ai/briefing/daily')) : of(null),
     }).pipe(finalize(() => (this.intelligenceLoading = false))).subscribe(({ revenue, stock, demand, noShow, briefing }) => {
       this.forecasts = {
         revenue_forecast: this.unwrap(revenue) ?? null,
@@ -1366,7 +1384,7 @@ export class CommandCenterPageComponent implements OnInit {
         no_show_risk: this.unwrap(noShow) ?? null,
       };
       this.briefing = this.unwrap(briefing) ?? null;
-      if (revenue || stock || demand || noShow || briefing) this.touch();
+      if (this.workforce || revenue || stock || demand || noShow || briefing) this.touch();
     });
   }
 
