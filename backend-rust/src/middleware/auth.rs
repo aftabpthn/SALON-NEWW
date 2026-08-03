@@ -217,7 +217,7 @@ pub async fn require_auth(
         .insert(crate::middleware::request_timing::VerifiedTenantId(
             audit_claims.tenant_id,
         ));
-    response
+    Ok(response)
 }
 
 fn request_mutates_data(method: &axum::http::Method) -> bool {
