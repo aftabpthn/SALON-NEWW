@@ -203,3 +203,20 @@ variable "error_webhook_url" {
     error_message = "error_webhook_url must use HTTPS."
   }
 }
+
+variable "otel_collector_image" {
+  description = "ADOT collector image that scrapes the API's /metrics endpoint and publishes it to CloudWatch."
+  type        = string
+  default     = "public.ecr.aws/aws-observability/aws-otel-collector:v0.43.3"
+}
+
+variable "metrics_scrape_interval_seconds" {
+  description = "How often the collector scrapes /metrics. Below 60s multiplies CloudWatch ingestion cost without adding much signal."
+  type        = number
+  default     = 60
+
+  validation {
+    condition     = var.metrics_scrape_interval_seconds >= 15 && var.metrics_scrape_interval_seconds <= 300
+    error_message = "metrics_scrape_interval_seconds must be between 15 and 300."
+  }
+}

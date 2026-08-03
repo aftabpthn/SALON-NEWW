@@ -71,6 +71,19 @@ async fn create_schema(pool: &PgPool) {
           journal_entry_id TEXT NOT NULL REFERENCES accounting_journal_entries(id) ON DELETE CASCADE,
           account_code TEXT NOT NULL, debit_paise BIGINT NOT NULL DEFAULT 0, credit_paise BIGINT NOT NULL DEFAULT 0
         );
+        -- list_movements unions manual drawer movements with cash taken on
+        -- invoices, so the sale side has to exist even when a test only
+        -- exercises the manual side.
+        CREATE TABLE pos_sales(
+          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+          invoice_number TEXT NOT NULL DEFAULT '', business_date DATE NOT NULL DEFAULT CURRENT_DATE,
+          cash_drawer_till_id TEXT
+        );
+        CREATE TABLE pos_payments(
+          id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT, tenant_id TEXT NOT NULL, branch_id TEXT NOT NULL,
+          sale_id TEXT NOT NULL REFERENCES pos_sales(id) ON DELETE CASCADE, method TEXT NOT NULL,
+          amount_paise BIGINT NOT NULL DEFAULT 0, paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
         "#,
     )
     .execute(pool)

@@ -125,3 +125,70 @@ identifier-shaped segments collapse to `:id`
 or any JSON sink). Forwarding is rate-limited globally (60/minute) and
 per-route (one report per minute, with suppressed repeats counted into the next
 report), so an outage cannot turn into thousands of outbound requests.
+
+## 12. Who scrapes `/metrics`
+
+An endpoint nobody reads is not observability. An ADOT collector runs as a
+sidecar in the API task, scrapes `http://127.0.0.1:8080/metrics` over the task's
+loopback interface, and republishes the result to CloudWatch as Embedded Metric
+Format.
+
+```
+backend :8080 ──/metrics──▶ otel sidecar ──EMF──▶ /aurashine/<env>/metrics
+                                                        │
+                                                        └─▶ AuraShine/<env> namespace
+                                                              └─▶ alarms → SNS
+```
+
+The collector is **not** an essential container: if telemetry breaks, the API
+keeps serving. It authenticates with the same generated `METRICS_AUTH_TOKEN`,
+injected from the runtime secret.
+
+Scrape interval defaults to 60s (`metrics_scrape_interval_seconds`). Below that
+you multiply CloudWatch ingestion cost without learning much more.
+
+### Metrics vs logs: the cost boundary
+
+CloudWatch bills per custom metric per month, so **only the metric/dimension
+pairs listed in `metric_declarations` become metrics**:
+
+| Metric | Dimensions promoted |
+| --- | --- |
+| `aurashine_http_request_duration_seconds` | `route` |
+| `aurashine_http_errors_total` | `route` |
+| `aurashine_worker_cycles_total` | `worker`, `outcome` |
+| `aurashine_worker_step_failures_total` | `worker`+`step`, and a no-dimension total |
+| `aurashine_db_pool_connections` | `state` |
+| `aurashine_metrics_series_dropped_total` | none |
+
+Everything else — including `aurashine_tenant_slow_requests_total` and the
+`method`/`status` breakdown of `aurashine_http_requests_total` — still lands in
+the `/aurashine/<env>/metrics` log group in full. **"Which salon is slow?" is a
+Logs Insights query, not a per-tenant CloudWatch metric.** Promoting `tenant`
+would mint one billable metric per salon.
+
+`dimension_rollup_option` is `NoDimensionRollup`, so CloudWatch publishes
+exactly the declared sets and nothing else. An alarm's `dimensions` block must
+match one of those sets exactly, or it will sit on missing data forever.
+
+### Alarms added
+
+| Alarm | Fires when |
+| --- | --- |
+| `db-pool-saturated` | ≥20 of 25 connections in use for 10 minutes |
+| `metrics-pipeline-silent` | No datapoints for 15 minutes — treated as breaching, because silence here means loss of visibility |
+| `metrics-cardinality-overflow` | A metric family hit its label cap; some label is leaking identifiers |
+| `worker-steps-failing` | Worker jobs erroring — invoice delivery or report exports silently stalled |
+
+### Verifying a deploy
+
+```bash
+# From inside the VPC, or through the ALB with the token:
+curl -H "Authorization: Bearer $METRICS_AUTH_TOKEN" https://<host>/metrics | head
+
+# Collector health (its own stdout):
+aws logs tail /aurashine/<env>/otel --since 10m
+
+# Did anything reach CloudWatch?
+aws cloudwatch list-metrics --namespace AuraShine/<env>
+```

@@ -687,22 +687,26 @@ mod tests {
         let branch = "branch1";
         cleanup(&db, &tenant).await;
 
+        // These tests share one database and clean up by tenant, so every row id
+        // has to carry the unique tenant too — a bare 'spa' collides with the
+        // identical id another test in this module inserts. Same prefixing the
+        // weekday-demand test below already uses.
         sqlx::query(
             "INSERT INTO services(id,tenant_id,branch_id,name,category,duration_minutes,price_paise,active)
-             VALUES ('spa',$1,$2,'Hair Spa','Hair',60,100000,TRUE)",
-        ).bind(&tenant).bind(branch).execute(&db).await.expect("service seeded");
+             VALUES ($3||'spa',$1,$2,'Hair Spa','Hair',60,100000,TRUE)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("service seeded");
         sqlx::query(
             "INSERT INTO pos_sales(id,tenant_id,branch_id,client_id,invoice_number,subtotal_paise,total_paise,paid_paise,status,finalized_at,created_at,is_deleted)
-             VALUES ('voided',$1,$2,'client1','INV-V',100000,100000,0,'voided',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,FALSE),
-                    ('deleted',$1,$2,'client1','INV-D',100000,100000,100000,'paid',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,TRUE),
-                    ('draft',$1,$2,'client1','INV-DR',100000,100000,0,'draft',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,FALSE)",
-        ).bind(&tenant).bind(branch).execute(&db).await.expect("excluded sales seeded");
+             VALUES ($3||'voided',$1,$2,'client1','INV-V',100000,100000,0,'voided',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,FALSE),
+                    ($3||'deleted',$1,$2,'client1','INV-D',100000,100000,100000,'paid',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,TRUE),
+                    ($3||'draft',$1,$2,'client1','INV-DR',100000,100000,0,'draft',(CURRENT_DATE-5)::timestamptz,(CURRENT_DATE-5)::timestamptz,FALSE)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("excluded sales seeded");
         sqlx::query(
             "INSERT INTO pos_sale_lines(id,tenant_id,branch_id,sale_id,line_type,item_id,item_name,quantity,unit_price_paise,line_total_paise)
-             VALUES ('lv',$1,$2,'voided','service','spa','Hair Spa',1,100000,100000),
-                    ('ld',$1,$2,'deleted','service','spa','Hair Spa',1,100000,100000),
-                    ('ldr',$1,$2,'draft','service','spa','Hair Spa',1,100000,100000)",
-        ).bind(&tenant).bind(branch).execute(&db).await.expect("excluded lines seeded");
+             VALUES ($3||'lv',$1,$2,$3||'voided','service',$3||'spa','Hair Spa',1,100000,100000),
+                    ($3||'ld',$1,$2,$3||'deleted','service',$3||'spa','Hair Spa',1,100000,100000),
+                    ($3||'ldr',$1,$2,$3||'draft','service',$3||'spa','Hair Spa',1,100000,100000)",
+        ).bind(&tenant).bind(branch).bind(&tenant).execute(&db).await.expect("excluded lines seeded");
 
         let rows = service_performance_trend(&db, &tenant, &one_branch(branch), 30, 10)
             .await
