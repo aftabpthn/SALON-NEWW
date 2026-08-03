@@ -157,7 +157,7 @@ fn probe_signal(path: &str) -> Option<&'static str> {
         .find_map(|(pattern, signal)| path.contains(pattern).then_some(*signal))
 }
 
-fn resolved_source_ip(peer: IpAddr, headers: &HeaderMap) -> String {
+pub(crate) fn resolved_source_ip(peer: IpAddr, headers: &HeaderMap) -> String {
     if trusted_proxy(peer) {
         if let Some(forwarded) = headers
             .get("x-forwarded-for")

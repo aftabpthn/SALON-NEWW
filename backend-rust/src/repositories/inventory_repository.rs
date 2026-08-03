@@ -45,6 +45,7 @@ pub struct InventoryRecord {
     pub order_level: i32,
     pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
+    pub retail_price_paise: i64,
     pub hsn_code: String,
     pub gst_percent: i32,
     pub barcode: String,
@@ -52,6 +53,7 @@ pub struct InventoryRecord {
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
     pub center_available: bool,
+    pub online_sale_enabled: bool,
     pub active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
@@ -79,6 +81,49 @@ pub struct InventoryKitComponentRecord {
     pub quantity: i32,
 }
 
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryKitOperationRecord {
+    pub id: String,
+    pub kit_inventory_item_id: String,
+    pub operation_type: String,
+    pub quantity: i32,
+    pub comments: String,
+    pub actor_user_id: String,
+    pub source_receipt_id: Option<String>,
+    pub source_receipt_line_id: Option<String>,
+    pub unit_cost_paise: i64,
+    pub stock_after_quantity: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryAdjustmentRecord {
+    pub id: String,
+    pub inventory_item_id: String,
+    pub item_name: String,
+    pub business_date: NaiveDate,
+    pub source: String,
+    pub status: String,
+    pub stock_before_quantity: i32,
+    pub requested_stock_quantity: i32,
+    pub quantity_delta: i32,
+    pub unit_cost_paise: i64,
+    pub value_paise: i64,
+    pub material: bool,
+    pub reason: String,
+    pub evidence_reference: String,
+    pub requested_by_user_id: String,
+    pub reviewed_by_user_id: Option<String>,
+    pub review_idempotency_key: Option<String>,
+    pub review_note: String,
+    pub adjustment_ledger_id: Option<String>,
+    pub requested_at: DateTime<Utc>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub applied_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, FromRow)]
 pub struct BatchAllocationRecord {
     pub batch_id: String,
@@ -104,6 +149,12 @@ pub struct InventoryControlItem {
     pub name: String,
     pub stock_quantity: i32,
     pub reorder_point: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
+    pub pending_po_quantity: i64,
+    pub pending_transfer_quantity: i64,
     pub unit_cost_paise: i64,
     pub created_at: DateTime<Utc>,
     pub last_outbound_at: Option<DateTime<Utc>>,
@@ -208,6 +259,8 @@ pub struct BackbarUsageRecord {
     pub source: String,
     pub expected_quantity: i64,
     pub actual_quantity: i64,
+    pub wasted_quantity: i64,
+    pub selected_batch_id: Option<String>,
     pub variance_quantity: i64,
     pub max_quantity: i64,
     pub wastage_percent: f64,
@@ -225,15 +278,19 @@ pub struct BackbarUsageForReview {
     pub id: String,
     pub inventory_item_id: String,
     pub actual_quantity: i32,
+    pub selected_batch_id: Option<String>,
     pub actor_user_id: String,
     pub status: String,
     pub container_id: Option<String>,
+    pub staff_id: Option<String>,
+    pub unit_cost_paise: i64,
 }
 
 #[derive(Debug, Clone, FromRow)]
 pub struct OpenBackbarContainer {
     pub id: String,
     pub remaining_quantity: i32,
+    pub unit_cost_paise: i64,
 }
 
 pub struct CreateInventory<'a> {
@@ -255,12 +312,14 @@ pub struct CreateInventory<'a> {
     pub order_level: i32,
     pub safety_stock_level: i32,
     pub unit_cost_paise: i64,
+    pub retail_price_paise: i64,
     pub hsn_code: &'a str,
     pub gst_percent: i32,
     pub barcode: &'a str,
     pub batch_tracked: bool,
     pub dual_use_stock: bool,
     pub center_available: bool,
+    pub online_sale_enabled: bool,
     pub active: bool,
 }
 
@@ -283,12 +342,14 @@ pub struct UpdateInventory<'a> {
     pub order_level: Option<i32>,
     pub safety_stock_level: Option<i32>,
     pub unit_cost_paise: Option<i64>,
+    pub retail_price_paise: Option<i64>,
     pub hsn_code: Option<&'a str>,
     pub gst_percent: Option<i32>,
     pub barcode: Option<&'a str>,
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
     pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
     pub active: Option<bool>,
 }
 
@@ -406,6 +467,25 @@ pub async fn control_items(
     sqlx::query_as(
         r#"
         SELECT item.id, item.sku, item.name, item.stock_quantity, item.reorder_point,
+               item.alert_level, item.desired_level, item.order_level, item.safety_stock_level,
+               COALESCE((
+                 SELECT SUM(line.quantity-line.received_quantity)
+                 FROM purchase_order_lines line
+                 JOIN purchase_orders po ON po.id=line.purchase_order_id
+                   AND po.tenant_id=line.tenant_id AND po.branch_id=line.branch_id
+                 WHERE line.tenant_id=item.tenant_id AND line.branch_id=item.branch_id
+                   AND line.inventory_item_id=item.id
+                   AND po.status IN ('pending_approval','approved','partially_received')
+               ),0)::BIGINT AS pending_po_quantity,
+               COALESCE((
+                 SELECT SUM(GREATEST(line.quantity-line.received_retail_quantity-line.received_consumable_quantity-line.damaged_quantity-line.expired_quantity-line.short_quantity,0))
+                 FROM inventory_transfer_lines line
+                 JOIN inventory_transfers transfer ON transfer.id=line.transfer_id AND transfer.tenant_id=line.tenant_id
+                 WHERE line.tenant_id=item.tenant_id
+                   AND transfer.destination_branch_id=item.branch_id
+                   AND line.destination_inventory_item_id=item.id
+                   AND transfer.status IN ('raised','approved','dispatched','in_transit','partially_received')
+               ),0)::BIGINT AS pending_transfer_quantity,
                item.unit_cost_paise, item.created_at,
                MAX(ledger.created_at) FILTER (WHERE ledger.quantity_delta < 0) AS last_outbound_at
         FROM inventory_items item
@@ -415,6 +495,7 @@ pub async fn control_items(
          AND ledger.inventory_item_id = item.id
         WHERE item.tenant_id = $1 AND item.branch_id = $2 AND item.active = TRUE
         GROUP BY item.id, item.sku, item.name, item.stock_quantity, item.reorder_point,
+                 item.alert_level, item.desired_level, item.order_level, item.safety_stock_level,
                  item.unit_cost_paise, item.created_at
         ORDER BY item.name
         "#,
@@ -579,30 +660,32 @@ pub async fn valuation(
     let started = Instant::now();
     let rows = sqlx::query_as(
         r#"
-        SELECT item.id AS inventory_item_id, item.name AS product_name, item.category,
-               (item.stock_quantity::BIGINT
-                 - COALESCE(ledger.quantity_delta_sum, 0)::BIGINT)
-                 AS stock_quantity,
-               item.unit_cost_paise,
-               (item.stock_quantity::BIGINT * item.unit_cost_paise
-                 - COALESCE(ledger.value_delta_sum, 0)::BIGINT)
-                 AS stock_value_paise,
+        WITH open_containers AS (
+          SELECT container.inventory_item_id,
+            SUM(container.remaining_quantity::BIGINT-COALESCE((SELECT SUM(event.quantity_delta::BIGINT) FROM inventory_backbar_container_events event WHERE event.container_id=container.id AND event.tenant_id=container.tenant_id AND event.branch_id=container.branch_id AND event.created_at>=($3::date+INTERVAL '1 day')),0))::BIGINT AS quantity_as_of,
+            SUM((container.remaining_quantity::BIGINT-COALESCE((SELECT SUM(event.quantity_delta::BIGINT) FROM inventory_backbar_container_events event WHERE event.container_id=container.id AND event.tenant_id=container.tenant_id AND event.branch_id=container.branch_id AND event.created_at>=($3::date+INTERVAL '1 day')),0))*COALESCE(container.unit_cost_paise,0))::BIGINT AS value_as_of
+          FROM inventory_backbar_containers container
+          WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.opened_at<($3::date+INTERVAL '1 day')
+          GROUP BY container.inventory_item_id
+        ), values AS (
+          SELECT item.id,item.name,item.category,item.reorder_point,item.unit_cost_paise,
+            item.stock_quantity::BIGINT-COALESCE(ledger.quantity_delta_sum,0)+COALESCE(container.quantity_as_of,0) AS quantity_as_of,
+            item.stock_quantity::BIGINT*item.unit_cost_paise-COALESCE(ledger.value_delta_sum,0)+COALESCE(container.value_as_of,0) AS value_as_of
+          FROM inventory_items item
+          LEFT JOIN (
+            SELECT inventory_item_id,SUM(quantity_delta::BIGINT) AS quantity_delta_sum,SUM(quantity_delta::BIGINT*unit_cost_paise) AS value_delta_sum
+            FROM inventory_stock_ledger
+            WHERE tenant_id=$1 AND branch_id=$2 AND created_at>=($3::date+INTERVAL '1 day')
+            GROUP BY inventory_item_id
+          ) ledger ON ledger.inventory_item_id=item.id
+          LEFT JOIN open_containers container ON container.inventory_item_id=item.id
+          WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.created_at<($3::date+INTERVAL '1 day')
+        )
+        SELECT id AS inventory_item_id,name AS product_name,category,quantity_as_of AS stock_quantity,
+               CASE WHEN quantity_as_of<>0 THEN value_as_of/quantity_as_of ELSE unit_cost_paise END AS unit_cost_paise,
+               value_as_of AS stock_value_paise,
                item.reorder_point
-        FROM inventory_items item
-        LEFT JOIN (
-          SELECT
-            inventory_item_id,
-            COALESCE(SUM(quantity_delta::BIGINT), 0) AS quantity_delta_sum,
-            COALESCE(SUM(quantity_delta::BIGINT * unit_cost_paise), 0) AS value_delta_sum
-          FROM inventory_stock_ledger
-          WHERE tenant_id = $1
-            AND branch_id = $2
-            AND created_at >= ($3::date + INTERVAL '1 day')
-          GROUP BY inventory_item_id
-        ) ledger ON ledger.inventory_item_id = item.id
-        WHERE item.tenant_id = $1
-          AND item.branch_id = $2
-          AND item.created_at < ($3::date + INTERVAL '1 day')
+        FROM values item
         ORDER BY item.name
         "#,
     )
@@ -631,7 +714,30 @@ pub async fn gl_reconciliation_snapshot(
 ) -> Result<InventoryGlSnapshot, sqlx::Error> {
     sqlx::query_as(
         r#"
-        WITH item_values AS (
+        WITH open_container_values AS (
+          SELECT container.inventory_item_id,
+            COALESCE(SUM(container.remaining_quantity::BIGINT - COALESCE((
+              SELECT SUM(event.quantity_delta::BIGINT)
+              FROM inventory_backbar_container_events event
+              WHERE event.tenant_id=container.tenant_id
+                AND event.branch_id=container.branch_id
+                AND event.container_id=container.id
+                AND event.created_at >= ($3::date + INTERVAL '1 day')
+            ),0)),0)::BIGINT AS quantity_as_of,
+            COALESCE(SUM((container.remaining_quantity::BIGINT - COALESCE((
+              SELECT SUM(event.quantity_delta::BIGINT)
+              FROM inventory_backbar_container_events event
+              WHERE event.tenant_id=container.tenant_id
+                AND event.branch_id=container.branch_id
+                AND event.container_id=container.id
+                AND event.created_at >= ($3::date + INTERVAL '1 day')
+            ),0))*COALESCE(container.unit_cost_paise,0)),0)::BIGINT AS value_as_of,
+            COUNT(*) FILTER (WHERE container.unit_cost_paise IS NULL OR container.unit_cost_paise<=0)::BIGINT AS missing_cost
+          FROM inventory_backbar_containers container
+          WHERE container.tenant_id=$1 AND container.branch_id=$2
+            AND container.opened_at < ($3::date + INTERVAL '1 day')
+          GROUP BY container.inventory_item_id
+        ), item_values AS (
           SELECT
             item.id,
             item.unit_cost_paise,
@@ -639,19 +745,21 @@ pub async fn gl_reconciliation_snapshot(
               item.stock_quantity::BIGINT
               - COALESCE(SUM(ledger.quantity_delta::BIGINT)
                   FILTER (WHERE ledger.created_at >= ($3::date + INTERVAL '1 day')), 0)::BIGINT
-            ELSE 0 END AS quantity_as_of,
+            ELSE 0 END + COALESCE(container.quantity_as_of,0) AS quantity_as_of,
             CASE WHEN item.created_at < ($3::date + INTERVAL '1 day') THEN
               item.stock_quantity::BIGINT * item.unit_cost_paise
               - COALESCE(SUM(ledger.quantity_delta::BIGINT * ledger.unit_cost_paise)
                   FILTER (WHERE ledger.created_at >= ($3::date + INTERVAL '1 day')), 0)::BIGINT
-            ELSE 0 END AS value_as_of
+            ELSE 0 END + COALESCE(container.value_as_of,0) AS value_as_of,
+            COALESCE(container.missing_cost,0) AS missing_container_cost
           FROM inventory_items item
           LEFT JOIN inventory_stock_ledger ledger
             ON ledger.tenant_id = item.tenant_id
            AND ledger.branch_id = item.branch_id
            AND ledger.inventory_item_id = item.id
+          LEFT JOIN open_container_values container ON container.inventory_item_id=item.id
           WHERE item.tenant_id = $1 AND item.branch_id = $2
-          GROUP BY item.id
+          GROUP BY item.id,container.quantity_as_of,container.value_as_of,container.missing_cost
         )
         SELECT
           COUNT(*) FILTER (WHERE quantity_as_of <> 0)::BIGINT AS product_count,
@@ -665,7 +773,7 @@ pub async fn gl_reconciliation_snapshot(
               AND entry.created_at < ($3::date + INTERVAL '1 day')
               AND line.account_code = $4
           ), 0)::BIGINT AS gl_value_paise,
-          COUNT(*) FILTER (WHERE quantity_as_of > 0 AND unit_cost_paise <= 0)::BIGINT
+          COUNT(*) FILTER (WHERE quantity_as_of > 0 AND (unit_cost_paise <= 0 OR missing_container_cost > 0))::BIGINT
             AS missing_cost_products
         FROM item_values
         "#,
@@ -823,16 +931,16 @@ pub async fn create(
         INSERT INTO inventory_items (
           tenant_id, branch_id, sku, name, category, subcategory, brand, product_usage,
           unit, package_unit, units_per_package, stock_quantity, reorder_point, alert_level,
-          desired_level, order_level, safety_stock_level, unit_cost_paise, hsn_code, gst_percent,
-          barcode, batch_tracked, dual_use_stock, center_available, active
+          desired_level, order_level, safety_stock_level, unit_cost_paise, retail_price_paise,
+          hsn_code, gst_percent, barcode, batch_tracked, dual_use_stock, center_available, online_sale_enabled, active
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
         RETURNING
           id,tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,
           package_unit,units_per_package,stock_quantity,reorder_point,alert_level,desired_level,
-          order_level,safety_stock_level,unit_cost_paise,hsn_code,gst_percent,barcode,
+          order_level,safety_stock_level,unit_cost_paise,retail_price_paise,hsn_code,gst_percent,barcode,
           CASE WHEN barcode='' THEN ARRAY[]::TEXT[] ELSE ARRAY[barcode]::TEXT[] END AS barcodes,
-          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
+          batch_tracked,dual_use_stock,center_available,online_sale_enabled,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -853,12 +961,14 @@ pub async fn create(
     .bind(input.order_level)
     .bind(input.safety_stock_level)
     .bind(input.unit_cost_paise)
+    .bind(input.retail_price_paise)
     .bind(input.hsn_code)
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
     .bind(input.center_available)
+    .bind(input.online_sale_enabled)
     .bind(input.active)
     .fetch_one(&mut **tx)
     .await
@@ -887,23 +997,25 @@ pub async fn update(
           order_level = COALESCE($16, order_level),
           safety_stock_level = COALESCE($17, safety_stock_level),
           unit_cost_paise = COALESCE($18, unit_cost_paise),
-          hsn_code = COALESCE($19, hsn_code),
-          gst_percent = COALESCE($20, gst_percent),
-          barcode = COALESCE($21, barcode),
-          batch_tracked = COALESCE($22, batch_tracked),
-          dual_use_stock = COALESCE($23, dual_use_stock),
-          center_available = COALESCE($24, center_available),
-          active = COALESCE($25, active),
+          retail_price_paise = COALESCE($19, retail_price_paise),
+          hsn_code = COALESCE($20, hsn_code),
+          gst_percent = COALESCE($21, gst_percent),
+          barcode = COALESCE($22, barcode),
+          batch_tracked = COALESCE($23, batch_tracked),
+          dual_use_stock = COALESCE($24, dual_use_stock),
+          center_available = COALESCE($25, center_available),
+          online_sale_enabled = COALESCE($26, online_sale_enabled),
+          active = COALESCE($27, active),
           updated_at = NOW()
         WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
         RETURNING
           id,tenant_id,branch_id,sku,name,category,subcategory,brand,product_usage,unit,
           package_unit,units_per_package,stock_quantity,reorder_point,alert_level,desired_level,
-          order_level,safety_stock_level,unit_cost_paise,hsn_code,gst_percent,barcode,
+          order_level,safety_stock_level,unit_cost_paise,retail_price_paise,hsn_code,gst_percent,barcode,
           COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
             FROM inventory_item_barcodes entry WHERE entry.tenant_id=$1 AND entry.branch_id=$2
               AND entry.inventory_item_id=inventory_items.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
-          batch_tracked,dual_use_stock,center_available,active,created_at,updated_at
+          batch_tracked,dual_use_stock,center_available,online_sale_enabled,active,created_at,updated_at
         "#,
     )
     .bind(input.tenant_id)
@@ -924,12 +1036,14 @@ pub async fn update(
     .bind(input.order_level)
     .bind(input.safety_stock_level)
     .bind(input.unit_cost_paise)
+    .bind(input.retail_price_paise)
     .bind(input.hsn_code)
     .bind(input.gst_percent)
     .bind(input.barcode)
     .bind(input.batch_tracked)
     .bind(input.dual_use_stock)
     .bind(input.center_available)
+    .bind(input.online_sale_enabled)
     .bind(input.active)
     .fetch_optional(&mut **tx)
     .await
@@ -1133,10 +1247,14 @@ pub async fn add_adjustment_ledger(
     unit_cost_paise: i64,
     stock_after_quantity: i32,
     reason: &str,
+    source: &str,
+    evidence_reference: &str,
+    business_date: Option<NaiveDate>,
+    adjustment_request_id: Option<&str>,
     idempotency_key: &str,
 ) -> Result<String, sqlx::Error> {
     sqlx::query_scalar(
-        "INSERT INTO inventory_stock_ledger (tenant_id, branch_id, inventory_item_id, sale_id, sale_line_id, movement_type, quantity_delta, unit_cost_paise, stock_after_quantity, adjustment_reason, adjustment_idempotency_key) VALUES ($1,$2,$3,NULL,NULL,'adjustment',$4,$5,$6,$7,NULLIF($8,'')) RETURNING id",
+        "INSERT INTO inventory_stock_ledger (tenant_id,branch_id,inventory_item_id,sale_id,sale_line_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity,adjustment_reason,adjustment_source,adjustment_evidence_reference,adjustment_business_date,adjustment_request_id,adjustment_idempotency_key) VALUES ($1,$2,$3,NULL,NULL,'adjustment',$4,$5,$6,$7,$8,$9,$10,$11,NULLIF($12,'')) RETURNING id",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -1145,9 +1263,105 @@ pub async fn add_adjustment_ledger(
     .bind(unit_cost_paise)
     .bind(stock_after_quantity)
     .bind(reason)
+    .bind(source)
+    .bind(evidence_reference)
+    .bind(business_date)
+    .bind(adjustment_request_id)
     .bind(idempotency_key)
     .fetch_one(&mut **tx)
     .await
+}
+
+const ADJUSTMENT_SELECT: &str = "SELECT request.id,request.inventory_item_id,item.name AS item_name,request.business_date,request.source,request.status,request.stock_before_quantity,request.requested_stock_quantity,request.quantity_delta,request.unit_cost_paise,request.value_paise,request.material,request.reason,request.evidence_reference,request.requested_by_user_id,request.reviewed_by_user_id,request.review_idempotency_key,request.review_note,request.adjustment_ledger_id,request.requested_at,request.reviewed_at,request.applied_at FROM inventory_adjustment_requests request JOIN inventory_items item ON item.id=request.inventory_item_id AND item.tenant_id=request.tenant_id AND item.branch_id=request.branch_id";
+
+pub async fn adjustment_request_replay(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    idempotency_key: &str,
+) -> Result<Option<InventoryAdjustmentRecord>, sqlx::Error> {
+    sqlx::query_as(&format!("{ADJUSTMENT_SELECT} WHERE request.tenant_id=$1 AND request.branch_id=$2 AND request.idempotency_key=$3"))
+        .bind(tenant_id).bind(branch_id).bind(idempotency_key)
+        .fetch_optional(&mut **tx).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_adjustment_request(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+    business_date: NaiveDate,
+    source: &str,
+    status: &str,
+    stock_before_quantity: i32,
+    requested_stock_quantity: i32,
+    quantity_delta: i32,
+    unit_cost_paise: i64,
+    value_paise: i64,
+    material: bool,
+    reason: &str,
+    evidence_reference: &str,
+    actor_user_id: &str,
+    idempotency_key: &str,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO inventory_adjustment_requests(tenant_id,branch_id,inventory_item_id,business_date,source,status,stock_before_quantity,requested_stock_quantity,quantity_delta,unit_cost_paise,value_paise,material,reason,evidence_reference,requested_by_user_id,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(business_date).bind(source).bind(status)
+        .bind(stock_before_quantity).bind(requested_stock_quantity).bind(quantity_delta).bind(unit_cost_paise)
+        .bind(value_paise).bind(material).bind(reason).bind(evidence_reference).bind(actor_user_id).bind(idempotency_key)
+        .fetch_one(&mut **tx).await
+}
+
+pub async fn adjustment_request_for_update(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<InventoryAdjustmentRecord>, sqlx::Error> {
+    sqlx::query_as(&format!("{ADJUSTMENT_SELECT} WHERE request.tenant_id=$1 AND request.branch_id=$2 AND request.id=$3 FOR UPDATE OF request,item"))
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
+}
+
+pub async fn finish_adjustment_request(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    expected_status: &str,
+    status: &str,
+    reviewer: Option<&str>,
+    review_note: &str,
+    ledger_id: Option<&str>,
+    review_idempotency_key: Option<&str>,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE inventory_adjustment_requests SET status=$5,reviewed_by_user_id=$6,review_note=$7,adjustment_ledger_id=$8,review_idempotency_key=$9,reviewed_at=CASE WHEN $6 IS NULL THEN reviewed_at ELSE NOW() END,applied_at=CASE WHEN $5='applied' THEN NOW() ELSE applied_at END WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status=$4")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(expected_status).bind(status).bind(reviewer).bind(review_note).bind(ledger_id).bind(review_idempotency_key)
+        .execute(&mut **tx).await?.rows_affected()==1)
+}
+
+pub async fn add_adjustment_event(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    event_type: &str,
+    actor_user_id: &str,
+    note: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO inventory_adjustment_events(tenant_id,branch_id,adjustment_request_id,event_type,actor_user_id,note) VALUES($1,$2,$3,$4,$5,$6)")
+        .bind(tenant_id).bind(branch_id).bind(request_id).bind(event_type).bind(actor_user_id).bind(note)
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn list_adjustment_requests(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<Vec<InventoryAdjustmentRecord>, sqlx::Error> {
+    sqlx::query_as(&format!("{ADJUSTMENT_SELECT} WHERE request.tenant_id=$1 AND request.branch_id=$2 AND ($3='' OR request.inventory_item_id=$3) ORDER BY request.requested_at DESC,request.id DESC LIMIT 500"))
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_all(db).await
 }
 
 pub async fn list_backbar_usage(
@@ -1171,7 +1385,8 @@ pub async fn list_backbar_usage(
                  COALESCE(NULLIF(staff.appointment_display_name, ''),
                           NULLIF(BTRIM(CONCAT_WS(' ', staff.first_name, staff.last_name)), ''), '') AS staff_name,
                  'Manual'::TEXT AS source, usage.expected_quantity::BIGINT AS expected_quantity,
-                 usage.actual_quantity::BIGINT AS actual_quantity,
+                 usage.actual_quantity::BIGINT AS actual_quantity, usage.wasted_quantity::BIGINT,
+                 usage.selected_batch_id,
                  (usage.actual_quantity - usage.expected_quantity)::BIGINT AS variance_quantity,
                  usage.max_quantity::BIGINT, usage.wastage_percent,
                  usage.approval_threshold_percent, usage.unit, usage.status, usage.notes,
@@ -1195,7 +1410,7 @@ pub async fn list_backbar_usage(
                  COALESCE(NULLIF(staff.appointment_display_name, ''),
                           NULLIF(BTRIM(CONCAT_WS(' ', staff.first_name, staff.last_name)), ''), '') AS staff_name,
                  sale.invoice_number, ABS(ledger.quantity_delta)::BIGINT, ABS(ledger.quantity_delta)::BIGINT,
-                 0::BIGINT, 0::BIGINT, 0::DOUBLE PRECISION, 0::DOUBLE PRECISION,
+                 0::BIGINT, NULL::TEXT, 0::BIGINT, 0::BIGINT, 0::DOUBLE PRECISION, 0::DOUBLE PRECISION,
                  item.unit, 'auto_consumed'::TEXT, ''::TEXT, ''::TEXT, NULL::TIMESTAMPTZ,
                  ledger.created_at
           FROM inventory_stock_ledger ledger
@@ -1212,7 +1427,8 @@ pub async fn list_backbar_usage(
           WHERE ledger.tenant_id=$1 AND ledger.branch_id=$2 AND ledger.movement_type='sale'
         )
         SELECT id, inventory_item_id, item_name, item_brand, client_id, appointment_id, client_name, service_id, service_name, staff_id, staff_name,
-               source, expected_quantity, actual_quantity, variance_quantity, max_quantity,
+               source, expected_quantity, actual_quantity, wasted_quantity, selected_batch_id,
+               variance_quantity, max_quantity,
                wastage_percent, approval_threshold_percent, unit, status, notes, review_note,
                reviewed_at, created_at
         FROM usage
@@ -1251,7 +1467,8 @@ pub async fn backbar_usage_by_key(
                COALESCE(NULLIF(staff.appointment_display_name, ''),
                         NULLIF(BTRIM(CONCAT_WS(' ', staff.first_name, staff.last_name)), ''), '') AS staff_name,
                'Manual'::TEXT AS source, usage.expected_quantity::BIGINT AS expected_quantity,
-               usage.actual_quantity::BIGINT AS actual_quantity,
+               usage.actual_quantity::BIGINT AS actual_quantity, usage.wasted_quantity::BIGINT,
+               usage.selected_batch_id,
                (usage.actual_quantity - usage.expected_quantity)::BIGINT AS variance_quantity,
                usage.max_quantity::BIGINT, usage.wastage_percent,
                usage.approval_threshold_percent, usage.unit, usage.status, usage.notes,
@@ -1276,9 +1493,10 @@ pub async fn service_recipe(
     tenant_id: &str,
     branch_id: &str,
     service_id: &str,
+    appointment_id: Option<&str>,
 ) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar("SELECT product_consumption_json::TEXT FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE")
-        .bind(tenant_id).bind(branch_id).bind(service_id).fetch_optional(&mut **tx).await
+    sqlx::query_scalar("SELECT COALESCE(snapshot.recipe_json,service.product_consumption_json)::TEXT FROM services service LEFT JOIN appointment_service_recipe_snapshots snapshot ON snapshot.tenant_id=service.tenant_id AND snapshot.branch_id=service.branch_id AND snapshot.service_id=service.id AND snapshot.appointment_id=$4 WHERE service.tenant_id=$1 AND service.branch_id=$2 AND service.id=$3 AND service.active=TRUE")
+        .bind(tenant_id).bind(branch_id).bind(service_id).bind(appointment_id).fetch_optional(&mut **tx).await
 }
 
 pub async fn active_staff_exists(
@@ -1336,6 +1554,8 @@ pub async fn insert_backbar_usage(
     min_quantity: i32,
     expected_quantity: i32,
     actual_quantity: i32,
+    wasted_quantity: i32,
+    selected_batch_id: Option<&str>,
     max_quantity: i32,
     usage_profile: &str,
     waste_reason: &str,
@@ -1351,9 +1571,9 @@ pub async fn insert_backbar_usage(
     container_id: Option<&str>,
     unit_cost_paise: i64,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO inventory_backbar_usage (id,tenant_id,branch_id,inventory_item_id,service_id,staff_id,client_id,appointment_id,unit,min_quantity,expected_quantity,actual_quantity,max_quantity,usage_profile,waste_reason,wastage_percent,approval_threshold_percent,status,notes,actor_user_id,idempotency_key,bowl_id,bowl_line_no,component_type,container_id,unit_cost_paise) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)")
+    sqlx::query("INSERT INTO inventory_backbar_usage (id,tenant_id,branch_id,inventory_item_id,service_id,staff_id,client_id,appointment_id,unit,min_quantity,expected_quantity,actual_quantity,wasted_quantity,selected_batch_id,max_quantity,usage_profile,waste_reason,wastage_percent,approval_threshold_percent,status,notes,actor_user_id,idempotency_key,bowl_id,bowl_line_no,component_type,container_id,unit_cost_paise) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)")
         .bind(id).bind(tenant_id).bind(branch_id).bind(inventory_item_id).bind(service_id).bind(staff_id)
-        .bind(client_id).bind(appointment_id).bind(unit).bind(min_quantity).bind(expected_quantity).bind(actual_quantity).bind(max_quantity)
+        .bind(client_id).bind(appointment_id).bind(unit).bind(min_quantity).bind(expected_quantity).bind(actual_quantity).bind(wasted_quantity).bind(selected_batch_id).bind(max_quantity)
         .bind(usage_profile).bind(waste_reason).bind(wastage_percent).bind(approval_threshold_percent).bind(status).bind(notes).bind(actor_user_id).bind(idempotency_key)
         .bind(bowl_id).bind(bowl_line_no).bind(component_type).bind(container_id).bind(unit_cost_paise)
         .execute(&mut **tx).await?;
@@ -1366,7 +1586,7 @@ pub async fn lock_backbar_usage_for_review(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<BackbarUsageForReview>, sqlx::Error> {
-    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,actor_user_id,status,container_id FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+    sqlx::query_as("SELECT id,inventory_item_id,actual_quantity,selected_batch_id,actor_user_id,status,container_id,staff_id,unit_cost_paise FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
 }
 
@@ -1376,7 +1596,7 @@ pub async fn lock_open_backbar_container(
     branch_id: &str,
     inventory_item_id: &str,
 ) -> Result<Option<OpenBackbarContainer>, sqlx::Error> {
-    sqlx::query_as("SELECT id,remaining_quantity FROM inventory_backbar_containers WHERE tenant_id=$1 AND branch_id=$2 AND inventory_item_id=$3 AND status='open' FOR UPDATE")
+    sqlx::query_as("SELECT container.id,container.remaining_quantity,COALESCE(container.unit_cost_paise,item.unit_cost_paise) AS unit_cost_paise FROM inventory_backbar_containers container JOIN inventory_items item ON item.id=container.inventory_item_id AND item.tenant_id=container.tenant_id AND item.branch_id=container.branch_id WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.inventory_item_id=$3 AND container.status='open' FOR UPDATE OF container")
         .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_optional(&mut **tx).await
 }
 
@@ -1415,9 +1635,10 @@ pub async fn review_backbar_usage(
     status: &str,
     reviewed_by_user_id: &str,
     review_note: &str,
+    unit_cost_paise: Option<i64>,
 ) -> Result<bool, sqlx::Error> {
-    Ok(sqlx::query("UPDATE inventory_backbar_usage SET status=$4,reviewed_by_user_id=$5,reviewed_at=NOW(),review_note=$6 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending_approval'")
-        .bind(tenant_id).bind(branch_id).bind(id).bind(status).bind(reviewed_by_user_id).bind(review_note)
+    Ok(sqlx::query("UPDATE inventory_backbar_usage SET status=$4,reviewed_by_user_id=$5,reviewed_at=NOW(),review_note=$6,unit_cost_paise=COALESCE($7,unit_cost_paise) WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending_approval'")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(status).bind(reviewed_by_user_id).bind(review_note).bind(unit_cost_paise)
         .execute(&mut **tx).await?.rows_affected() == 1)
 }
 
@@ -1433,6 +1654,7 @@ pub async fn backbar_usage_by_id(
                   COALESCE(service.name,'') AS service_name,usage.staff_id,
                   COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(BTRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),'') AS staff_name,
                   'Manual'::TEXT AS source,usage.expected_quantity::BIGINT,usage.actual_quantity::BIGINT,
+                  usage.wasted_quantity::BIGINT,usage.selected_batch_id,
                   (usage.actual_quantity-usage.expected_quantity)::BIGINT AS variance_quantity,
                   usage.max_quantity::BIGINT,usage.wastage_percent,usage.approval_threshold_percent,
                   usage.unit,usage.status,usage.notes,usage.review_note,usage.reviewed_at,usage.created_at
@@ -1686,7 +1908,7 @@ pub async fn color_staff_shift_dashboard(
         LEFT JOIN staff_schedules schedule ON schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.staff_id=staff.id AND schedule.schedule_date=$3
         LEFT JOIN staff_attendance_records attendance ON attendance.tenant_id=$1 AND attendance.branch_id=$2 AND attendance.staff_id=staff.id AND attendance.business_date=$3
         LEFT JOIN LATERAL (
-          SELECT CASE WHEN COUNT(DISTINCT usage.unit)=1 THEN MIN(usage.unit) ELSE 'mixed' END unit,
+          SELECT CASE WHEN COUNT(*)=0 THEN '' WHEN COUNT(DISTINCT usage.unit)=1 THEN MIN(usage.unit) ELSE 'mixed' END unit,
             COUNT(DISTINCT usage.bowl_id)::BIGINT bowl_count,COUNT(DISTINCT usage.client_id)::BIGINT client_count,
             COUNT(DISTINCT usage.bowl_id) FILTER (WHERE usage.usage_profile='root_touch_up')::BIGINT root_touch_up_count,
             COUNT(DISTINCT usage.bowl_id) FILTER (WHERE usage.usage_profile='full_colour')::BIGINT full_colour_count,
@@ -1934,6 +2156,16 @@ pub async fn has_kit_components(
         .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_one(&mut **tx).await
 }
 
+pub async fn is_kit_component(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM inventory_kit_components WHERE tenant_id=$1 AND branch_id=$2 AND component_inventory_item_id=$3)")
+        .bind(tenant_id).bind(branch_id).bind(inventory_item_id).fetch_one(&mut **tx).await
+}
+
 pub async fn replace_kit_components(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -1951,28 +2183,91 @@ pub async fn replace_kit_components(
     Ok(())
 }
 
-pub async fn kit_assembly_by_key(
+pub async fn kit_operation_by_key(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
     idempotency_key: &str,
-) -> Result<Option<String>, sqlx::Error> {
-    sqlx::query_scalar("SELECT id FROM inventory_kit_assemblies WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+) -> Result<Option<InventoryKitOperationRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,kit_inventory_item_id,operation_type,quantity,comments,actor_user_id,source_receipt_id,source_receipt_line_id,unit_cost_paise,stock_after_quantity,created_at FROM inventory_kit_assemblies WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
         .bind(tenant_id).bind(branch_id).bind(idempotency_key).fetch_optional(&mut **tx).await
 }
 
-pub async fn create_kit_assembly(
+#[allow(clippy::too_many_arguments)]
+pub async fn create_kit_operation(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
     kit_inventory_item_id: &str,
+    operation_type: &str,
     quantity: i32,
     idempotency_key: &str,
     actor_user_id: &str,
+    comments: &str,
+    source_receipt_id: Option<&str>,
+    source_receipt_line_id: Option<&str>,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO inventory_kit_assemblies (tenant_id,branch_id,kit_inventory_item_id,quantity,idempotency_key,actor_user_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id")
-        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).bind(quantity).bind(idempotency_key).bind(actor_user_id)
+    sqlx::query_scalar("INSERT INTO inventory_kit_assemblies (tenant_id,branch_id,kit_inventory_item_id,operation_type,quantity,idempotency_key,actor_user_id,comments,source_receipt_id,source_receipt_line_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).bind(operation_type).bind(quantity).bind(idempotency_key).bind(actor_user_id).bind(comments).bind(source_receipt_id).bind(source_receipt_line_id)
         .fetch_one(&mut **tx).await
+}
+
+pub async fn finish_kit_operation(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    unit_cost_paise: i64,
+    stock_after_quantity: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE inventory_kit_assemblies SET unit_cost_paise=$4,stock_after_quantity=$5 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(unit_cost_paise).bind(stock_after_quantity)
+        .execute(&mut **tx).await?;
+    Ok(())
+}
+
+pub async fn kit_history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+) -> Result<Vec<InventoryKitOperationRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,kit_inventory_item_id,operation_type,quantity,comments,actor_user_id,source_receipt_id,source_receipt_line_id,unit_cost_paise,stock_after_quantity,created_at FROM inventory_kit_assemblies WHERE tenant_id=$1 AND branch_id=$2 AND kit_inventory_item_id=$3 ORDER BY created_at DESC,id DESC LIMIT 100")
+        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).fetch_all(db).await
+}
+
+pub async fn kit_auto_unbundle(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT COALESCE((SELECT auto_unbundle_on_receive FROM inventory_kit_settings WHERE tenant_id=$1 AND branch_id=$2 AND kit_inventory_item_id=$3),FALSE)")
+        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).fetch_one(&mut **tx).await
+}
+
+pub async fn kit_auto_unbundle_value(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT COALESCE((SELECT auto_unbundle_on_receive FROM inventory_kit_settings WHERE tenant_id=$1 AND branch_id=$2 AND kit_inventory_item_id=$3),FALSE)")
+        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).fetch_one(db).await
+}
+
+pub async fn save_kit_auto_unbundle(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+    enabled: bool,
+    actor_user_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO inventory_kit_settings(tenant_id,branch_id,kit_inventory_item_id,auto_unbundle_on_receive,updated_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(tenant_id,branch_id,kit_inventory_item_id) DO UPDATE SET auto_unbundle_on_receive=EXCLUDED.auto_unbundle_on_receive,updated_by=EXCLUDED.updated_by,updated_at=NOW()")
+        .bind(tenant_id).bind(branch_id).bind(kit_inventory_item_id).bind(enabled).bind(actor_user_id)
+        .execute(&mut **tx).await?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1992,25 +2287,79 @@ pub async fn add_kit_ledger(
         .bind(unit_cost_paise).bind(stock_after_quantity).bind(assembly_id).fetch_one(&mut **tx).await
 }
 
-pub async fn delete(
+pub async fn discontinue(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
     id: &str,
-) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query(
-        r#"
-        DELETE FROM inventory_items
-        WHERE tenant_id = $1 AND branch_id = $2 AND id = $3
-        "#,
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(id)
-    .execute(db)
-    .await?;
+    replacement_id: Option<&str>,
+    reason: &str,
+    actor: &str,
+) -> Result<Value, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let stock = sqlx::query_scalar::<_, i32>("SELECT stock_quantity FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_one(&mut *tx).await?;
+    if stock != 0 {
+        return Err(sqlx::Error::Protocol(
+            "product stock must be zero before discontinuation".into(),
+        ));
+    }
+    let blocked = sqlx::query_scalar::<_, bool>(r#"SELECT
+      EXISTS(SELECT 1 FROM purchase_order_lines line JOIN purchase_orders po ON po.id=line.purchase_order_id WHERE line.tenant_id=$1 AND line.branch_id=$2 AND line.inventory_item_id=$3 AND po.status IN ('draft','pending_approval','approved','partially_received'))
+      OR EXISTS(SELECT 1 FROM inventory_transfer_lines line JOIN inventory_transfers transfer ON transfer.id=line.transfer_id WHERE line.tenant_id=$1 AND (line.source_inventory_item_id=$3 OR line.destination_inventory_item_id=$3) AND transfer.status='in_transit')
+      OR EXISTS(SELECT 1 FROM inventory_batches batch WHERE batch.tenant_id=$1 AND batch.branch_id=$2 AND batch.inventory_item_id=$3 AND batch.quantity>0)
+      OR EXISTS(SELECT 1 FROM inventory_backbar_containers container WHERE container.tenant_id=$1 AND container.branch_id=$2 AND container.inventory_item_id=$3 AND container.remaining_quantity>0)"#)
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_one(&mut *tx).await?;
+    if blocked {
+        return Err(sqlx::Error::Protocol(
+            "product has an open purchase order, in-transit transfer, batch balance, or container balance".into(),
+        ));
+    }
+    if let Some(replacement) = replacement_id {
+        let valid = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)")
+            .bind(tenant_id).bind(branch_id).bind(replacement).fetch_one(&mut *tx).await?;
+        if !valid || replacement == id {
+            return Err(sqlx::Error::Protocol(
+                "replacement product is invalid".into(),
+            ));
+        }
+    }
+    sqlx::query("UPDATE inventory_items SET active=FALSE,center_available=FALSE,online_sale_enabled=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).execute(&mut *tx).await?;
+    let event = sqlx::query_scalar::<_, Value>("INSERT INTO inventory_product_lifecycle_events(tenant_id,branch_id,inventory_item_id,event_type,replacement_inventory_item_id,reason,actor_user_id) VALUES($1,$2,$3,'discontinued',$4,$5,$6) RETURNING jsonb_build_object('id',id,'eventType',event_type,'replacementInventoryItemId',replacement_inventory_item_id,'reason',reason,'actorUserId',actor_user_id,'createdAt',created_at)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(replacement_id).bind(reason).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(event)
+}
 
-    Ok(result.rows_affected() > 0)
+pub async fn reactivate(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    reason: &str,
+    actor: &str,
+) -> Result<Value, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let changed = sqlx::query("UPDATE inventory_items SET active=TRUE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE")
+        .bind(tenant_id).bind(branch_id).bind(id).execute(&mut *tx).await?.rows_affected();
+    if changed != 1 {
+        return Err(sqlx::Error::RowNotFound);
+    }
+    let event = sqlx::query_scalar::<_, Value>("INSERT INTO inventory_product_lifecycle_events(tenant_id,branch_id,inventory_item_id,event_type,reason,actor_user_id) VALUES($1,$2,$3,'reactivated',$4,$5) RETURNING jsonb_build_object('id',id,'eventType',event_type,'replacementInventoryItemId',replacement_inventory_item_id,'reason',reason,'actorUserId',actor_user_id,'createdAt',created_at)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(reason).bind(actor).fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(event)
+}
+
+pub async fn lifecycle_events(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar("SELECT jsonb_build_object('id',event.id,'eventType',event.event_type,'replacementInventoryItemId',event.replacement_inventory_item_id,'replacementProductName',replacement.name,'reason',event.reason,'actorUserId',event.actor_user_id,'createdAt',event.created_at) FROM inventory_product_lifecycle_events event LEFT JOIN inventory_items replacement ON replacement.id=event.replacement_inventory_item_id WHERE event.tenant_id=$1 AND event.branch_id=$2 AND event.inventory_item_id=$3 ORDER BY event.created_at DESC")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_all(db).await
 }
 
 fn select_sql(where_clause: &str) -> String {
@@ -2020,11 +2369,11 @@ fn select_sql(where_clause: &str) -> String {
           item.id,item.tenant_id,item.branch_id,item.sku,item.name,item.category,item.subcategory,item.brand,
           item.product_usage,item.unit,item.package_unit,item.units_per_package,item.stock_quantity,
           item.reorder_point,item.alert_level,item.desired_level,item.order_level,item.safety_stock_level,
-          item.unit_cost_paise,item.hsn_code,item.gst_percent,item.barcode,
+          item.unit_cost_paise,item.retail_price_paise,item.hsn_code,item.gst_percent,item.barcode,
           COALESCE((SELECT ARRAY_AGG(entry.barcode ORDER BY entry.is_primary DESC,entry.created_at,entry.id)
             FROM inventory_item_barcodes entry WHERE entry.tenant_id=item.tenant_id
               AND entry.branch_id=item.branch_id AND entry.inventory_item_id=item.id AND entry.active),ARRAY[]::TEXT[]) AS barcodes,
-          item.batch_tracked,item.dual_use_stock,item.center_available,item.active,item.created_at,item.updated_at
+          item.batch_tracked,item.dual_use_stock,item.center_available,item.online_sale_enabled,item.active,item.created_at,item.updated_at
         FROM inventory_items item
         {where_clause}
         "#,

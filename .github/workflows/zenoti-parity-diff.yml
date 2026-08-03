@@ -1,0 +1,32 @@
+name: Monthly Zenoti parity diff
+
+on:
+  schedule:
+    - cron: '15 4 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  release-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: diff
+        run: node scripts/check-zenoti-release-diff.mjs
+      - name: Open parity review issue for a newer public release
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --state open --search "Zenoti parity review ${{ steps.diff.outputs.latest }} in:title" --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            gh issue create \
+              --title "Zenoti parity review ${{ steps.diff.outputs.latest }}" \
+              --body "A newer Zenoti public release was detected.\n\nCutoff: ${{ steps.diff.outputs.cutoff }}\nLatest: ${{ steps.diff.outputs.latest }}\nSource: ${{ steps.diff.outputs.url }}\n\nRefresh the master register, then inspect every affected vertical, Staff App, API, provider/device, permission and UAT mapping. Add atomic rows; never silently broaden an existing row."
+          fi

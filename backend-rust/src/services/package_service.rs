@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sqlx::{FromRow, PgPool};
@@ -52,6 +52,95 @@ pub struct PackageAlert {
     pub pending_qty: i32,
     pub pending_value_paise: i64,
     pub expires_at: Option<NaiveDate>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn change_credit_state(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    credit_id: &str,
+    action: &str,
+    target_client_id: Option<&str>,
+    frozen_until: Option<NaiveDate>,
+    reason: &str,
+    idempotency_key: &str,
+    actor: &str,
+) -> Result<Value, AppError> {
+    let reason = required_text(Some(reason), "reason is required")?;
+    let key = required_text(Some(idempotency_key), "idempotencyKey is required")?;
+    if !matches!(action, "freeze" | "resume" | "transfer") {
+        return Err(AppError::validation("package credit action is invalid"));
+    }
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start package credit change"))?;
+    if let Some(replay) = sqlx::query_scalar::<_, Value>("SELECT jsonb_build_object('creditId',liability_id,'action',action,'sourceClientId',source_client_id,'targetClientId',target_client_id,'frozenUntil',$5::DATE) FROM customer_liability_lifecycle_events WHERE tenant_id=$1 AND branch_id=$2 AND liability_type='package' AND liability_id=$3 AND idempotency_key=$4")
+        .bind(tenant_id).bind(branch_id).bind(credit_id).bind(key).bind(frozen_until)
+        .fetch_optional(&mut *tx).await.map_err(|_| AppError::internal("failed to replay package credit change"))? {
+        tx.commit().await.map_err(|_| AppError::internal("failed to finish package credit replay"))?;
+        return Ok(replay);
+    }
+    let credit = sqlx::query_as::<_, (String, String, i32, i64, Option<DateTime<Utc>>)>(
+        "SELECT branch_id,client_id,remaining_qty,GREATEST(issued_value_paise-COALESCE((SELECT SUM(redeemed_value_paise) FROM pos_package_redemptions r WHERE r.tenant_id=client_package_credits.tenant_id AND r.client_package_credit_id=client_package_credits.id),0),0)::BIGINT,frozen_at FROM client_package_credits WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE FOR UPDATE",
+    )
+    .bind(tenant_id).bind(branch_id).bind(credit_id).fetch_optional(&mut *tx).await
+    .map_err(|_| AppError::internal("failed to load package credit"))?
+    .ok_or_else(|| AppError::not_found("active package credit was not found"))?;
+    let target = target_client_id.unwrap_or("").trim();
+    match action {
+        "freeze" => {
+            if credit.4.is_some() {
+                return Err(AppError::conflict("package credit is already frozen"));
+            }
+            sqlx::query("UPDATE client_package_credits SET frozen_at=NOW(),frozen_until=$4,freeze_reason=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(tenant_id).bind(branch_id).bind(credit_id).bind(frozen_until).bind(reason).execute(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to freeze package credit"))?;
+        }
+        "resume" => {
+            if credit.4.is_none() {
+                return Err(AppError::conflict("package credit is not frozen"));
+            }
+            sqlx::query("UPDATE client_package_credits SET frozen_at=NULL,frozen_until=NULL,freeze_reason='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(tenant_id).bind(branch_id).bind(credit_id).execute(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to resume package credit"))?;
+        }
+        "transfer" => {
+            if target.is_empty() || target == credit.1 {
+                return Err(AppError::validation(
+                    "a different targetClientId is required",
+                ));
+            }
+            let target_exists = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)")
+                .bind(tenant_id).bind(branch_id).bind(target).fetch_one(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to validate package transfer target"))?;
+            if !target_exists {
+                return Err(AppError::validation(
+                    "package transfer target was not found",
+                ));
+            }
+            sqlx::query("UPDATE client_package_credits SET client_id=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                .bind(tenant_id).bind(branch_id).bind(credit_id).bind(target).execute(&mut *tx).await
+                .map_err(|_| AppError::internal("failed to transfer package credit"))?;
+        }
+        _ => unreachable!(),
+    }
+    let target = if action == "transfer" {
+        target
+    } else {
+        credit.1.as_str()
+    };
+    sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,quantity_before,quantity_after,balance_before_paise,balance_after_paise,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'package',$3,$4,$2,$2,$5,$6,$7,$7,$8,$8,$9,$10,$11)")
+        .bind(tenant_id).bind(branch_id).bind(credit_id).bind(action).bind(&credit.1).bind(target)
+        .bind(credit.2).bind(credit.3).bind(reason).bind(actor).bind(key).execute(&mut *tx).await
+        .map_err(|_| AppError::internal("failed to record package credit lifecycle"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to finish package credit change"))?;
+    Ok(
+        json!({"creditId":credit_id,"action":action,"sourceClientId":credit.1,"targetClientId":target,"frozenUntil":frozen_until}),
+    )
 }
 
 pub async fn create(

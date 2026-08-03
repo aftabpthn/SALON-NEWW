@@ -240,6 +240,10 @@ test('POS client cards show the real membership activation state', () => {
   assert.match(checkout, /res\?\.data\?\.kpi \?\? res\?\.data \?\? res\?\.kpi \?\? res/);
 });
 
+test('automatic membership discounts do not require a manual discount reason', () => {
+  assert.match(checkout, /line\.discountSource !== 'membership' && this\.manualLineDiscountPaise\(line\) > 0/);
+});
+
 test('final invoice without collection requires confirmation and stays unpaid', () => {
   assert.match(checkout, /if \(this\.paidNowPaise === 0\)/);
   assert.match(checkout, /window\.confirm\('No payment collected\. Save invoice as unpaid\?'\)/);
@@ -296,6 +300,11 @@ test('invoice register links invoice, client, staff and payment mode to their re
 });
 
 test('invoice reports consolidate old report logic into five connected workspaces', () => {
+  assert.match(invoiceReports, /\/api\/v1\/inventory\?pageSize=200/);
+  assert.doesNotMatch(invoiceReports, /'\/api\/v1\/products/);
+  assert.match(invoiceReports, /optionFailures\.add\(label\)/);
+  assert.match(invoiceReports, /Unable to load \$\{\[\.\.\.this\.optionFailures\]\.join\(', '\)\}/);
+  assert.match(invoiceReportsTemplate, /\{\{ optionsError\(\) \}\}/);
   assert.match(invoiceReports, /type ReportTab = 'invoice-360' \| 'receivable-recovery' \| 'payment-wallet' \| 'staff-service-360' \| 'finance-control'[\s\S]*'detailed-invoice'[\s\S]*'payment-collection'[\s\S]*'staff-service-discount'/);
   assert.match(invoiceReports, /forkJoin\(requests\.map/);
   assert.match(invoiceReports, /sourceTabsForActive\(\)[\s\S]*'due-recovery', 'recovery-history'/);

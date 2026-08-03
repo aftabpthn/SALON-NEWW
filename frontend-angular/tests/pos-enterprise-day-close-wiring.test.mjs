@@ -19,7 +19,7 @@ test('enterprise lock workflow reflects the shared branch drawer prerequisite', 
   assert.match(page, /drawerReadyForLock/);
   assert.match(page, /Close and approve the branch cash drawer before locking the day/);
   assert.match(template, /Branch cash drawer must be closed and approved before lock\/Z-report/);
-  assert.match(template, /\[disabled\]="busy \|\| !drawerReadyForLock"/);
+  assert.match(template, /\[disabled\]="busy \|\| !drawerReadyForLock \|\| !eodReady"/);
   assert.match(backend, /cash drawers must be closed before locking the day/);
   assert.match(service, /all cash drawers must be closed and approved before Z-report generation/);
 });

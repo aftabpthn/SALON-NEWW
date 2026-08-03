@@ -1,7 +1,8 @@
 import { Component, HostListener, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
-import { StaffAppService, StaffDashboard, StaffWorkspacePreferences, StaffWorkspacePreferenceUpdate } from "../../core/staff-app.service";
+import { StaffAppService, StaffDashboard, StaffSecurityContext, StaffWorkspacePreferences, StaffWorkspacePreferenceUpdate } from "../../core/staff-app.service";
+import { StaffNativePermission, StaffNativeService } from "../../core/staff-native.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 import { StaffPermissionBadgesComponent } from "./staff-permission-badges.component";
 
@@ -39,6 +40,13 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
               <div class="row"><strong>Role</strong><span>{{ staff.user()?.role || data.staff.roleId || '-' }}</span></div>
               <div class="row"><strong>Branch</strong><span>{{ staff.user()?.branchId || '-' }}</span></div>
             </div>
+            @if ((staff.user()?.branches?.length || 0) > 1) {
+              <div class="branch-switch">
+                <label><span>Authorized branch</span><select [(ngModel)]="selectedBranchId" name="selectedBranchId" [disabled]="switchingBranch()">@for (branch of staff.user()?.branches || []; track branch.branchId) { <option [value]="branch.branchId">{{ branch.branchName || branch.branchId }}</option> }</select></label>
+                <label class="check-row"><input type="checkbox" [(ngModel)]="rememberBranch" name="rememberBranch" [disabled]="switchingBranch()" /><span>Use as preferred branch</span></label>
+                <button class="button" type="button" [disabled]="switchingBranch() || selectedBranchId === staff.user()?.branchId" (click)="switchBranch()">{{ switchingBranch() ? 'Switching...' : 'Switch branch' }}</button>
+              </div>
+            }
             <div class="row-actions permission-actions settings-actions">
               <button class="button primary" type="button" [disabled]="loading() || loggingOut()" [attr.aria-busy]="loading()" (click)="refresh()">{{ loading() ? 'Refreshing...' : 'Refresh session' }}</button>
               <button class="button" type="button" [disabled]="loggingOut()" [attr.aria-busy]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Logging out...' : 'Logout' }}</button>
@@ -90,6 +98,8 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
                 <select name="locale" [(ngModel)]="preferenceForm.locale" [disabled]="savingPreferences() || !canManageSettings()">
                   <option value="en-IN">English India</option>
                   <option value="en-US">English US</option>
+                  <option value="hi-IN">हिन्दी</option>
+                  <option value="hi-Latn-IN">Hinglish</option>
                 </select>
               </label>
               <label>
@@ -112,6 +122,10 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
                 <span>Compact mode</span>
               </label>
               <label class="check-row">
+                <input type="checkbox" name="calendarSyncEnabled" [(ngModel)]="preferenceForm.calendarSyncEnabled" [disabled]="savingPreferences() || !canManageSettings()" />
+                <span>Calendar sync</span>
+              </label>
+              <label class="check-row">
                 <input type="checkbox" name="staffHints" [(ngModel)]="preferenceForm.staffHints" [disabled]="savingPreferences() || !canManageSettings()" />
                 <span>Staff hints</span>
               </label>
@@ -119,6 +133,50 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
                 <button class="button primary" type="submit" [disabled]="savingPreferences() || !canSavePreferences()" [attr.aria-busy]="savingPreferences()">{{ savingPreferences() ? 'Saving...' : 'Save preferences' }}</button>
               </div>
             </form>
+          </section>
+        }
+
+        @if (security(); as access) {
+          <section class="grid two security-grid">
+            <article class="panel">
+              <div class="panel-title"><h2>Access policy</h2><span>{{ geofenceLabel(access) }}</span></div>
+              <div class="list">
+                <div class="row"><strong>Inactivity logout</strong><span>{{ access.inactivityMinutes }} minutes</span></div>
+                <div class="row"><strong>Geofence radius</strong><span>{{ access.geofence.radiusMeters }} m</span></div>
+                <div class="row"><strong>Role exception</strong><span>{{ access.geofence.roleExempt ? 'Applied' : 'No' }}</span></div>
+                <div class="row"><strong>Branch location</strong><span>{{ access.geofence.locationConfigured ? 'Configured' : 'Not configured' }}</span></div>
+              </div>
+              <div class="pin-form">
+                <label><span>Device PIN</span><input [(ngModel)]="pin" name="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="4–8 digits" [disabled]="savingPin() || !canManageSettings()" /></label>
+                <button class="button" type="button" [disabled]="savingPin() || !canManageSettings() || pin.length < 4" (click)="savePin()">{{ savingPin() ? 'Saving...' : access.pinConfigured ? 'Change PIN' : 'Set PIN' }}</button>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-title"><h2>App permissions</h2><span>Current device</span></div>
+              <div class="list">
+                @for (item of permissionRows(); track item.label) { <div class="row session-row"><strong>{{ item.label }}</strong><span>{{ item.status }}</span><button class="link-button" type="button" [disabled]="requestingPermission() === item.key" (click)="requestPermission(item.key)">Request</button></div> }
+              </div>
+              <button class="button" type="button" (click)="refreshPermissionStatus()">Refresh status</button>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title"><h2>Active sessions</h2><span>{{ access.sessions.length }}</span></div>
+            <div class="list">
+              @for (session of access.sessions; track session.sessionId) {
+                <div class="row session-row"><strong>{{ session.sessionId === access.currentSessionId ? 'This session' : (session.deviceId || 'Device session') }}</strong><span>{{ session.lastUsedAt || session.createdAt }}</span><button class="link-button" type="button" [disabled]="revoking() === session.sessionId" (click)="revokeSession(session.sessionId)">Logout</button></div>
+              } @empty { <div class="row"><strong>No active sessions</strong><span>-</span></div> }
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title"><h2>Authorized devices</h2><span>{{ access.devices.length }}</span></div>
+            <div class="list">
+              @for (device of access.devices; track device.deviceId) {
+                <div class="row session-row"><strong>{{ device.deviceId === access.currentDeviceId ? 'This device' : device.deviceId }}</strong><span>{{ device.status }} · {{ device.activeSessions }} sessions</span><button class="link-button" type="button" [disabled]="revoking() === device.deviceId" (click)="revokeDevice(device.deviceId)">Revoke</button></div>
+              } @empty { <div class="row"><strong>No devices</strong><span>-</span></div> }
+            </div>
           </section>
         }
       }
@@ -157,30 +215,44 @@ import { StaffPermissionBadgesComponent } from "./staff-permission-badges.compon
     .check-row { flex-direction: row !important; align-items: center; min-height: 38px; }
     .check-row input { width: 16px; min-height: 16px; }
     .preference-actions { justify-content: flex-end; }
+    .branch-switch,.pin-form { display:grid;gap:8px;margin-top:12px; }
+    .branch-switch label,.pin-form label { display:grid;gap:5px;color:var(--staff-text-secondary);font-size:.72rem;font-weight:700; }
+    .branch-switch select,.pin-form input { min-height:40px;padding:0 10px;border:1px solid var(--staff-border);border-radius:12px;background:var(--staff-surface);color:var(--staff-text); }
+    .security-grid { margin-top:10px; }
+    .session-row { grid-template-columns:minmax(110px,1fr) minmax(120px,2fr) auto; }
     @media (max-width: 820px) { .preferences-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 700px) {
       .settings-error, .settings-actions, .preference-actions { align-items: stretch; flex-direction: column; }
       .settings-error button, .settings-actions .button, .preference-actions .button { width: 100%; }
       .settings-layout { gap: 14px; }
     }
-    @media (max-width: 520px) { .preferences-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 520px) { .preferences-grid { grid-template-columns: 1fr; } .session-row { grid-template-columns:1fr auto; } .session-row span { grid-column:1 / -1;grid-row:2; } }
     @media (prefers-reduced-motion: reduce) { .biometric-switch, .biometric-switch span { transition: none; } }
   `]
 })
 export class StaffSettingsPage implements OnInit {
   readonly dashboard = signal<StaffDashboard | null>(null);
   readonly preferences = signal<StaffWorkspacePreferences | null>(null);
+  readonly security = signal<StaffSecurityContext | null>(null);
   readonly loading = signal(false);
   readonly savingPreferences = signal(false);
   readonly savingBiometric = signal(false);
   readonly loggingOut = signal(false);
+  readonly switchingBranch = signal(false);
+  readonly savingPin = signal(false);
+  readonly revoking = signal("");
+  readonly requestingPermission = signal("");
+  readonly permissionStates = signal<Record<string, string>>({ camera: "Unknown", gps: "Unknown", microphone: "Unknown", nfc: "Unknown", push: "Unknown", biometric: "Unknown" });
   readonly message = signal("");
   readonly localError = signal("");
   readonly loadError = signal("");
   readonly timezones = ["Asia/Kolkata", "UTC", "Asia/Dubai", "Europe/London", "America/New_York"];
   preferenceForm: StaffWorkspacePreferenceUpdate = {};
+  selectedBranchId = "";
+  rememberBranch = false;
+  pin = "";
 
-  constructor(readonly staff: StaffAppService, private readonly router: Router) {}
+  constructor(readonly staff: StaffAppService, private readonly native: StaffNativeService, private readonly router: Router) {}
 
   ngOnInit() { if (this.canReadSettings()) void this.load(); }
 
@@ -193,13 +265,17 @@ export class StaffSettingsPage implements OnInit {
     this.loading.set(true);
     this.loadError.set("");
     try {
-      const [dashboard, preferences] = await Promise.all([
+      const [dashboard, preferences, security] = await Promise.all([
         this.staff.dashboard(),
-        this.staff.workspacePreferences()
+        this.staff.workspacePreferences(),
+        this.staff.refreshSecurityContext()
       ]);
       this.dashboard.set(dashboard);
+      this.security.set(security);
+      this.selectedBranchId = this.staff.user()?.branchId || "";
       this.setPreferences(preferences);
       this.applyCompactMode(preferences);
+      await this.refreshPermissionStatus();
     } catch {
       this.loadError.set(this.staff.error() || "Unable to load settings.");
     } finally {
@@ -293,6 +369,88 @@ export class StaffSettingsPage implements OnInit {
     }
   }
 
+  async switchBranch() {
+    if (!this.selectedBranchId || this.switchingBranch()) return;
+    this.switchingBranch.set(true);
+    this.message.set("");
+    this.localError.set("");
+    try {
+      await this.staff.switchBranch(this.selectedBranchId, this.rememberBranch);
+      await this.load();
+      this.message.set("Branch switched.");
+    } catch { this.localError.set(this.staff.error() || "Unable to switch branch."); }
+    finally { this.switchingBranch.set(false); }
+  }
+
+  async savePin() {
+    if (this.savingPin() || !/^\d{4,8}$/.test(this.pin)) return;
+    this.savingPin.set(true);
+    this.message.set("");
+    this.localError.set("");
+    try {
+      await this.staff.setDevicePin(this.pin);
+      this.pin = "";
+      this.security.set(this.staff.securityContext());
+      this.message.set("Device PIN saved.");
+    } catch { this.localError.set(this.staff.error() || "Unable to save device PIN."); }
+    finally { this.savingPin.set(false); }
+  }
+
+  async revokeSession(sessionId: string) {
+    if (this.revoking()) return;
+    this.revoking.set(sessionId);
+    try {
+      const result = await this.staff.revokeSession(sessionId);
+      if (result.current) { await this.router.navigateByUrl("/staff/login"); return; }
+      this.security.set(this.staff.securityContext());
+    } catch { this.localError.set(this.staff.error() || "Unable to revoke session."); }
+    finally { this.revoking.set(""); }
+  }
+
+  async revokeDevice(deviceId: string) {
+    if (this.revoking()) return;
+    this.revoking.set(deviceId);
+    try {
+      await this.staff.revokeDevice(deviceId);
+      if (!this.staff.isAuthenticated()) { await this.router.navigateByUrl("/staff/login"); return; }
+      this.security.set(this.staff.securityContext());
+    } catch { this.localError.set(this.staff.error() || "Unable to revoke device."); }
+    finally { this.revoking.set(""); }
+  }
+
+  geofenceLabel(context: StaffSecurityContext): string {
+    if (context.geofence.roleExempt) return "Full access (role exception)";
+    return context.geofence.mode === "read_only" ? "Read-only outside geofence" : context.geofence.mode === "blocked" ? "Blocked outside geofence" : "Full access";
+  }
+
+  permissionRows(): Array<{ key: StaffNativePermission; label: string; status: string }> {
+    const states = this.permissionStates();
+    return [
+      { key: "camera", label: "Camera", status: states["camera"] || "Unknown" },
+      { key: "gps", label: "GPS", status: states["gps"] || "Unknown" },
+      { key: "microphone", label: "Microphone", status: states["microphone"] || "Unknown" },
+      { key: "nfc", label: "NFC", status: states["nfc"] || "Unknown" },
+      { key: "push", label: "Push notifications", status: states["push"] || "Unknown" }
+    ];
+  }
+
+  async refreshPermissionStatus() {
+    const native = await this.native.permissionStates();
+    this.permissionStates.set({
+      ...native,
+      biometric: this.staff.biometricSupported() ? this.staff.biometricEnabled() ? "enabled" : "available" : "unavailable"
+    });
+  }
+
+  async requestPermission(permission: StaffNativePermission) {
+    if (this.requestingPermission()) return;
+    this.requestingPermission.set(permission);
+    this.localError.set("");
+    try { await this.native.requestPermission(permission); await this.refreshPermissionStatus(); }
+    catch (error) { this.localError.set(error instanceof Error ? error.message : "Permission could not be requested."); }
+    finally { this.requestingPermission.set(""); }
+  }
+
   async logout() {
     if (this.loggingOut()) return;
     this.loggingOut.set(true);
@@ -313,11 +471,13 @@ export class StaffSettingsPage implements OnInit {
       dateFormat: preferences.dateTime.dateFormat,
       timeFormat: preferences.dateTime.timeFormat,
       compactMode: preferences.interface.compactMode,
-      staffHints: preferences.defaults.staffHints
+      staffHints: preferences.defaults.staffHints,
+      calendarSyncEnabled: preferences.defaults.calendarSyncEnabled
     };
   }
 
   private applyCompactMode(preferences: StaffWorkspacePreferences) {
     document.documentElement.dataset["staffCompactMode"] = preferences.interface.compactMode ? "true" : "false";
+    document.documentElement.lang = preferences.localization.locale.split("-")[0] || "en";
   }
 }

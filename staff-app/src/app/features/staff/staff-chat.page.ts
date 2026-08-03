@@ -1,7 +1,8 @@
 import { DatePipe } from "@angular/common";
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { StaffAppService, StaffChatConversation, StaffConversationMessage } from "../../core/staff-app.service";
+import { StaffAppService, StaffChatAttachment, StaffChatConversation, StaffChatParticipant, StaffConversationMessage } from "../../core/staff-app.service";
+import { openProtectedBlob } from "../../core/staff-protected-file";
 
 type RealtimeState = "connecting" | "live" | "polling" | "offline";
 
@@ -32,15 +33,24 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
             <div class="chat-sidebar-head"><div><p class="eyebrow">Conversations</p><h2>Inbox</h2></div><span>{{ conversationsRefreshing() ? 'Sync' : conversations().length }}</span></div>
             <nav class="chat-conversation-list" aria-label="Choose a conversation">
               @for (conversation of conversations(); track conversation.id) {
-                <button type="button" class="chat-conversation" [class.active]="conversation.id === activeConversationId()" [class.private]="conversation.type === 'private-owner'" [attr.aria-current]="conversation.id === activeConversationId() ? 'page' : null" (click)="openConversation(conversation.id)">
-                  <span class="conversation-mark" aria-hidden="true">{{ conversation.type === 'private-owner' ? 'O' : 'T' }}</span>
-                  <span class="conversation-copy"><strong>{{ conversation.title }}</strong><small>{{ conversation.type === 'private-owner' ? 'Private · only participants' : 'Branch team' }}</small></span>
-                  <span class="conversation-meta">{{ conversation.messageCount }}</span>
+                <button type="button" class="chat-conversation" [class.active]="conversation.id === activeConversationId()" [class.private]="conversation.type !== 'team'" [attr.aria-current]="conversation.id === activeConversationId() ? 'page' : null" (click)="openConversation(conversation.id)">
+                  <span class="conversation-mark" aria-hidden="true">{{ conversationMark(conversation.type) }}</span>
+                  <span class="conversation-copy"><strong>{{ conversation.title }}</strong><small>{{ conversationLabel(conversation.type) }}</small></span>
+                  <span class="conversation-meta">{{ conversation.unreadCount || conversation.messageCount }}</span>
                 </button>
               } @empty {
                 <p class="chat-list-empty">No conversations are available for this branch.</p>
               }
             </nav>
+            @if (canManageChat()) {
+              <details class="start-private-card">
+                <summary>New direct, group or broadcast</summary>
+                <label>Type<select [(ngModel)]="newConversationType"><option value="direct">Direct</option><option value="group">Group</option>@if (isManager()) { <option value="broadcast">Broadcast</option> }</select></label>
+                @if (newConversationType !== 'direct') { <label>Title<input [(ngModel)]="newConversationTitle" maxlength="160" /></label> }
+                <div class="chat-participants">@for (participant of participants(); track participant.userId) { <label><input type="checkbox" [checked]="selectedParticipantIds.includes(participant.userId)" (change)="toggleParticipant(participant.userId, $any($event.target).checked)" />{{ participant.name }} <small>{{ participant.jobTitle }}</small></label> }</div>
+                <button class="button" type="button" [disabled]="creatingConversation() || !canCreateConversation()" (click)="createConversation()">{{ creatingConversation() ? 'Creating...' : 'Create conversation' }}</button>
+              </details>
+            }
             @if (canStartPrivateChat()) {
               <div class="start-private-card">
                 <span aria-hidden="true">↗</span><div><strong>Need a private word?</strong><p>Only you and the owner can see this conversation.</p></div>
@@ -49,14 +59,15 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
             }
           </aside>
 
-          <section class="chat-main" [class.private-chat]="activeConversation()?.type === 'private-owner'" aria-label="Active conversation">
+          <section class="chat-main" [class.private-chat]="activeConversation()?.type !== 'team'" aria-label="Active conversation">
             @if (activeConversation(); as active) {
               <header class="chat-thread-head">
-                <div class="thread-identity"><span class="conversation-mark" aria-hidden="true">{{ active.type === 'private-owner' ? 'O' : 'T' }}</span><div><h2>{{ active.title }}</h2><p>{{ active.type === 'private-owner' ? 'Private conversation · visible only to persisted participants' : 'Shared with your branch team' }}</p></div></div>
-                <span class="chat-mode-pill" [class.private]="active.type === 'private-owner'">{{ active.type === 'private-owner' ? 'Private' : 'Team' }}</span>
+                <div class="thread-identity"><span class="conversation-mark" aria-hidden="true">{{ conversationMark(active.type) }}</span><div><h2>{{ active.title }}</h2><p>{{ conversationLabel(active.type) }}</p></div></div>
+                <span class="chat-mode-pill" [class.private]="active.type !== 'team'">{{ label(active.type) }}</span>
               </header>
 
               @if (actionError()) { <div class="chat-inline-error" role="alert"><span>{{ actionError() }}</span><button type="button" (click)="clearActionError()" aria-label="Dismiss error">Dismiss</button></div> }
+              @if (shareNotice()) { <div class="chat-offline-note" role="status">{{ shareNotice() }}</div> }
               @if (!online()) { <div class="chat-offline-note" role="status">You’re offline. Messages stay readable, but sending will resume when you reconnect.</div> }
               @if (!canSendChat()) { <div class="chat-offline-note" role="note">Read-only access. You can follow this conversation but cannot send messages.</div> }
 
@@ -71,6 +82,9 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
                       <article class="chat-message" [class.mine]="item.senderUserId === staff.user()?.id">
                         <div class="message-byline"><strong>{{ item.senderUserId === staff.user()?.id ? 'You' : (item.senderName || 'Team member') }}</strong><time [attr.datetime]="item.createdAt">{{ item.createdAt | date:'shortTime' }}</time></div>
                         <p>{{ item.body }}</p>
+                        @if (item.shareType && item.shareId) { <button type="button" class="link-button" (click)="openSharedRecord(item)">Open shared {{ item.shareType }}</button> }
+                        @if (item.attachmentId) { <button type="button" class="link-button" (click)="downloadAttachment(item)">{{ item.attachmentFileName || 'Download attachment' }}</button> }
+                        @if (item.senderUserId === staff.user()?.id) { <small>Read by {{ item.readByCount }}</small> }
                       </article>
                     } @empty {
                       <div class="chat-thread-state"><span class="empty-chat-mark" aria-hidden="true">•••</span><strong>Start the conversation</strong><p>{{ active.type === 'private-owner' ? 'This space is private to you and the owner.' : 'Share the first update with your branch team.' }}</p></div>
@@ -82,6 +96,12 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
               @if (unseenMessageCount()) { <button class="new-message-button" type="button" (click)="scrollToLatest(true)">{{ unseenMessageCount() }} new {{ unseenMessageCount() === 1 ? 'message' : 'messages' }} ↓</button> }
 
               <form class="chat-composer" (submit)="send($event)">
+                <div class="composer-tools">
+                  <label class="link-button">Attach<input type="file" hidden accept="image/jpeg,image/png,image/webp,application/pdf,.docx,.xlsx" (change)="selectAttachment($event)" /></label>
+                  <select [(ngModel)]="shareType" name="shareType"><option value="">Smart Share</option><option value="appointment">Appointment</option><option value="invoice">Invoice</option><option value="guest">Guest</option></select>
+                  @if (shareType) { <input [(ngModel)]="shareId" name="shareId" maxlength="120" [placeholder]="label(shareType) + ' ID'" /> }
+                  @if (pendingAttachment(); as attachment) { <span>{{ attachment.fileName }} <button type="button" (click)="pendingAttachment.set(null)">Remove</button></span> }
+                </div>
                 <label class="sr-only" for="chat-draft">Message {{ active.title }}</label>
                 <textarea id="chat-draft" name="chatDraft" [(ngModel)]="draft" maxlength="4000" rows="1" [disabled]="!canSendChat() || !online() || sending()" [attr.aria-describedby]="'chat-compose-help chat-character-count'" [placeholder]="canSendChat() ? (online() ? 'Write a message…' : 'Reconnect to send a message') : 'Read-only conversation'" (keydown)="onComposerKeydown($event)"></textarea>
                 <div class="composer-footer"><span id="chat-compose-help">Enter to send · Shift+Enter for a new line</span><span id="chat-character-count" [class.near-limit]="draft.length > 3600">{{ draft.length }}/4000</span><button class="button primary chat-send" type="submit" [disabled]="!canSubmit()" [attr.aria-busy]="sending()">{{ sending() ? 'Sending...' : 'Send' }} <span aria-hidden="true">↗</span></button></div>
@@ -99,6 +119,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
 export class StaffChatPage implements OnInit, OnDestroy {
   @ViewChild("messageViewport") private messageViewport?: ElementRef<HTMLElement>;
   readonly conversations = signal<StaffChatConversation[]>([]);
+  readonly participants = signal<StaffChatParticipant[]>([]);
   readonly messages = signal<StaffConversationMessage[]>([]);
   readonly activeConversationId = signal("");
   readonly initialLoading = signal(false);
@@ -106,15 +127,24 @@ export class StaffChatPage implements OnInit, OnDestroy {
   readonly messagesLoading = signal(false);
   readonly startingPrivate = signal(false);
   readonly sending = signal(false);
+  readonly creatingConversation = signal(false);
+  readonly attachmentUploading = signal(false);
+  readonly pendingAttachment = signal<StaffChatAttachment | null>(null);
   readonly loadError = signal("");
   readonly messagesError = signal("");
   readonly actionError = signal("");
+  readonly shareNotice = signal("");
   readonly online = signal(typeof navigator === "undefined" || navigator.onLine);
   readonly connectionState = signal<RealtimeState>(this.online() ? "connecting" : "offline");
   readonly unseenMessageCount = signal(0);
   readonly activeConversation = computed(() => this.conversations().find((item) => item.id === this.activeConversationId()) || null);
   readonly connectionLabel = computed(() => ({ connecting: "Connecting", live: "Live", polling: "Syncing", offline: "Offline" })[this.connectionState()]);
   draft = "";
+  newConversationType: "direct" | "group" | "broadcast" = "direct";
+  newConversationTitle = "";
+  selectedParticipantIds: string[] = [];
+  shareType = "";
+  shareId = "";
 
   private socket: WebSocket | null = null;
   private pollTimer = 0;
@@ -132,6 +162,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
     window.addEventListener("online", this.handleOnline);
     window.addEventListener("offline", this.handleOffline);
     void this.loadConversations();
+    if (this.canSendChat()) void this.loadParticipants();
     void this.connectRealtime();
     this.pollTimer = window.setInterval(() => {
       if (this.online() && document.visibilityState === "visible") void this.poll();
@@ -148,11 +179,38 @@ export class StaffChatPage implements OnInit, OnDestroy {
   }
 
   canReadChat(): boolean { return this.staff.hasPermission("staff.app.chat.read"); }
-  canSendChat(): boolean { return this.staff.hasPermission("staff.app.chat.manage"); }
+  canSendChat(): boolean { return this.staff.hasPermission("staff.app.chat.manage") && this.activeConversation()?.canSend !== false; }
+  canManageChat(): boolean { return this.staff.hasPermission("staff.app.chat.manage"); }
   isOwner(): boolean { return ["owner", "admin", "superadmin"].includes(String(this.staff.user()?.role || "").trim().toLowerCase()); }
-  canStartPrivateChat(): boolean { return this.canSendChat() && !this.isOwner() && !this.conversations().some((item) => item.type === "private-owner"); }
-  canSubmit(): boolean { return this.canSendChat() && this.online() && !this.sending() && !!this.draft.trim() && this.draft.length <= 4000 && !!this.activeConversationId(); }
+  isManager(): boolean { return ["owner", "admin", "manager", "superadmin"].includes(String(this.staff.user()?.role || "").trim().toLowerCase()); }
+  canStartPrivateChat(): boolean { return this.canManageChat() && !this.isOwner() && !this.conversations().some((item) => item.type === "private-owner"); }
+  canSubmit(): boolean { return this.canSendChat() && this.online() && !this.sending() && !this.attachmentUploading() && !!this.draft.trim() && this.draft.length <= 4000 && !!this.activeConversationId() && (!this.shareType || !!this.shareId.trim()); }
+  canCreateConversation(): boolean { const count = this.selectedParticipantIds.length; return this.canManageChat() && (this.newConversationType === "direct" ? count === 1 : count > 0) && (this.newConversationType === "direct" || !!this.newConversationTitle.trim()); }
   clearActionError(): void { this.actionError.set(""); }
+  label(value: string): string { return value.replace(/-/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+  conversationMark(type: StaffChatConversation["type"]): string { return ({ team: "T", "private-owner": "O", direct: "D", group: "G", broadcast: "B" })[type]; }
+  conversationLabel(type: StaffChatConversation["type"]): string { return ({ team: "Branch team", "private-owner": "Private · only you and owner", direct: "Direct conversation", group: "Private group", broadcast: "Manager broadcast" })[type]; }
+
+  async loadParticipants(): Promise<void> {
+    try { this.participants.set(await this.staff.staffChatParticipants()); }
+    catch { this.actionError.set(this.staff.error() || "Team members could not be loaded."); }
+  }
+
+  toggleParticipant(userId: string, checked: boolean): void {
+    if (this.newConversationType === "direct" && checked) this.selectedParticipantIds = [userId];
+    else this.selectedParticipantIds = checked ? [...new Set([...this.selectedParticipantIds, userId])] : this.selectedParticipantIds.filter((id) => id !== userId);
+  }
+
+  async createConversation(): Promise<void> {
+    if (!this.canCreateConversation() || this.creatingConversation()) return;
+    this.creatingConversation.set(true); this.actionError.set("");
+    try {
+      const conversation = await this.staff.createStaffChatConversation({ type: this.newConversationType, title: this.newConversationTitle.trim() || undefined, participantUserIds: this.selectedParticipantIds }, crypto.randomUUID());
+      this.selectedParticipantIds = []; this.newConversationTitle = "";
+      await this.loadConversations(true); await this.openConversation(conversation.id);
+    } catch { this.actionError.set(this.staff.error() || "Conversation could not be created."); }
+    finally { this.creatingConversation.set(false); }
+  }
 
   async loadConversations(silent = false): Promise<void> {
     if (!this.canReadChat()) return;
@@ -198,6 +256,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
       if (generation !== this.messageGeneration || conversationId !== this.activeConversationId()) return;
       const hadMessages = this.messages().length > 0;
       this.messages.set(this.dedupeMessages(items));
+      await this.staff.markStaffConversationRead(conversationId);
       if (!hadMessages || this.nearBottom) this.scrollToLatest(false);
     } catch {
       if (generation === this.messageGeneration && showLoading) this.messagesError.set(this.staff.error() || "Check your connection and retry.");
@@ -226,14 +285,41 @@ export class StaffChatPage implements OnInit, OnDestroy {
     this.sending.set(true);
     this.actionError.set("");
     try {
-      const message = await this.staff.sendStaffConversationMessage(conversationId, body, crypto.randomUUID());
+      const message = await this.staff.sendStaffConversationMessage(conversationId, body, crypto.randomUUID(), {
+        shareType: this.shareType || undefined, shareId: this.shareId.trim() || undefined,
+        attachmentId: this.pendingAttachment()?.id
+      });
       this.messages.update((items) => this.dedupeMessages([...items, message]));
       this.draft = "";
+      this.shareType = ""; this.shareId = ""; this.pendingAttachment.set(null);
       this.nearBottom = true;
       this.scrollToLatest(true);
       void this.loadConversations(true);
     } catch { this.actionError.set(this.staff.error() || "Message could not be sent. Your draft has been kept."); }
     finally { this.sending.set(false); }
+  }
+
+  async selectAttachment(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement; const file = input.files?.[0]; input.value = "";
+    if (!file || this.attachmentUploading()) return;
+    this.attachmentUploading.set(true); this.actionError.set("");
+    try { this.pendingAttachment.set(await this.staff.uploadStaffChatAttachment(file)); }
+    catch { this.actionError.set(this.staff.error() || "Attachment could not be uploaded."); }
+    finally { this.attachmentUploading.set(false); }
+  }
+
+  async downloadAttachment(message: StaffConversationMessage): Promise<void> {
+    if (!message.attachmentId) return;
+    try {
+      const blob = await this.staff.downloadStaffChatAttachment(message.attachmentId);
+      await openProtectedBlob(blob, message.attachmentFileName || "attachment");
+    } catch { this.actionError.set(this.staff.error() || "Attachment is unavailable or expired."); }
+  }
+
+  async openSharedRecord(message: StaffConversationMessage): Promise<void> {
+    if (!message.shareType || !message.shareId) return;
+    try { await this.staff.resolveStaffChatShare(message.shareType, message.shareId); this.shareNotice.set(`Access confirmed for shared ${message.shareType} ${message.shareId}.`); }
+    catch { this.actionError.set(this.staff.error() || "You no longer have access to this shared record."); }
   }
 
   onComposerKeydown(event: KeyboardEvent): void {

@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -18,6 +18,7 @@ pub struct SessionDetails {
     pub items: Vec<SessionItemView>,
     pub counts: Vec<repo::CountLineRecord>,
     pub findings: Vec<repo::FindingRecord>,
+    pub events: Vec<repo::SessionEventRecord>,
     pub value_summary: ValueSummary,
 }
 
@@ -47,12 +48,15 @@ pub struct SessionItemView {
     pub expected_ledger_movement_count: Option<i64>,
     pub expected_provenance_status: Option<String>,
     pub expected_movement_summary: Option<Value>,
+    pub audit_source: String,
+    pub included_in_reconciliation: bool,
     pub approved_quantity: Option<i32>,
     pub variance_quantity: Option<i32>,
     pub counted_value_paise: Option<i64>,
     pub variance_value_paise: Option<i64>,
     pub variance_cause_suggestion: Option<String>,
     pub variance_reason: String,
+    pub reconciliation_notes: String,
     pub adjustment_ledger_id: Option<String>,
     pub posted_at: Option<DateTime<Utc>>,
 }
@@ -84,9 +88,31 @@ pub async fn create(
     blind: bool,
     counters: i32,
     threshold: i32,
+    business_date: NaiveDate,
+    audit_scope: &str,
+    product_scope: &str,
+    unaudited_policy: &str,
+    item_ids: Vec<String>,
+    can_backdate: bool,
+    can_use_zero: bool,
 ) -> Result<SessionDetails, AppError> {
     let name = required_text(name, 160, "audit name")?;
-    if !(1..=5).contains(&counters) || threshold < 0 {
+    if !(1..=5).contains(&counters)
+        || threshold < 0
+        || !matches!(audit_scope, "full" | "cycle")
+        || !matches!(product_scope, "all" | "retail" | "consumable")
+        || !matches!(
+            unaudited_policy,
+            "require_count"
+                | "counted_only"
+                | "projected_floor_zero"
+                | "projected_preserve_negative"
+                | "zero"
+        )
+        || (audit_scope == "full" && !item_ids.is_empty())
+        || (audit_scope == "cycle" && (item_ids.is_empty() || item_ids.len() > 500))
+        || item_ids.iter().collect::<HashSet<_>>().len() != item_ids.len()
+    {
         return Err(AppError::validation("invalid counter or recount threshold"));
     }
     let policy =
@@ -99,12 +125,53 @@ pub async fn create(
         .get("countValueVarianceThresholdPaise")
         .and_then(Value::as_i64)
         .unwrap_or(10_000);
+    let allow_zero = policy
+        .get("allowZeroUnauditedAudit")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let today = Utc::now()
+        .with_timezone(&FixedOffset::east_opt(19_800).expect("IST offset"))
+        .date_naive();
+    if business_date > today {
+        return Err(AppError::validation("businessDate cannot be in the future"));
+    }
+    if business_date < today && !can_backdate {
+        return Err(AppError::forbidden(
+            "backdated stock audits require inventory approval permission",
+        ));
+    }
+    if unaudited_policy == "zero" && (!allow_zero || !can_use_zero) {
+        return Err(AppError::forbidden(
+            "setting unaudited stock to zero is disabled or requires inventory approval permission",
+        ));
+    }
+    let cutoff_at = if business_date == today {
+        Utc::now()
+    } else {
+        FixedOffset::east_opt(19_800)
+            .expect("IST offset")
+            .from_local_datetime(
+                &business_date
+                    .and_hms_opt(23, 59, 59)
+                    .expect("valid audit cutoff"),
+            )
+            .single()
+            .expect("fixed offset has one local time")
+            .with_timezone(&Utc)
+    };
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start stock audit"))?;
-    if repo::lock_snapshot_inventory(&mut tx, tenant, branch)
+    inventory_adjustment_service::enforce_inventory_business_date(
+        &mut tx,
+        tenant,
+        branch,
+        business_date,
+    )
+    .await?;
+    if repo::lock_snapshot_inventory(&mut tx, tenant, branch, product_scope, &item_ids)
         .await
         .map_err(|_| AppError::internal("failed to lock inventory for stock audit"))?
         == 0
@@ -113,9 +180,18 @@ pub async fn create(
             "no active inventory items are available to count",
         ));
     }
-    let mismatch_count = repo::ledger_stock_mismatch_count(&mut tx, tenant, branch)
+    let overlap = repo::open_scope_overlap_count(&mut tx, tenant, branch, product_scope, &item_ids)
         .await
-        .map_err(|_| AppError::internal("failed to verify inventory ledger integrity"))?;
+        .map_err(|_| AppError::internal("failed to check overlapping stock audits"))?;
+    if overlap > 0 {
+        return Err(AppError::conflict(format!(
+            "{overlap} selected product(s) already belong to an open stock audit"
+        )));
+    }
+    let mismatch_count =
+        repo::ledger_stock_mismatch_count(&mut tx, tenant, branch, product_scope, &item_ids)
+            .await
+            .map_err(|_| AppError::internal("failed to verify inventory ledger integrity"))?;
     if mismatch_count > 0 {
         return Err(AppError::conflict(format!(
             "{mismatch_count} active inventory item(s) do not match the stock ledger; resolve Operations Health exceptions before starting an audit"
@@ -126,6 +202,11 @@ pub async fn create(
         tenant,
         branch,
         name,
+        business_date,
+        cutoff_at,
+        audit_scope,
+        product_scope,
+        unaudited_policy,
         blind,
         counters,
         threshold,
@@ -135,7 +216,7 @@ pub async fn create(
     )
     .await
     .map_err(|_| AppError::internal("failed to create stock audit"))?;
-    if repo::snapshot_items(&mut tx, tenant, branch, &id)
+    if repo::snapshot_items(&mut tx, tenant, branch, &id, product_scope, &item_ids)
         .await
         .map_err(|_| AppError::internal("failed to snapshot stock"))?
         == 0
@@ -144,6 +225,8 @@ pub async fn create(
             "no active inventory items are available to count",
         ));
     }
+    repo::add_session_event(&mut tx,tenant,branch,&id,"created",actor,"Stock audit snapshot created",&json!({"auditScope":audit_scope,"productScope":product_scope,"businessDate":business_date,"unauditedPolicy":unaudited_policy}))
+        .await.map_err(|_|AppError::internal("failed to write stock audit history"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit stock audit"))?;
@@ -156,11 +239,12 @@ pub async fn details(
     branch: &str,
     id: &str,
 ) -> Result<SessionDetails, AppError> {
-    let (session, items, counts, findings) = tokio::try_join!(
+    let (session, items, counts, findings, events) = tokio::try_join!(
         repo::get_session(&state.db, tenant, branch, id),
         repo::session_items(&state.db, tenant, branch, id),
         repo::count_lines(&state.db, tenant, branch, id),
-        repo::findings(&state.db, tenant, branch, id)
+        repo::findings(&state.db, tenant, branch, id),
+        repo::session_events(&state.db, tenant, branch, id)
     )
     .map_err(|_| AppError::internal("failed to load stock audit"))?;
     let session =
@@ -172,6 +256,7 @@ pub async fn details(
         session,
         counts,
         findings,
+        events,
         items: items
             .into_iter()
             .map(|item| {
@@ -211,12 +296,15 @@ pub async fn details(
                         .then(|| item.expected_provenance_status.clone()),
                     expected_movement_summary: (!hide_expected)
                         .then(|| item.expected_movement_summary.clone()),
+                    audit_source: item.audit_source,
+                    included_in_reconciliation: item.included_in_reconciliation,
                     approved_quantity: item.approved_quantity,
                     variance_quantity: item.variance_quantity,
                     counted_value_paise: counted_value,
                     variance_value_paise: variance_value,
                     variance_cause_suggestion,
                     variance_reason: item.variance_reason,
+                    reconciliation_notes: item.reconciliation_notes,
                     adjustment_ledger_id: item.adjustment_ledger_id,
                     posted_at: item.posted_at,
                 })
@@ -253,11 +341,7 @@ pub async fn record_count(
         .await
         .map_err(|_| AppError::internal("failed to validate stock audit item"))?
         .ok_or_else(|| AppError::not_found("inventory item is not in this stock audit"))?;
-    let round = if session.status == "recount_required" {
-        2
-    } else {
-        1
-    };
+    let round = session.current_round;
     let mut tx = state
         .db
         .begin()
@@ -310,11 +394,7 @@ pub async fn close_counting(
     let lines = repo::count_lines(&state.db, tenant, branch, session_id)
         .await
         .map_err(|_| AppError::internal("failed to load stock count lines"))?;
-    let round = if session.status == "recount_required" {
-        2
-    } else {
-        1
-    };
+    let round = session.current_round;
     let mut grouped: HashMap<&str, Vec<i32>> = HashMap::new();
     for line in lines.iter().filter(|line| line.round_number == round) {
         grouped
@@ -322,12 +402,24 @@ pub async fn close_counting(
             .or_default()
             .push(line.counted_quantity);
     }
+    let manual_counted = grouped.values().filter(|values| !values.is_empty()).count();
     for item in &items {
-        if grouped.get(item.id.as_str()).map_or(0, Vec::len) < session.required_counters as usize {
+        let count = grouped.get(item.id.as_str()).map_or(0, Vec::len);
+        if count > 0 && count < session.required_counters as usize {
+            return Err(AppError::validation(
+                "each manually audited product needs all required counter counts",
+            ));
+        }
+        if count == 0 && session.unaudited_policy == "require_count" {
             return Err(AppError::validation(
                 "every snapshot item needs all required counter counts",
             ));
         }
+    }
+    if manual_counted == 0 {
+        return Err(AppError::validation(
+            "count at least one product before submitting the audit",
+        ));
     }
     let needs_recount = grouped.values().any(|values| {
         values.iter().max().unwrap_or(&0) - values.iter().min().unwrap_or(&0)
@@ -339,26 +431,35 @@ pub async fn close_counting(
         .await
         .map_err(|_| AppError::internal("failed to close stock audit"))?;
     if needs_recount {
-        if !repo::set_status(
+        if !repo::advance_to_recount(&mut tx, tenant, branch, session_id, &session.status)
+            .await
+            .map_err(|_| AppError::internal("failed to require recount"))?
+        {
+            return Err(AppError::conflict("stock audit state changed"));
+        }
+        repo::add_session_event(
             &mut tx,
             tenant,
             branch,
             session_id,
-            &session.status,
             "recount_required",
             actor,
-            "",
+            "Counter quantities exceeded the recount threshold",
+            &json!({"completedRound":round,"nextRound":round+1}),
         )
         .await
-        .map_err(|_| AppError::internal("failed to require recount"))?
-        {
-            return Err(AppError::conflict("stock audit state changed"));
-        }
+        .map_err(|_| AppError::internal("failed to write stock audit history"))?;
     } else {
         for item in &items {
-            let values = &grouped[item.id.as_str()];
-            let counted =
-                (values.iter().sum::<i32>() + values.len() as i32 / 2) / values.len() as i32;
+            let values = grouped.get(item.id.as_str());
+            let (counted, source, included) = match values.filter(|values| !values.is_empty()) {
+                Some(values) => (
+                    (values.iter().sum::<i32>() + values.len() as i32 / 2) / values.len() as i32,
+                    "manual",
+                    true,
+                ),
+                None => unaudited_result(&session.unaudited_policy, item.expected_quantity)?,
+            };
             repo::set_review_results(
                 &mut tx,
                 tenant,
@@ -366,6 +467,8 @@ pub async fn close_counting(
                 &item.id,
                 counted,
                 counted - item.expected_quantity,
+                source,
+                included,
             )
             .await
             .map_err(|_| AppError::internal("failed to calculate stock variance"))?;
@@ -385,6 +488,8 @@ pub async fn close_counting(
         {
             return Err(AppError::conflict("stock audit state changed"));
         }
+        repo::add_session_event(&mut tx,tenant,branch,session_id,"counting_closed",actor,"Stock count submitted for reconciliation",&json!({"round":round,"manuallyAudited":manual_counted,"totalProducts":items.len(),"unauditedPolicy":session.unaudited_policy}))
+            .await.map_err(|_|AppError::internal("failed to write stock audit history"))?;
     }
     tx.commit()
         .await
@@ -396,6 +501,7 @@ pub async fn set_variance_reason(
     state: &AppState,
     tenant: &str,
     branch: &str,
+    actor: &str,
     session_id: &str,
     session_item_id: &str,
     reason: &str,
@@ -409,21 +515,213 @@ pub async fn set_variance_reason(
             "variance reasons can be set during review",
         ));
     }
+    ensure_reconciler(state, tenant, branch, &session, actor, session_id).await?;
+    let item = repo::session_item(&state.db, tenant, branch, session_id, session_item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit item"))?
+        .ok_or_else(|| AppError::not_found("stock audit item was not found"))?;
     let reason = required_text(reason, 500, "variance reason")?;
+    let quantity = item
+        .approved_quantity
+        .ok_or_else(|| AppError::conflict("stock audit item has no reconciled quantity"))?;
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to save variance reason"))?;
-    if !repo::set_reason(&mut tx, tenant, branch, session_item_id, reason)
-        .await
-        .map_err(|_| AppError::internal("failed to save variance reason"))?
+    if !repo::set_reconciliation(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        session_item_id,
+        quantity,
+        reason,
+        reason,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save variance reason"))?
     {
         return Err(AppError::not_found("stock audit item was not found"));
     }
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit variance reason"))?;
+    details(state, tenant, branch, session_id).await
+}
+
+pub async fn import_counts(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    session_id: &str,
+    device: &str,
+    batch_key: &str,
+    rows: Vec<(String, i32)>,
+) -> Result<SessionDetails, AppError> {
+    let device = text(device, 120, "deviceId")?;
+    let batch_key = required_text(batch_key, 100, "idempotencyKey")?;
+    if rows.is_empty()
+        || rows.len() > 500
+        || rows.iter().any(|(_, quantity)| *quantity < 0)
+        || rows
+            .iter()
+            .map(|(item, _)| item)
+            .collect::<HashSet<_>>()
+            .len()
+            != rows.len()
+    {
+        return Err(AppError::validation(
+            "CSV import must contain 1 to 500 unique products with non-negative whole quantities",
+        ));
+    }
+    let session = repo::get_session(&state.db, tenant, branch, session_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit"))?
+        .ok_or_else(|| AppError::not_found("stock audit session was not found"))?;
+    if !matches!(session.status.as_str(), "counting" | "recount_required") {
+        return Err(AppError::conflict("stock audit is not accepting counts"));
+    }
+    let items = repo::session_items(&state.db, tenant, branch, session_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit items"))?;
+    let item_map: HashMap<&str, &repo::SessionItemRecord> = items
+        .iter()
+        .map(|item| (item.inventory_item_id.as_str(), item))
+        .collect();
+    if rows
+        .iter()
+        .any(|(item, _)| !item_map.contains_key(item.as_str()))
+    {
+        return Err(AppError::validation(
+            "CSV contains a product outside this audit snapshot",
+        ));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to import stock counts"))?;
+    let mut inserted = 0_usize;
+    for (index, (inventory_item_id, quantity)) in rows.iter().enumerate() {
+        let item = item_map[inventory_item_id.as_str()];
+        let key = format!("{batch_key}:{index}");
+        if let Some(existing) = repo::count_by_key(&mut tx, tenant, branch, &key)
+            .await
+            .map_err(|_| AppError::internal("failed to check CSV replay"))?
+        {
+            if existing.session_item_id != item.id
+                || existing.counter_user_id != actor
+                || existing.counted_quantity != *quantity
+            {
+                return Err(AppError::conflict(
+                    "CSV idempotencyKey is already used by different count data",
+                ));
+            }
+            continue;
+        }
+        repo::insert_count(
+            &mut tx,
+            tenant,
+            branch,
+            &item.id,
+            actor,
+            session.current_round,
+            *quantity,
+            device,
+            &key,
+        )
+        .await
+        .map_err(|_| {
+            AppError::conflict(
+                "this counter already submitted one of the imported products for the current round",
+            )
+        })?;
+        inserted += 1;
+    }
+    if inserted > 0 {
+        repo::add_session_event(
+            &mut tx,
+            tenant,
+            branch,
+            session_id,
+            "csv_imported",
+            actor,
+            "CSV stock counts imported",
+            &json!({"batchKey":batch_key,"rows":rows.len()}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write stock audit history"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit CSV stock counts"))?;
+    details(state, tenant, branch, session_id).await
+}
+
+pub async fn save_reconciliation(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    session_id: &str,
+    item_id: &str,
+    quantity: i32,
+    reason: &str,
+    notes: &str,
+) -> Result<SessionDetails, AppError> {
+    if quantity < 0 {
+        return Err(AppError::validation(
+            "reconciled physical quantity cannot be negative",
+        ));
+    }
+    let session = repo::get_session(&state.db, tenant, branch, session_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit"))?
+        .ok_or_else(|| AppError::not_found("stock audit session was not found"))?;
+    if session.status != "review" {
+        return Err(AppError::conflict(
+            "stock audit is not open for reconciliation",
+        ));
+    }
+    ensure_reconciler(state, tenant, branch, &session, actor, session_id).await?;
+    let item = repo::session_item(&state.db, tenant, branch, session_id, item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit item"))?
+        .ok_or_else(|| AppError::not_found("stock audit item was not found"))?;
+    if !item.included_in_reconciliation {
+        return Err(AppError::conflict("excluded products cannot be reconciled"));
+    }
+    let variance = quantity - item.expected_quantity;
+    let reason = if variance == 0 {
+        text(reason, 500, "variance reason")?
+    } else {
+        required_text(reason, 500, "variance reason")?
+    };
+    let notes = if variance == 0 {
+        text(notes, 1000, "reconciliation notes")?
+    } else {
+        required_text(notes, 1000, "reconciliation notes")?
+    };
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to save reconciliation"))?;
+    if !repo::set_reconciliation(
+        &mut tx, tenant, branch, session_id, item_id, quantity, reason, notes,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save reconciliation"))?
+    {
+        return Err(AppError::not_found("stock audit item was not found"));
+    }
+    repo::add_session_event(&mut tx,tenant,branch,session_id,"reconciliation_saved",actor,notes,&json!({"inventoryItemId":item_id,"reconciledQuantity":quantity,"varianceQuantity":variance,"reason":reason}))
+        .await.map_err(|_|AppError::internal("failed to write stock audit history"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit reconciliation"))?;
     details(state, tenant, branch, session_id).await
 }
 
@@ -441,19 +739,41 @@ pub async fn submit_for_approval(
     if session.status != "review" {
         return Err(AppError::conflict("stock audit is not ready for approval"));
     }
+    ensure_reconciler(state, tenant, branch, &session, actor, session_id).await?;
     let items = repo::session_items(&state.db, tenant, branch, session_id)
         .await
         .map_err(|_| AppError::internal("failed to load stock audit items"))?;
     if items.iter().any(|item| {
-        item.variance_quantity.unwrap_or_default() != 0 && item.variance_reason.trim().is_empty()
+        item.included_in_reconciliation
+            && item.variance_quantity.unwrap_or_default() != 0
+            && (item.variance_reason.trim().is_empty()
+                || item.reconciliation_notes.trim().is_empty())
     }) {
-        return Err(AppError::validation("each stock variance needs a reason"));
+        return Err(AppError::validation(
+            "each stock variance needs a reason and reconciliation notes",
+        ));
     }
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to submit stock audit"))?;
+    if !repo::attach_floor_closing(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        session.business_date,
+        &session.product_scope,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to validate open-container closing"))?
+    {
+        return Err(AppError::validation("approve the open-container physical closing for this business date before submitting the unopened-stock audit"));
+    }
+    repo::snapshot_reconciliation_state(&mut tx, tenant, branch, session_id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to lock reconciliation snapshot"))?;
     if !repo::set_status(
         &mut tx,
         tenant,
@@ -469,6 +789,8 @@ pub async fn submit_for_approval(
     {
         return Err(AppError::conflict("stock audit state changed"));
     }
+    repo::add_session_event(&mut tx,tenant,branch,session_id,"submitted",actor,"Reconciliation submitted for approval",&json!({"includedProducts":items.iter().filter(|item|item.included_in_reconciliation).count()}))
+        .await.map_err(|_|AppError::internal("failed to write stock audit history"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit stock audit submission"))?;
@@ -518,6 +840,13 @@ pub async fn approve(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to approve stock audit"))?;
+    inventory_adjustment_service::enforce_inventory_business_date(
+        &mut tx,
+        tenant,
+        branch,
+        session.business_date,
+    )
+    .await?;
     if !repo::set_status(
         &mut tx,
         tenant,
@@ -534,17 +863,34 @@ pub async fn approve(
         return Err(AppError::conflict("stock audit state changed"));
     }
     for item in &items {
+        if !item.included_in_reconciliation {
+            repo::mark_posted(&mut tx, tenant, branch, &item.id, None)
+                .await
+                .map_err(|_| AppError::internal("failed to mark excluded audit item"))?;
+            continue;
+        }
         let delta = item.variance_quantity.unwrap_or_default();
+        let locked = repo::lock_inventory(&mut tx, tenant, branch, &item.inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock inventory item"))?
+            .ok_or_else(|| AppError::not_found("inventory item was not found"))?;
+        let latest_ledger =
+            repo::latest_ledger_id(&mut tx, tenant, branch, &item.inventory_item_id)
+                .await
+                .map_err(|_| AppError::internal("failed to verify reconciliation snapshot"))?;
+        if item.reconciled_stock_quantity != Some(locked.stock_quantity)
+            || item.reconciled_source_ledger_id != latest_ledger
+        {
+            return Err(AppError::conflict(
+                "stock changed after reconciliation; reject and resubmit the audit before approval",
+            ));
+        }
         if delta == 0 {
             repo::mark_posted(&mut tx, tenant, branch, &item.id, None)
                 .await
                 .map_err(|_| AppError::internal("failed to mark stock audit item"))?;
             continue;
         }
-        let locked = repo::lock_inventory(&mut tx, tenant, branch, &item.inventory_item_id)
-            .await
-            .map_err(|_| AppError::internal("failed to lock inventory item"))?
-            .ok_or_else(|| AppError::not_found("inventory item was not found"))?;
         let target = locked.stock_quantity.checked_add(delta).ok_or_else(|| {
             AppError::validation("stock audit adjustment exceeds supported range")
         })?;
@@ -561,6 +907,39 @@ pub async fn approve(
         {
             None
         } else {
+            let business_date = session.business_date;
+            let adjustment_request_id = inventory_repository::create_adjustment_request(
+                &mut tx,
+                tenant,
+                branch,
+                &item.inventory_item_id,
+                business_date,
+                "audit_reconciliation",
+                "pending_approval",
+                locked.stock_quantity,
+                target,
+                delta,
+                locked.unit_cost_paise,
+                i64::from(delta.saturating_abs()).saturating_mul(locked.unit_cost_paise),
+                exceeds_threshold,
+                &item.variance_reason,
+                &format!("stock-audit:{session_id}:{}", item.id),
+                actor,
+                &key,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to create audit reconciliation adjustment"))?;
+            inventory_repository::add_adjustment_event(
+                &mut tx,
+                tenant,
+                branch,
+                &adjustment_request_id,
+                "requested",
+                actor,
+                "Approved stock audit reconciliation",
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to write audit adjustment history"))?;
             inventory_repository::apply_adjusted_stock(
                 &mut tx,
                 tenant,
@@ -570,15 +949,33 @@ pub async fn approve(
             )
             .await
             .map_err(|_| AppError::internal("failed to apply stock audit adjustment"))?;
+            let unit_cost_paise = if delta < 0 {
+                inventory_adjustment_service::outbound_unit_cost(
+                    &mut tx,
+                    tenant,
+                    branch,
+                    &item.inventory_item_id,
+                    locked.batch_tracked,
+                    locked.unit_cost_paise,
+                    delta.saturating_abs(),
+                )
+                .await?
+            } else {
+                locked.unit_cost_paise
+            };
             let ledger = inventory_repository::add_adjustment_ledger(
                 &mut tx,
                 tenant,
                 branch,
                 &item.inventory_item_id,
                 delta,
-                locked.unit_cost_paise,
+                unit_cost_paise,
                 target,
                 &item.variance_reason,
+                "audit_reconciliation",
+                &format!("stock-audit:{session_id}"),
+                Some(business_date),
+                Some(&adjustment_request_id),
                 &key,
             )
             .await
@@ -595,50 +992,44 @@ pub async fn approve(
                 )
                 .await?;
             }
-            let amount = i64::from(delta.saturating_abs()) * locked.unit_cost_paise;
-            let lines = if delta > 0 {
-                vec![
-                    accounting_service::ManualJournalLine {
-                        account_code: accounting_service::INVENTORY_ASSET_ACCOUNT.into(),
-                        debit_paise: amount,
-                        credit_paise: 0,
-                    },
-                    accounting_service::ManualJournalLine {
-                        account_code: "STOCK_VARIANCE_GAIN".into(),
-                        debit_paise: 0,
-                        credit_paise: amount,
-                    },
-                ]
-            } else {
-                vec![
-                    accounting_service::ManualJournalLine {
-                        account_code: if item.variance_reason.to_lowercase().contains("theft") {
-                            "INVENTORY_SHRINKAGE_EXPENSE".into()
-                        } else {
-                            "STOCK_VARIANCE_LOSS".into()
-                        },
-                        debit_paise: amount,
-                        credit_paise: 0,
-                    },
-                    accounting_service::ManualJournalLine {
-                        account_code: accounting_service::INVENTORY_ASSET_ACCOUNT.into(),
-                        debit_paise: 0,
-                        credit_paise: amount,
-                    },
-                ]
-            };
-            accounting_service::post_control_journal(
+            accounting_service::post_inventory_adjustment(
                 &mut tx,
                 tenant,
                 branch,
                 "stock_count_adjustment",
                 &item.id,
-                Utc::now().date_naive(),
-                "Approved stock audit variance",
+                business_date,
                 actor,
-                &lines,
+                delta,
+                unit_cost_paise,
+                &item.variance_reason,
             )
             .await?;
+            inventory_repository::finish_adjustment_request(
+                &mut tx,
+                tenant,
+                branch,
+                &adjustment_request_id,
+                "pending_approval",
+                "applied",
+                Some(actor),
+                "Approved through stock audit",
+                Some(&ledger),
+                Some(&format!("stock-audit-review:{session_id}:{}", item.id)),
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to finish audit adjustment history"))?;
+            inventory_repository::add_adjustment_event(
+                &mut tx,
+                tenant,
+                branch,
+                &adjustment_request_id,
+                "applied",
+                actor,
+                "Stock audit variance posted",
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to finish audit adjustment history"))?;
             Some(ledger)
         };
         repo::mark_posted(&mut tx, tenant, branch, &item.id, ledger.as_deref())
@@ -653,6 +1044,30 @@ pub async fn approve(
     {
         return Err(AppError::conflict("stock audit state changed"));
     }
+    repo::add_session_event(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        "approved",
+        actor,
+        "Stock reconciliation approved",
+        &json!({"thresholdExceeded":exceeds_threshold}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write stock audit history"))?;
+    repo::add_session_event(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        "posted",
+        actor,
+        "Immutable inventory and GL adjustments posted",
+        &json!({"businessDate":session.business_date}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write stock audit history"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit stock audit posting"))?;
@@ -668,6 +1083,20 @@ pub async fn reject(
     reason: &str,
 ) -> Result<SessionDetails, AppError> {
     let reason = required_text(reason, 500, "rejection reason")?;
+    let session = repo::get_session(&state.db, tenant, branch, session_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load stock audit"))?
+        .ok_or_else(|| AppError::not_found("stock audit session was not found"))?;
+    if session.created_by == actor
+        || session.submitted_by.as_deref() == Some(actor)
+        || repo::counters_for_session(&state.db, tenant, branch, session_id, actor)
+            .await
+            .map_err(|_| AppError::internal("failed to enforce approval separation"))?
+    {
+        return Err(AppError::forbidden(
+            "an auditor or reconciler cannot reject this stock audit",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
@@ -688,9 +1117,57 @@ pub async fn reject(
     {
         return Err(AppError::conflict("stock audit is not pending approval"));
     }
+    repo::add_session_event(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        "rejected",
+        actor,
+        reason,
+        &json!({}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write stock audit history"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit stock audit rejection"))?;
+    details(state, tenant, branch, session_id).await
+}
+
+pub async fn resubmit(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    session_id: &str,
+) -> Result<SessionDetails, AppError> {
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to resubmit stock audit"))?;
+    if !repo::resubmit_rejected(&mut tx, tenant, branch, session_id, actor)
+        .await
+        .map_err(|_| AppError::internal("failed to resubmit stock audit"))?
+    {
+        return Err(AppError::conflict("only the original auditor can resubmit a rejected audit with an available recount round"));
+    }
+    repo::add_session_event(
+        &mut tx,
+        tenant,
+        branch,
+        session_id,
+        "resubmitted",
+        actor,
+        "Rejected audit reopened for recount",
+        &json!({}),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write stock audit history"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit stock audit resubmission"))?;
     details(state, tenant, branch, session_id).await
 }
 
@@ -717,9 +1194,10 @@ pub async fn add_finding(
         .await
         .map_err(|_| AppError::internal("failed to load stock audit"))?
         .ok_or_else(|| AppError::not_found("stock audit session was not found"))?;
-    if !matches!(session.status.as_str(), "review" | "pending_approval") {
+    if session.status != "review" {
         return Err(AppError::conflict("findings can be recorded during review"));
     }
+    ensure_reconciler(state, tenant, branch, &session, actor, session_id).await?;
     if repo::session_item(&state.db, tenant, branch, session_id, item_id)
         .await
         .map_err(|_| AppError::internal("failed to validate stock audit item"))?
@@ -763,7 +1241,7 @@ pub async fn scan(
     client_event: &str,
     captured_at: DateTime<Utc>,
 ) -> Result<ScanResult, AppError> {
-    if !["lookup", "receive", "count", "waste", "transfer"].contains(&workflow) {
+    if !["lookup", "receive", "count", "waste", "transfer", "kit"].contains(&workflow) {
         return Err(AppError::validation("invalid scanner workflow"));
     }
     let code = required_text(code, 160, "code")?;
@@ -877,6 +1355,26 @@ pub async fn aliases(
         .map_err(|_| AppError::internal("failed to load barcode aliases"))
 }
 
+async fn ensure_reconciler(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    session: &repo::SessionRecord,
+    actor: &str,
+    session_id: &str,
+) -> Result<(), AppError> {
+    if session.created_by == actor
+        || repo::counters_for_session(&state.db, tenant, branch, session_id, actor)
+            .await
+            .map_err(|_| AppError::internal("failed to enforce reconciler separation"))?
+    {
+        return Err(AppError::forbidden(
+            "an auditor or counter cannot reconcile the same stock audit",
+        ));
+    }
+    Ok(())
+}
+
 fn required_text<'a>(value: &'a str, max: usize, name: &str) -> Result<&'a str, AppError> {
     let value = text(value, max, name)?;
     if value.is_empty() {
@@ -896,6 +1394,16 @@ fn stock_value_paise(quantity: i32, unit_cost_paise: i64) -> Result<i64, AppErro
     i64::from(quantity)
         .checked_mul(unit_cost_paise)
         .ok_or_else(|| AppError::internal("stock audit value exceeds supported range"))
+}
+
+fn unaudited_result(policy: &str, expected: i32) -> Result<(i32, &'static str, bool), AppError> {
+    match policy {
+        "counted_only" => Ok((expected, "excluded", false)),
+        "projected_floor_zero" => Ok((expected.max(0), "projected", true)),
+        "projected_preserve_negative" | "require_count" => Ok((expected, "projected", true)),
+        "zero" => Ok((0, "zero", true)),
+        _ => Err(AppError::validation("invalid unaudited product policy")),
+    }
 }
 
 fn suggested_variance_cause(
@@ -928,23 +1436,29 @@ fn suggested_variance_cause(
 fn variance_value_totals(
     items: &[repo::SessionItemRecord],
 ) -> Result<Option<(i64, i64)>, AppError> {
-    if items.iter().any(|item| item.variance_quantity.is_none()) {
+    if items
+        .iter()
+        .any(|item| item.included_in_reconciliation && item.variance_quantity.is_none())
+    {
         return Ok(None);
     }
-    items.iter().try_fold(Some((0_i64, 0_i64)), |totals, item| {
-        let (net, absolute) = totals.unwrap_or_default();
-        let value = stock_value_paise(
-            item.variance_quantity.unwrap_or_default(),
-            item.expected_unit_cost_paise,
-        )?;
-        let net = net.checked_add(value).ok_or_else(|| {
-            AppError::internal("stock audit net variance exceeds supported range")
-        })?;
-        let absolute = absolute
-            .checked_add(value.abs())
-            .ok_or_else(|| AppError::internal("stock audit exposure exceeds supported range"))?;
-        Ok(Some((net, absolute)))
-    })
+    items
+        .iter()
+        .filter(|item| item.included_in_reconciliation)
+        .try_fold(Some((0_i64, 0_i64)), |totals, item| {
+            let (net, absolute) = totals.unwrap_or_default();
+            let value = stock_value_paise(
+                item.variance_quantity.unwrap_or_default(),
+                item.expected_unit_cost_paise,
+            )?;
+            let net = net.checked_add(value).ok_or_else(|| {
+                AppError::internal("stock audit net variance exceeds supported range")
+            })?;
+            let absolute = absolute.checked_add(value.abs()).ok_or_else(|| {
+                AppError::internal("stock audit exposure exceeds supported range")
+            })?;
+            Ok(Some((net, absolute)))
+        })
 }
 
 fn owner_approval_required(
@@ -952,14 +1466,17 @@ fn owner_approval_required(
     quantity_threshold_bps: i32,
     value_threshold_paise: i64,
 ) -> Result<bool, AppError> {
-    let quantity_exceeded = items.iter().any(|item| {
-        let variance = i64::from(item.variance_quantity.unwrap_or_default()).abs();
-        let expected = i64::from(item.expected_quantity).abs();
-        variance > 0
-            && (expected == 0
-                || variance.saturating_mul(10_000) / expected.max(1)
-                    > i64::from(quantity_threshold_bps))
-    });
+    let quantity_exceeded = items
+        .iter()
+        .filter(|item| item.included_in_reconciliation)
+        .any(|item| {
+            let variance = i64::from(item.variance_quantity.unwrap_or_default()).abs();
+            let expected = i64::from(item.expected_quantity).abs();
+            variance > 0
+                && (expected == 0
+                    || variance.saturating_mul(10_000) / expected.max(1)
+                        > i64::from(quantity_threshold_bps))
+        });
     let value_exceeded = variance_value_totals(items)?
         .is_some_and(|(_, absolute)| absolute > 0 && absolute >= value_threshold_paise);
     Ok(quantity_exceeded || value_exceeded)
@@ -970,25 +1487,39 @@ fn value_summary(
     items: &[repo::SessionItemRecord],
     hide_expected: bool,
 ) -> Result<ValueSummary, AppError> {
-    let expected = items.iter().try_fold(0_i64, |total, item| {
-        total
-            .checked_add(stock_value_paise(
-                item.expected_quantity,
-                item.expected_unit_cost_paise,
-            )?)
-            .ok_or_else(|| AppError::internal("stock audit expected value exceeds supported range"))
-    })?;
-    let counted = if items.iter().all(|item| item.approved_quantity.is_some()) {
-        Some(items.iter().try_fold(0_i64, |total, item| {
+    let expected = items
+        .iter()
+        .filter(|item| item.included_in_reconciliation)
+        .try_fold(0_i64, |total, item| {
             total
                 .checked_add(stock_value_paise(
-                    item.approved_quantity.unwrap_or_default(),
+                    item.expected_quantity,
                     item.expected_unit_cost_paise,
                 )?)
                 .ok_or_else(|| {
-                    AppError::internal("stock audit counted value exceeds supported range")
+                    AppError::internal("stock audit expected value exceeds supported range")
                 })
-        })?)
+        })?;
+    let counted = if items
+        .iter()
+        .filter(|item| item.included_in_reconciliation)
+        .all(|item| item.approved_quantity.is_some())
+    {
+        Some(
+            items
+                .iter()
+                .filter(|item| item.included_in_reconciliation)
+                .try_fold(0_i64, |total, item| {
+                    total
+                        .checked_add(stock_value_paise(
+                            item.approved_quantity.unwrap_or_default(),
+                            item.expected_unit_cost_paise,
+                        )?)
+                        .ok_or_else(|| {
+                            AppError::internal("stock audit counted value exceeds supported range")
+                        })
+                })?,
+        )
     } else {
         None
     };
@@ -1056,5 +1587,22 @@ mod tests {
             ),
             Some("unaccounted")
         );
+    }
+
+    #[test]
+    fn unaudited_policies_handle_negative_projection_without_unsafe_guessing() {
+        assert_eq!(
+            unaudited_result("projected_floor_zero", -3).unwrap(),
+            (0, "projected", true)
+        );
+        assert_eq!(
+            unaudited_result("projected_preserve_negative", -3).unwrap(),
+            (-3, "projected", true)
+        );
+        assert_eq!(
+            unaudited_result("counted_only", 7).unwrap(),
+            (7, "excluded", false)
+        );
+        assert_eq!(unaudited_result("zero", 7).unwrap(), (0, "zero", true));
     }
 }

@@ -5,7 +5,8 @@ use chrono::{Duration, NaiveDate, Utc};
 use crate::{
     models::common::AppError,
     repositories::{
-        migration_repository, purchase_order_event_repository,
+        inventory_governance_repository, inventory_repository, migration_repository,
+        purchase_order_event_repository,
         purchase_repository::{
             self, PurchaseOrderLineRecord, PurchaseOrderRecord, PurchaseReceipt,
             PurchaseReceiptLine, SupplierAdvanceRecord, SupplierPaymentRecord,
@@ -89,6 +90,10 @@ pub struct OrderDetails {
 
 pub struct ReturnInput {
     pub purchase_receipt_id: String,
+    pub return_date: String,
+    pub credit_note_number: String,
+    pub credit_note_date: String,
+    pub evidence_reference: String,
     pub reason: String,
     pub idempotency_key: String,
     pub lines: Vec<ReturnLineInput>,
@@ -97,6 +102,15 @@ pub struct ReturnInput {
 pub struct ReturnLineInput {
     pub purchase_receipt_line_id: String,
     pub quantity: i32,
+}
+
+pub struct QuarantineDispositionInput {
+    pub action: String,
+    pub quantity: i32,
+    pub reason: String,
+    pub evidence_reference: String,
+    pub credit_note_number: String,
+    pub idempotency_key: String,
 }
 
 pub struct SupplierPaymentInput {
@@ -857,11 +871,12 @@ pub async fn receive(
                 &receipt.id,
                 &saved.id,
                 &line.item_id,
-                line.damaged_quantity,
+                base_quantity(line.damaged_quantity, line.units_per_package)?,
                 &line.variance_reason,
                 &line.batch_number,
                 &line.batch_barcode,
                 line.expiry_date,
+                line.stock_unit_cost_paise,
                 actor_user_id,
             )
             .await
@@ -907,6 +922,25 @@ pub async fn receive(
                 &ledger_id,
             )
             .await?;
+            if inventory_repository::kit_auto_unbundle(&mut tx, tenant_id, branch_id, &line.item_id)
+                .await
+                .map_err(|_| AppError::internal("failed to load kit receiving setting"))?
+            {
+                inventory_adjustment_service::unbundle_kit_in_tx(
+                    &mut tx,
+                    tenant_id,
+                    branch_id,
+                    &line.item_id,
+                    line.stock_quantity,
+                    &format!("grn-unbundle:{}", saved.id),
+                    actor_user_id,
+                    "Automatic GRN unbundle",
+                    "receipt_unbundle",
+                    Some(&receipt.id),
+                    Some(&saved.id),
+                )
+                .await?;
+            }
         }
         saved_lines.push(saved);
     }
@@ -1070,6 +1104,13 @@ pub async fn create_order(
     }
     let taxable = calculated.iter().map(|line| line.8).sum();
     let tax = calculated.iter().map(|line| line.9).sum();
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let number_prefix = policy
+        .as_ref()
+        .and_then(|value| value["purchaseOrderSettings"]["numberPrefix"].as_str())
+        .unwrap_or("PO");
     let mut tx = state
         .db
         .begin()
@@ -1086,6 +1127,7 @@ pub async fn create_order(
         tax,
         input.shipping_paise,
         input.handling_paise,
+        number_prefix,
         actor,
     )
     .await
@@ -1152,6 +1194,109 @@ pub async fn order_details(
     Ok(OrderDetails { order, lines })
 }
 
+pub async fn bulk_raise_orders(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    mut ids: Vec<String>,
+    note: &str,
+) -> Result<Vec<OrderDetails>, AppError> {
+    ids.iter_mut().for_each(|id| *id = id.trim().to_string());
+    ids.retain(|id| !id.is_empty());
+    ids.sort();
+    ids.dedup();
+    if ids.is_empty() || ids.len() > 100 || note.chars().count() > 500 {
+        return Err(AppError::validation(
+            "bulk purchase-order request is invalid",
+        ));
+    }
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let settings = policy
+        .as_ref()
+        .and_then(|value| value.get("purchaseOrderSettings"));
+    if settings
+        .and_then(|value| value.get("bulkRaiseEnabled"))
+        .and_then(serde_json::Value::as_bool)
+        == Some(false)
+    {
+        return Err(AppError::forbidden(
+            "bulk purchase-order raise is disabled for this branch",
+        ));
+    }
+    let approval_required = settings
+        .and_then(|value| value.get("approvalRequired"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    let threshold = settings
+        .and_then(|value| value.get("approvalThresholdPaise"))
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start bulk purchase-order transaction"))?;
+    let rows = sqlx::query_as::<_, (String,String,i64)>("SELECT id,status,total_paise FROM purchase_orders WHERE tenant_id=$1 AND branch_id=$2 AND id=ANY($3) FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(&ids).fetch_all(&mut *tx).await.map_err(|_| AppError::internal("failed to lock purchase orders"))?;
+    if rows.len() != ids.len() || rows.iter().any(|row| row.1 != "draft") {
+        return Err(AppError::conflict(
+            "all selected purchase orders must exist and be draft",
+        ));
+    }
+    for (id, _, total) in &rows {
+        let to = if approval_required && (threshold == 0 || *total >= threshold) {
+            "pending_approval"
+        } else {
+            "approved"
+        };
+        if !purchase_repository::transition_order(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "draft",
+            to,
+            actor,
+            note.trim(),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to raise purchase order"))?
+        {
+            return Err(AppError::conflict(
+                "purchase order status changed; reload and try again",
+            ));
+        }
+        purchase_order_event_repository::set_timestamp(&mut tx, tenant_id, branch_id, id, to)
+            .await
+            .map_err(|_| AppError::internal("failed to timestamp bulk purchase order"))?;
+        purchase_order_event_repository::add(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "bulk_submit",
+            "draft",
+            to,
+            note.trim(),
+            actor,
+            &serde_json::json!({"batchSize":ids.len()}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to audit bulk purchase order"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit bulk purchase orders"))?;
+    let mut result = Vec::with_capacity(ids.len());
+    for id in ids {
+        result.push(order_details(state, tenant_id, branch_id, &id).await?);
+    }
+    Ok(result)
+}
+
 pub async fn transition_order(
     state: &AppState,
     tenant_id: &str,
@@ -1165,6 +1310,12 @@ pub async fn transition_order(
         .await
         .map_err(|_| AppError::internal("failed to load purchase order"))?
         .ok_or_else(|| AppError::not_found("purchase order was not found"))?;
+    let policy = inventory_governance_repository::policy(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load purchase order settings"))?;
+    let order_settings = policy
+        .as_ref()
+        .and_then(|value| value.get("purchaseOrderSettings"));
     if action == "send" {
         let mut tx = state
             .db
@@ -1179,6 +1330,23 @@ pub async fn transition_order(
                 "only approved purchase orders can be sent",
             ));
         }
+        let delivery_enabled = order_settings
+            .and_then(|value| value.get("supplierElectronicDelivery"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let delivery_queued = if delivery_enabled {
+            if !purchase_repository::queue_order_email(&mut tx, tenant_id, branch_id, id, actor)
+                .await
+                .map_err(|_| AppError::internal("failed to queue purchase order delivery"))?
+            {
+                return Err(AppError::validation(
+                    "supplier email is required for electronic purchase-order delivery",
+                ));
+            }
+            true
+        } else {
+            false
+        };
         purchase_order_event_repository::add(
             &mut tx,
             tenant_id,
@@ -1189,7 +1357,7 @@ pub async fn transition_order(
             &current.status,
             note,
             actor,
-            &serde_json::json!({}),
+            &serde_json::json!({"electronicDeliveryQueued":delivery_queued}),
         )
         .await
         .map_err(|_| AppError::internal("failed to write purchase order send event"))?;
@@ -1202,7 +1370,22 @@ pub async fn transition_order(
         purchase_order_event_repository::has_receipts(&state.db, tenant_id, branch_id, id)
             .await
             .map_err(|_| AppError::internal("failed to inspect purchase order receipts"))?;
-    let to = transition_target(&current.status, action, has_receipts).ok_or_else(|| {
+    let approval_required = order_settings
+        .and_then(|value| value.get("approvalRequired"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+        && order_settings
+            .and_then(|value| value.get("approvalThresholdPaise"))
+            .and_then(serde_json::Value::as_i64)
+            .map_or(true, |threshold| {
+                threshold == 0 || current.total_paise >= threshold
+            });
+    let to = if action == "submit" && !approval_required {
+        Some("approved")
+    } else {
+        transition_target(&current.status, action, has_receipts)
+    }
+    .ok_or_else(|| {
         AppError::conflict("purchase order action is not allowed in its current state")
     })?;
     if matches!(action, "approve" | "reject") && current.created_by == actor {
@@ -1520,6 +1703,12 @@ pub async fn create_return(
     input: ReturnInput,
 ) -> Result<CreatedId, AppError> {
     let receipt_id = required(input.purchase_receipt_id, "purchaseReceiptId is required")?;
+    let return_date = parse_optional_date(Some(&input.return_date), "returnDate")?
+        .ok_or_else(|| AppError::validation("returnDate is required"))?;
+    let credit_note_number = required(input.credit_note_number, "creditNoteNumber is required")?;
+    let credit_note_date = parse_optional_date(Some(&input.credit_note_date), "creditNoteDate")?
+        .ok_or_else(|| AppError::validation("creditNoteDate is required"))?;
+    let evidence_reference = required(input.evidence_reference, "evidenceReference is required")?;
     let reason = required(input.reason, "reason is required")?;
     let key = required(input.idempotency_key, "idempotencyKey is required")?;
     if input.lines.is_empty() {
@@ -1541,9 +1730,34 @@ pub async fn create_return(
             .map_err(|_| AppError::internal("failed to finish purchase return retry"))?;
         return Ok(CreatedId { id });
     }
+    let policy = purchase_repository::inventory_receipt_policy(&mut tx, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load inventory lock policy"))?;
+    if return_date > Utc::now().date_naive() || credit_note_date > Utc::now().date_naive() {
+        return Err(AppError::validation(
+            "return and credit-note dates cannot be in the future",
+        ));
+    }
+    if policy
+        .financial_lock_date
+        .is_some_and(|lock| return_date <= lock || credit_note_date <= lock)
+    {
+        return Err(AppError::conflict(
+            "purchase return date is inside the inventory financial lock period",
+        ));
+    }
+    if policy.edit_lock_days > 0 {
+        let cutoff = Utc::now().date_naive() - Duration::days(i64::from(policy.edit_lock_days));
+        if return_date < cutoff || credit_note_date < cutoff {
+            return Err(AppError::conflict(
+                "purchase return date is older than the inventory edit-lock window",
+            ));
+        }
+    }
     let mut seen = HashSet::new();
     let mut rows = Vec::with_capacity(input.lines.len());
     let mut total_taxable = 0_i64;
+    let mut total_inventory_value = 0_i64;
     let mut total_cgst = 0_i64;
     let mut total_sgst = 0_i64;
     let mut total_igst = 0_i64;
@@ -1598,6 +1812,8 @@ pub async fn create_return(
         );
         let tax = cgst.saturating_add(sgst).saturating_add(igst);
         total_taxable = total_taxable.saturating_add(taxable);
+        total_inventory_value = total_inventory_value
+            .saturating_add(i64::from(stock_quantity).saturating_mul(line.stock_unit_cost_paise));
         total_cgst = total_cgst.saturating_add(cgst);
         total_sgst = total_sgst.saturating_add(sgst);
         total_igst = total_igst.saturating_add(igst);
@@ -1627,6 +1843,10 @@ pub async fn create_return(
         branch_id,
         &receipt_id,
         &reason,
+        return_date,
+        &credit_note_number,
+        credit_note_date,
+        &evidence_reference,
         total_taxable,
         total_tax,
         &key,
@@ -1690,6 +1910,7 @@ pub async fn create_return(
         branch_id,
         &return_id,
         total_taxable,
+        total_inventory_value,
         total_cgst,
         total_sgst,
         total_igst,
@@ -1699,6 +1920,242 @@ pub async fn create_return(
         .await
         .map_err(|_| AppError::internal("failed to commit purchase return"))?;
     Ok(CreatedId { id: return_id })
+}
+
+pub async fn list_quarantine(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<purchase_repository::ReceivingQuarantineRecord>, AppError> {
+    purchase_repository::list_receiving_quarantine(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load receiving quarantine"))
+}
+
+pub async fn dispose_quarantine(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    quarantine_id: &str,
+    input: QuarantineDispositionInput,
+) -> Result<purchase_repository::ReceivingQuarantineRecord, AppError> {
+    let action = input.action.trim().to_lowercase();
+    if !matches!(action.as_str(), "release" | "return" | "discard") || input.quantity <= 0 {
+        return Err(AppError::validation("action or quantity is invalid"));
+    }
+    let reason = required(input.reason, "reason is required")?;
+    let evidence = required(input.evidence_reference, "evidenceReference is required")?;
+    let key = required(input.idempotency_key, "idempotencyKey is required")?;
+    let credit_note = input.credit_note_number.trim().to_string();
+    if action == "return" && credit_note.is_empty() {
+        return Err(AppError::validation(
+            "creditNoteNumber is required for a vendor return",
+        ));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start quarantine disposition"))?;
+    if let Some((_, existing_quarantine, existing_action, existing_quantity)) =
+        purchase_repository::quarantine_disposition_replay(&mut tx, tenant_id, branch_id, &key)
+            .await
+            .map_err(|_| AppError::internal("failed to read quarantine disposition retry"))?
+    {
+        if existing_quarantine != quarantine_id
+            || existing_action != action
+            || existing_quantity != input.quantity
+        {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by another quarantine action",
+            ));
+        }
+        return purchase_repository::list_receiving_quarantine(&state.db, tenant_id, branch_id)
+            .await
+            .map_err(|_| AppError::internal("failed to reload quarantine"))?
+            .into_iter()
+            .find(|row| row.id == quarantine_id)
+            .ok_or_else(|| AppError::not_found("quarantine record was not found"));
+    }
+    let quarantine = purchase_repository::lock_receiving_quarantine(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        quarantine_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to lock quarantine"))?
+    .ok_or_else(|| AppError::not_found("quarantine record was not found"))?;
+    if input.quantity > quarantine.remaining_quantity {
+        return Err(AppError::conflict(
+            "disposition quantity exceeds quarantine balance",
+        ));
+    }
+    let policy = purchase_repository::inventory_receipt_policy(&mut tx, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load inventory lock policy"))?;
+    let business_date = Utc::now().date_naive();
+    if policy
+        .financial_lock_date
+        .is_some_and(|lock| business_date <= lock)
+    {
+        return Err(AppError::conflict(
+            "quarantine action date is inside the inventory financial lock period",
+        ));
+    }
+    let disposition_id = purchase_repository::create_quarantine_disposition(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        quarantine_id,
+        &action,
+        input.quantity,
+        quarantine.unit_cost_paise,
+        &reason,
+        &evidence,
+        &credit_note,
+        actor,
+        &key,
+    )
+    .await
+    .map_err(|_| AppError::conflict("quarantine disposition conflicts with an existing action"))?;
+    let mut stock_ledger_id = None;
+    if action == "release" {
+        let stock_quantity = if quarantine.quantity_basis == "base_unit" {
+            input.quantity
+        } else {
+            base_quantity(input.quantity, quarantine.units_per_package)?
+        };
+        let item = purchase_repository::lock_inventory_item(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &quarantine.inventory_item_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to lock released inventory"))?
+        .ok_or_else(|| AppError::not_found("inventory item was not found"))?;
+        let stock_after = item
+            .stock_quantity
+            .checked_add(stock_quantity)
+            .ok_or_else(|| AppError::validation("released quantity exceeds supported range"))?;
+        let next_cost = inventory_adjustment_service::weighted_average_cost(
+            item.stock_quantity,
+            item.unit_cost_paise,
+            stock_quantity,
+            quarantine.unit_cost_paise,
+        )?;
+        purchase_repository::apply_stock(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &quarantine.inventory_item_id,
+            stock_after,
+            next_cost,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to release quarantined stock"))?;
+        let ledger = purchase_repository::add_quarantine_release_ledger(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &quarantine.inventory_item_id,
+            &quarantine.purchase_receipt_id,
+            &quarantine.purchase_receipt_line_id,
+            &disposition_id,
+            stock_quantity,
+            quarantine.unit_cost_paise,
+            stock_after,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write quarantine stock ledger"))?;
+        inventory_adjustment_service::record_batch_receipt(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &quarantine.inventory_item_id,
+            item.batch_tracked,
+            &quarantine.batch_number,
+            &quarantine.batch_barcode,
+            quarantine.expiry_date,
+            quarantine.received_date,
+            stock_quantity,
+            quarantine.unit_cost_paise,
+            &ledger,
+        )
+        .await?;
+        let amount = i64::from(stock_quantity).saturating_mul(quarantine.unit_cost_paise);
+        accounting_service::post_control_journal(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            "quarantine_release",
+            &disposition_id,
+            business_date,
+            "Released receiving quarantine",
+            actor,
+            &[
+                accounting_service::ManualJournalLine {
+                    account_code: accounting_service::INVENTORY_ASSET_ACCOUNT.into(),
+                    debit_paise: amount,
+                    credit_paise: 0,
+                },
+                accounting_service::ManualJournalLine {
+                    account_code: "ACCOUNTS_PAYABLE".into(),
+                    debit_paise: 0,
+                    credit_paise: amount,
+                },
+            ],
+        )
+        .await?;
+        inventory_governance_repository::record_operational_movement(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &quarantine.inventory_item_id,
+            "quarantine_release",
+            "damaged_quarantine",
+            if item.product_usage == "consumable" {
+                "consumable_available"
+            } else {
+                "retail_available"
+            },
+            stock_quantity,
+            quarantine.unit_cost_paise,
+            None,
+            actor,
+            &reason,
+            "quarantine_disposition",
+            &disposition_id,
+            &format!("quarantine-release:{key}"),
+            false,
+            &serde_json::json!({"evidenceReference":evidence}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write quarantine bucket movement"))?;
+        stock_ledger_id = Some(ledger);
+    }
+    purchase_repository::finish_quarantine_disposition(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        quarantine_id,
+        &disposition_id,
+        quarantine.remaining_quantity - input.quantity,
+        stock_ledger_id.as_deref(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to finish quarantine disposition"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit quarantine disposition"))?;
+    purchase_repository::list_receiving_quarantine(&state.db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to reload quarantine"))?
+        .into_iter()
+        .find(|row| row.id == quarantine_id)
+        .ok_or_else(|| AppError::internal("saved quarantine record was not found"))
 }
 
 fn split_supplier_payment(amount_paise: i64, balance_paise: i64) -> (i64, i64) {

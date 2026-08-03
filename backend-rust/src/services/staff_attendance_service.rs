@@ -6,7 +6,8 @@ use crate::{
     models::common::AppError,
     repositories::{
         staff_attendance_repository::{
-            self, AttendanceAdjustmentInput, AttendanceCorrectionInput,
+            self, AttendanceAdjustmentInput, AttendanceClockPolicyRecord,
+            AttendanceCorrectionInput, AttendanceCorrectionRequestRecord,
             AttendanceSummaryBaseRecord, OvertimeApprovalRecord,
         },
         staff_payroll_repository, staff_repository,
@@ -63,6 +64,93 @@ pub struct AttendanceSummaryRow {
     pub revised_leave_balance: f64,
     pub revised_special_leave_balance: f64,
     pub comments: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceClockOptions {
+    pub work_tasks: Vec<staff_attendance_repository::AttendanceWorkTaskRateRecord>,
+    pub policy: AttendanceClockPolicyRecord,
+    pub warnings: Vec<String>,
+}
+
+pub async fn clock_options(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<AttendanceClockOptions, AppError> {
+    ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    let (work_tasks, policy, active_state) = tokio::try_join!(
+        staff_attendance_repository::work_task_rates(db, tenant_id, branch_id, staff_id),
+        staff_attendance_repository::clock_policy(
+            db,
+            tenant_id,
+            branch_id,
+            staff_id,
+            business_date
+        ),
+        staff_attendance_repository::active_clock_state(
+            db,
+            tenant_id,
+            branch_id,
+            staff_id,
+            business_date
+        ),
+    )
+    .map_err(|_| AppError::internal("failed to load attendance clock options"))?;
+    let mut warnings = Vec::new();
+    if !policy.has_schedule && policy.unscheduled_clock_in_mode == "warn" {
+        warnings.push("No working schedule is assigned for this business date.".to_string());
+    }
+    if let Some(clock_in_at) = active_state.0 {
+        let elapsed = (Utc::now() - clock_in_at).num_minutes().max(0);
+        if policy.mandatory_break_after_minutes > 0
+            && elapsed >= i64::from(policy.mandatory_break_after_minutes)
+            && active_state.1 < i64::from(policy.mandatory_break_minutes)
+        {
+            warnings.push(format!(
+                "A {} minute break is required by attendance policy.",
+                policy.mandatory_break_minutes
+            ));
+        }
+        if policy.forgot_clock_out_minutes > 0
+            && elapsed >= i64::from(policy.forgot_clock_out_minutes)
+        {
+            warnings.push(
+                "You still have an open clock-in. Clock out or request a correction.".to_string(),
+            );
+        }
+    }
+    Ok(AttendanceClockOptions {
+        work_tasks,
+        policy,
+        warnings,
+    })
+}
+
+pub async fn schedule_forgot_clock_out_reminders(db: &PgPool) -> Result<u64, AppError> {
+    sqlx::query(
+        r#"INSERT INTO notifications(tenant_id,branch_id,user_id,created_by,notification_type,title,body,resource_type,resource_id,metadata_json)
+           SELECT DISTINCT ON (session.id) session.tenant_id,session.branch_id,employee.user_id,'system','staff_forgot_clock_out',
+                  'Clock out reminder','You still have an open clock-in.','staff_attendance_session',session.id,
+                  jsonb_build_object('deepLink','/staff/attendance','businessDate',session.business_date)
+             FROM staff_attendance_sessions session
+             JOIN staff employee ON employee.tenant_id=session.tenant_id AND employee.branch_id=session.branch_id AND employee.id=session.staff_id
+             JOIN staff_attendance_rules rule ON rule.tenant_id=session.tenant_id AND rule.branch_id=session.branch_id AND rule.active=TRUE
+            WHERE session.clock_out_at IS NULL AND session.superseded_at IS NULL AND employee.user_id IS NOT NULL
+              AND rule.forgot_clock_out_minutes>0
+              AND session.clock_in_at<=NOW()-MAKE_INTERVAL(mins=>rule.forgot_clock_out_minutes)
+              AND NOT EXISTS(SELECT 1 FROM notifications notification WHERE notification.tenant_id=session.tenant_id
+                AND notification.branch_id=session.branch_id AND notification.notification_type='staff_forgot_clock_out'
+                AND notification.resource_type='staff_attendance_session' AND notification.resource_id=session.id)
+            ORDER BY session.id,rule.updated_at DESC NULLS LAST,rule.id"#,
+    )
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected())
+    .map_err(|_| AppError::internal("failed to schedule forgot-clock-out reminders"))
 }
 
 pub async fn summary(
@@ -156,6 +244,7 @@ pub async fn clock_in(
     clock_in_at: Option<DateTime<Utc>>,
     source: &str,
     comments: &str,
+    work_task_rate_id: Option<&str>,
 ) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
     if comments.len() > 500 || source.len() > 50 {
@@ -164,14 +253,32 @@ pub async fn clock_in(
     let clock_in_at = clock_in_at.unwrap_or_else(Utc::now);
     validate_business_timestamp(business_date, clock_in_at, false)?;
     ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
-    if staff_attendance_repository::get_for_day(db, tenant_id, branch_id, staff_id, business_date)
-        .await
-        .map_err(|_| AppError::internal("failed to validate attendance"))?
-        .is_some()
-    {
-        return Err(AppError::validation(
-            "attendance already exists for this date",
+    let options = clock_options(db, tenant_id, branch_id, staff_id, business_date).await?;
+    if !options.policy.has_schedule && options.policy.unscheduled_clock_in_mode == "block" {
+        return Err(AppError::forbidden(
+            "unscheduled clock-in is blocked by attendance policy",
         ));
+    }
+    if options.policy.has_schedule && options.policy.scheduled_clock_in_mode == "block" {
+        return Err(AppError::forbidden(
+            "scheduled clock-in is blocked by attendance policy",
+        ));
+    }
+    if let Some(start) = options.policy.schedule_start {
+        let local_time = clock_in_at
+            .with_timezone(&FixedOffset::east_opt(19_800).expect("IST offset is valid"))
+            .time();
+        let earliest = start - Duration::minutes(i64::from(options.policy.early_clock_in_minutes));
+        if local_time < earliest {
+            return Err(AppError::validation(
+                "clock-in is earlier than the configured threshold",
+            ));
+        }
+    }
+    if let Some(task_id) = work_task_rate_id {
+        if !options.work_tasks.iter().any(|task| task.id == task_id) {
+            return Err(AppError::validation("approved work task is invalid"));
+        }
     }
     staff_attendance_repository::clock_in(
         db,
@@ -182,9 +289,19 @@ pub async fn clock_in(
         clock_in_at,
         source,
         comments,
+        work_task_rate_id,
     )
     .await
-    .map_err(|_| AppError::internal("failed to clock in staff"))
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|db_error| db_error.is_unique_violation())
+        {
+            AppError::conflict("an attendance session is already open")
+        } else {
+            AppError::internal("failed to clock in staff")
+        }
+    })
 }
 
 pub async fn clock_out(
@@ -195,15 +312,25 @@ pub async fn clock_out(
     business_date: NaiveDate,
     clock_out_at: Option<DateTime<Utc>>,
     penalty_paise: i64,
+    cash_tip_paise: i64,
     comments: &str,
 ) -> Result<staff_attendance_repository::AttendanceRecord, AppError> {
     ensure_staff(db, tenant_id, branch_id, staff_id).await?;
-    if penalty_paise < 0 || comments.len() > 500 {
+    if penalty_paise < 0 || cash_tip_paise < 0 || comments.len() > 500 {
         return Err(AppError::validation("invalid attendance clock out"));
     }
     let clock_out_at = clock_out_at.unwrap_or_else(Utc::now);
     validate_business_timestamp(business_date, clock_out_at, true)?;
     ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
+    let policy = staff_attendance_repository::clock_policy(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        business_date,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load attendance policy"))?;
     staff_attendance_repository::clock_out(
         db,
         tenant_id,
@@ -212,7 +339,18 @@ pub async fn clock_out(
         business_date,
         clock_out_at,
         penalty_paise,
+        cash_tip_paise,
         comments,
+        if policy.automatic_break_enabled {
+            policy.mandatory_break_after_minutes
+        } else {
+            0
+        },
+        if policy.automatic_break_enabled {
+            policy.mandatory_break_minutes
+        } else {
+            0
+        },
     )
     .await
     .map_err(|_| AppError::internal("failed to clock out staff"))?
@@ -297,6 +435,225 @@ pub async fn correct_attendance(
             AppError::internal("failed to correct attendance")
         }
     })
+}
+
+pub async fn list_correction_requests(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<AttendanceCorrectionRequestRecord>, AppError> {
+    if !status.is_empty() && !matches!(status, "pending" | "approved" | "rejected" | "cancelled") {
+        return Err(AppError::validation(
+            "attendance correction status is invalid",
+        ));
+    }
+    staff_attendance_repository::list_correction_requests(
+        db, tenant_id, branch_id, staff_id, status,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load attendance correction requests"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn request_correction(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+    clock_in_at: Option<DateTime<Utc>>,
+    clock_out_at: Option<DateTime<Utc>>,
+    work_task_rate_id: Option<&str>,
+    reason: &str,
+    requested_by: &str,
+) -> Result<AttendanceCorrectionRequestRecord, AppError> {
+    ensure_staff(db, tenant_id, branch_id, staff_id).await?;
+    ensure_attendance_editable(db, tenant_id, branch_id, business_date).await?;
+    let reason = reason.trim();
+    if reason.is_empty()
+        || reason.chars().count() > 500
+        || (clock_in_at.is_none() && clock_out_at.is_none())
+        || clock_out_at.is_some() && clock_in_at.is_none()
+        || clock_in_at
+            .zip(clock_out_at)
+            .is_some_and(|(start, end)| end < start)
+    {
+        return Err(AppError::validation(
+            "attendance correction request is invalid",
+        ));
+    }
+    if let Some(value) = clock_in_at {
+        validate_business_timestamp(business_date, value, false)?;
+    }
+    if let Some(value) = clock_out_at {
+        validate_business_timestamp(business_date, value, true)?;
+    }
+    if let Some(task_id) = work_task_rate_id {
+        let tasks =
+            staff_attendance_repository::work_task_rates(db, tenant_id, branch_id, staff_id)
+                .await
+                .map_err(|_| AppError::internal("failed to validate attendance work task"))?;
+        if !tasks.iter().any(|task| task.id == task_id) {
+            return Err(AppError::validation("approved work task is invalid"));
+        }
+    }
+    staff_attendance_repository::create_correction_request(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        business_date,
+        clock_in_at,
+        clock_out_at,
+        work_task_rate_id,
+        reason,
+        requested_by,
+    )
+    .await
+    .map_err(|error| {
+        if error
+            .as_database_error()
+            .is_some_and(|db_error| db_error.is_unique_violation())
+        {
+            AppError::conflict("a correction request is already pending for this business date")
+        } else {
+            AppError::internal("failed to save attendance correction request")
+        }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn decide_correction_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    version: i32,
+    decision: &str,
+    review_note: &str,
+    reviewer_id: &str,
+) -> Result<AttendanceCorrectionRequestRecord, AppError> {
+    let decision = decision.trim().to_lowercase();
+    let review_note = review_note.trim();
+    if version < 1
+        || !matches!(decision.as_str(), "approved" | "rejected")
+        || decision == "rejected" && review_note.is_empty()
+        || review_note.chars().count() > 500
+    {
+        return Err(AppError::validation(
+            "attendance correction decision is invalid",
+        ));
+    }
+    let request = staff_attendance_repository::get_correction_request(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load attendance correction request"))?
+        .ok_or_else(|| AppError::not_found("attendance correction request was not found"))?;
+    if request.status != "pending" || request.version != version {
+        return Err(AppError::conflict(
+            "attendance correction request changed; reload and try again",
+        ));
+    }
+    if decision == "rejected" {
+        if !staff_attendance_repository::finish_correction_request(
+            db,
+            tenant_id,
+            branch_id,
+            id,
+            "pending",
+            "rejected",
+            reviewer_id,
+            review_note,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to reject attendance correction request"))?
+        {
+            return Err(AppError::conflict(
+                "attendance correction request changed; reload and try again",
+            ));
+        }
+    } else {
+        if !staff_attendance_repository::claim_correction_request(
+            db,
+            tenant_id,
+            branch_id,
+            id,
+            version,
+            reviewer_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to claim attendance correction request"))?
+        {
+            return Err(AppError::conflict(
+                "attendance correction request changed; reload and try again",
+            ));
+        }
+        let breaks = staff_attendance_repository::break_inputs_for_day(
+            db,
+            tenant_id,
+            branch_id,
+            &request.staff_id,
+            request.business_date,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to preserve attendance breaks"))?;
+        let correction = AttendanceCorrectionInput {
+            clock_in_at: request.requested_clock_in_at,
+            clock_out_at: request.requested_clock_out_at,
+            manual_status: None,
+            penalty_paise: 0,
+            comments: request.reason.clone(),
+            correction_reason: request.reason.clone(),
+            corrected_by: reviewer_id.to_string(),
+            work_task_rate_id: request.requested_work_task_rate_id.clone(),
+            breaks,
+        };
+        if let Err(error) = correct_attendance(
+            db,
+            tenant_id,
+            branch_id,
+            &request.staff_id,
+            request.business_date,
+            correction,
+        )
+        .await
+        {
+            let _ = staff_attendance_repository::finish_correction_request(
+                db,
+                tenant_id,
+                branch_id,
+                id,
+                "processing",
+                "pending",
+                reviewer_id,
+                "",
+            )
+            .await;
+            return Err(error);
+        }
+        if !staff_attendance_repository::finish_correction_request(
+            db,
+            tenant_id,
+            branch_id,
+            id,
+            "processing",
+            "approved",
+            reviewer_id,
+            review_note,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to approve attendance correction request"))?
+        {
+            return Err(AppError::conflict(
+                "attendance correction request finalization failed",
+            ));
+        }
+    }
+    staff_attendance_repository::get_correction_request(db, tenant_id, branch_id, id)
+        .await
+        .map_err(|_| AppError::internal("failed to load decided attendance correction request"))?
+        .ok_or_else(|| AppError::not_found("attendance correction request was not found"))
 }
 
 /// Blocks attendance edits once the payroll period covering `business_date` is locked, or once
@@ -605,6 +962,7 @@ mod tests {
             comments: String::new(),
             correction_reason: "Manager correction".into(),
             corrected_by: "user".into(),
+            work_task_rate_id: None,
             breaks: vec![
                 AttendanceBreakInput {
                     started_at: at("2026-07-13T12:00:00Z"),
@@ -648,6 +1006,7 @@ mod tests {
                 comments: String::new(),
                 correction_reason: "Manager correction".into(),
                 corrected_by: "user".into(),
+                work_task_rate_id: None,
                 breaks: vec![],
             };
             assert!(validate_correction(date, &input).is_ok(), "{status}");
@@ -660,6 +1019,7 @@ mod tests {
             comments: String::new(),
             correction_reason: "Manager correction".into(),
             corrected_by: "user".into(),
+            work_task_rate_id: None,
             breaks: vec![],
         };
         assert!(validate_correction(date, &invalid).is_err());

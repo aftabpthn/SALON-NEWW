@@ -13,8 +13,11 @@ type Tab = 'Overview' | 'Integrations' | 'API Keys' | 'Webhooks' | 'Imports' | '
 type Provider = { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string };
 type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier' | 'zenoti' | 'dingg'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
 type ConnectorSyncJob = { id: string; provider: string; triggerSource: string; status: string; attempts: number; lastError: string; createdAt: string; completedAt?: string };
+type ConnectorAccountMapping = { localAccountCode: string; externalAccountId: string; externalAccountName: string; version: number; updatedBy: string; updatedAt: string };
+type ConnectorReconciliation = { provider: string; localJournalCount: number; localDebitPaise: number; localCreditPaise: number; syncedJournalCount: number; syncedDebitPaise: number; syncedCreditPaise: number; pendingJournalCount: number; processingJournalCount: number; failedJournalCount: number; uncertainJournalCount: number; unmappedAccountCodes: string[]; balanced: boolean; reconciled: boolean };
 type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; ipAllowlistJson: string[]; rateLimitPerMinute: number; status: string; lastUsedAt?: string; createdAt: string };
 type WebhookRow = { id: string; name: string; endpointUrl: string; events: string[]; active: boolean; updatedAt: string };
+type WebhookDelivery = { id: string; subscriptionId: string; eventType: string; eventId: string; status: string; attempts: number; responseStatus?: number; lastError: string; deliveredAt?: string; deadLetteredAt?: string; replayedAt?: string; replayedBy?: string; createdAt: string; updatedAt: string };
 type MappingAlternative = { targetField: string; confidencePercentage: number; reasons: string[]; rejectionReasons: string[]; requiredTransformation: string };
 type MappingDecision = { sourceColumn: string; targetField?: string; candidates: string[]; aliasLevel: string; confidence: 'green' | 'yellow' | 'red'; confidencePercentage: number; collision: boolean; reason: string; alternativeTargets: MappingAlternative[]; suggestionReasons: string[]; rejectionReasons: string[]; detectedDataType: string; sampleEvidence: string[]; requiredTransformation?: string; approved: boolean; approvalId?: string; approvedBy?: string; approvedAt?: string };
 type MappingSuggestions = { source: string; ruleVersion: string; fingerprint: string; headerFingerprint: string; profileMatch: 'exact' | 'drift' | 'none'; savedProfile?: { id: string; name: string; mappingVersion: number; approvedBy: string; approvedAt: string; headerFingerprint: string; columnCount: number }; headerDiff: { added: string[]; removed: string[] }; semanticSource: string; semanticAdvisory: Record<string, string>; suggestions: Record<string, string>; unmatchedColumns: string[]; decisions: MappingDecision[]; approvalRequiredIssues: string[]; hardBlockingIssues: string[]; blockingIssues: string[] };
@@ -31,8 +34,8 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   readonly apiScopes = ['clients.read', 'appointments.read', 'sales.read', 'staff.read'];
   readonly webhookEvents = ['client.created', 'appointment.created', 'appointment.status_changed', 'sale.status_changed'];
   readonly migrationProviders = ['auto', 'zenoti', 'dingg', 'salonist', 'fresha', 'tally', 'busy', 'marg', 'excel', 'csv', 'manual'];
-  activeTab: Tab = 'Imports'; providers: Provider[] = []; connectors: ConnectorRow[] = []; connectorJobs: ConnectorSyncJob[] = []; apiKeys: ApiKeyRow[] = []; webhooks: WebhookRow[] = [];
-  drawer: 'import' | 'cutover' | 'api-key' | 'webhook' | 'governance' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; postingMode: 'history_only' | 'opening_snapshot' | 'opening_payable' | 'live_receipt' = 'history_only'; cutoverId = ''; cutoverDate = ''; selectedJob: ImportJob | null = null;
+  activeTab: Tab = 'Imports'; providers: Provider[] = []; connectors: ConnectorRow[] = []; connectorJobs: ConnectorSyncJob[] = []; apiKeys: ApiKeyRow[] = []; webhooks: WebhookRow[] = []; webhookDeliveries: WebhookDelivery[] = [];
+  drawer: 'import' | 'cutover' | 'api-key' | 'webhook' | 'governance' | 'accounting' | '' = ''; entity: ImportEntity | '' = ''; mode: 'dry-run' | 'commit' = 'dry-run'; postingMode: 'history_only' | 'opening_snapshot' | 'opening_payable' | 'live_receipt' = 'history_only'; cutoverId = ''; cutoverDate = ''; selectedJob: ImportJob | null = null;
   cutoverDraft = { id: '', businessTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', cutoverDate: '', cutoverTime: '00:00', historicalPeriodEndDate: '', historicalPeriodEndTime: '23:59' };
   snapshotChecksum = '';
   goLiveApprovalNote = '';
@@ -41,6 +44,10 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] as string[] }; revealedSecret = '';
   netsuiteAccountId = '';
   migrationConnectorDraft = { credential: '', authScheme: 'api_key', centerIds: '', startDate: '', endDate: '', exportUrl: '', sourceFileName: 'dingg-export.xlsx', mode: 'dry-run' as 'dry-run' | 'commit' };
+  selectedAccountingConnector: ConnectorRow | null = null;
+  accountingMappings: ConnectorAccountMapping[] = [];
+  accountingReconciliation: ConnectorReconciliation | null = null;
+  accountingMappingDraft: Record<string, { externalAccountId: string; externalAccountName: string }> = {};
   selectedSourceFile: File | null = null; selectedSourceFileId = ''; uploadSessionId = ''; uploadProgress = 0; uploadStatus = '';
   sourceProvider = 'auto'; evidenceRetentionDays = 90; sourceProfile: MigrationSourceProfile | null = null; selectedSourceSheet = ''; selectedHeaderSourceSheet = '';
   quarantineSelected: Record<string, boolean> = {}; quarantineCorrections: Record<string, string> = {};
@@ -62,16 +69,18 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   get canApproveOpeningPayableFinance() { return this.canManageMigrations && this.auth.hasAccess(['owner', 'admin', 'superadmin', 'super-admin'], ['finance.write']); }
   get canConfirmOpeningPayableBranch() { return this.canManageMigrations && this.auth.hasRole('manager'); }
   get canApproveCutoverOwnerActions() { return this.auth.hasRole('owner', 'superadmin', 'super-admin'); }
+  get canManageAccounting() { return this.auth.hasRole('owner', 'admin', 'manager', 'accountant', 'superadmin', 'super-admin') || this.auth.hasPermission('finance.write', 'security.manage'); }
+  get accountingAccountCodes() { return [...new Set([...(this.accountingReconciliation?.unmappedAccountCodes || []), ...this.accountingMappings.map((row) => row.localAccountCode)])].sort(); }
   get nextCutoverStatus(): MigrationCutoverStatus | null { const current = this.activeCutover?.status; return current ? ({ draft: 'history_importing', history_importing: 'inventory_frozen', inventory_frozen: 'snapshot_approved', snapshot_approved: 'snapshot_applied', snapshot_applied: 'reconciled', reconciled: 'live', live: null } as const)[current] : null; }
   get nextCutoverNeedsOwner() { return this.nextCutoverStatus === 'inventory_frozen' || this.nextCutoverStatus === 'snapshot_approved' || this.nextCutoverStatus === 'live'; }
-  get visibleTabs() { return this.canViewApiClients ? this.tabs : this.tabs.filter((tab) => tab !== 'API Keys'); }
+  get visibleTabs() { return this.canViewApiClients ? this.tabs : this.tabs.filter((tab) => tab !== 'API Keys' && tab !== 'Webhooks'); }
 
   async ngOnInit() { if (new URL(location.href).searchParams.get('connector')) this.activeTab = 'Integrations'; await this.reload(); this.refreshTimer = window.setInterval(() => { if (!this.busy && this.jobs.some((job) => ['staging', 'dependency_pending', 'queued', 'processing'].includes(job.status))) void this.reloadImportData(); }, 5000); }
   ngOnDestroy() { window.clearInterval(this.refreshTimer); }
   async reload() {
     this.loading = true; this.error = '';
     try {
-      const [payments, delivery, connectors, connectorJobs, keys, hooks] = await Promise.all([
+      const [payments, delivery, connectors, connectorJobs, keys, hooks, hookDeliveries] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<Provider[]>>('/pos/payment-providers')),
         firstValueFrom(this.api.get<ApiEnvelope<Provider[]>>('/settings/integrations/delivery-providers')),
         firstValueFrom(this.api.get<ApiEnvelope<ConnectorRow[]>>('/settings/integrations/connectors')),
@@ -79,10 +88,15 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
         this.canViewApiClients
           ? firstValueFrom(this.api.get<ApiEnvelope<ApiKeyRow[]>>('/settings/integrations/api-keys'))
           : Promise.resolve({ success: true, data: [] } as ApiEnvelope<ApiKeyRow[]>),
-        firstValueFrom(this.api.get<ApiEnvelope<WebhookRow[]>>('/settings/integrations/webhooks')),
+        this.canViewApiClients
+          ? firstValueFrom(this.api.get<ApiEnvelope<WebhookRow[]>>('/settings/integrations/webhooks'))
+          : Promise.resolve({ success: true, data: [] } as ApiEnvelope<WebhookRow[]>),
+        this.canViewApiClients
+          ? firstValueFrom(this.api.get<ApiEnvelope<WebhookDelivery[]>>('/settings/integrations/webhook-deliveries'))
+          : Promise.resolve({ success: true, data: [] } as ApiEnvelope<WebhookDelivery[]>),
         this.migration.reload(),
       ]);
-      this.providers = [...(delivery.data || []), ...(payments.data || [])]; this.connectors = connectors.data || []; this.connectorJobs = connectorJobs.data || []; this.apiKeys = keys.data || []; this.webhooks = hooks.data || [];
+      this.providers = [...(delivery.data || []), ...(payments.data || [])]; this.connectors = connectors.data || []; this.connectorJobs = connectorJobs.data || []; this.apiKeys = keys.data || []; this.webhooks = hooks.data || []; this.webhookDeliveries = hookDeliveries.data || [];
     } catch (error) { this.error = this.message(error, 'Integration data could not be loaded'); }
     finally { this.loading = false; }
   }
@@ -246,6 +260,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   async revokeApiKey(row: ApiKeyRow) { if (!this.canManageApiClients || !confirm(`Revoke ${row.name}?`)) return; await this.action(async () => { await firstValueFrom(this.api.delete(`/settings/integrations/api-keys/${row.id}`)); await this.reload(); }, 'API key could not be revoked'); }
   async saveWebhook() { if (!this.webhookDraft.name.trim() || !this.webhookDraft.endpointUrl.trim() || !this.webhookDraft.events.length) return; await this.action(async () => { const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/settings/integrations/webhooks', this.webhookDraft)); this.revealedSecret = result.data?.signingSecret || ''; await this.reload(); }, 'Webhook could not be created'); }
   async testWebhook(row: WebhookRow) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/webhooks/${row.id}/test`, {})); }, 'Webhook test could not be queued'); }
+  async replayWebhook(row: WebhookDelivery) { if (!this.canManageApiClients) return; await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/webhook-deliveries/${row.id}/replay`, {})); await this.reload(); }, 'Webhook delivery could not be replayed'); }
   async deactivateWebhook(row: WebhookRow) { if (!confirm(`Deactivate ${row.name}?`)) return; await this.action(async () => { await firstValueFrom(this.api.delete(`/settings/integrations/webhooks/${row.id}`)); await this.reload(); }, 'Webhook could not be deactivated'); }
   async connectConnector(row: ConnectorRow) {
     if (row.provider === 'zapier') { this.activeTab = 'API Keys'; return; }
@@ -280,6 +295,28 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   }
   async syncConnector(row: ConnectorRow) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/connectors/${row.provider}/sync`, {})); await this.reload(); }, `${row.label} sync could not be queued`); }
   async disconnectConnector(row: ConnectorRow) { if (!confirm(`Disconnect ${row.label}?`)) return; await this.action(async () => { await firstValueFrom(this.api.delete(`/settings/integrations/connectors/${row.provider}`)); await this.reload(); }, `${row.label} could not be disconnected`); }
+  async openAccountingConnector(row: ConnectorRow) {
+    if (row.category !== 'accounting') return;
+    this.selectedAccountingConnector = row; this.accountingMappings = []; this.accountingReconciliation = null; this.accountingMappingDraft = {}; this.drawer = 'accounting';
+    await this.action(async () => {
+      const [mappings, reconciliation] = await Promise.all([
+        firstValueFrom(this.api.get<ApiEnvelope<ConnectorAccountMapping[]>>(`/settings/integrations/connectors/${row.provider}/account-mappings`)),
+        firstValueFrom(this.api.get<ApiEnvelope<ConnectorReconciliation>>(`/settings/integrations/connectors/${row.provider}/reconciliation`)),
+      ]);
+      this.accountingMappings = mappings.data || []; this.accountingReconciliation = reconciliation.data || null;
+      for (const mapping of this.accountingMappings) this.accountingMappingDraft[mapping.localAccountCode] = { externalAccountId: mapping.externalAccountId, externalAccountName: mapping.externalAccountName };
+      for (const code of this.accountingReconciliation?.unmappedAccountCodes || []) this.accountingMappingDraft[code] ||= { externalAccountId: '', externalAccountName: '' };
+    }, `${row.label} accounting configuration could not be loaded`);
+  }
+  async saveAccountingMappings() {
+    const connector = this.selectedAccountingConnector; if (!connector || !this.canManageAccounting) return;
+    const rows = Object.entries(this.accountingMappingDraft).filter(([, value]) => value.externalAccountId.trim());
+    if (!rows.length) { this.error = 'Enter at least one external account ID'; return; }
+    await this.action(async () => {
+      for (const [code, value] of rows) await firstValueFrom(this.api.put(`/settings/integrations/connectors/${connector.provider}/account-mappings/${encodeURIComponent(code)}`, { externalAccountId: value.externalAccountId.trim(), externalAccountName: value.externalAccountName.trim() || null }));
+      await this.openAccountingConnector(connector);
+    }, `${connector.label} account mappings could not be saved`);
+  }
   async resume(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/resume`, {})); await this.reloadImportData(); }, 'Import job could not be resumed'); }
   async pause(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/pause`, {})); await this.reloadImportData(); }, 'Import job could not be paused'); }
   async retryFailed(job: ImportJob) { await this.action(async () => { await firstValueFrom(this.api.post(`/settings/integrations/import-jobs/${job.id}/retry-failed`, {})); await this.reloadImportData(); }, 'Failed chunks could not be retried'); }

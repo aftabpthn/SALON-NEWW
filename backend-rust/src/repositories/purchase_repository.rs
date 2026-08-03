@@ -159,10 +159,58 @@ pub struct PurchaseReturnRecord {
     pub purchase_receipt_id: String,
     pub supplier_name: String,
     pub reason: String,
+    pub return_date: NaiveDate,
+    pub credit_note_number: String,
+    pub credit_note_date: Option<NaiveDate>,
+    pub evidence_reference: String,
     pub taxable_paise: i64,
     pub tax_paise: i64,
     pub total_paise: i64,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceivingQuarantineRecord {
+    pub id: String,
+    pub purchase_receipt_id: String,
+    pub purchase_receipt_line_id: String,
+    pub inventory_item_id: String,
+    pub product_name: String,
+    pub supplier_name: String,
+    pub quantity: i32,
+    pub remaining_quantity: i32,
+    pub package_unit: String,
+    pub stock_unit: String,
+    pub units_per_package: i32,
+    pub quantity_basis: String,
+    pub status: String,
+    pub reason: String,
+    pub batch_number: String,
+    pub batch_barcode: String,
+    pub expiry_date: Option<NaiveDate>,
+    pub received_date: NaiveDate,
+    pub unit_cost_paise: i64,
+    pub dispositions: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct LockedReceivingQuarantine {
+    pub id: String,
+    pub purchase_receipt_id: String,
+    pub purchase_receipt_line_id: String,
+    pub inventory_item_id: String,
+    pub quantity: i32,
+    pub remaining_quantity: i32,
+    pub units_per_package: i32,
+    pub quantity_basis: String,
+    pub status: String,
+    pub batch_number: String,
+    pub batch_barcode: String,
+    pub expiry_date: Option<NaiveDate>,
+    pub received_date: NaiveDate,
+    pub unit_cost_paise: i64,
 }
 
 #[derive(Debug, Clone, FromRow, serde::Serialize)]
@@ -636,11 +684,91 @@ pub async fn create_receiving_quarantine(
     batch_number: &str,
     batch_barcode: &str,
     expiry_date: Option<NaiveDate>,
+    unit_cost_paise: i64,
     actor_user_id: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO inventory_receiving_quarantine (tenant_id,branch_id,purchase_receipt_id,purchase_receipt_line_id,inventory_item_id,quantity,reason,batch_number,batch_barcode,expiry_date,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
-        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(receipt_line_id).bind(item_id).bind(quantity).bind(reason).bind(batch_number).bind(batch_barcode).bind(expiry_date).bind(actor_user_id).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO inventory_receiving_quarantine (tenant_id,branch_id,purchase_receipt_id,purchase_receipt_line_id,inventory_item_id,quantity,remaining_quantity,quantity_basis,reason,batch_number,batch_barcode,expiry_date,unit_cost_paise,created_by) VALUES ($1,$2,$3,$4,$5,$6,$6,'base_unit',$7,$8,$9,$10,$11,$12)")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(receipt_line_id).bind(item_id).bind(quantity).bind(reason).bind(batch_number).bind(batch_barcode).bind(expiry_date).bind(unit_cost_paise).bind(actor_user_id).execute(&mut **tx).await?;
     Ok(())
+}
+
+pub async fn list_receiving_quarantine(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<ReceivingQuarantineRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT quarantine.id,quarantine.purchase_receipt_id,quarantine.purchase_receipt_line_id,quarantine.inventory_item_id,item.name AS product_name,receipt.supplier_name,quarantine.quantity,quarantine.remaining_quantity,line.package_unit,line.stock_unit,line.units_per_package,quarantine.quantity_basis,quarantine.status,quarantine.reason,quarantine.batch_number,quarantine.batch_barcode,quarantine.expiry_date,receipt.received_date,quarantine.unit_cost_paise,COALESCE((SELECT jsonb_agg(jsonb_build_object('id',disposition.id,'action',disposition.action,'quantity',disposition.quantity,'reason',disposition.reason,'evidenceReference',disposition.evidence_reference,'creditNoteNumber',disposition.credit_note_number,'actorUserId',disposition.actor_user_id,'createdAt',disposition.created_at) ORDER BY disposition.created_at,disposition.id) FROM inventory_quarantine_dispositions disposition WHERE disposition.tenant_id=quarantine.tenant_id AND disposition.branch_id=quarantine.branch_id AND disposition.quarantine_id=quarantine.id),'[]'::JSONB) AS dispositions,quarantine.created_at FROM inventory_receiving_quarantine quarantine JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id AND line.tenant_id=quarantine.tenant_id AND line.branch_id=quarantine.branch_id JOIN purchase_receipts receipt ON receipt.id=quarantine.purchase_receipt_id AND receipt.tenant_id=quarantine.tenant_id AND receipt.branch_id=quarantine.branch_id JOIN inventory_items item ON item.id=quarantine.inventory_item_id AND item.tenant_id=quarantine.tenant_id AND item.branch_id=quarantine.branch_id WHERE quarantine.tenant_id=$1 AND quarantine.branch_id=$2 ORDER BY (quarantine.remaining_quantity>0) DESC,quarantine.created_at DESC")
+        .bind(tenant_id).bind(branch_id).fetch_all(db).await
+}
+
+pub async fn lock_receiving_quarantine(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<LockedReceivingQuarantine>, sqlx::Error> {
+    sqlx::query_as("SELECT quarantine.id,quarantine.purchase_receipt_id,quarantine.purchase_receipt_line_id,quarantine.inventory_item_id,quarantine.quantity,quarantine.remaining_quantity,line.units_per_package,quarantine.quantity_basis,quarantine.status,quarantine.batch_number,quarantine.batch_barcode,quarantine.expiry_date,receipt.received_date,quarantine.unit_cost_paise FROM inventory_receiving_quarantine quarantine JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id AND line.tenant_id=quarantine.tenant_id AND line.branch_id=quarantine.branch_id JOIN purchase_receipts receipt ON receipt.id=quarantine.purchase_receipt_id AND receipt.tenant_id=quarantine.tenant_id AND receipt.branch_id=quarantine.branch_id WHERE quarantine.tenant_id=$1 AND quarantine.branch_id=$2 AND quarantine.id=$3 FOR UPDATE OF quarantine")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut **tx).await
+}
+
+pub async fn quarantine_disposition_replay(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    key: &str,
+) -> Result<Option<(String, String, String, i32)>, sqlx::Error> {
+    sqlx::query_as("SELECT id,quarantine_id,action,quantity FROM inventory_quarantine_dispositions WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+        .bind(tenant_id).bind(branch_id).bind(key).fetch_optional(&mut **tx).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_quarantine_disposition(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    quarantine_id: &str,
+    action: &str,
+    quantity: i32,
+    unit_cost_paise: i64,
+    reason: &str,
+    evidence_reference: &str,
+    credit_note_number: &str,
+    actor: &str,
+    key: &str,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO inventory_quarantine_dispositions(tenant_id,branch_id,quarantine_id,action,quantity,unit_cost_paise,reason,evidence_reference,credit_note_number,actor_user_id,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(quarantine_id).bind(action).bind(quantity).bind(unit_cost_paise).bind(reason).bind(evidence_reference).bind(credit_note_number).bind(actor).bind(key).fetch_one(&mut **tx).await
+}
+
+pub async fn finish_quarantine_disposition(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    quarantine_id: &str,
+    _disposition_id: &str,
+    remaining_quantity: i32,
+    _stock_ledger_id: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE inventory_receiving_quarantine SET remaining_quantity=$4,status=CASE WHEN $4>0 THEN 'partially_disposed' WHEN (SELECT COUNT(DISTINCT action) FROM inventory_quarantine_dispositions WHERE tenant_id=$1 AND branch_id=$2 AND quarantine_id=$3)=1 THEN (SELECT CASE action WHEN 'release' THEN 'released' WHEN 'return' THEN 'returned' ELSE 'discarded' END FROM inventory_quarantine_dispositions WHERE tenant_id=$1 AND branch_id=$2 AND quarantine_id=$3 LIMIT 1) ELSE 'mixed' END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(quarantine_id).bind(remaining_quantity).execute(&mut **tx).await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn add_quarantine_release_ledger(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    item_id: &str,
+    receipt_id: &str,
+    receipt_line_id: &str,
+    disposition_id: &str,
+    quantity: i32,
+    unit_cost_paise: i64,
+    stock_after: i32,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,purchase_receipt_id,purchase_receipt_line_id,quarantine_disposition_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity) VALUES($1,$2,$3,$4,$5,$6,'quarantine_release',$7,$8,$9) RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(item_id).bind(receipt_id).bind(receipt_line_id).bind(disposition_id).bind(quantity).bind(unit_cost_paise).bind(stock_after).fetch_one(&mut **tx).await
 }
 
 pub async fn apply_stock(
@@ -898,10 +1026,22 @@ pub async fn create_order(
     tax_paise: i64,
     shipping_paise: i64,
     handling_paise: i64,
+    number_prefix: &str,
     created_by: &str,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO purchase_orders(tenant_id,branch_id,order_number,supplier_id,expected_date,notes,taxable_paise,tax_paise,shipping_paise,handling_paise,total_paise,created_by) SELECT $1,$2,'PO-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),supplier.id,$4,$5,$6,$7,$8,$9,$6+$7+$8+$9,$10 FROM suppliers supplier WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2 AND supplier.id=$3 AND supplier.active=TRUE RETURNING id")
-        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(expected_date).bind(notes).bind(taxable_paise).bind(tax_paise).bind(shipping_paise).bind(handling_paise).bind(created_by).fetch_one(&mut **tx).await
+    sqlx::query_scalar("INSERT INTO purchase_orders(tenant_id,branch_id,order_number,supplier_id,expected_date,notes,taxable_paise,tax_paise,shipping_paise,handling_paise,total_paise,created_by) SELECT $1,$2,$10||'-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||UPPER(SUBSTRING(REPLACE(gen_random_uuid()::TEXT,'-','') FROM 1 FOR 8)),supplier.id,$4,$5,$6,$7,$8,$9,$6+$7+$8+$9,$11 FROM suppliers supplier WHERE supplier.tenant_id=$1 AND supplier.branch_id=$2 AND supplier.id=$3 AND supplier.active=TRUE RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(supplier_id).bind(expected_date).bind(notes).bind(taxable_paise).bind(tax_paise).bind(shipping_paise).bind(handling_paise).bind(number_prefix).bind(created_by).fetch_one(&mut **tx).await
+}
+
+pub async fn queue_order_email(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    order_id: &str,
+    actor: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("INSERT INTO supplier_communication_queue(tenant_id,branch_id,supplier_id,purchase_order_id,channel,destination,subject,message,idempotency_key,created_by) SELECT po.tenant_id,po.branch_id,po.supplier_id,po.id,'email',supplier.email,'Purchase order '||po.order_number,'Purchase order '||po.order_number||' total: '||po.total_paise||' paise','po:'||po.id||':send', $4 FROM purchase_orders po JOIN suppliers supplier ON supplier.id=po.supplier_id AND supplier.tenant_id=po.tenant_id AND supplier.branch_id=po.branch_id WHERE po.tenant_id=$1 AND po.branch_id=$2 AND po.id=$3 AND BTRIM(COALESCE(supplier.email,''))<>'' ON CONFLICT(tenant_id,branch_id,idempotency_key) DO NOTHING")
+        .bind(tenant_id).bind(branch_id).bind(order_id).bind(actor).execute(&mut **tx).await?.rows_affected() == 1)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -994,7 +1134,7 @@ pub async fn list_returns(
     offset: Option<i64>,
 ) -> Result<Vec<PurchaseReturnRecord>, sqlx::Error> {
     let query = apply_purchase_list_pagination(
-        "SELECT return_row.id,return_row.purchase_receipt_id,receipt.supplier_name,return_row.reason,return_row.taxable_paise,return_row.tax_paise,return_row.total_paise,return_row.created_at FROM purchase_returns return_row JOIN purchase_receipts receipt ON receipt.id=return_row.purchase_receipt_id AND receipt.tenant_id=return_row.tenant_id AND receipt.branch_id=return_row.branch_id WHERE return_row.tenant_id=$1 AND return_row.branch_id=$2 AND receipt.rolled_back_at IS NULL ORDER BY return_row.created_at DESC"
+        "SELECT return_row.id,return_row.purchase_receipt_id,receipt.supplier_name,return_row.reason,return_row.return_date,return_row.credit_note_number,return_row.credit_note_date,return_row.evidence_reference,return_row.taxable_paise,return_row.tax_paise,return_row.total_paise,return_row.created_at FROM purchase_returns return_row JOIN purchase_receipts receipt ON receipt.id=return_row.purchase_receipt_id AND receipt.tenant_id=return_row.tenant_id AND receipt.branch_id=return_row.branch_id WHERE return_row.tenant_id=$1 AND return_row.branch_id=$2 AND receipt.rolled_back_at IS NULL ORDER BY return_row.return_date DESC,return_row.created_at DESC"
             .to_string(),
         limit,
         offset,
@@ -1033,13 +1173,17 @@ pub async fn create_return(
     branch_id: &str,
     receipt_id: &str,
     reason: &str,
+    return_date: NaiveDate,
+    credit_note_number: &str,
+    credit_note_date: NaiveDate,
+    evidence_reference: &str,
     taxable_paise: i64,
     tax_paise: i64,
     key: &str,
     actor: &str,
 ) -> Result<String, sqlx::Error> {
-    sqlx::query_scalar("INSERT INTO purchase_returns(tenant_id,branch_id,purchase_receipt_id,supplier_id,reason,taxable_paise,tax_paise,total_paise,idempotency_key,created_by) SELECT $1,$2,receipt.id,receipt.supplier_id,$4,$5,$6,$5+$6,$7,$8 FROM purchase_receipts receipt WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.id=$3 AND receipt.rolled_back_at IS NULL RETURNING id")
-        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(reason).bind(taxable_paise).bind(tax_paise).bind(key).bind(actor).fetch_one(&mut **tx).await
+    sqlx::query_scalar("INSERT INTO purchase_returns(tenant_id,branch_id,purchase_receipt_id,supplier_id,reason,return_date,credit_note_number,credit_note_date,evidence_reference,taxable_paise,tax_paise,total_paise,idempotency_key,created_by) SELECT $1,$2,receipt.id,receipt.supplier_id,$4,$5,$6,$7,$8,$9,$10,$9+$10,$11,$12 FROM purchase_receipts receipt WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.id=$3 AND receipt.rolled_back_at IS NULL RETURNING id")
+        .bind(tenant_id).bind(branch_id).bind(receipt_id).bind(reason).bind(return_date).bind(credit_note_number).bind(credit_note_date).bind(evidence_reference).bind(taxable_paise).bind(tax_paise).bind(key).bind(actor).fetch_one(&mut **tx).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1082,14 +1226,19 @@ pub async fn list_payables(
     offset: Option<i64>,
 ) -> Result<Vec<PayableRecord>, sqlx::Error> {
     let query = apply_purchase_list_pagination(
-        r#"SELECT * FROM (
+        r#"WITH quarantine_release_totals AS (
+             SELECT quarantine.purchase_receipt_id,SUM(disposition.quantity::BIGINT*disposition.unit_cost_paise*CASE WHEN quarantine.quantity_basis='base_unit' THEN 1 ELSE GREATEST(line.units_per_package,1) END)::BIGINT AS released_paise
+             FROM inventory_quarantine_dispositions disposition JOIN inventory_receiving_quarantine quarantine ON quarantine.id=disposition.quarantine_id AND quarantine.tenant_id=disposition.tenant_id AND quarantine.branch_id=disposition.branch_id JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id
+             WHERE disposition.tenant_id=$1 AND disposition.branch_id=$2 AND disposition.action='release' GROUP BY quarantine.purchase_receipt_id
+           ) SELECT * FROM (
              SELECT receipt.id AS purchase_receipt_id,'live_receipt'::TEXT AS source_type,
                     receipt.supplier_id,supplier.name AS supplier_name,receipt.supplier_invoice_number,
-                    receipt.received_date,receipt.due_date,receipt.total_paise,
+                    receipt.received_date,receipt.due_date,receipt.total_paise+COALESCE(release.released_paise,0) AS total_paise,
                     COALESCE((SELECT SUM(total_paise) FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)::BIGINT AS returned_paise,
                     COALESCE((SELECT SUM(amount_paise) FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)::BIGINT AS paid_paise,
-                    GREATEST(receipt.total_paise-COALESCE((SELECT SUM(total_paise) FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)-COALESCE((SELECT SUM(amount_paise) FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0),0)::BIGINT AS balance_paise
+                    GREATEST(receipt.total_paise+COALESCE(release.released_paise,0)-COALESCE((SELECT SUM(total_paise) FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)-COALESCE((SELECT SUM(amount_paise) FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0),0)::BIGINT AS balance_paise
                FROM purchase_receipts receipt JOIN suppliers supplier ON supplier.id=receipt.supplier_id
+               LEFT JOIN quarantine_release_totals release ON release.purchase_receipt_id=receipt.id
               WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.rolled_back_at IS NULL
              UNION ALL
              SELECT 'opening:'||line.id,'opening_migration',line.supplier_id,supplier.name,
@@ -1126,16 +1275,21 @@ pub async fn supplier_payment_summary(
         r#"WITH return_totals AS (
              SELECT purchase_receipt_id,SUM(total_paise)::BIGINT AS returned_paise
              FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 GROUP BY purchase_receipt_id
+           ), quarantine_release_totals AS (
+             SELECT quarantine.purchase_receipt_id,SUM(disposition.quantity::BIGINT*disposition.unit_cost_paise*CASE WHEN quarantine.quantity_basis='base_unit' THEN 1 ELSE GREATEST(line.units_per_package,1) END)::BIGINT AS released_paise
+             FROM inventory_quarantine_dispositions disposition JOIN inventory_receiving_quarantine quarantine ON quarantine.id=disposition.quarantine_id AND quarantine.tenant_id=disposition.tenant_id AND quarantine.branch_id=disposition.branch_id JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id
+             WHERE disposition.tenant_id=$1 AND disposition.branch_id=$2 AND disposition.action='release' GROUP BY quarantine.purchase_receipt_id
            ), payment_totals AS (
              SELECT purchase_receipt_id,SUM(amount_paise)::BIGINT AS paid_paise
              FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 GROUP BY purchase_receipt_id
            ), receipt_totals AS (
              SELECT receipt.supplier_id,
                     SUM(COALESCE(payment.paid_paise,0))::BIGINT AS paid_paise,
-                    SUM(GREATEST(receipt.total_paise-COALESCE(ret.returned_paise,0)-COALESCE(payment.paid_paise,0),0))::BIGINT AS unpaid_paise
+                    SUM(GREATEST(receipt.total_paise+COALESCE(release.released_paise,0)-COALESCE(ret.returned_paise,0)-COALESCE(payment.paid_paise,0),0))::BIGINT AS unpaid_paise
              FROM purchase_receipts receipt
              LEFT JOIN return_totals ret ON ret.purchase_receipt_id=receipt.id
              LEFT JOIN payment_totals payment ON payment.purchase_receipt_id=receipt.id
+             LEFT JOIN quarantine_release_totals release ON release.purchase_receipt_id=receipt.id
              WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.supplier_id IS NOT NULL AND receipt.rolled_back_at IS NULL
              GROUP BY receipt.supplier_id
            ), advance_totals AS (
@@ -1327,7 +1481,7 @@ pub async fn payable_balance_for_update(
         .fetch_optional(&mut **tx)
         .await;
     }
-    sqlx::query_scalar("SELECT GREATEST(receipt.total_paise-COALESCE((SELECT SUM(total_paise) FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)-COALESCE((SELECT SUM(amount_paise) FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0),0)::BIGINT FROM purchase_receipts receipt WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.id=$3 AND receipt.supplier_id IS NOT NULL AND receipt.rolled_back_at IS NULL FOR UPDATE")
+    sqlx::query_scalar("SELECT GREATEST(receipt.total_paise+COALESCE((SELECT SUM(disposition.quantity::BIGINT*disposition.unit_cost_paise*CASE WHEN quarantine.quantity_basis='base_unit' THEN 1 ELSE GREATEST(line.units_per_package,1) END) FROM inventory_quarantine_dispositions disposition JOIN inventory_receiving_quarantine quarantine ON quarantine.id=disposition.quarantine_id JOIN purchase_receipt_lines line ON line.id=quarantine.purchase_receipt_line_id WHERE disposition.tenant_id=$1 AND disposition.branch_id=$2 AND disposition.action='release' AND quarantine.purchase_receipt_id=receipt.id),0)-COALESCE((SELECT SUM(total_paise) FROM purchase_returns WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0)-COALESCE((SELECT SUM(amount_paise) FROM supplier_payments WHERE tenant_id=$1 AND branch_id=$2 AND purchase_receipt_id=receipt.id),0),0)::BIGINT FROM purchase_receipts receipt WHERE receipt.tenant_id=$1 AND receipt.branch_id=$2 AND receipt.id=$3 AND receipt.supplier_id IS NOT NULL AND receipt.rolled_back_at IS NULL FOR UPDATE")
         .bind(tenant_id).bind(branch_id).bind(receipt_id).fetch_optional(&mut **tx).await
 }
 

@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
@@ -45,11 +45,14 @@ pub struct AttendanceDetailRecord {
     pub overtime_minutes: i32,
     pub break_minutes: i32,
     pub penalty_paise: i64,
+    pub cash_tip_paise: i64,
+    pub session_count: i32,
     pub source: String,
     pub comments: String,
     pub correction_reason: String,
     pub corrected_at: Option<DateTime<Utc>>,
     pub breaks: Value,
+    pub sessions: Value,
     pub operations: Value,
 }
 
@@ -70,6 +73,8 @@ pub struct AttendanceRecord {
     pub overtime_minutes: i32,
     pub break_minutes: i32,
     pub penalty_paise: i64,
+    pub cash_tip_paise: i64,
+    pub session_count: i32,
     pub comments: String,
     pub correction_reason: String,
     pub corrected_at: Option<DateTime<Utc>>,
@@ -99,7 +104,28 @@ pub struct AttendanceCorrectionInput {
     pub comments: String,
     pub correction_reason: String,
     pub corrected_by: String,
+    pub work_task_rate_id: Option<String>,
     pub breaks: Vec<AttendanceBreakInput>,
+}
+
+pub async fn break_inputs_for_day(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<Vec<AttendanceBreakInput>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (DateTime<Utc>, DateTime<Utc>, String)>(
+        "SELECT breaks.started_at,breaks.ended_at,breaks.comments FROM staff_attendance_breaks breaks JOIN staff_attendance_records attendance ON attendance.id=breaks.attendance_id WHERE breaks.tenant_id=$1 AND breaks.branch_id=$2 AND breaks.staff_id=$3 AND attendance.business_date=$4 AND breaks.ended_at IS NOT NULL ORDER BY breaks.started_at"
+    ).bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).fetch_all(db).await?;
+    Ok(rows
+        .into_iter()
+        .map(|(started_at, ended_at, comments)| AttendanceBreakInput {
+            started_at,
+            ended_at,
+            comments,
+        })
+        .collect())
 }
 
 pub struct AttendanceAdjustmentInput {
@@ -265,6 +291,7 @@ pub async fn detail_rows(
                COALESCE(a.early_leave_minutes,0) AS early_leave_minutes,
                COALESCE(a.overtime_minutes,0) AS overtime_minutes,
                COALESCE(a.break_minutes,0) AS break_minutes,COALESCE(a.penalty_paise,0)::BIGINT AS penalty_paise,
+               COALESCE(a.cash_tip_paise,0)::BIGINT AS cash_tip_paise,COALESCE(a.session_count,0) AS session_count,
                COALESCE(a.source,'') AS source,COALESCE(a.comments,s.notes,'') AS comments,
                COALESCE(a.correction_reason,'') AS correction_reason,a.corrected_at,
                COALESCE((
@@ -274,6 +301,16 @@ pub async fn detail_rows(
                  FROM staff_attendance_breaks b
                  WHERE b.tenant_id=a.tenant_id AND b.branch_id=a.branch_id AND b.attendance_id=a.id
                ),'[]'::jsonb) AS breaks,
+               COALESCE((
+                 SELECT jsonb_agg(jsonb_build_object(
+                   'id',session.id,'clockInAt',session.clock_in_at,'clockOutAt',session.clock_out_at,
+                   'workTaskRateId',session.work_task_rate_id,'workTaskName',session.work_task_name,
+                   'payRatePaise',session.pay_rate_paise,'cashTipPaise',session.cash_tip_paise,'source',session.source
+                 ) ORDER BY session.clock_in_at)
+                 FROM staff_attendance_sessions session
+                 WHERE session.tenant_id=a.tenant_id AND session.branch_id=a.branch_id AND session.attendance_id=a.id
+                   AND session.superseded_at IS NULL
+               ),'[]'::jsonb) AS sessions,
                COALESCE((
                  SELECT jsonb_agg(jsonb_build_object(
                    'id',op.id,'title',op.title,'operationType',op.operation_type,'status',op.status,
@@ -313,7 +350,7 @@ pub async fn get_for_day(
     staff_id: &str,
     business_date: NaiveDate,
 ) -> Result<Option<AttendanceRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,staff_id,business_date,clock_in_at,clock_out_at,status,manual_status,source,worked_minutes,late_minutes,early_leave_minutes,overtime_minutes,break_minutes,penalty_paise,comments,correction_reason,corrected_at FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4")
+    sqlx::query_as("SELECT id,staff_id,business_date,clock_in_at,clock_out_at,status,manual_status,source,worked_minutes,late_minutes,early_leave_minutes,overtime_minutes,break_minutes,penalty_paise,cash_tip_paise,session_count,comments,correction_reason,corrected_at FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4")
         .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).fetch_optional(db).await
 }
 
@@ -338,24 +375,34 @@ const RECALCULATE_ATTENDANCE_SQL: &str = r#"
       WHERE employee.tenant_id=$1 AND employee.branch_id=$2 AND employee.id=$3
     ), metrics AS (
       SELECT a.id,
-             CASE WHEN a.clock_in_at IS NULL OR settings.start_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (((a.clock_in_at AT TIME ZONE 'Asia/Kolkata')::TIME)-settings.start_time))/60)::INTEGER-settings.grace_minutes) END AS late,
-             CASE WHEN a.clock_out_at IS NULL OR settings.end_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (settings.end_time-((a.clock_out_at AT TIME ZONE 'Asia/Kolkata')::TIME)))/60)::INTEGER-settings.early_leave_grace_minutes) END AS early_leave,
-             CASE WHEN a.clock_out_at IS NULL OR settings.end_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (((a.clock_out_at AT TIME ZONE 'Asia/Kolkata')::TIME)-settings.end_time))/60)::INTEGER-settings.overtime_after_minutes) END AS raw_overtime,
-             CASE WHEN a.clock_in_at IS NULL OR a.clock_out_at IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (a.clock_out_at-a.clock_in_at))/60)::INTEGER) END AS gross_minutes,
+             session.first_clock_in,session.last_clock_out,session.has_open_session,session.gross_minutes,session.session_count,session.cash_tip_paise,
+             CASE WHEN session.first_clock_in IS NULL OR settings.start_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (((session.first_clock_in AT TIME ZONE 'Asia/Kolkata')::TIME)-settings.start_time))/60)::INTEGER-settings.grace_minutes) END AS late,
+             CASE WHEN session.has_open_session OR session.last_clock_out IS NULL OR settings.end_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (settings.end_time-((session.last_clock_out AT TIME ZONE 'Asia/Kolkata')::TIME)))/60)::INTEGER-settings.early_leave_grace_minutes) END AS early_leave,
+             CASE WHEN session.has_open_session OR session.last_clock_out IS NULL OR settings.end_time IS NULL THEN 0 ELSE GREATEST(0,FLOOR(EXTRACT(EPOCH FROM (((session.last_clock_out AT TIME ZONE 'Asia/Kolkata')::TIME)-settings.end_time))/60)::INTEGER-settings.overtime_after_minutes) END AS raw_overtime,
              COALESCE((SELECT SUM(FLOOR(EXTRACT(EPOCH FROM (b.ended_at-b.started_at))/60)::INTEGER) FROM staff_attendance_breaks b WHERE b.tenant_id=$1 AND b.branch_id=$2 AND b.attendance_id=a.id),0)::INTEGER AS break_minutes,
              settings.*
       FROM staff_attendance_records a CROSS JOIN settings
+      CROSS JOIN LATERAL (
+        SELECT MIN(s.clock_in_at) AS first_clock_in,MAX(s.clock_out_at) AS last_clock_out,
+               BOOL_OR(s.clock_out_at IS NULL) AS has_open_session,
+               COALESCE(SUM(CASE WHEN s.clock_out_at IS NULL THEN 0 ELSE FLOOR(EXTRACT(EPOCH FROM (s.clock_out_at-s.clock_in_at))/60)::INTEGER END),0)::INTEGER AS gross_minutes,
+               COUNT(*)::INTEGER AS session_count,COALESCE(SUM(s.cash_tip_paise),0)::BIGINT AS cash_tip_paise
+        FROM staff_attendance_sessions s WHERE s.attendance_id=a.id AND s.superseded_at IS NULL
+      ) session
       WHERE a.tenant_id=$1 AND a.branch_id=$2 AND a.staff_id=$3 AND a.business_date=$4
     )
     UPDATE staff_attendance_records a SET
+      clock_in_at=metrics.first_clock_in,clock_out_at=CASE WHEN metrics.has_open_session THEN NULL ELSE metrics.last_clock_out END,
       late_minutes=metrics.late,early_leave_minutes=metrics.early_leave,break_minutes=metrics.break_minutes,
+      cash_tip_paise=metrics.cash_tip_paise,session_count=metrics.session_count,
       worked_minutes=GREATEST(0,metrics.gross_minutes-CASE WHEN metrics.deduct_breaks THEN metrics.break_minutes ELSE 0 END),
       overtime_minutes=CASE WHEN metrics.raw_overtime<metrics.minimum_overtime_minutes THEN 0 ELSE LEAST(
         CASE WHEN metrics.maximum_overtime_minutes>0 THEN metrics.maximum_overtime_minutes ELSE metrics.raw_overtime END,
         CASE WHEN metrics.overtime_rounding_minutes>0 THEN (metrics.raw_overtime/metrics.overtime_rounding_minutes)*metrics.overtime_rounding_minutes ELSE metrics.raw_overtime END
       ) END,
       status=COALESCE(a.manual_status,CASE
-        WHEN a.clock_out_at IS NULL THEN CASE WHEN a.clock_in_at IS NULL THEN a.status ELSE 'clocked_in' END
+        WHEN metrics.has_open_session THEN 'clocked_in'
+        WHEN metrics.last_clock_out IS NULL THEN a.status
         WHEN metrics.absent_after_minutes>0 AND metrics.late>=metrics.absent_after_minutes THEN 'absent'
         WHEN metrics.half_day_after_minutes>0 AND metrics.late>=metrics.half_day_after_minutes THEN 'half_day'
         WHEN metrics.late>0 THEN 'late'
@@ -363,7 +410,7 @@ const RECALCULATE_ATTENDANCE_SQL: &str = r#"
     FROM metrics WHERE a.id=metrics.id
     RETURNING a.id,a.staff_id,a.business_date,a.clock_in_at,a.clock_out_at,a.status,a.manual_status,a.source,
               a.worked_minutes,a.late_minutes,a.early_leave_minutes,a.overtime_minutes,a.break_minutes,
-              a.penalty_paise,a.comments,a.correction_reason,a.corrected_at
+              a.penalty_paise,a.cash_tip_paise,a.session_count,a.comments,a.correction_reason,a.corrected_at
 "#;
 
 pub async fn clock_in(
@@ -375,11 +422,247 @@ pub async fn clock_in(
     clock_in_at: DateTime<Utc>,
     source: &str,
     comments: &str,
+    work_task_rate_id: Option<&str>,
 ) -> Result<AttendanceRecord, sqlx::Error> {
-    sqlx::query("INSERT INTO staff_attendance_records(tenant_id,branch_id,staff_id,business_date,clock_in_at,status,source,comments) VALUES($1,$2,$3,$4,$5,'clocked_in',$6,$7)")
-        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date)
-        .bind(clock_in_at).bind(source).bind(comments).execute(db).await?;
-    recalculate(db, tenant_id, branch_id, staff_id, business_date).await
+    let mut tx = db.begin().await?;
+    let task = if let Some(id) = work_task_rate_id {
+        sqlx::query_as::<_, (String, String, i64)>("SELECT id,task_name,pay_rate_paise FROM staff_work_task_pay_rates WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND active=TRUE")
+            .bind(tenant_id).bind(branch_id).bind(staff_id).bind(id).fetch_optional(&mut *tx).await?
+    } else {
+        None
+    };
+    let attendance_id = sqlx::query_scalar::<_, String>(
+        "INSERT INTO staff_attendance_records(tenant_id,branch_id,staff_id,business_date,clock_in_at,status,source,comments) VALUES($1,$2,$3,$4,$5,'clocked_in',$6,$7) ON CONFLICT(tenant_id,branch_id,staff_id,business_date) DO UPDATE SET clock_out_at=NULL,status='clocked_in',source=EXCLUDED.source,comments=EXCLUDED.comments,updated_at=NOW() RETURNING id"
+    ).bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).bind(clock_in_at).bind(source).bind(comments).fetch_one(&mut *tx).await?;
+    sqlx::query("INSERT INTO staff_attendance_sessions(tenant_id,branch_id,staff_id,attendance_id,business_date,clock_in_at,work_task_rate_id,work_task_name,pay_rate_paise,source,comments) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(&attendance_id).bind(business_date).bind(clock_in_at)
+        .bind(task.as_ref().map(|row| row.0.as_str())).bind(task.as_ref().map(|row| row.1.as_str()).unwrap_or(""))
+        .bind(task.as_ref().map(|row| row.2).unwrap_or(0)).bind(source).bind(comments).execute(&mut *tx).await?;
+    let row = sqlx::query_as(RECALCULATE_ATTENDANCE_SQL)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .bind(business_date)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceWorkTaskRateRecord {
+    pub id: String,
+    pub task_name: String,
+    pub pay_rate_paise: i64,
+    pub version: i32,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceClockPolicyRecord {
+    pub has_schedule: bool,
+    pub schedule_start: Option<NaiveTime>,
+    pub scheduled_clock_in_mode: String,
+    pub unscheduled_clock_in_mode: String,
+    pub early_clock_in_minutes: i32,
+    pub mandatory_break_after_minutes: i32,
+    pub mandatory_break_minutes: i32,
+    pub automatic_break_enabled: bool,
+    pub forgot_clock_out_minutes: i32,
+}
+
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct AttendanceCorrectionRequestRecord {
+    pub id: String,
+    pub staff_id: String,
+    pub staff_name: String,
+    pub business_date: NaiveDate,
+    pub requested_clock_in_at: Option<DateTime<Utc>>,
+    pub requested_clock_out_at: Option<DateTime<Utc>>,
+    pub requested_work_task_rate_id: Option<String>,
+    pub work_task_name: String,
+    pub reason: String,
+    pub status: String,
+    pub requested_by: String,
+    pub reviewed_by: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub review_note: String,
+    pub version: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+}
+
+const CORRECTION_REQUEST_COLUMNS: &str = r#"request.id,request.staff_id,
+  COALESCE(NULLIF(staff.appointment_display_name,''),TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),request.staff_id) AS staff_name,
+  request.business_date,request.requested_clock_in_at,request.requested_clock_out_at,request.requested_work_task_rate_id,
+  COALESCE(task.task_name,'') AS work_task_name,request.reason,request.status,request.requested_by,
+  request.reviewed_by,request.reviewed_at,request.review_note,request.version,request.created_at,request.updated_at"#;
+
+pub async fn list_correction_requests(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    status: &str,
+) -> Result<Vec<AttendanceCorrectionRequestRecord>, sqlx::Error> {
+    let sql = format!(
+        r#"SELECT {CORRECTION_REQUEST_COLUMNS}
+      FROM staff_attendance_correction_requests request
+      JOIN staff ON staff.tenant_id=request.tenant_id AND staff.branch_id=request.branch_id AND staff.id=request.staff_id
+      LEFT JOIN staff_work_task_pay_rates task ON task.id=request.requested_work_task_rate_id
+      WHERE request.tenant_id=$1 AND request.branch_id=$2 AND ($3='' OR request.staff_id=$3) AND ($4='' OR request.status=$4)
+      ORDER BY request.created_at DESC,request.id DESC LIMIT 500"#
+    );
+    sqlx::query_as(&sql)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .bind(status)
+        .fetch_all(db)
+        .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn create_correction_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+    requested_clock_in_at: Option<DateTime<Utc>>,
+    requested_clock_out_at: Option<DateTime<Utc>>,
+    requested_work_task_rate_id: Option<&str>,
+    reason: &str,
+    requested_by: &str,
+) -> Result<AttendanceCorrectionRequestRecord, sqlx::Error> {
+    let sql = format!(
+        r#"WITH inserted AS (
+      INSERT INTO staff_attendance_correction_requests(tenant_id,branch_id,staff_id,business_date,requested_clock_in_at,requested_clock_out_at,requested_work_task_rate_id,reason,requested_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
+    ) SELECT {CORRECTION_REQUEST_COLUMNS} FROM inserted request
+      JOIN staff ON staff.tenant_id=request.tenant_id AND staff.branch_id=request.branch_id AND staff.id=request.staff_id
+      LEFT JOIN staff_work_task_pay_rates task ON task.id=request.requested_work_task_rate_id"#
+    );
+    sqlx::query_as(&sql)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .bind(business_date)
+        .bind(requested_clock_in_at)
+        .bind(requested_clock_out_at)
+        .bind(requested_work_task_rate_id)
+        .bind(reason)
+        .bind(requested_by)
+        .fetch_one(db)
+        .await
+}
+
+pub async fn get_correction_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+) -> Result<Option<AttendanceCorrectionRequestRecord>, sqlx::Error> {
+    let sql = format!(
+        r#"SELECT {CORRECTION_REQUEST_COLUMNS} FROM staff_attendance_correction_requests request
+      JOIN staff ON staff.tenant_id=request.tenant_id AND staff.branch_id=request.branch_id AND staff.id=request.staff_id
+      LEFT JOIN staff_work_task_pay_rates task ON task.id=request.requested_work_task_rate_id
+      WHERE request.tenant_id=$1 AND request.branch_id=$2 AND request.id=$3"#
+    );
+    sqlx::query_as(&sql)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(id)
+        .fetch_optional(db)
+        .await
+}
+
+pub async fn claim_correction_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    version: i32,
+    reviewer_id: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE staff_attendance_correction_requests SET status='processing',reviewed_by=$5,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='pending' AND version=$4")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(version).bind(reviewer_id).execute(db).await?.rows_affected()==1)
+}
+
+pub async fn finish_correction_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    from_status: &str,
+    status: &str,
+    reviewer_id: &str,
+    review_note: &str,
+) -> Result<bool, sqlx::Error> {
+    Ok(sqlx::query("UPDATE staff_attendance_correction_requests SET status=$5,reviewed_by=$6,reviewed_at=CASE WHEN $5='pending' THEN NULL ELSE NOW() END,review_note=$7,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status=$4")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(from_status).bind(status).bind(reviewer_id).bind(review_note).execute(db).await?.rows_affected()==1)
+}
+
+pub async fn work_task_rates(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<Vec<AttendanceWorkTaskRateRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,task_name,pay_rate_paise,version FROM staff_work_task_pay_rates WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND active=TRUE ORDER BY task_name,id")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).fetch_all(db).await
+}
+
+pub async fn clock_policy(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<AttendanceClockPolicyRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT schedule.id IS NOT NULL AND schedule.status='working' AS has_schedule,
+                  schedule.shift1_start AS schedule_start,
+                  COALESCE(rule.scheduled_clock_in_mode,'allow') AS scheduled_clock_in_mode,
+                  COALESCE(rule.unscheduled_clock_in_mode,'warn') AS unscheduled_clock_in_mode,
+                  COALESCE(rule.early_clock_in_minutes,0) AS early_clock_in_minutes,
+                  COALESCE(rule.mandatory_break_after_minutes,profile.mandatory_break_minutes,0) AS mandatory_break_after_minutes,
+                  COALESCE(rule.mandatory_break_minutes,profile.mandatory_break_minutes,0) AS mandatory_break_minutes,
+                  COALESCE(rule.automatic_break_enabled,FALSE) AS automatic_break_enabled,
+                  COALESCE(rule.forgot_clock_out_minutes,0) AS forgot_clock_out_minutes
+             FROM staff employee
+             LEFT JOIN staff_profiles profile ON profile.tenant_id=employee.tenant_id AND profile.branch_id=employee.branch_id AND profile.staff_id=employee.id
+             LEFT JOIN staff_schedules schedule ON schedule.tenant_id=employee.tenant_id AND schedule.branch_id=employee.branch_id AND schedule.staff_id=employee.id AND schedule.schedule_date=$4
+             LEFT JOIN staff_attendance_rules rule ON rule.tenant_id=employee.tenant_id AND rule.branch_id=employee.branch_id AND rule.active=TRUE
+            WHERE employee.tenant_id=$1 AND employee.branch_id=$2 AND employee.id=$3"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).fetch_one(db).await
+}
+
+pub async fn active_clock_state(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    business_date: NaiveDate,
+) -> Result<(Option<DateTime<Utc>>, i64), sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT
+             (SELECT MAX(clock_in_at) FROM staff_attendance_sessions WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4 AND clock_out_at IS NULL AND superseded_at IS NULL),
+             COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (breaks.ended_at-breaks.started_at))/60)::BIGINT
+                         FROM staff_attendance_breaks breaks
+                         JOIN staff_attendance_records attendance ON attendance.id=breaks.attendance_id
+                        WHERE breaks.tenant_id=$1 AND breaks.branch_id=$2 AND breaks.staff_id=$3
+                          AND attendance.business_date=$4 AND breaks.ended_at IS NOT NULL),0)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(business_date)
+    .fetch_one(db)
+    .await
 }
 
 pub async fn clock_out(
@@ -390,17 +673,61 @@ pub async fn clock_out(
     business_date: NaiveDate,
     clock_out_at: DateTime<Utc>,
     penalty_paise: i64,
+    cash_tip_paise: i64,
     comments: &str,
+    automatic_break_after_minutes: i32,
+    automatic_break_minutes: i32,
 ) -> Result<Option<AttendanceRecord>, sqlx::Error> {
-    let updated = sqlx::query("UPDATE staff_attendance_records SET clock_out_at=$5,penalty_paise=$6,comments=$7,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4 AND status='clocked_in' AND clock_in_at IS NOT NULL AND $5>=clock_in_at")
-        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date)
-        .bind(clock_out_at).bind(penalty_paise).bind(comments).execute(db).await?;
-    if updated.rows_affected() == 0 {
+    let mut tx = db.begin().await?;
+    let updated = sqlx::query_as::<_, (String, DateTime<Utc>)>("UPDATE staff_attendance_sessions SET clock_out_at=$5,cash_tip_paise=$6,comments=$7,updated_at=NOW() WHERE id=(SELECT id FROM staff_attendance_sessions WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4 AND clock_out_at IS NULL AND superseded_at IS NULL AND $5>=clock_in_at ORDER BY clock_in_at DESC LIMIT 1) RETURNING attendance_id,clock_in_at")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).bind(clock_out_at).bind(cash_tip_paise).bind(comments).fetch_optional(&mut *tx).await?;
+    let Some((attendance_id, clock_in_at)) = updated else {
+        tx.rollback().await?;
         return Ok(None);
+    };
+    if let Some((break_start, break_end)) = automatic_break_window(
+        clock_in_at,
+        clock_out_at,
+        automatic_break_after_minutes,
+        automatic_break_minutes,
+    ) {
+        sqlx::query("INSERT INTO staff_attendance_breaks(tenant_id,branch_id,staff_id,attendance_id,started_at,ended_at,comments,created_by) SELECT $1,$2,$3,$4,$5,$6,'Automatic policy break','system' WHERE NOT EXISTS(SELECT 1 FROM staff_attendance_breaks WHERE tenant_id=$1 AND branch_id=$2 AND attendance_id=$4)")
+            .bind(tenant_id).bind(branch_id).bind(staff_id).bind(&attendance_id).bind(break_start).bind(break_end).execute(&mut *tx).await?;
     }
-    recalculate_with_ot_reset(db, tenant_id, branch_id, staff_id, business_date)
-        .await
-        .map(Some)
+    sqlx::query("UPDATE staff_attendance_records SET penalty_paise=$5,comments=$6,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).bind(penalty_paise).bind(comments).execute(&mut *tx).await?;
+    let before: Option<i32> = sqlx::query_scalar("SELECT overtime_minutes FROM staff_attendance_records WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND business_date=$4")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).bind(business_date).fetch_optional(&mut *tx).await?;
+    let row: AttendanceRecord = sqlx::query_as(RECALCULATE_ATTENDANCE_SQL)
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(staff_id)
+        .bind(business_date)
+        .fetch_one(&mut *tx)
+        .await?;
+    if before != Some(row.overtime_minutes) {
+        sqlx::query("UPDATE staff_attendance_records SET ot_approval_status='pending',approved_overtime_minutes=0,ot_approved_by=NULL,ot_approved_at=NULL,updated_at=NOW() WHERE id=$1")
+            .bind(&row.id).execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(Some(row))
+}
+
+fn automatic_break_window(
+    clock_in_at: DateTime<Utc>,
+    clock_out_at: DateTime<Utc>,
+    after_minutes: i32,
+    break_minutes: i32,
+) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+    (after_minutes > 0
+        && break_minutes > 0
+        && clock_out_at - clock_in_at >= Duration::minutes(i64::from(after_minutes)))
+    .then(|| {
+        (
+            (clock_out_at - Duration::minutes(i64::from(break_minutes))).max(clock_in_at),
+            clock_out_at,
+        )
+    })
 }
 
 async fn recalculate(
@@ -552,6 +879,21 @@ pub async fn save_correction(
     .bind(&input.corrected_by)
     .fetch_one(&mut *tx)
     .await?;
+    sqlx::query("UPDATE staff_attendance_sessions SET superseded_at=NOW(),superseded_by=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND attendance_id=$3 AND superseded_at IS NULL")
+        .bind(tenant_id).bind(branch_id).bind(&attendance_id).bind(&input.corrected_by).execute(&mut *tx).await?;
+    if let Some(clock_in_at) = input.clock_in_at {
+        let task = if let Some(id) = input.work_task_rate_id.as_deref() {
+            sqlx::query_as::<_, (String, String, i64)>("SELECT id,task_name,pay_rate_paise FROM staff_work_task_pay_rates WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND id=$4 AND active=TRUE")
+                .bind(tenant_id).bind(branch_id).bind(staff_id).bind(id).fetch_optional(&mut *tx).await?
+        } else {
+            None
+        };
+        sqlx::query("INSERT INTO staff_attendance_sessions(tenant_id,branch_id,staff_id,attendance_id,business_date,clock_in_at,clock_out_at,work_task_rate_id,work_task_name,pay_rate_paise,source,comments) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'manual_correction',$11)")
+            .bind(tenant_id).bind(branch_id).bind(staff_id).bind(&attendance_id).bind(business_date)
+            .bind(clock_in_at).bind(input.clock_out_at).bind(task.as_ref().map(|row| row.0.as_str()))
+            .bind(task.as_ref().map(|row| row.1.as_str()).unwrap_or("")).bind(task.as_ref().map(|row| row.2).unwrap_or(0))
+            .bind(&input.comments).execute(&mut *tx).await?;
+    }
     sqlx::query("DELETE FROM staff_attendance_breaks WHERE tenant_id=$1 AND branch_id=$2 AND attendance_id=$3")
         .bind(tenant_id).bind(branch_id).bind(&attendance_id).execute(&mut *tx).await?;
     for item in input.breaks {
@@ -670,4 +1012,21 @@ pub async fn overtime_business_date(
     .bind(attendance_id)
     .fetch_optional(db)
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn automatic_break_requires_threshold_and_uses_policy_duration() {
+        let clock_in = Utc.with_ymd_and_hms(2026, 8, 2, 3, 30, 0).unwrap();
+        let clock_out = clock_in + Duration::hours(8);
+        assert_eq!(
+            automatic_break_window(clock_in, clock_out, 360, 30),
+            Some((clock_out - Duration::minutes(30), clock_out))
+        );
+        assert_eq!(automatic_break_window(clock_in, clock_out, 600, 30), None);
+    }
 }

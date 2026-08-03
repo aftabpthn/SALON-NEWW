@@ -1,3 +1,4 @@
+use chrono::{Duration, NaiveDate, Utc};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Transaction};
@@ -8,8 +9,10 @@ use crate::{
     models::common::AppError,
     repositories::{
         inventory_governance_repository,
-        inventory_repository::{self, InventoryRecord, UpdateInventory},
+        inventory_repository::{self, InventoryAdjustmentRecord, InventoryRecord, UpdateInventory},
+        purchase_repository,
     },
+    services::accounting_service,
     state::AppState,
 };
 
@@ -33,6 +36,7 @@ pub struct InventoryUpdateInput<'a> {
     pub order_level: Option<i32>,
     pub safety_stock_level: Option<i32>,
     pub unit_cost_paise: Option<i64>,
+    pub retail_price_paise: Option<i64>,
     pub hsn_code: Option<&'a str>,
     pub gst_percent: Option<i32>,
     pub barcode: Option<&'a str>,
@@ -40,10 +44,32 @@ pub struct InventoryUpdateInput<'a> {
     pub batch_tracked: Option<bool>,
     pub dual_use_stock: Option<bool>,
     pub center_available: Option<bool>,
+    pub online_sale_enabled: Option<bool>,
     pub active: Option<bool>,
     pub adjustment_reason: Option<&'a str>,
+    pub adjustment_evidence_reference: Option<&'a str>,
+    pub adjustment_business_date: Option<&'a str>,
     pub idempotency_key: Option<&'a str>,
     pub actor_user_id: &'a str,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AdjustmentWrite {
+    pub inventory_item_id: String,
+    pub requested_stock_quantity: i32,
+    pub business_date: String,
+    pub reason: String,
+    pub evidence_reference: String,
+    pub idempotency_key: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AdjustmentReviewWrite {
+    pub decision: String,
+    pub review_note: String,
+    pub idempotency_key: String,
 }
 
 pub struct BackbarUsageInput<'a> {
@@ -55,10 +81,13 @@ pub struct BackbarUsageInput<'a> {
     pub client_id: Option<&'a str>,
     pub appointment_id: Option<&'a str>,
     pub actual_quantity: i32,
+    pub wasted_quantity: i32,
+    pub selected_batch_id: Option<&'a str>,
     pub waste_reason: &'a str,
     pub notes: &'a str,
     pub actor_user_id: &'a str,
     pub idempotency_key: &'a str,
+    pub override_authorized: bool,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -83,6 +112,7 @@ pub struct ColorBowlInput<'a> {
     pub notes: &'a str,
     pub actor_user_id: &'a str,
     pub idempotency_key: &'a str,
+    pub override_authorized: bool,
     pub lines: Vec<ColorBowlLineInput>,
 }
 
@@ -109,6 +139,13 @@ pub struct KitAssemblyResult {
     pub stock_quantity: i32,
 }
 
+pub struct KitOperationInput<'a> {
+    pub quantity: i32,
+    pub idempotency_key: &'a str,
+    pub actor_user_id: &'a str,
+    pub comments: &'a str,
+}
+
 #[derive(Debug, PartialEq)]
 struct RecipeUsagePolicy {
     min_quantity: i32,
@@ -118,6 +155,23 @@ struct RecipeUsagePolicy {
     wastage_percent: f64,
     approval_threshold_percent: f64,
     approval_required: bool,
+    track_automatically: bool,
+    allow_manual_override: bool,
+}
+
+pub struct BackbarReversalInput<'a> {
+    pub tenant_id: &'a str,
+    pub branch_id: &'a str,
+    pub usage_id: &'a str,
+    pub reason: &'a str,
+    pub actor_user_id: &'a str,
+    pub idempotency_key: &'a str,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PosRecipeUsage {
+    quantity: i64,
+    track_automatically: bool,
 }
 
 pub async fn record_backbar_usage(
@@ -159,6 +213,12 @@ async fn record_backbar_usage_in_tx(
             || existing.client_id.as_deref() != input.client_id
             || existing.appointment_id.as_deref() != input.appointment_id
             || existing.actual_quantity != i64::from(input.actual_quantity)
+            || existing.wasted_quantity != i64::from(input.wasted_quantity)
+            || existing.selected_batch_id.as_deref()
+                != input
+                    .selected_batch_id
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
         {
             return Err(AppError::conflict(
                 "idempotencyKey is already used by different backbar usage",
@@ -201,6 +261,7 @@ async fn record_backbar_usage_in_tx(
             input.inventory_item_id,
             item.stock_quantity,
             item.unit_cost_paise,
+            item.batch_tracked,
             input.actor_user_id,
             &format!("auto-open:{}", input.idempotency_key),
         )
@@ -212,6 +273,7 @@ async fn record_backbar_usage_in_tx(
         .map(|row| inventory_repository::OpenBackbarContainer {
             id: row.0,
             remaining_quantity: row.1,
+            unit_cost_paise: row.2,
         });
         if open_container.is_none() {
             return Err(AppError::validation(
@@ -226,6 +288,25 @@ async fn record_backbar_usage_in_tx(
         return Err(AppError::validation(
             "open tube has insufficient remaining quantity",
         ));
+    }
+    let selected_batch_id = input
+        .selected_batch_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(selected_batch_id) = selected_batch_id {
+        if !item.batch_tracked || open_container.is_some() {
+            return Err(AppError::validation(
+                "batch selection is available only for sealed batch-tracked stock",
+            ));
+        }
+        enforce_selected_fefo_batch(
+            tx,
+            input.tenant_id,
+            input.branch_id,
+            input.inventory_item_id,
+            selected_batch_id,
+        )
+        .await?;
     }
     let checkout_policy=sqlx::query_as::<_,(String,bool)>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block'),COALESCE((SELECT auto_checkout_service_consumption FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),TRUE)")
         .bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut **tx).await
@@ -296,11 +377,16 @@ async fn record_backbar_usage_in_tx(
         }
     }
     let policy = if let Some(service_id) = input.service_id {
-        let recipe =
-            inventory_repository::service_recipe(tx, input.tenant_id, input.branch_id, service_id)
-                .await
-                .map_err(|_| AppError::internal("failed to load service recipe"))?
-                .ok_or_else(|| AppError::validation("service is not available"))?;
+        let recipe = inventory_repository::service_recipe(
+            tx,
+            input.tenant_id,
+            input.branch_id,
+            service_id,
+            input.appointment_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to load service recipe"))?
+        .ok_or_else(|| AppError::validation("service is not available"))?;
         recipe_usage_policy(&recipe, input.inventory_item_id, input.actual_quantity)?
     } else {
         RecipeUsagePolicy {
@@ -311,15 +397,22 @@ async fn record_backbar_usage_in_tx(
             wastage_percent: 0.0,
             approval_threshold_percent: 0.0,
             approval_required: false,
+            track_automatically: false,
+            allow_manual_override: true,
         }
     };
+    if policy.track_automatically && !policy.allow_manual_override && !input.override_authorized {
+        return Err(AppError::forbidden(
+            "manager approval is required to override automatic service consumption",
+        ));
+    }
     let waste_reason = input.waste_reason.trim();
     if !waste_reason.is_empty() && !valid_waste_reason(waste_reason) {
         return Err(AppError::validation("wasteReason is invalid"));
     }
-    if policy.wastage_percent > 0.0 && waste_reason.is_empty() {
+    if (input.wasted_quantity > 0 || policy.wastage_percent > 0.0) && waste_reason.is_empty() {
         return Err(AppError::validation(
-            "wastage reason is required when actual quantity exceeds the recipe maximum",
+            "wastage reason is required for wasted quantity or abnormal usage",
         ));
     }
     if waste_reason == "other" && input.notes.trim().is_empty() {
@@ -331,6 +424,22 @@ async fn record_backbar_usage_in_tx(
         item.stock_quantity
     } else {
         item.stock_quantity - input.actual_quantity
+    };
+    let usage_unit_cost_paise = if let Some(container) = open_container.as_ref() {
+        container.unit_cost_paise
+    } else if policy.approval_required {
+        item.unit_cost_paise
+    } else {
+        outbound_unit_cost(
+            tx,
+            input.tenant_id,
+            input.branch_id,
+            input.inventory_item_id,
+            item.batch_tracked,
+            item.unit_cost_paise,
+            input.actual_quantity,
+        )
+        .await?
     };
     let usage_id = Uuid::new_v4().to_string();
     let status = if policy.approval_required {
@@ -352,6 +461,8 @@ async fn record_backbar_usage_in_tx(
         policy.min_quantity,
         policy.expected_quantity,
         input.actual_quantity,
+        input.wasted_quantity,
+        selected_batch_id,
         policy.max_quantity,
         &policy.usage_profile,
         waste_reason,
@@ -367,7 +478,7 @@ async fn record_backbar_usage_in_tx(
         open_container
             .as_ref()
             .map(|container| container.id.as_str()),
-        item.unit_cost_paise,
+        usage_unit_cost_paise,
     )
     .await
     .map_err(map_backbar_error)?;
@@ -398,7 +509,7 @@ async fn record_backbar_usage_in_tx(
                 "open_floor_balance",
                 "consumed",
                 input.actual_quantity,
-                item.unit_cost_paise,
+                usage_unit_cost_paise,
                 input.staff_id,
                 input.actor_user_id,
                 input.notes.trim(),
@@ -427,7 +538,7 @@ async fn record_backbar_usage_in_tx(
                 input.inventory_item_id,
                 &usage_id,
                 input.actual_quantity,
-                item.unit_cost_paise,
+                usage_unit_cost_paise,
                 stock_after,
             )
             .await
@@ -444,7 +555,7 @@ async fn record_backbar_usage_in_tx(
                 },
                 "consumable_available",
                 input.actual_quantity,
-                item.unit_cost_paise,
+                usage_unit_cost_paise,
                 input.staff_id,
                 input.actor_user_id,
                 "backbar_usage",
@@ -583,10 +694,13 @@ pub async fn record_color_bowl(
                 client_id: Some(input.client_id),
                 appointment_id: Some(input.appointment_id),
                 actual_quantity: line.actual_quantity,
+                wasted_quantity: 0,
+                selected_batch_id: None,
                 waste_reason: line.waste_reason.trim(),
                 notes: line.notes.trim(),
                 actor_user_id: input.actor_user_id,
                 idempotency_key: &line_key,
+                override_authorized: input.override_authorized,
             },
             Some(&bowl_id),
             (position + 1) as i32,
@@ -654,6 +768,7 @@ pub async fn review_backbar_usage(
         return Err(AppError::conflict("backbar usage is not pending approval"));
     }
     enforce_distinct_backbar_reviewer(&usage.actor_user_id, input.actor_user_id)?;
+    let mut approved_unit_cost_paise = None;
     let status = if input.decision == "approve" {
         let item = inventory_repository::lock_for_adjustment(
             &mut tx,
@@ -666,6 +781,7 @@ pub async fn review_backbar_usage(
         .filter(|item| item.active)
         .ok_or_else(|| AppError::validation("inventory item is not available"))?;
         if let Some(container_id) = usage.container_id.as_deref() {
+            approved_unit_cost_paise = Some(usage.unit_cost_paise);
             inventory_repository::consume_open_backbar_container(
                 &mut tx,
                 input.tenant_id,
@@ -687,8 +803,8 @@ pub async fn review_backbar_usage(
                 "open_floor_balance",
                 "consumed",
                 usage.actual_quantity,
-                item.unit_cost_paise,
-                None,
+                usage.unit_cost_paise,
+                usage.staff_id.as_deref(),
                 input.actor_user_id,
                 input.review_note.trim(),
                 "backbar_usage",
@@ -717,6 +833,27 @@ pub async fn review_backbar_usage(
                 ));
             }
             let stock_after = item.stock_quantity - usage.actual_quantity;
+            let unit_cost_paise = outbound_unit_cost(
+                &mut tx,
+                input.tenant_id,
+                input.branch_id,
+                &usage.inventory_item_id,
+                item.batch_tracked,
+                item.unit_cost_paise,
+                usage.actual_quantity,
+            )
+            .await?;
+            if let Some(selected_batch_id) = usage.selected_batch_id.as_deref() {
+                enforce_selected_fefo_batch(
+                    &mut tx,
+                    input.tenant_id,
+                    input.branch_id,
+                    &usage.inventory_item_id,
+                    selected_batch_id,
+                )
+                .await?;
+            }
+            approved_unit_cost_paise = Some(unit_cost_paise);
             inventory_repository::apply_adjusted_stock(
                 &mut tx,
                 input.tenant_id,
@@ -733,7 +870,7 @@ pub async fn review_backbar_usage(
                 &usage.inventory_item_id,
                 &usage.id,
                 usage.actual_quantity,
-                item.unit_cost_paise,
+                unit_cost_paise,
                 stock_after,
             )
             .await
@@ -746,8 +883,8 @@ pub async fn review_backbar_usage(
                 "auto_service_checkout",
                 "consumable_available",
                 usage.actual_quantity,
-                item.unit_cost_paise,
-                None,
+                unit_cost_paise,
+                usage.staff_id.as_deref(),
                 input.actor_user_id,
                 "backbar_usage",
                 &usage.id,
@@ -780,6 +917,7 @@ pub async fn review_backbar_usage(
         status,
         input.actor_user_id,
         input.review_note.trim(),
+        approved_unit_cost_paise,
     )
     .await
     .map_err(|_| AppError::internal("failed to save backbar review"))?
@@ -800,6 +938,141 @@ pub async fn review_backbar_usage(
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit backbar review"))?;
+    Ok(saved)
+}
+
+pub async fn reverse_backbar_usage(
+    state: &AppState,
+    input: BackbarReversalInput<'_>,
+) -> Result<inventory_repository::BackbarUsageRecord, AppError> {
+    let reason = input.reason.trim();
+    if reason.is_empty() || reason.chars().count() > 500 {
+        return Err(AppError::validation("reversal reason is required"));
+    }
+    let key = input.idempotency_key.trim();
+    if key.is_empty() || key.len() > 160 {
+        return Err(AppError::validation("idempotencyKey is required"));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start usage reversal"))?;
+    let usage = sqlx::query_as::<_, (String, String, i32, String, Option<String>, Option<String>, String)>(
+        "SELECT id,inventory_item_id,actual_quantity,status,container_id,sale_id,reversal_idempotency_key FROM inventory_backbar_usage WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+    )
+    .bind(input.tenant_id).bind(input.branch_id).bind(input.usage_id)
+    .fetch_optional(&mut *tx).await
+    .map_err(|_| AppError::internal("failed to lock backbar usage"))?
+    .ok_or_else(|| AppError::not_found("backbar usage was not found"))?;
+    if usage.3 == "reversed" {
+        if usage.6 != key {
+            return Err(AppError::conflict("backbar usage is already reversed"));
+        }
+        let saved = inventory_repository::backbar_usage_by_id(
+            &mut tx,
+            input.tenant_id,
+            input.branch_id,
+            input.usage_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to load reversed usage"))?
+        .ok_or_else(|| AppError::internal("reversed usage was not found"))?;
+        tx.rollback()
+            .await
+            .map_err(|_| AppError::internal("failed to finish usage replay"))?;
+        return Ok(saved);
+    }
+    if usage.3 != "recorded" {
+        return Err(AppError::conflict("only recorded usage can be reversed"));
+    }
+    if usage.5.is_some() {
+        return Err(AppError::conflict(
+            "invoiced service consumption is retained on refund; correct it through a new governed inventory adjustment",
+        ));
+    }
+    if let Some(container_id) = usage.4.as_deref() {
+        sqlx::query("UPDATE inventory_backbar_containers SET remaining_quantity=remaining_quantity+$4,status='open',closed_by=NULL,closed_at=NULL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status IN ('open','empty') AND remaining_quantity+$4<=capacity_quantity")
+            .bind(input.tenant_id).bind(input.branch_id).bind(container_id).bind(usage.2)
+            .execute(&mut *tx).await
+            .map_err(|_|AppError::conflict("container cannot be reopened while another tube is open"))
+            .and_then(|result| (result.rows_affected()==1).then_some(()).ok_or_else(||AppError::conflict("container balance cannot accept this reversal")))?;
+        let remaining=sqlx::query_scalar::<_,i32>("SELECT remaining_quantity FROM inventory_backbar_containers WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(input.tenant_id).bind(input.branch_id).bind(container_id).fetch_one(&mut *tx).await
+            .map_err(|_|AppError::internal("failed to load reversed container balance"))?;
+        sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,quantity_delta,remaining_after,actor_user_id,idempotency_key,metadata) VALUES($1,$2,$3,'usage_reversed',$4,$5,$6,$7,jsonb_build_object('usageId',$8,'reason',$9))")
+            .bind(input.tenant_id).bind(input.branch_id).bind(container_id).bind(usage.2).bind(remaining)
+            .bind(input.actor_user_id).bind(format!("usage-reversal:{key}")).bind(input.usage_id).bind(reason)
+            .execute(&mut *tx).await.map_err(|_|AppError::internal("failed to write container reversal"))?;
+    } else {
+        let ledger_id=sqlx::query_scalar::<_,String>("SELECT id FROM inventory_stock_ledger WHERE tenant_id=$1 AND branch_id=$2 AND backbar_usage_id=$3 AND movement_type='consumption'")
+            .bind(input.tenant_id).bind(input.branch_id).bind(input.usage_id).fetch_one(&mut *tx).await
+            .map_err(|_|AppError::conflict("usage stock movement was not found"))?;
+        let allocations = inventory_repository::stock_ledger_batch_allocations(
+            &mut tx,
+            input.tenant_id,
+            input.branch_id,
+            &ledger_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to load usage batch allocation"))?;
+        let reversal_id = sqlx::query_scalar::<_, String>(
+            "SELECT reverse_inventory_stock_ledger($1,$2,$3,$4,$5)",
+        )
+        .bind(input.tenant_id)
+        .bind(input.branch_id)
+        .bind(&ledger_id)
+        .bind(input.actor_user_id)
+        .bind(reason)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| AppError::internal("failed to reverse usage stock"))?;
+        for allocation in allocations {
+            inventory_repository::add_to_batch_quantity(
+                &mut tx,
+                input.tenant_id,
+                input.branch_id,
+                &allocation.batch_id,
+                allocation.quantity,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to restore usage batch"))?;
+            inventory_repository::add_batch_movement(
+                &mut tx,
+                input.tenant_id,
+                input.branch_id,
+                &allocation.batch_id,
+                &reversal_id,
+                allocation.quantity,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to write usage batch reversal"))?;
+        }
+    }
+    if let Some(original)=sqlx::query_as::<_,(String,String,String,i32,i64,Option<String>)>("SELECT id,source_bucket,destination_bucket,quantity,unit_cost_paise,employee_id FROM inventory_operational_movements WHERE tenant_id=$1 AND branch_id=$2 AND reference_type='backbar_usage' AND reference_id=$3 AND action IN ('auto_service_checkout','manual_consumption') ORDER BY created_at DESC LIMIT 1")
+        .bind(input.tenant_id).bind(input.branch_id).bind(input.usage_id).fetch_optional(&mut *tx).await
+        .map_err(|_|AppError::internal("failed to load usage operational movement"))? {
+        inventory_governance_repository::record_operational_movement(
+            &mut tx,input.tenant_id,input.branch_id,&usage.1,"reversal",&original.2,&original.1,
+            original.3,original.4,original.5.as_deref(),input.actor_user_id,reason,"backbar_usage",input.usage_id,
+            &format!("usage-reversal-op:{key}"),false,&serde_json::json!({"reversalOf":original.0}),
+        ).await.map_err(|_|AppError::internal("failed to write usage operational reversal"))?;
+    }
+    sqlx::query("UPDATE inventory_backbar_usage SET status='reversed',reversed_at=NOW(),reversed_by_user_id=$4,reversal_reason=$5,reversal_idempotency_key=$6 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(input.tenant_id).bind(input.branch_id).bind(input.usage_id).bind(input.actor_user_id).bind(reason).bind(key)
+        .execute(&mut *tx).await.map_err(|_|AppError::internal("failed to mark usage reversed"))?;
+    let saved = inventory_repository::backbar_usage_by_id(
+        &mut tx,
+        input.tenant_id,
+        input.branch_id,
+        input.usage_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load reversed usage"))?
+    .ok_or_else(|| AppError::internal("reversed usage was not found"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit usage reversal"))?;
     Ok(saved)
 }
 
@@ -881,6 +1154,14 @@ fn recipe_usage_policy(
         approval_threshold_percent,
         approval_required: actual_quantity > max_quantity
             || variance_percent > approval_threshold_percent,
+        track_automatically: entry
+            .get("trackAutomatically")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        allow_manual_override: entry
+            .get("allowManualOverride")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
     })
 }
 
@@ -963,6 +1244,46 @@ pub fn recipe_quantities(recipe: &str) -> Result<HashMap<String, i64>, AppError>
     Ok(quantities)
 }
 
+fn recipe_consumption_lines(recipe: &str) -> Result<HashMap<String, PosRecipeUsage>, AppError> {
+    let entries = serde_json::from_str::<Value>(recipe)
+        .ok()
+        .and_then(|value| value.as_array().cloned())
+        .unwrap_or_default();
+    let mut lines = HashMap::new();
+    for entry in entries {
+        let item_id = ["itemId", "productId", "inventoryItemId"]
+            .iter()
+            .find_map(|key| entry.get(*key).and_then(Value::as_str))
+            .unwrap_or("")
+            .trim();
+        let quantity = ["quantity", "qty", "standardQty"]
+            .iter()
+            .find_map(|key| entry.get(*key))
+            .and_then(recipe_quantity)
+            .unwrap_or(0);
+        if item_id.is_empty() || quantity <= 0 {
+            return Err(AppError::validation(
+                "service inventory recipe contains an invalid item",
+            ));
+        }
+        let automatically = entry
+            .get("trackAutomatically")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        lines
+            .entry(item_id.to_string())
+            .and_modify(|current: &mut PosRecipeUsage| {
+                current.quantity = current.quantity.saturating_add(quantity);
+                current.track_automatically &= automatically;
+            })
+            .or_insert(PosRecipeUsage {
+                quantity,
+                track_automatically: automatically,
+            });
+    }
+    Ok(lines)
+}
+
 pub async fn consume_pos_sale(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -1008,7 +1329,13 @@ pub async fn consume_pos_sale(
                         "product sale line requires an inventory item id",
                     ));
                 }
-                HashMap::from([(item_id, line_quantity)])
+                HashMap::from([(
+                    item_id,
+                    PosRecipeUsage {
+                        quantity: line_quantity,
+                        track_automatically: true,
+                    },
+                )])
             }
             "service" if !item_id.trim().is_empty() => {
                 pos_service_recipe(
@@ -1016,6 +1343,7 @@ pub async fn consume_pos_sale(
                     tenant_id,
                     branch_id,
                     &item_id,
+                    appointment_id,
                     line_quantity,
                     recipe_required,
                 )
@@ -1028,8 +1356,8 @@ pub async fn consume_pos_sale(
             }
             _ => HashMap::new(),
         };
-        for (inventory_item_id, quantity) in quantities {
-            let quantity = i32::try_from(quantity)
+        for (inventory_item_id, recipe_usage) in quantities {
+            let quantity = i32::try_from(recipe_usage.quantity)
                 .ok()
                 .filter(|quantity| *quantity > 0)
                 .ok_or_else(|| AppError::validation("inventory consumption quantity is invalid"))?;
@@ -1051,6 +1379,11 @@ pub async fn consume_pos_sale(
                     moved += 1;
                     continue;
                 }
+            }
+            if service_id.is_some() && !recipe_usage.track_automatically {
+                return Err(AppError::validation(
+                    "record mandatory appointment product usage before POS checkout",
+                ));
             }
             if let Some(consumed) = consume_pos_open_container(
                 tx,
@@ -1192,6 +1525,7 @@ async fn consume_pos_open_container(
             inventory_item_id,
             item.stock_quantity,
             item.unit_cost_paise,
+            item.batch_tracked,
             "system:pos",
             &format!("pos-auto-open:{sale_line_id}:{inventory_item_id}"),
         )
@@ -1203,6 +1537,7 @@ async fn consume_pos_open_container(
         .map(|row| inventory_repository::OpenBackbarContainer {
             id: row.0,
             remaining_quantity: row.1,
+            unit_cost_paise: row.2,
         });
     }
     let container =
@@ -1223,12 +1558,12 @@ async fn consume_pos_open_container(
         .bind(tenant_id).bind(branch_id).bind(&container.id).bind(quantity).fetch_one(&mut **tx).await
         .map_err(|_|AppError::validation("open floor container has insufficient remaining quantity"))?;
     sqlx::query("INSERT INTO inventory_backbar_container_events(tenant_id,branch_id,container_id,event_type,quantity_delta,remaining_after,actor_user_id,idempotency_key,metadata) VALUES($1,$2,$3,'consumed',$4,$5,'system:pos',$6,jsonb_build_object('source','pos_recipe','saleId',$7,'saleLineId',$8,'serviceId',$9,'appointmentId',$10,'unitCostPaise',$11))")
-        .bind(tenant_id).bind(branch_id).bind(&container.id).bind(-quantity).bind(remaining).bind(&key).bind(sale_id).bind(sale_line_id).bind(service_id).bind(appointment_id).bind(item.unit_cost_paise)
+        .bind(tenant_id).bind(branch_id).bind(&container.id).bind(-quantity).bind(remaining).bind(&key).bind(sale_id).bind(sale_line_id).bind(service_id).bind(appointment_id).bind(container.unit_cost_paise)
         .execute(&mut **tx).await
         .map_err(|_|AppError::internal("failed to write POS container consumption"))?;
     inventory_governance_repository::record_operational_movement(
         tx,tenant_id,branch_id,inventory_item_id,"auto_service_checkout","open_floor_balance","consumed",
-        quantity,item.unit_cost_paise,employee_id,"system:pos","","pos_sale_line",sale_line_id,
+        quantity,container.unit_cost_paise,employee_id,"system:pos","","pos_sale_line",sale_line_id,
         &format!("pos-service-op:{sale_line_id}:{inventory_item_id}"),false,
         &serde_json::json!({"saleId":sale_id,"serviceId":service_id,"appointmentId":appointment_id}),
     ).await.map_err(|_|AppError::internal("failed to write POS floor consumption history"))?;
@@ -1246,6 +1581,7 @@ pub async fn restock_pos_product_return(
     line_type: &str,
     inventory_item_id: &str,
     quantity: i64,
+    actor_user_id: &str,
 ) -> Result<(), AppError> {
     let quantity = i32::try_from(quantity)
         .ok()
@@ -1314,6 +1650,51 @@ pub async fn restock_pos_product_return(
             )
             .await?;
         }
+        inventory_governance_repository::record_operational_movement(
+            tx,
+            tenant_id,
+            branch_id,
+            inventory_item_id,
+            "customer_return_restock",
+            "customer_return",
+            "retail_available",
+            quantity,
+            sale_movement.2,
+            None,
+            actor_user_id,
+            "Customer return restocked",
+            "pos_refund",
+            refund_id,
+            &format!("pos-return-restock:{refund_id}:{sale_line_id}"),
+            false,
+            &serde_json::json!({"saleId":sale_id,"stockLedgerId":return_ledger_id}),
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to record returned product floor stock"))?;
+        let amount = i64::from(quantity).saturating_mul(sale_movement.2);
+        accounting_service::post_control_journal(
+            tx,
+            tenant_id,
+            branch_id,
+            "customer_return_restock",
+            &format!("{refund_id}:{sale_line_id}"),
+            Utc::now().date_naive(),
+            "Customer return restocked",
+            actor_user_id,
+            &[
+                accounting_service::ManualJournalLine {
+                    account_code: accounting_service::INVENTORY_ASSET_ACCOUNT.into(),
+                    debit_paise: amount,
+                    credit_paise: 0,
+                },
+                accounting_service::ManualJournalLine {
+                    account_code: "COST_OF_GOODS_SOLD".into(),
+                    debit_paise: 0,
+                    credit_paise: amount,
+                },
+            ],
+        )
+        .await?;
     }
     Ok(())
 }
@@ -1323,33 +1704,42 @@ async fn pos_service_recipe(
     tenant_id: &str,
     branch_id: &str,
     service_id: &str,
+    appointment_id: Option<&str>,
     service_quantity: i64,
     recipe_required: bool,
-) -> Result<HashMap<String, i64>, AppError> {
-    let recipe = sqlx::query_scalar::<_, String>(
-        "SELECT product_consumption_json::TEXT FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
-    )
-    .bind(tenant_id)
-    .bind(branch_id)
-    .bind(service_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(|_| AppError::internal("failed to load service inventory recipe"))?;
+) -> Result<HashMap<String, PosRecipeUsage>, AppError> {
+    let recipe = if let Some(appointment_id) = appointment_id {
+        sqlx::query_scalar::<_, String>("SELECT snapshot.recipe_json::TEXT FROM appointment_service_recipe_snapshots snapshot WHERE snapshot.tenant_id=$1 AND snapshot.branch_id=$2 AND snapshot.service_id=$3 AND snapshot.appointment_id=$4")
+            .bind(tenant_id).bind(branch_id).bind(service_id).bind(appointment_id)
+            .fetch_optional(&mut **tx).await
+    } else {
+        sqlx::query_scalar::<_, String>("SELECT product_consumption_json::TEXT FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant_id).bind(branch_id).bind(service_id)
+            .fetch_optional(&mut **tx).await
+    }.map_err(|_| AppError::internal("failed to load service inventory recipe"))?;
     let quantities = recipe
         .as_deref()
-        .map(recipe_quantities)
+        .map(recipe_consumption_lines)
         .transpose()?
         .unwrap_or_default();
     enforce_pos_recipe(recipe_required, &quantities)?;
     Ok(quantities
         .into_iter()
-        .map(|(item_id, quantity)| (item_id, service_quantity.saturating_mul(quantity)))
+        .map(|(item_id, usage)| {
+            (
+                item_id,
+                PosRecipeUsage {
+                    quantity: service_quantity.saturating_mul(usage.quantity),
+                    track_automatically: usage.track_automatically,
+                },
+            )
+        })
         .collect())
 }
 
 fn enforce_pos_recipe(
     recipe_required: bool,
-    quantities: &HashMap<String, i64>,
+    quantities: &HashMap<String, PosRecipeUsage>,
 ) -> Result<(), AppError> {
     if recipe_required && quantities.is_empty() {
         return Err(AppError::validation(
@@ -1439,6 +1829,16 @@ async fn deduct_pos_inventory_item(
             "insufficient inventory for POS checkout",
         ));
     }
+    let unit_cost_paise = outbound_unit_cost(
+        tx,
+        tenant_id,
+        branch_id,
+        inventory_item_id,
+        item.batch_tracked,
+        item.unit_cost_paise,
+        quantity,
+    )
+    .await?;
     let stock_after = item.stock_quantity - quantity;
     let ledger_id = sqlx::query_scalar::<_, String>(
         "INSERT INTO inventory_stock_ledger(tenant_id,branch_id,inventory_item_id,sale_id,sale_line_id,movement_type,quantity_delta,unit_cost_paise,stock_after_quantity) VALUES($1,$2,$3,$4,$5,'sale',$6,$7,$8) ON CONFLICT DO NOTHING RETURNING id",
@@ -1449,7 +1849,7 @@ async fn deduct_pos_inventory_item(
     .bind(sale_id)
     .bind(sale_line_id)
     .bind(-quantity)
-    .bind(item.unit_cost_paise)
+    .bind(unit_cost_paise)
     .bind(stock_after)
     .fetch_optional(&mut **tx)
     .await
@@ -1469,7 +1869,7 @@ async fn deduct_pos_inventory_item(
         },
         preferred,
         quantity,
-        item.unit_cost_paise,
+        unit_cost_paise,
         employee_id,
         "system:pos",
         "pos_sale_line",
@@ -1513,6 +1913,11 @@ fn validate_backbar(input: &BackbarUsageInput<'_>) -> Result<(), AppError> {
             "inventoryItemId and positive actualQuantity are required",
         ));
     }
+    if input.wasted_quantity < 0 || input.wasted_quantity > input.actual_quantity {
+        return Err(AppError::validation(
+            "wastedQuantity must be between 0 and actualQuantity",
+        ));
+    }
     if input
         .service_id
         .is_some_and(|value| value.trim().is_empty())
@@ -1533,6 +1938,25 @@ fn validate_backbar(input: &BackbarUsageInput<'_>) -> Result<(), AppError> {
     Ok(())
 }
 
+async fn enforce_selected_fefo_batch(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+    selected_batch_id: &str,
+) -> Result<(), AppError> {
+    let batches =
+        inventory_repository::lock_fefo_batches(tx, tenant_id, branch_id, inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to validate selected inventory batch"))?;
+    if batches.first().map(|batch| batch.batch_id.as_str()) != Some(selected_batch_id) {
+        return Err(AppError::conflict(
+            "selected batch is no longer the next non-expired FEFO batch",
+        ));
+    }
+    Ok(())
+}
+
 fn map_backbar_error(error: sqlx::Error) -> AppError {
     if error
         .as_database_error()
@@ -1548,8 +1972,10 @@ fn map_backbar_error(error: sqlx::Error) -> AppError {
 #[cfg(test)]
 mod recipe_tests {
     use super::{
-        enforce_distinct_backbar_reviewer, enforce_pos_recipe, recipe_quantities,
-        recipe_usage_policy,
+        enforce_distinct_backbar_reviewer, enforce_pos_recipe, kit_component_allowed,
+        kit_unbundle_batch_number, recipe_consumption_lines, recipe_quantities,
+        recipe_usage_policy, validate_backbar, weighted_average_cost, BackbarUsageInput,
+        PosRecipeUsage,
     };
     use std::collections::HashMap;
 
@@ -1596,7 +2022,63 @@ mod recipe_tests {
         let empty = HashMap::new();
         assert!(enforce_pos_recipe(false, &empty).is_ok());
         assert!(enforce_pos_recipe(true, &empty).is_err());
-        assert!(enforce_pos_recipe(true, &HashMap::from([("item".into(), 1)])).is_ok());
+        assert!(enforce_pos_recipe(
+            true,
+            &HashMap::from([(
+                "item".into(),
+                PosRecipeUsage {
+                    quantity: 1,
+                    track_automatically: true
+                }
+            )])
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn preserves_manual_recipe_lines_for_pos_blocking() {
+        let rows=recipe_consumption_lines(r#"[{"productId":"auto","standardQty":2,"trackAutomatically":true},{"productId":"manual","standardQty":3,"trackAutomatically":false}]"#)
+            .expect("recipe should parse");
+        assert!(rows["auto"].track_automatically);
+        assert!(!rows["manual"].track_automatically);
+        assert_eq!(rows["manual"].quantity, 3);
+    }
+
+    #[test]
+    fn kit_type_and_weighted_value_rules_are_stable() {
+        assert!(kit_component_allowed("retail", "retail"));
+        assert!(kit_component_allowed("retail", "dual_use"));
+        assert!(kit_component_allowed("consumable", "dual_use"));
+        assert!(!kit_component_allowed("retail", "consumable"));
+        assert!(!kit_component_allowed("dual_use", "retail"));
+        assert_eq!(weighted_average_cost(2, 100, 1, 400).unwrap(), 200);
+        assert_eq!(kit_unbundle_batch_number(false, "operation"), "");
+        assert_eq!(
+            kit_unbundle_batch_number(true, "operation"),
+            "KIT-operation"
+        );
+    }
+
+    #[test]
+    fn rejects_waste_above_actual_usage() {
+        let input = BackbarUsageInput {
+            tenant_id: "tenant",
+            branch_id: "branch",
+            inventory_item_id: "item",
+            service_id: Some("service"),
+            staff_id: Some("staff"),
+            client_id: Some("client"),
+            appointment_id: Some("appointment"),
+            actual_quantity: 2,
+            wasted_quantity: 3,
+            selected_batch_id: None,
+            waste_reason: "damage",
+            notes: "",
+            actor_user_id: "actor",
+            idempotency_key: "usage-key",
+            override_authorized: false,
+        };
+        assert!(validate_backbar(&input).is_err());
     }
 }
 
@@ -1617,6 +2099,431 @@ pub async fn update(
     Ok(result)
 }
 
+pub async fn list_adjustments(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+) -> Result<Vec<InventoryAdjustmentRecord>, AppError> {
+    inventory_repository::list_adjustment_requests(
+        &state.db,
+        tenant_id,
+        branch_id,
+        inventory_item_id.trim(),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load inventory adjustments"))
+}
+
+pub async fn request_adjustment(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    input: AdjustmentWrite,
+) -> Result<InventoryAdjustmentRecord, AppError> {
+    let item_id = required_adjustment_text(&input.inventory_item_id, "inventoryItemId")?;
+    let reason = required_adjustment_text(&input.reason, "reason")?;
+    let evidence = required_adjustment_text(&input.evidence_reference, "evidenceReference")?;
+    let key = required_adjustment_text(&input.idempotency_key, "idempotencyKey")?;
+    if input.requested_stock_quantity < 0 {
+        return Err(AppError::validation(
+            "requestedStockQuantity must be 0 or greater",
+        ));
+    }
+    let business_date = NaiveDate::parse_from_str(input.business_date.trim(), "%Y-%m-%d")
+        .map_err(|_| AppError::validation("businessDate must use YYYY-MM-DD"))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start inventory adjustment"))?;
+    if let Some(existing) =
+        inventory_repository::adjustment_request_replay(&mut tx, tenant_id, branch_id, key)
+            .await
+            .map_err(|_| AppError::internal("failed to read inventory adjustment retry"))?
+    {
+        if existing.inventory_item_id != item_id
+            || existing.requested_stock_quantity != input.requested_stock_quantity
+        {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by another adjustment",
+            ));
+        }
+        return Ok(existing);
+    }
+    enforce_inventory_business_date(&mut tx, tenant_id, branch_id, business_date).await?;
+    let item = inventory_repository::lock_for_adjustment(&mut tx, tenant_id, branch_id, item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to lock inventory item"))?
+        .ok_or_else(|| AppError::not_found("inventory item was not found"))?;
+    let delta = input
+        .requested_stock_quantity
+        .checked_sub(item.stock_quantity)
+        .ok_or_else(|| AppError::validation("inventory adjustment exceeds supported range"))?;
+    if delta == 0 {
+        return Err(AppError::validation("requested stock equals current stock"));
+    }
+    if item.batch_tracked && delta > 0 {
+        return Err(AppError::conflict(
+            "batch-tracked stock must be received or released from quarantine",
+        ));
+    }
+    let value = i64::from(delta.saturating_abs()).saturating_mul(item.unit_cost_paise);
+    let threshold = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE((SELECT count_value_variance_threshold_paise FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),50000)",
+    ).bind(tenant_id).bind(branch_id).fetch_one(&mut *tx).await
+        .map_err(|_| AppError::internal("failed to load adjustment approval threshold"))?;
+    let material = value > threshold;
+    let request_id = inventory_repository::create_adjustment_request(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        item_id,
+        business_date,
+        "manual",
+        "pending_approval",
+        item.stock_quantity,
+        input.requested_stock_quantity,
+        delta,
+        item.unit_cost_paise,
+        value,
+        material,
+        reason,
+        evidence,
+        actor,
+        key,
+    )
+    .await
+    .map_err(map_adjustment_request_error)?;
+    inventory_repository::add_adjustment_event(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &request_id,
+        "requested",
+        actor,
+        reason,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write adjustment history"))?;
+    if !material {
+        let ledger = apply_governed_adjustment(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &request_id,
+            &item,
+            input.requested_stock_quantity,
+            delta,
+            business_date,
+            reason,
+            evidence,
+            actor,
+            key,
+        )
+        .await?;
+        inventory_repository::finish_adjustment_request(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &request_id,
+            "pending_approval",
+            "applied",
+            None,
+            "Automatically applied below approval threshold",
+            Some(&ledger),
+            None,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to complete inventory adjustment"))?;
+        inventory_repository::add_adjustment_event(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &request_id,
+            "applied",
+            actor,
+            "Below approval threshold",
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write adjustment history"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit inventory adjustment"))?;
+    inventory_repository::list_adjustment_requests(&state.db, tenant_id, branch_id, item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to reload inventory adjustment"))?
+        .into_iter()
+        .find(|row| row.id == request_id)
+        .ok_or_else(|| AppError::internal("saved inventory adjustment was not found"))
+}
+
+pub async fn review_adjustment(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    actor: &str,
+    id: &str,
+    input: AdjustmentReviewWrite,
+) -> Result<InventoryAdjustmentRecord, AppError> {
+    let decision = input.decision.trim().to_lowercase();
+    if !matches!(decision.as_str(), "approve" | "reject") {
+        return Err(AppError::validation("decision must be approve or reject"));
+    }
+    let key = required_adjustment_text(&input.idempotency_key, "idempotencyKey")?;
+    let note = input.review_note.trim();
+    if decision == "reject" && note.is_empty() {
+        return Err(AppError::validation(
+            "reviewNote is required when rejecting",
+        ));
+    }
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start adjustment review"))?;
+    let request =
+        inventory_repository::adjustment_request_for_update(&mut tx, tenant_id, branch_id, id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock adjustment request"))?
+            .ok_or_else(|| AppError::not_found("adjustment request was not found"))?;
+    if request.status != "pending_approval" {
+        if request.review_idempotency_key.as_deref() == Some(key) {
+            return Ok(request);
+        }
+        return Err(AppError::conflict("adjustment request is already reviewed"));
+    }
+    if request.requested_by_user_id == actor {
+        return Err(AppError::forbidden(
+            "requester cannot approve or reject the same material adjustment",
+        ));
+    }
+    if decision == "reject" {
+        inventory_repository::finish_adjustment_request(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "pending_approval",
+            "rejected",
+            Some(actor),
+            note,
+            None,
+            Some(key),
+        )
+        .await
+        .map_err(map_adjustment_request_error)?;
+        inventory_repository::add_adjustment_event(
+            &mut tx, tenant_id, branch_id, id, "rejected", actor, note,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write adjustment review history"))?;
+    } else {
+        enforce_inventory_business_date(&mut tx, tenant_id, branch_id, request.business_date)
+            .await?;
+        let item = inventory_repository::lock_for_adjustment(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &request.inventory_item_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to lock inventory item"))?
+        .ok_or_else(|| AppError::not_found("inventory item was not found"))?;
+        if item.stock_quantity != request.stock_before_quantity {
+            return Err(AppError::conflict(
+                "stock changed after request; reject it and create a fresh adjustment",
+            ));
+        }
+        let ledger = apply_governed_adjustment(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            &item,
+            request.requested_stock_quantity,
+            request.quantity_delta,
+            request.business_date,
+            &request.reason,
+            &request.evidence_reference,
+            actor,
+            &format!("adjustment-review:{id}"),
+        )
+        .await?;
+        inventory_repository::finish_adjustment_request(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "pending_approval",
+            "applied",
+            Some(actor),
+            note,
+            Some(&ledger),
+            Some(key),
+        )
+        .await
+        .map_err(map_adjustment_request_error)?;
+        inventory_repository::add_adjustment_event(
+            &mut tx, tenant_id, branch_id, id, "approved", actor, note,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write adjustment review history"))?;
+        inventory_repository::add_adjustment_event(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            id,
+            "applied",
+            actor,
+            "Approved adjustment posted",
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write adjustment history"))?;
+    }
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit adjustment review"))?;
+    inventory_repository::list_adjustment_requests(
+        &state.db,
+        tenant_id,
+        branch_id,
+        &request.inventory_item_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to reload adjustment request"))?
+    .into_iter()
+    .find(|row| row.id == id)
+    .ok_or_else(|| AppError::internal("reviewed adjustment was not found"))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn apply_governed_adjustment(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    item: &InventoryRecord,
+    target: i32,
+    delta: i32,
+    business_date: NaiveDate,
+    reason: &str,
+    evidence: &str,
+    actor: &str,
+    key: &str,
+) -> Result<String, AppError> {
+    let unit_cost_paise = if delta < 0 {
+        outbound_unit_cost(
+            tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            item.batch_tracked,
+            item.unit_cost_paise,
+            delta.saturating_abs(),
+        )
+        .await?
+    } else {
+        item.unit_cost_paise
+    };
+    inventory_repository::apply_adjusted_stock(tx, tenant_id, branch_id, &item.id, target)
+        .await
+        .map_err(|_| AppError::internal("failed to apply inventory adjustment"))?;
+    let ledger = inventory_repository::add_adjustment_ledger(
+        tx,
+        tenant_id,
+        branch_id,
+        &item.id,
+        delta,
+        unit_cost_paise,
+        target,
+        reason,
+        "manual",
+        evidence,
+        Some(business_date),
+        Some(request_id),
+        key,
+    )
+    .await
+    .map_err(map_ledger_error)?;
+    if delta < 0 {
+        allocate_fefo_quantity(
+            tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            item.batch_tracked,
+            &ledger,
+            delta.saturating_abs(),
+        )
+        .await?;
+    }
+    accounting_service::post_inventory_adjustment(
+        tx,
+        tenant_id,
+        branch_id,
+        "inventory_adjustment",
+        request_id,
+        business_date,
+        actor,
+        delta,
+        unit_cost_paise,
+        reason,
+    )
+    .await?;
+    Ok(ledger)
+}
+
+pub(crate) async fn enforce_inventory_business_date(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    date: NaiveDate,
+) -> Result<(), AppError> {
+    let today = Utc::now().date_naive();
+    if date > today {
+        return Err(AppError::validation("businessDate cannot be in the future"));
+    }
+    let policy = purchase_repository::inventory_receipt_policy(tx, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load inventory lock policy"))?;
+    if policy.financial_lock_date.is_some_and(|lock| date <= lock) {
+        return Err(AppError::conflict(
+            "inventory date is inside the financial lock period",
+        ));
+    }
+    if policy.edit_lock_days > 0 && date < today - Duration::days(i64::from(policy.edit_lock_days))
+    {
+        return Err(AppError::conflict(
+            "inventory date is older than the edit-lock window",
+        ));
+    }
+    Ok(())
+}
+
+fn required_adjustment_text<'a>(value: &'a str, field: &str) -> Result<&'a str, AppError> {
+    let value = value.trim();
+    if value.is_empty() {
+        Err(AppError::validation(format!("{field} is required")))
+    } else {
+        Ok(value)
+    }
+}
+
+fn map_adjustment_request_error(error: sqlx::Error) -> AppError {
+    if error
+        .as_database_error()
+        .and_then(|value| value.code())
+        .is_some_and(|code| code == "23505")
+    {
+        AppError::conflict("idempotencyKey is already used by another adjustment action")
+    } else {
+        AppError::internal("failed to save inventory adjustment request")
+    }
+}
+
 async fn update_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     input: &InventoryUpdateInput<'_>,
@@ -1628,6 +2535,15 @@ async fn update_in_tx(
     let Some(current) = current else {
         return Ok(None);
     };
+    if input
+        .online_sale_enabled
+        .unwrap_or(current.online_sale_enabled)
+        && input.product_usage.unwrap_or(&current.product_usage) == "consumable"
+    {
+        return Err(AppError::validation(
+            "only retail or dual-use products can be sold in Webstore",
+        ));
+    }
     let master_change_requested = input.sku.is_some()
         || input.name.is_some()
         || input.category.is_some()
@@ -1650,6 +2566,7 @@ async fn update_in_tx(
         || input.batch_tracked.is_some()
         || input.dual_use_stock.is_some()
         || input.center_available.is_some()
+        || input.online_sale_enabled.is_some()
         || input.active.is_some();
     if master_change_requested
         && inventory_repository::master_edit_locked(tx, input.tenant_id, input.branch_id)
@@ -1731,6 +2648,12 @@ async fn update_in_tx(
                     .is_some_and(|value| value != current.hsn_code.as_str()),
             ),
             (
+                "retailPricePaise",
+                input
+                    .retail_price_paise
+                    .is_some_and(|value| value != current.retail_price_paise),
+            ),
+            (
                 "gstPercent",
                 input
                     .gst_percent
@@ -1757,6 +2680,12 @@ async fn update_in_tx(
                 input
                     .center_available
                     .is_some_and(|value| value != current.center_available),
+            ),
+            (
+                "onlineSaleEnabled",
+                input
+                    .online_sale_enabled
+                    .is_some_and(|value| value != current.online_sale_enabled),
             ),
         ];
         for (field, changed) in candidates {
@@ -1864,7 +2793,30 @@ async fn update_in_tx(
                 .adjustment_reason
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
-                .unwrap_or("Manual stock adjustment");
+                .ok_or_else(|| AppError::validation("adjustmentReason is required"))?;
+            let evidence = input
+                .adjustment_evidence_reference
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| AppError::validation("adjustmentEvidenceReference is required"))?;
+            let business_date = NaiveDate::parse_from_str(
+                input.adjustment_business_date.unwrap_or_default().trim(),
+                "%Y-%m-%d",
+            )
+            .map_err(|_| AppError::validation("adjustmentBusinessDate must use YYYY-MM-DD"))?;
+            enforce_inventory_business_date(tx, input.tenant_id, input.branch_id, business_date)
+                .await?;
+            let value = i64::from(quantity_delta.saturating_abs())
+                .saturating_mul(input.unit_cost_paise.unwrap_or(current.unit_cost_paise));
+            let threshold = sqlx::query_scalar::<_, i64>(
+                "SELECT COALESCE((SELECT count_value_variance_threshold_paise FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),50000)",
+            ).bind(input.tenant_id).bind(input.branch_id).fetch_one(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to load adjustment approval threshold"))?;
+            if value > threshold {
+                return Err(AppError::conflict(
+                    "material stock adjustment must use the approval workflow",
+                ));
+            }
             inventory_repository::upsert_product_master_value(
                 tx,
                 input.tenant_id,
@@ -1876,15 +2828,33 @@ async fn update_in_tx(
             )
             .await
             .map_err(|_| AppError::internal("failed to save adjustment reason master"))?;
+            let adjustment_unit_cost_paise = if quantity_delta < 0 {
+                outbound_unit_cost(
+                    tx,
+                    input.tenant_id,
+                    input.branch_id,
+                    input.id,
+                    current.batch_tracked,
+                    input.unit_cost_paise.unwrap_or(current.unit_cost_paise),
+                    quantity_delta.saturating_abs(),
+                )
+                .await?
+            } else {
+                input.unit_cost_paise.unwrap_or(current.unit_cost_paise)
+            };
             let ledger_id = inventory_repository::add_adjustment_ledger(
                 tx,
                 input.tenant_id,
                 input.branch_id,
                 input.id,
                 quantity_delta,
-                input.unit_cost_paise.unwrap_or(current.unit_cost_paise),
+                adjustment_unit_cost_paise,
                 target,
                 reason,
+                "manual_direct",
+                evidence,
+                Some(business_date),
+                None,
                 idempotency_key,
             )
             .await
@@ -1900,6 +2870,19 @@ async fn update_in_tx(
                 )
                 .await?;
             }
+            accounting_service::post_inventory_adjustment(
+                tx,
+                input.tenant_id,
+                input.branch_id,
+                "inventory_adjustment_direct",
+                &ledger_id,
+                business_date,
+                input.actor_user_id,
+                quantity_delta,
+                adjustment_unit_cost_paise,
+                reason,
+            )
+            .await?;
         }
     }
 
@@ -1924,12 +2907,14 @@ async fn update_in_tx(
             order_level: input.order_level,
             safety_stock_level: input.safety_stock_level,
             unit_cost_paise: input.unit_cost_paise,
+            retail_price_paise: input.retail_price_paise,
             hsn_code: input.hsn_code,
             gst_percent: input.gst_percent,
             barcode: input.barcode,
             batch_tracked: input.batch_tracked,
             dual_use_stock: input.dual_use_stock,
             center_available: input.center_available,
+            online_sale_enabled: input.online_sale_enabled,
             active: input.active,
         },
     )
@@ -2081,6 +3066,41 @@ pub async fn allocate_fefo_batches(
         quantity,
     )
     .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn outbound_unit_cost(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    inventory_item_id: &str,
+    batch_tracked: bool,
+    fallback_unit_cost_paise: i64,
+    quantity: i32,
+) -> Result<i64, AppError> {
+    if !batch_tracked || quantity <= 0 {
+        return Ok(fallback_unit_cost_paise);
+    }
+    let valuation_method = sqlx::query_scalar::<_, String>(
+        "SELECT COALESCE((SELECT valuation_method FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'weighted_average')",
+    )
+    .bind(tenant_id).bind(branch_id).fetch_one(&mut **tx).await
+    .map_err(|_| AppError::internal("failed to load inventory valuation policy"))?;
+    if valuation_method != "fifo" {
+        return Ok(fallback_unit_cost_paise);
+    }
+    let batches =
+        inventory_repository::lock_fefo_batches(tx, tenant_id, branch_id, inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock FIFO inventory batches"))?;
+    fifo_planned_unit_cost(
+        &batches
+            .iter()
+            .map(|batch| (batch.quantity, batch.unit_cost_paise))
+            .collect::<Vec<_>>(),
+        quantity,
+    )
+    .ok_or_else(|| AppError::conflict("non-expired batch stock is insufficient"))
 }
 
 pub async fn allocate_fefo_quantity(
@@ -2407,12 +3427,63 @@ fn fefo_plan(available: &[i32], requested: i32) -> Option<Vec<i32>> {
     (remaining == 0).then_some(plan)
 }
 
+fn fifo_planned_unit_cost(layers: &[(i32, i64)], requested: i32) -> Option<i64> {
+    if requested <= 0 {
+        return None;
+    }
+    let plan = fefo_plan(
+        &layers.iter().map(|layer| layer.0).collect::<Vec<_>>(),
+        requested,
+    )?;
+    let total = layers
+        .iter()
+        .zip(plan)
+        .try_fold(0_i64, |total, (layer, used)| {
+            i64::from(used)
+                .checked_mul(layer.1)
+                .and_then(|value| total.checked_add(value))
+        })?;
+    Some((total + i64::from(requested) / 2) / i64::from(requested))
+}
+
+fn kit_component_allowed(kit_usage: &str, component_usage: &str) -> bool {
+    matches!(kit_usage, "retail" | "consumable")
+        && (component_usage == kit_usage || component_usage == "dual_use")
+}
+
+fn kit_unbundle_batch_number(batch_tracked: bool, operation_id: &str) -> String {
+    batch_tracked
+        .then(|| format!("KIT-{operation_id}"))
+        .unwrap_or_default()
+}
+
+pub(crate) fn weighted_average_cost(
+    current_quantity: i32,
+    current_cost: i64,
+    incoming_quantity: i32,
+    incoming_cost: i64,
+) -> Result<i64, AppError> {
+    let total_quantity = current_quantity
+        .checked_add(incoming_quantity)
+        .ok_or_else(|| AppError::validation("stock quantity exceeds supported range"))?;
+    let value = i128::from(current_quantity)
+        .checked_mul(i128::from(current_cost))
+        .and_then(|amount| {
+            amount.checked_add(i128::from(incoming_quantity) * i128::from(incoming_cost))
+        })
+        .ok_or_else(|| AppError::validation("inventory valuation exceeds supported range"))?;
+    i64::try_from((value + i128::from(total_quantity / 2)) / i128::from(total_quantity))
+        .map_err(|_| AppError::validation("inventory unit cost exceeds supported range"))
+}
+
 pub async fn save_kit_components(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
     kit_inventory_item_id: &str,
     components: Vec<KitComponentInput>,
+    auto_unbundle_on_receive: Option<bool>,
+    actor_user_id: &str,
 ) -> Result<Vec<inventory_repository::InventoryKitComponentRecord>, AppError> {
     if components.is_empty() || components.len() > 100 {
         return Err(AppError::validation("kit must contain 1 to 100 components"));
@@ -2453,13 +3524,48 @@ pub async fn save_kit_components(
             "batch-tracked products cannot be assembled kits",
         ));
     }
+    if !matches!(kit.product_usage.as_str(), "retail" | "consumable") {
+        return Err(AppError::validation(
+            "a kit must be either retail or consumable, not dual-use",
+        ));
+    }
+    if inventory_repository::is_kit_component(&mut tx, tenant_id, branch_id, kit_inventory_item_id)
+        .await
+        .map_err(|_| AppError::internal("failed to validate nested kit"))?
+    {
+        return Err(AppError::validation(
+            "a component of another kit cannot become a nested kit",
+        ));
+    }
+    let existing = inventory_repository::kit_components_for_update(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        kit_inventory_item_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load existing kit components"))?;
+    let existing_definition = existing
+        .iter()
+        .map(|row| (row.component_inventory_item_id.clone(), row.quantity))
+        .collect::<Vec<_>>();
+    if kit.stock_quantity > 0 && existing_definition != normalized {
+        return Err(AppError::conflict(
+            "unbundle existing kit stock before changing its components",
+        ));
+    }
     for (component_id, _) in &normalized {
         let component =
             inventory_repository::lock_for_adjustment(&mut tx, tenant_id, branch_id, component_id)
                 .await
                 .map_err(|_| AppError::internal("failed to validate kit component"))?
-                .filter(|item| item.active)
+                .filter(|item| item.active && item.center_available)
                 .ok_or_else(|| AppError::validation("kit component is unavailable"))?;
+        if !kit_component_allowed(&kit.product_usage, &component.product_usage) {
+            return Err(AppError::validation(
+                "retail kits can contain only retail or dual-use products; consumable kits can contain only consumable or dual-use products",
+            ));
+        }
         if inventory_repository::has_kit_components(&mut tx, tenant_id, branch_id, &component.id)
             .await
             .map_err(|_| AppError::internal("failed to validate nested kit"))?
@@ -2476,6 +3582,18 @@ pub async fn save_kit_components(
     )
     .await
     .map_err(|_| AppError::internal("failed to save kit components"))?;
+    if let Some(enabled) = auto_unbundle_on_receive {
+        inventory_repository::save_kit_auto_unbundle(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            kit_inventory_item_id,
+            enabled,
+            actor_user_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to save kit receiving setting"))?;
+    }
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit kit components"))?;
@@ -2492,10 +3610,15 @@ pub async fn assemble_kit(
     quantity: i32,
     idempotency_key: &str,
     actor_user_id: &str,
+    comments: &str,
 ) -> Result<KitAssemblyResult, AppError> {
-    if quantity <= 0 || idempotency_key.trim().is_empty() || idempotency_key.len() > 120 {
+    if quantity <= 0
+        || idempotency_key.trim().is_empty()
+        || idempotency_key.len() > 120
+        || comments.chars().count() > 500
+    {
         return Err(AppError::validation(
-            "positive quantity and idempotencyKey are required",
+            "positive quantity, a valid idempotencyKey and comments up to 500 characters are required",
         ));
     }
     let mut tx = state
@@ -2511,9 +3634,9 @@ pub async fn assemble_kit(
     )
     .await
     .map_err(|_| AppError::internal("failed to lock kit inventory"))?
-    .filter(|item| item.active)
+    .filter(|item| item.active && item.center_available)
     .ok_or_else(|| AppError::not_found("kit item was not found"))?;
-    if let Some(id) = inventory_repository::kit_assembly_by_key(
+    if let Some(operation) = inventory_repository::kit_operation_by_key(
         &mut tx,
         tenant_id,
         branch_id,
@@ -2523,16 +3646,29 @@ pub async fn assemble_kit(
     .map_err(|_| AppError::internal("failed to read kit assembly replay"))?
     {
         tx.rollback().await.ok();
+        if operation.kit_inventory_item_id != kit.id
+            || operation.operation_type != "bundle"
+            || operation.quantity != quantity
+        {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by a different kit operation",
+            ));
+        }
         return Ok(KitAssemblyResult {
-            id,
+            id: operation.id,
             kit_inventory_item_id: kit.id,
             quantity,
-            stock_quantity: kit.stock_quantity,
+            stock_quantity: operation.stock_after_quantity,
         });
     }
     if kit.batch_tracked {
         return Err(AppError::conflict(
             "batch-tracked products cannot be assembled kits",
+        ));
+    }
+    if !matches!(kit.product_usage.as_str(), "retail" | "consumable") {
+        return Err(AppError::validation(
+            "a kit must be either retail or consumable, not dual-use",
         ));
     }
     let components = inventory_repository::kit_components_for_update(
@@ -2546,14 +3682,18 @@ pub async fn assemble_kit(
     if components.is_empty() {
         return Err(AppError::validation("kit has no components"));
     }
-    let assembly_id = inventory_repository::create_kit_assembly(
+    let assembly_id = inventory_repository::create_kit_operation(
         &mut tx,
         tenant_id,
         branch_id,
         kit_inventory_item_id,
+        "bundle",
         quantity,
         idempotency_key.trim(),
         actor_user_id,
+        comments.trim(),
+        None,
+        None,
     )
     .await
     .map_err(|_| AppError::conflict("kit assembly idempotency key already exists"))?;
@@ -2567,8 +3707,13 @@ pub async fn assemble_kit(
         )
         .await
         .map_err(|_| AppError::internal("failed to lock kit component"))?
-        .filter(|item| item.active)
+        .filter(|item| item.active && item.center_available)
         .ok_or_else(|| AppError::validation("kit component is unavailable"))?;
+        if !kit_component_allowed(&kit.product_usage, &item.product_usage) {
+            return Err(AppError::validation(
+                "kit component type no longer matches the kit",
+            ));
+        }
         let required = component
             .quantity
             .checked_mul(quantity)
@@ -2580,6 +3725,16 @@ pub async fn assemble_kit(
             )));
         }
         let stock_after = item.stock_quantity - required;
+        let component_unit_cost_paise = outbound_unit_cost(
+            &mut tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            item.batch_tracked,
+            item.unit_cost_paise,
+            required,
+        )
+        .await?;
         inventory_repository::apply_adjusted_stock(
             &mut tx,
             tenant_id,
@@ -2597,26 +3752,26 @@ pub async fn assemble_kit(
             &assembly_id,
             "kit_component_out",
             -required,
-            item.unit_cost_paise,
+            component_unit_cost_paise,
             stock_after,
         )
         .await
         .map_err(|_| AppError::internal("failed to write kit component ledger"))?;
         allocate_fefo_batches(&mut tx, tenant_id, branch_id, &item, &ledger_id, required).await?;
         kit_cost = kit_cost
-            .saturating_add(i64::from(component.quantity).saturating_mul(item.unit_cost_paise));
+            .checked_add(
+                i64::from(component.quantity)
+                    .checked_mul(component_unit_cost_paise)
+                    .ok_or_else(|| AppError::validation("kit valuation exceeds supported range"))?,
+            )
+            .ok_or_else(|| AppError::validation("kit valuation exceeds supported range"))?;
     }
     let stock_after = kit
         .stock_quantity
         .checked_add(quantity)
         .ok_or_else(|| AppError::validation("kit stock exceeds supported range"))?;
-    let total_value = i128::from(kit.stock_quantity)
-        .checked_mul(i128::from(kit.unit_cost_paise))
-        .and_then(|value| value.checked_add(i128::from(quantity) * i128::from(kit_cost)))
-        .ok_or_else(|| AppError::validation("kit valuation exceeds supported range"))?;
     let weighted_cost =
-        i64::try_from((total_value + i128::from(stock_after / 2)) / i128::from(stock_after))
-            .map_err(|_| AppError::validation("kit unit cost exceeds supported range"))?;
+        weighted_average_cost(kit.stock_quantity, kit.unit_cost_paise, quantity, kit_cost)?;
     inventory_repository::apply_stock_and_cost(
         &mut tx,
         tenant_id,
@@ -2640,11 +3795,260 @@ pub async fn assemble_kit(
     )
     .await
     .map_err(|_| AppError::internal("failed to write kit assembly ledger"))?;
+    inventory_repository::finish_kit_operation(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        &assembly_id,
+        kit_cost,
+        stock_after,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to finish kit assembly history"))?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit kit assembly"))?;
     Ok(KitAssemblyResult {
         id: assembly_id,
+        kit_inventory_item_id: kit.id,
+        quantity,
+        stock_quantity: stock_after,
+    })
+}
+
+pub async fn unbundle_kit(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+    input: KitOperationInput<'_>,
+) -> Result<KitAssemblyResult, AppError> {
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to start kit unbundle"))?;
+    let result = unbundle_kit_in_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        kit_inventory_item_id,
+        input.quantity,
+        input.idempotency_key,
+        input.actor_user_id,
+        input.comments,
+        "unbundle",
+        None,
+        None,
+    )
+    .await?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit kit unbundle"))?;
+    Ok(result)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn unbundle_kit_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    kit_inventory_item_id: &str,
+    quantity: i32,
+    idempotency_key: &str,
+    actor_user_id: &str,
+    comments: &str,
+    operation_type: &str,
+    source_receipt_id: Option<&str>,
+    source_receipt_line_id: Option<&str>,
+) -> Result<KitAssemblyResult, AppError> {
+    if quantity <= 0
+        || idempotency_key.trim().is_empty()
+        || idempotency_key.len() > 120
+        || comments.chars().count() > 500
+        || !matches!(operation_type, "unbundle" | "receipt_unbundle")
+    {
+        return Err(AppError::validation("kit unbundle input is invalid"));
+    }
+    let kit =
+        inventory_repository::lock_for_adjustment(tx, tenant_id, branch_id, kit_inventory_item_id)
+            .await
+            .map_err(|_| AppError::internal("failed to lock kit inventory"))?
+            .filter(|item| item.active && item.center_available)
+            .ok_or_else(|| AppError::not_found("kit item was not found"))?;
+    if let Some(operation) =
+        inventory_repository::kit_operation_by_key(tx, tenant_id, branch_id, idempotency_key.trim())
+            .await
+            .map_err(|_| AppError::internal("failed to read kit unbundle replay"))?
+    {
+        if operation.kit_inventory_item_id != kit.id
+            || operation.operation_type != operation_type
+            || operation.quantity != quantity
+        {
+            return Err(AppError::conflict(
+                "idempotencyKey is already used by a different kit operation",
+            ));
+        }
+        return Ok(KitAssemblyResult {
+            id: operation.id,
+            kit_inventory_item_id: kit.id,
+            quantity,
+            stock_quantity: operation.stock_after_quantity,
+        });
+    }
+    if kit.batch_tracked || !matches!(kit.product_usage.as_str(), "retail" | "consumable") {
+        return Err(AppError::validation(
+            "only non-batch retail or consumable kits can be unbundled",
+        ));
+    }
+    if kit.stock_quantity < quantity {
+        return Err(AppError::conflict(
+            "insufficient finished kit stock to unbundle",
+        ));
+    }
+    let components = inventory_repository::kit_components_for_update(
+        tx,
+        tenant_id,
+        branch_id,
+        kit_inventory_item_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load kit components"))?;
+    if components.is_empty() {
+        return Err(AppError::validation("kit has no components"));
+    }
+    let mut locked = Vec::with_capacity(components.len());
+    let mut component_cost = 0i128;
+    let mut component_units = 0i64;
+    for component in components {
+        let item = inventory_repository::lock_for_adjustment(
+            tx,
+            tenant_id,
+            branch_id,
+            &component.component_inventory_item_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to lock kit component"))?
+        .filter(|item| item.active && item.center_available)
+        .ok_or_else(|| AppError::validation("kit component is unavailable"))?;
+        if !kit_component_allowed(&kit.product_usage, &item.product_usage) {
+            return Err(AppError::validation(
+                "kit component type no longer matches the kit",
+            ));
+        }
+        component_cost += i128::from(component.quantity) * i128::from(item.unit_cost_paise);
+        component_units += i64::from(component.quantity);
+        locked.push((component, item));
+    }
+    let operation_id = inventory_repository::create_kit_operation(
+        tx,
+        tenant_id,
+        branch_id,
+        kit_inventory_item_id,
+        operation_type,
+        quantity,
+        idempotency_key.trim(),
+        actor_user_id,
+        comments.trim(),
+        source_receipt_id,
+        source_receipt_line_id,
+    )
+    .await
+    .map_err(|_| AppError::conflict("kit operation idempotency key already exists"))?;
+    for (component, item) in locked {
+        let incoming_quantity = component
+            .quantity
+            .checked_mul(quantity)
+            .ok_or_else(|| AppError::validation("kit quantity exceeds supported range"))?;
+        let incoming_cost = if component_cost > 0 {
+            i64::try_from(
+                (i128::from(kit.unit_cost_paise) * i128::from(item.unit_cost_paise)
+                    + component_cost / 2)
+                    / component_cost,
+            )
+            .map_err(|_| AppError::validation("component valuation exceeds supported range"))?
+        } else {
+            (kit.unit_cost_paise + component_units / 2) / component_units
+        };
+        let stock_after = item
+            .stock_quantity
+            .checked_add(incoming_quantity)
+            .ok_or_else(|| AppError::validation("component stock exceeds supported range"))?;
+        let next_cost = weighted_average_cost(
+            item.stock_quantity,
+            item.unit_cost_paise,
+            incoming_quantity,
+            incoming_cost,
+        )?;
+        inventory_repository::apply_stock_and_cost(
+            tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            stock_after,
+            next_cost,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to restore kit component"))?;
+        let ledger_id = inventory_repository::add_kit_ledger(
+            tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            &operation_id,
+            "kit_component_in",
+            incoming_quantity,
+            incoming_cost,
+            stock_after,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to write kit component-in ledger"))?;
+        let unbundle_batch = kit_unbundle_batch_number(item.batch_tracked, &operation_id);
+        record_batch_receipt(
+            tx,
+            tenant_id,
+            branch_id,
+            &item.id,
+            item.batch_tracked,
+            &unbundle_batch,
+            "",
+            None,
+            chrono::Utc::now().date_naive(),
+            incoming_quantity,
+            incoming_cost,
+            &ledger_id,
+        )
+        .await?;
+    }
+    let stock_after = kit.stock_quantity - quantity;
+    inventory_repository::apply_adjusted_stock(tx, tenant_id, branch_id, &kit.id, stock_after)
+        .await
+        .map_err(|_| AppError::internal("failed to consume finished kit"))?;
+    inventory_repository::add_kit_ledger(
+        tx,
+        tenant_id,
+        branch_id,
+        &kit.id,
+        &operation_id,
+        "kit_unbundle_out",
+        -quantity,
+        kit.unit_cost_paise,
+        stock_after,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to write kit unbundle ledger"))?;
+    inventory_repository::finish_kit_operation(
+        tx,
+        tenant_id,
+        branch_id,
+        &operation_id,
+        kit.unit_cost_paise,
+        stock_after,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to finish kit unbundle history"))?;
+    Ok(KitAssemblyResult {
+        id: operation_id,
         kit_inventory_item_id: kit.id,
         quantity,
         stock_quantity: stock_after,
@@ -2685,6 +4089,14 @@ fn validate(input: &InventoryUpdateInput<'_>) -> Result<(), AppError> {
         ));
     }
     if input
+        .adjustment_evidence_reference
+        .is_some_and(|value| value.trim().len() > 500)
+    {
+        return Err(AppError::validation(
+            "adjustmentEvidenceReference must be at most 500 characters",
+        ));
+    }
+    if input
         .idempotency_key
         .is_some_and(|value| value.trim().len() > 120)
     {
@@ -2709,7 +4121,7 @@ fn map_ledger_error(error: sqlx::Error) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{fefo_plan, update_in_tx, validate, InventoryUpdateInput};
+    use super::{fefo_plan, fifo_planned_unit_cost, update_in_tx, validate, InventoryUpdateInput};
     use sqlx::PgPool;
 
     fn input<'a>(
@@ -2738,6 +4150,7 @@ mod tests {
             order_level: None,
             safety_stock_level: None,
             unit_cost_paise: None,
+            retail_price_paise: None,
             hsn_code: None,
             gst_percent: None,
             barcode: None,
@@ -2745,8 +4158,11 @@ mod tests {
             batch_tracked: None,
             dual_use_stock: None,
             center_available: None,
+            online_sale_enabled: None,
             active: None,
             adjustment_reason: Some("Cycle count correction"),
+            adjustment_evidence_reference: Some("count-sheet-1"),
+            adjustment_business_date: Some("2026-08-01"),
             idempotency_key: Some(key),
             actor_user_id: "user-1",
         }
@@ -2970,5 +4386,6 @@ mod tests {
     fn fefo_uses_earliest_available_batches_and_rejects_shortage() {
         assert_eq!(fefo_plan(&[2, 5, 9], 6), Some(vec![2, 4, 0]));
         assert_eq!(fefo_plan(&[2, 1], 4), None);
+        assert_eq!(fifo_planned_unit_cost(&[(2, 100), (5, 130)], 4), Some(115));
     }
 }

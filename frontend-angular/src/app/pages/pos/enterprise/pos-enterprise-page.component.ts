@@ -17,6 +17,7 @@ interface CorporateMember { id: string; clientId: string; clientName: string; cl
 interface CorporateStatement { id: string; saleId: string; invoiceNumber: string; dueDate: string; originalAmountPaise: number; paidPaise: number; outstandingPaise: number; status: string; }
 interface Provider { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string; }
 interface NotificationProfile { senderEmail: string; senderPhone: string; logoUrl: string; signatureUrl: string; emailVerified: boolean; phoneVerified: boolean; ownerEmail: string; ownerPhone: string; reportingEmail: string; ownerEmailVerified: boolean; ownerPhoneVerified: boolean; reportingEmailVerified: boolean; clientEmailEnabled: boolean; clientWhatsappEnabled: boolean; ownerEmailEnabled: boolean; ownerWhatsappEnabled: boolean; dailyReportEnabled: boolean; dailyReportTime: string; dailyReportTimezone: string; }
+interface CashControlSettings { maxCashPaise: number; varianceAlertPaise: number; updatedAt: string; }
 
 @Component({
     selector: 'app-pos-enterprise-page',
@@ -45,11 +46,13 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   dayClose: any = null;
   float: any = null;
   drawer: any = null;
+  cashControls: CashControlSettings | null = null;
   notification: NotificationProfile = { senderEmail: '', senderPhone: '', logoUrl: '', signatureUrl: '', emailVerified: false, phoneVerified: false, ownerEmail: '', ownerPhone: '', reportingEmail: '', ownerEmailVerified: false, ownerPhoneVerified: false, reportingEmailVerified: false, clientEmailEnabled: true, clientWhatsappEnabled: true, ownerEmailEnabled: false, ownerWhatsappEnabled: false, dailyReportEnabled: false, dailyReportTime: '21:00', dailyReportTimezone: 'Asia/Kolkata' };
   terminalCode = ''; terminalName = ''; terminalCounter = '';
   deviceTerminalId = ''; deviceName = ''; deviceType = 'thermal'; connectionType = 'browser';
   jobTerminalId = ''; jobDeviceId = ''; jobSaleId = ''; jobFormat = 'thermal';
   dayReason = ''; reopenReason = '';
+  maxCashLimit = ''; varianceAlert = '';
   riskNotes: Record<string, string> = {};
   accountCode = ''; accountName = ''; accountEmail = ''; accountPhone = ''; accountGstin = ''; accountCredit = ''; accountTerms = '';
   corporateSaleId = ''; corporateAccountId = ''; corporateReference = '';
@@ -59,6 +62,8 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   verificationId = ''; verificationOtp = '';
   approvalRecipient = ''; approvalChannel = 'whatsapp'; approvalPath = '';
   loading = false; busy = false; message = ''; error = '';
+  /** Set when the delivery profile fails to load, so the blank form is not saved over real settings. */
+  notificationError = '';
   private liveUpdates?: Subscription;
 
   constructor(private readonly api: ApiService, private readonly realtime: PosRealtimeService) {}
@@ -77,7 +82,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   load(): void {
     if (!this.isoDate()) { this.error = 'Select a valid business date'; return; }
     this.loading = true; this.error = ''; this.message = '';
-    let pending = 14;
+    let pending = 15;
     const done = () => { pending -= 1; if (!pending) this.loading = false; };
     this.read<Terminal[]>('/api/v1/pos/terminals', (rows) => this.terminals = rows, done);
     this.read<PrintDevice[]>('/api/v1/pos/print-devices', (rows) => this.devices = rows, done);
@@ -87,6 +92,11 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
     this.read<Provider[]>('/api/v1/pos/payment-providers', (rows) => this.providers = rows, done);
     this.read<any>(`/api/v1/pos/day-close/${this.isoDate()}`, (row) => this.dayClose = row, done);
     this.read<any>('/api/v1/pos/float-suggestion', (row) => this.float = row, done);
+    this.read<CashControlSettings>('/api/v1/pos/cash-drawer/settings', (row) => {
+      this.cashControls = row;
+      this.maxCashLimit = row.maxCashPaise ? String(row.maxCashPaise / 100) : '';
+      this.varianceAlert = String(row.varianceAlertPaise / 100);
+    }, done);
     this.read<any>(`/api/v1/pos/fraud-summary?from=${this.isoDate()}&to=${this.isoDate()}`, (row) => this.fraudSummary = row, done);
     this.read<any>('/api/v1/pos/corporate-outstanding', (row) => this.corporateOutstanding = row, done);
     this.read<any>(`/api/v1/pos/day-close/${this.isoDate()}/accounting-preview`, (row) => this.accountingPreview = row, done);
@@ -96,7 +106,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
       next: (response) => { this.drawer = response?.data ?? null; done(); },
       error: () => { this.drawer = null; done(); },
     });
-    this.api.get<any>('/api/v1/invoice-notifications/profile').subscribe({ next: (response) => { const row = response?.data ?? response; if (row) this.notification = row; }, error: () => {} });
+    this.api.get<any>('/api/v1/invoice-notifications/profile').subscribe({ next: (response) => { const row = response?.data ?? response; if (row) this.notification = row; this.notificationError = ''; }, error: () => this.notificationError = 'Unable to load delivery profile' });
     this.api.get<any>('/api/v1/invoice-notifications/queue').subscribe({ next: (response) => { const row = response?.data ?? response; this.notificationQueue = Array.isArray(row) ? row : []; }, error: () => this.notificationQueue = [] });
   }
 
@@ -126,8 +136,15 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
 
   lockDay(): void {
     if (!this.drawerReadyForLock) return this.fail('Close and approve the branch cash drawer before locking the day');
+    if (!this.eodReady) return this.fail('Resolve register, invoice, payment and accounting reconciliation gaps before lock');
     if (!this.dayReason.trim()) return this.fail('Lock reason is required');
     this.run(this.api.post(`/api/v1/pos/day-close/${this.isoDate()}/lock`, { reason: this.dayReason.trim() }), 'Business day locked', () => this.dayReason = '');
+  }
+  saveCashControls(): void {
+    const maxCashPaise = this.toPaise(this.maxCashLimit);
+    const varianceAlertPaise = this.toPaise(this.varianceAlert);
+    if (maxCashPaise < 0 || varianceAlertPaise < 0 || !Number.isFinite(maxCashPaise + varianceAlertPaise)) return this.fail('Enter valid non-negative cash control amounts');
+    this.run(this.api.put('/api/v1/pos/cash-drawer/settings', { maxCashPaise, varianceAlertPaise }), 'Cash controls saved');
   }
   reopenDay(): void { if (!this.reopenReason.trim()) return this.fail('Reopen reason is required'); this.run(this.api.post(`/api/v1/pos/day-close/${this.isoDate()}/reopen`, { reason: this.reopenReason.trim() }), 'Business day reopened', () => this.reopenReason = ''); }
   generateZ(): void { this.run(this.api.post(`/api/v1/pos/z-reports/${this.isoDate()}`, {}), 'Immutable Z-report generated'); }
@@ -161,6 +178,7 @@ export class PosEnterprisePageComponent implements OnInit, OnDestroy {
   get displayBusinessDate(): string { return this.displayDate(this.businessDate); }
   get drawerStatus(): string { return this.drawer?.status ? String(this.drawer.status).replace('_', ' ') : 'Not opened'; }
   get drawerReadyForLock(): boolean { return !this.drawer || this.drawer.status === 'closed'; }
+  get eodReady(): boolean { return this.dayClose?.reconciliation?.ready === true; }
   onBusinessDateChange(value: string): void { this.businessDate = value; this.load(); }
   terminalNameFor(id: string): string { return this.terminals.find((row) => row.id === id)?.terminalName ?? id; }
   terminalPresence(row: Terminal): string {

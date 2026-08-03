@@ -1,4 +1,5 @@
 import "@angular/compiler";
+import { IDBFactory } from "fake-indexeddb";
 import { HttpClient, HttpHeaders } from "@angular/common/http";
 import { Observable, Subject, of, throwError } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,13 +71,9 @@ function setOnline(online: boolean): void {
   });
 }
 
-function storedQueue(): Array<Record<string, unknown>> {
-  const value: unknown = JSON.parse(localStorage.getItem("auraStaffOfflineQueue") || "[]");
-  return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === "object") : [];
-}
-
 describe("StaffAppService security behavior", () => {
   beforeEach(() => {
+    Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: new IDBFactory() });
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: new MemoryStorage() });
     setOnline(true);
     vi.mocked(resetCsrfState).mockClear();
@@ -293,10 +290,12 @@ describe("StaffAppService security behavior", () => {
     setOnline(false);
 
     const result = await service.completeTask("task-1", 3);
-    const [entry] = storedQueue();
+    const [entry] = await service.offlineActions();
 
     expect(isQueuedMutation(result)).toBe(true);
-    expect(entry).toMatchObject({ userId: "one", tenantId: "tenant-one", method: "PATCH", state: "pending" });
+    expect(entry).toMatchObject({ state: "pending" });
+    expect(service.offlineQueueSize()).toBe(1);
+    expect(localStorage.getItem("auraStaffOfflineQueue")).toBeNull();
     expect(entry).not.toHaveProperty("sessionId");
 
     setOnline(true);
@@ -313,10 +312,7 @@ describe("StaffAppService security behavior", () => {
     await first.service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" });
     setOnline(false);
     await first.service.completeTask("task-1", 3);
-    const legacyQueue = storedQueue();
-    if (!legacyQueue[0]) throw new Error("Expected queued action.");
-    legacyQueue[0]["sessionId"] = "stale-random-session";
-    localStorage.setItem("auraStaffOfflineQueue", JSON.stringify(legacyQueue));
+    expect(await first.service.offlineActions()).toHaveLength(1);
 
     const payload = btoa(JSON.stringify({ tenant_id: "tenant-one" })).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
     const token = `header.${payload}.signature`;
@@ -355,5 +351,20 @@ describe("StaffAppService security behavior", () => {
     const flush = http.calls.find((call) => call.method === "PATCH" && call.url.endsWith("/staff/self/tasks/task-1/status"));
     expect(flush?.options.headers?.get("Idempotency-Key")).toBe(queuedIdempotencyKey);
     expect(service.offlineQueueSize()).toBe(0);
+  });
+
+  it("sends a device PIN only to the server and never persists it locally", async () => {
+    const { service, http } = serviceWith((method, url) => {
+      if (method === "POST" && url.endsWith("/auth/login")) return of(loginSession("one"));
+      if (method === "POST" && url.endsWith("/staff/self/security/pin")) return of({ configured: true });
+      return of({});
+    });
+    await service.login({ tenantId: "tenant-one", loginId: "one.staff", password: "password" });
+
+    await service.setDevicePin("2580");
+
+    expect(http.calls.find((call) => call.url.endsWith("/staff/self/security/pin"))?.body).toMatchObject({ pin: "2580" });
+    const storedValues = Array.from({ length: localStorage.length }, (_, index) => localStorage.getItem(localStorage.key(index) || "") || "").join(" ");
+    expect(storedValues).not.toContain("2580");
   });
 });

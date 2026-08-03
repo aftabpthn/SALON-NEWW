@@ -2,6 +2,14 @@ use chrono::{NaiveDate, Utc};
 use serde_json::Value;
 use sqlx::PgPool;
 
+pub async fn active_hrms_scopes(db: &PgPool) -> Result<Vec<(String, String)>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT branch.tenant_id::TEXT,branch.id::TEXT FROM branches branch JOIN tenants tenant ON tenant.id::TEXT=branch.tenant_id::TEXT WHERE branch.active=TRUE AND tenant.status='active' ORDER BY branch.tenant_id,branch.name",
+    )
+    .fetch_all(db)
+    .await
+}
+
 pub async fn dashboard(db: &PgPool, tenant: &str, branch: &str) -> Result<Value, sqlx::Error> {
     let openings = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',opening.id,'title',opening.title,'department',opening.department,'employmentType',opening.employment_type,'openingsCount',opening.openings_count,'description',opening.description,'status',opening.status,'applicationCount',(SELECT COUNT(*) FROM hr_job_applications application WHERE application.tenant_id=opening.tenant_id AND application.branch_id=opening.branch_id AND application.job_opening_id=opening.id),'version',opening.version,'createdAt',opening.created_at,'updatedAt',opening.updated_at) ORDER BY opening.created_at DESC),'[]'::JSONB) FROM hr_job_openings opening WHERE opening.tenant_id=$1 AND opening.branch_id=$2"#).bind(tenant).bind(branch).fetch_one(db);
     let applications = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('id',application.id,'jobOpeningId',application.job_opening_id,'jobTitle',opening.title,'firstName',application.first_name,'lastName',application.last_name,'email',application.email,'phone',application.phone,'source',application.source,'resumeUrl',application.resume_url,'notes',application.notes,'stage',application.stage,'linkedStaffId',application.linked_staff_id,'version',application.version,'createdAt',application.created_at,'updatedAt',application.updated_at) ORDER BY application.created_at DESC),'[]'::JSONB) FROM hr_job_applications application JOIN hr_job_openings opening ON opening.id=application.job_opening_id AND opening.tenant_id=application.tenant_id AND opening.branch_id=application.branch_id WHERE application.tenant_id=$1 AND application.branch_id=$2"#).bind(tenant).bind(branch).fetch_one(db);
@@ -164,12 +172,18 @@ pub async fn operations_intelligence(
         /NULLIF((attendance_rate IS NOT NULL)::INT+(appraisal_rate IS NOT NULL)::INT+(training_rate IS NOT NULL)::INT+(operations_rate IS NOT NULL)::INT,0),2) health_score,
         ((attendance_rate IS NOT NULL)::INT+(appraisal_rate IS NOT NULL)::INT+(training_rate IS NOT NULL)::INT+(operations_rate IS NOT NULL)::INT)*25 coverage
       FROM staff_metrics
-    ) SELECT JSONB_BUILD_OBJECT('branch',JSONB_BUILD_OBJECT('activeStaff',COUNT(*),'healthScore',COALESCE(ROUND(AVG(health_score),2),0),
+    ) SELECT JSONB_BUILD_OBJECT('branch',JSONB_BUILD_OBJECT('activeStaff',COUNT(*),
+      'healthScore',CASE WHEN COALESCE(ROUND(AVG(coverage),2),0)<75 THEN NULL ELSE COALESCE(ROUND(AVG(health_score),2),0) END,
+      'provisionalHealthScore',COALESCE(ROUND(AVG(health_score),2),0),
+      'evidenceCoveragePercent',COALESCE(ROUND(AVG(coverage),2),0),
+      'evidenceStatus',CASE WHEN COALESCE(ROUND(AVG(coverage),2),0)<75 THEN 'insufficient_evidence' ELSE 'sufficient' END,
       'attendancePercent',COALESCE(ROUND(AVG(attendance_rate),2),0),'appraisalPercent',COALESCE(ROUND(AVG(appraisal_rate),2),0),
       'trainingPercent',COALESCE(ROUND(AVG(training_rate),2),0),'operationsPercent',COALESCE(ROUND(AVG(operations_rate),2),0)),
       'staff',COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT('staffId',id,'employeeCode',employee_code,'staffName',staff_name,'jobTitle',job_title,
         'attendancePercent',attendance_rate,'appraisalPercent',appraisal_rate,'trainingPercent',training_rate,'operationsPercent',operations_rate,
-        'healthScore',COALESCE(health_score,0),'coveragePercent',coverage) ORDER BY health_score DESC NULLS LAST,staff_name),'[]'::JSONB)) FROM scored"#)
+        'healthScore',CASE WHEN coverage>=75 THEN health_score ELSE NULL END,'provisionalHealthScore',COALESCE(health_score,0),
+        'coveragePercent',coverage,'evidenceStatus',CASE WHEN coverage<75 THEN 'insufficient_evidence' ELSE 'sufficient' END)
+        ORDER BY health_score DESC NULLS LAST,staff_name),'[]'::JSONB)) FROM scored"#)
         .bind(tenant).bind(branch).bind(from).bind(to).fetch_one(db);
     let (expiry_alerts, onboarding_overdue, missed_tasks, exceptions, completion, benchmarks) = tokio::try_join!(
         expiry_alerts,
@@ -181,14 +195,24 @@ pub async fn operations_intelligence(
     )?;
     let health_score = benchmarks
         .pointer("/branch/healthScore")
-        .and_then(Value::as_f64)
-        .unwrap_or(0.0);
+        .cloned()
+        .unwrap_or(Value::Null);
+    let evidence_coverage = benchmarks
+        .pointer("/branch/evidenceCoveragePercent")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!(0));
+    let evidence_status = benchmarks
+        .pointer("/branch/evidenceStatus")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!("insufficient_evidence"));
     Ok(serde_json::json!({
         "dateFrom": from,
         "dateTo": to,
         "generatedAt": Utc::now(),
         "summary": {
-            "hrHealthScore": health_score,
+            "hrHealthScore": health_score.clone(),
+            "evidenceCoveragePercent": evidence_coverage.clone(),
+            "evidenceStatus": evidence_status.clone(),
             "expiryAlertCount": expiry_alerts.as_array().map_or(0, Vec::len),
             "onboardingOverdueCount": onboarding_overdue.as_array().map_or(0, Vec::len),
             "missedTaskCount": missed_tasks.as_array().map_or(0, Vec::len),
@@ -205,6 +229,8 @@ pub async fn operations_intelligence(
             "periodStart": from,
             "periodEnd": to,
             "hrHealthScore": health_score,
+            "evidenceCoveragePercent": evidence_coverage,
+            "evidenceStatus": evidence_status,
             "requiresAttention": expiry_alerts.as_array().map_or(0, Vec::len)
                 + onboarding_overdue.as_array().map_or(0, Vec::len)
                 + missed_tasks.as_array().map_or(0, Vec::len)
@@ -475,7 +501,7 @@ pub async fn calibrate_appraisal(
     comments: &str,
     version: i32,
 ) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar(r#"UPDATE staff_performance_reviews review SET calibrated_score=$6,calibration_comments=$7,calibrated_by=$5,calibrated_at=NOW(),status='approval_pending',last_actor_user_id=$5,version=version+1,updated_at=NOW() WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3 AND review.version=$4 AND review.status='calibration' AND EXISTS(SELECT 1 FROM staff_appraisal_cycles cycle WHERE cycle.tenant_id=$1 AND cycle.branch_id=$2 AND cycle.id=review.appraisal_cycle_id AND cycle.status='calibration') RETURNING JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'status',status,'calibratedScore',calibrated_score,'version',version,'updatedAt',updated_at)"#)
+    sqlx::query_scalar(r#"UPDATE staff_performance_reviews review SET calibrated_score=$6,calibration_comments=$7,calibrated_by=$5,calibrated_at=NOW(),status='approval_pending',last_actor_user_id=$5,version=version+1,updated_at=NOW() WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3 AND review.version=$4 AND review.status='calibration' AND review.last_actor_user_id<>$5 AND EXISTS(SELECT 1 FROM staff_appraisal_cycles cycle WHERE cycle.tenant_id=$1 AND cycle.branch_id=$2 AND cycle.id=review.appraisal_cycle_id AND cycle.status='calibration') RETURNING JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'status',status,'calibratedScore',calibrated_score,'version',version,'updatedAt',updated_at)"#)
         .bind(tenant).bind(branch).bind(id).bind(version).bind(actor).bind(score).bind(comments).fetch_optional(db).await
 }
 
@@ -488,7 +514,7 @@ pub async fn approve_appraisal(
     rating: &str,
     version: i32,
 ) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar(r#"UPDATE staff_performance_reviews review SET final_score=calibrated_score,final_rating=$6,approved_by=$5,approved_at=NOW(),status='approved',shared_at=NOW(),last_actor_user_id=$5,version=version+1,updated_at=NOW() WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3 AND review.version=$4 AND review.status='approval_pending' AND review.calibrated_score IS NOT NULL AND review.profitability_guard_passed=TRUE AND EXISTS(SELECT 1 FROM staff_appraisal_cycles cycle WHERE cycle.tenant_id=$1 AND cycle.branch_id=$2 AND cycle.id=review.appraisal_cycle_id AND cycle.status='calibration') RETURNING JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'status',status,'finalScore',final_score,'finalRating',final_rating,'version',version,'updatedAt',updated_at)"#)
+    sqlx::query_scalar(r#"UPDATE staff_performance_reviews review SET final_score=calibrated_score,final_rating=$6,approved_by=$5,approved_at=NOW(),status='approved',shared_at=NOW(),last_actor_user_id=$5,version=version+1,updated_at=NOW() WHERE review.tenant_id=$1 AND review.branch_id=$2 AND review.id=$3 AND review.version=$4 AND review.status='approval_pending' AND review.calibrated_score IS NOT NULL AND review.profitability_guard_passed=TRUE AND review.calibrated_by<>$5 AND EXISTS(SELECT 1 FROM staff_appraisal_cycles cycle WHERE cycle.tenant_id=$1 AND cycle.branch_id=$2 AND cycle.id=review.appraisal_cycle_id AND cycle.status='calibration') RETURNING JSONB_BUILD_OBJECT('id',id,'staffId',staff_id,'status',status,'finalScore',final_score,'finalRating',final_rating,'version',version,'updatedAt',updated_at)"#)
         .bind(tenant).bind(branch).bind(id).bind(version).bind(actor).bind(rating).fetch_optional(db).await
 }
 
@@ -527,7 +553,8 @@ pub async fn promotion_readiness_report(
             'planId',plan.id,'roleTitle',plan.role_title,'targetRoleId',plan.target_role_id,'targetRoleName',role.name,
             'criticalRole',plan.critical_role,'planStatus',plan.status,'candidateId',candidate.id,
             'staffId',candidate.staff_id,'staffName',TRIM(CONCAT_WS(' ',staff.first_name,NULLIF(staff.last_name,''))),
-            'readiness',candidate.readiness,'readinessScore',candidate.readiness_score,
+            'readiness',CASE WHEN candidate.evidence_coverage_percent<75 THEN 'insufficient_evidence' ELSE candidate.readiness END,
+            'readinessScore',candidate.readiness_score,
             'evidenceCoveragePercent',candidate.evidence_coverage_percent,'signals',candidate.signal_snapshot_json,
             'evidence',candidate.evidence_json,'developmentActions',candidate.development_actions_json,
             'nominationStatus',candidate.status,'nominatedBy',candidate.nominated_by,'approvedBy',candidate.approved_by,
@@ -623,7 +650,8 @@ pub async fn create_succession_candidate(
       WHERE plan.tenant_id=$1 AND plan.branch_id=$2 AND plan.id=$4 AND plan.status='active'
     ) INSERT INTO staff_succession_candidates(tenant_id,branch_id,plan_id,staff_id,readiness,readiness_score,
         evidence_json,development_actions_json,signal_snapshot_json,evidence_coverage_percent,calculated_at,created_by,nominated_by)
-      SELECT $1,$2,plan_id,staff_id,signals->>'readiness',(signals->>'score')::INTEGER,$6,$7,signals,
+      SELECT $1,$2,plan_id,staff_id,CASE WHEN (signals->>'coveragePercent')::INTEGER<75 THEN 'insufficient_evidence' ELSE signals->>'readiness' END,
+        (signals->>'score')::INTEGER,$6,$7,signals,
         (signals->>'coveragePercent')::INTEGER,NOW(),$3,$3 FROM eligible
       RETURNING JSONB_BUILD_OBJECT('id',id,'planId',plan_id,'staffId',staff_id,'readiness',readiness,
         'readinessScore',readiness_score,'evidenceCoveragePercent',evidence_coverage_percent,'signals',signal_snapshot_json,
@@ -656,7 +684,8 @@ pub async fn update_succession_candidate(
       SELECT candidate.*,staff_succession_signal_snapshot($1,$2,candidate.plan_id,candidate.staff_id) signals
       FROM staff_succession_candidates candidate
       WHERE candidate.tenant_id=$1 AND candidate.branch_id=$2 AND candidate.id=$3 AND candidate.version=$7 AND candidate.status='proposed'
-    ) UPDATE staff_succession_candidates candidate SET status=$4,readiness=current.signals->>'readiness',
+    ) UPDATE staff_succession_candidates candidate SET status=$4,
+      readiness=CASE WHEN (current.signals->>'coveragePercent')::INTEGER<75 THEN 'insufficient_evidence' ELSE current.signals->>'readiness' END,
       readiness_score=(current.signals->>'score')::INTEGER,evidence_json=$5,development_actions_json=$6,
       signal_snapshot_json=current.signals,evidence_coverage_percent=(current.signals->>'coveragePercent')::INTEGER,
       calculated_at=NOW(),version=candidate.version+1,updated_at=NOW()
@@ -693,7 +722,7 @@ pub async fn decide_succession_candidate(
       approved_by=CASE WHEN $5='approved' THEN $4 ELSE NULL END,approved_at=CASE WHEN $5='approved' THEN NOW() ELSE NULL END,
       decision_note=$6,version=version+1,updated_at=NOW()
       WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$7 AND status='proposed'
-        AND nominated_by<>$4 AND ($5<>'approved' OR evidence_coverage_percent>=50)
+        AND nominated_by<>$4 AND ($5<>'approved' OR evidence_coverage_percent>=75)
       RETURNING JSONB_BUILD_OBJECT('id',id,'planId',plan_id,'staffId',staff_id,'status',status,
         'readiness',readiness,'readinessScore',readiness_score,'evidenceCoveragePercent',evidence_coverage_percent,
         'signals',signal_snapshot_json,'approvedBy',approved_by,'approvedAt',approved_at,'decisionNote',decision_note,

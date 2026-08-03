@@ -55,6 +55,7 @@ impl PermissionDefinition {
             || self.code.starts_with("finance.")
             || self.code.starts_with("security.")
             || self.code.contains("payroll")
+            || self.code.starts_with("staff.hrms.")
             || self.code.contains("refund")
             || self.code.contains("void")
             || self.code == "clients.merge"
@@ -67,6 +68,7 @@ impl PermissionDefinition {
         } else if self.code.contains("payroll") {
             Some("staff.payroll")
         } else if self.code == "staff.analytics.read"
+            || self.code.starts_with("staff.hrms.")
             || self.code.starts_with("staff.app.performance.")
             || self.code.starts_with("staff.app.leaderboard.")
             || self.code.starts_with("staff.app.reports.")
@@ -137,6 +139,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Appointments",
     },
     PermissionDefinition {
+        code: "appointments.outside_hours.override",
+        label: "Book outside location hours",
+        group: "Appointments",
+    },
+    PermissionDefinition {
+        code: "appointments.fees.waive",
+        label: "Waive appointment fees",
+        group: "Appointments",
+    },
+    PermissionDefinition {
         code: "bookings.read",
         label: "View booking operations",
         group: "Bookings",
@@ -174,6 +186,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "clients.audit.read",
         label: "View client audit history",
+        group: "Clients",
+    },
+    PermissionDefinition {
+        code: "clients.cross_location.read",
+        label: "View verified cross-location client visits",
         group: "Clients",
     },
     PermissionDefinition {
@@ -272,6 +289,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff",
     },
     PermissionDefinition {
+        code: "staff.hrms.read",
+        label: "View HRMS",
+        group: "Staff",
+    },
+    PermissionDefinition {
+        code: "staff.hrms.manage",
+        label: "Manage HRMS",
+        group: "Staff",
+    },
+    PermissionDefinition {
         code: "staff.attendance.read",
         label: "View staff attendance",
         group: "Staff",
@@ -334,6 +361,121 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "staff.app.appointments.manage",
         label: "Manage Staff App appointments",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.appointments.team.read",
+        label: "View team calendars in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.appointments.team.manage",
+        label: "Manage team appointments in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.appointments.price.manage",
+        label: "Override appointment prices in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.service.read",
+        label: "View Staff App service workspace",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.service.consumables.manage",
+        label: "Record Staff App service consumables",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.service.upsell.manage",
+        label: "Add Staff App recommendations to invoice",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.pos.read",
+        label: "View Staff App checkout invoices",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.pos.manage",
+        label: "Manage Staff App checkout and payments",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.pos.lifecycle.manage",
+        label: "Void or refund Staff App invoices",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.register.read",
+        label: "View Staff App cash register",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.register.manage",
+        label: "Operate Staff App cash register",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.register.approve",
+        label: "Approve Staff App register closure",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.read",
+        label: "View appointment-linked Guest 360",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.contact.read",
+        label: "View unmasked guest contact details",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.notes.manage",
+        label: "Add appointment-linked guest notes",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.clinical.read",
+        label: "View guest clinical details",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.clinical.manage",
+        label: "Update guest clinical details",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.forms.read",
+        label: "View guest forms and history",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.forms.manage",
+        label: "Save and submit guest forms",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.forms.review",
+        label: "Review submitted guest forms",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.photos.read",
+        label: "View protected guest photos",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.photos.manage",
+        label: "Upload and delete protected guest photos",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.guest.consent.manage",
+        label: "Manage guest communication consent",
         group: "Staff App",
     },
     PermissionDefinition {
@@ -462,8 +604,38 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff App",
     },
     PermissionDefinition {
+        code: "staff.app.surveys.read",
+        label: "Show employee surveys in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.surveys.manage",
+        label: "Submit employee surveys in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "staff.app.payroll.read",
         label: "Show Staff App payroll and payslips",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.payroll.costs.read",
+        label: "Show employer payroll costs in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.payroll.deductions.read",
+        label: "Show payroll deductions in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.payroll.documents.read",
+        label: "Download employee payroll documents in Staff App",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.tips.dispute.manage",
+        label: "Submit tip disputes in Staff App",
         group: "Staff App",
     },
     PermissionDefinition {
@@ -721,6 +893,12 @@ pub struct AuthClaims {
     pub exp: usize,
 }
 
+impl AuthClaims {
+    pub fn has_field_mask(&self, field: &str) -> bool {
+        self.masked_fields.iter().any(|value| value == field)
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct TokenPair {
     pub access_token: String,
@@ -738,6 +916,7 @@ pub struct TokenScope<'a> {
     pub role_id: Option<&'a str>,
     pub role: &'a str,
     pub permissions: &'a [String],
+    pub masked_fields: &'a [String],
     pub permission_version: i64,
     pub session_id: &'a str,
     pub must_change_password: bool,
@@ -763,6 +942,7 @@ pub fn issue_token_pair(
             role_id: None,
             role,
             permissions: &[],
+            masked_fields: &[],
             permission_version: 1,
             session_id: &session_id,
             must_change_password: false,
@@ -891,7 +1071,7 @@ fn claims(
         role_id: scope.role_id.map(str::to_string),
         permissions: scope.permissions.to_vec(),
         denied_permissions: Vec::new(),
-        masked_fields: Vec::new(),
+        masked_fields: scope.masked_fields.to_vec(),
         max_discount_paise: None,
         max_refund_paise: None,
         max_cash_movement_paise: None,
@@ -915,6 +1095,7 @@ mod tests {
     #[test]
     fn scoped_token_round_trip_preserves_branch_role_and_permissions() {
         let permissions = vec!["read:appointments".to_string()];
+        let masked_fields = vec!["inventory.cost".to_string()];
         let (tokens, _) = issue_scoped_token_pair(
             TokenScope {
                 user_id: "user-1",
@@ -923,6 +1104,7 @@ mod tests {
                 role_id: Some("role-manager"),
                 role: "manager",
                 permissions: &permissions,
+                masked_fields: &masked_fields,
                 permission_version: 4,
                 session_id: "session-1",
                 must_change_password: false,
@@ -941,6 +1123,7 @@ mod tests {
         assert_eq!(claims.branch_id.as_deref(), Some("branch-2"));
         assert_eq!(claims.role, "manager");
         assert_eq!(claims.permissions, permissions);
+        assert_eq!(claims.masked_fields, masked_fields);
         assert_eq!(claims.permission_version, 4);
         assert_eq!(claims.session_id, "session-1");
         assert!(claims.mfa_enrollment_required);
@@ -974,5 +1157,41 @@ mod tests {
         assert_eq!(permission.group, "Staff App");
         assert_eq!(permission.action(), "read");
         assert_eq!(permission.scope(), "self");
+    }
+
+    #[test]
+    fn phase_seven_staff_permissions_are_registered() {
+        for code in [
+            "staff.app.pos.read",
+            "staff.app.pos.manage",
+            "staff.app.pos.lifecycle.manage",
+            "staff.app.register.read",
+            "staff.app.register.manage",
+            "staff.app.register.approve",
+        ] {
+            assert!(permission_definition(code).is_some(), "missing {code}");
+        }
+    }
+
+    #[test]
+    fn phase_eight_staff_permissions_are_registered() {
+        for code in [
+            "staff.app.payroll.costs.read",
+            "staff.app.payroll.deductions.read",
+            "staff.app.payroll.documents.read",
+            "staff.app.tips.dispute.manage",
+        ] {
+            assert!(permission_definition(code).is_some(), "missing {code}");
+        }
+    }
+
+    #[test]
+    fn appointment_book_privileged_permissions_are_registered() {
+        for code in [
+            "appointments.outside_hours.override",
+            "appointments.fees.waive",
+        ] {
+            assert!(permission_definition(code).is_some(), "missing {code}");
+        }
     }
 }

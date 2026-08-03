@@ -34,6 +34,8 @@ export class AppointmentReportsPageComponent implements OnInit {
   selected: ReportRow | null = null;
   loading = false;
   error = '';
+  /** Set when an optional filter list fails, so an empty dropdown is not read as "no records". */
+  filterError = '';
   search = '';
   branchId = '';
   staffId = '';
@@ -106,17 +108,21 @@ export class AppointmentReportsPageComponent implements OnInit {
   async reload(): Promise<void> {
     this.loading = true;
     this.error = '';
+    this.filterError = '';
     try {
       const [register, staff, branches, report] = await Promise.all([
         firstValueFrom(this.api.get<any>('/api/v1/appointment-activity/register?limit=1000')),
-        firstValueFrom(this.api.get<any>('/api/v1/staff?limit=500')).catch(() => []),
-        firstValueFrom(this.api.get<any>('/api/v1/branches?limit=500')).catch(() => []),
+        firstValueFrom(this.api.get<any>('/api/v1/staff?limit=500')).catch(() => null),
+        firstValueFrom(this.api.get<any>('/api/v1/settings/branches')).catch(() => null),
         firstValueFrom(this.api.get<any>('/api/v1/appointment-activity/reports?limit=1000')).catch(() => null),
       ]);
       const body = register?.data ?? register;
       this.rows = Array.isArray(body?.rows) ? body.rows : [];
-      this.staff = this.options(staff);
-      this.branches = this.options(branches);
+      // A failed filter list keeps whatever was already loaded; only a real response replaces it.
+      const failed: string[] = [];
+      if (staff === null) failed.push('staff'); else this.staff = this.options(staff);
+      if (branches === null) failed.push('branches'); else this.branches = this.options(branches);
+      this.filterError = failed.length ? `Unable to load ${failed.join(' and ')}` : '';
       const reportBody = report?.data ?? report;
       this.reportGeneratedAt = String(reportBody?.generatedAt || body?.generatedAt || '');
       if (this.selected) this.selected = this.rows.find((row) => row.appointmentId === this.selected?.appointmentId) ?? null;

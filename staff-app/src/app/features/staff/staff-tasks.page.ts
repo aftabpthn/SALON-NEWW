@@ -66,7 +66,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
               <div class="panel-title"><h2>{{ column.label }}</h2><span>{{ loading() ? 'Refreshing...' : taskCount(column.status) }}</span></div>
               <div class="list">
                 @for (task of tasksByStatus(column.status); track task.id) {
-                   <div class="kanban-card task-card" draggable="true" (dragstart)="dragTask(task.id, task.version)" [class.pending]="pendingTaskId() === task.id"><div class="task-heading"><strong>{{ task.title }}</strong>@if (task.taskType === 'training' || task.taskType === 'compliance') { <span class="pill">{{ task.taskType === 'training' ? 'SOP' : 'Rule' }}</span> }</div>@if (task.description) { <p>{{ task.description }}</p> }<small>{{ task.priority || 'medium' }} · {{ task.dueAt ? (task.dueAt | date:'short') : 'no due date' }}</small><div class="row-actions task-actions"><span class="badge">{{ task.status || 'open' }}</span>@if (canUpdateTasks() && (!task.status || task.status === 'open')) { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'in_progress')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Start' }}</button> } @if (canUpdateTasks() && task.status === 'blocked') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'in_progress')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Resume' }}</button> } @if (canUpdateTasks() && task.status === 'in_progress') { <button type="button" class="button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="completeTask(task.id, task.version)">{{ pendingTaskId() === task.id ? 'Saving...' : 'Done' }}</button> } @if (canUpdateTasks() && task.status === 'completed') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'open')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Reopen' }}</button> }</div></div>
+                   <div class="kanban-card task-card" draggable="true" (dragstart)="dragTask(task.id, task.version)" [class.pending]="pendingTaskId() === task.id"><div class="task-heading"><strong>{{ task.title }}</strong>@if (task.taskType === 'training' || task.taskType === 'compliance') { <span class="pill">{{ task.taskType === 'training' ? 'SOP' : 'Rule' }}</span> }</div>@if (task.description) { <p>{{ task.description }}</p> }<small>{{ task.priority || 'medium' }} · {{ task.dueAt ? (task.dueAt | date:'short') : 'no due date' }}@if (task.clientId) { · Guest linked }@if (task.appointmentId) { · Appointment linked }</small><div class="row-actions task-actions"><span class="badge">{{ task.status || 'open' }}</span>@if (canUpdateTasks() && (!task.status || task.status === 'open')) { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'in_progress')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Start' }}</button> } @if (canUpdateTasks() && task.status === 'blocked') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'in_progress')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Resume' }}</button> } @if (canUpdateTasks() && task.status === 'in_progress') { <button type="button" class="button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="completeTask(task.id, task.version)">{{ pendingTaskId() === task.id ? 'Saving...' : 'Done' }}</button> } @if (canUpdateTasks() && task.status === 'completed') { <button type="button" class="link-button" [disabled]="!!pendingTaskId()" [attr.aria-busy]="pendingTaskId() === task.id" (click)="moveTask(task.id, task.version, 'open')">{{ pendingTaskId() === task.id ? 'Saving...' : 'Reopen' }}</button> }</div></div>
                 } @empty { <div class="tasks-empty"><p>No {{ column.label.toLowerCase() }} tasks.</p><small>{{ column.status === 'open' ? 'Assigned CRM tasks will appear here.' : 'Move tasks here when status changes.' }}</small></div> }
               </div>
             </article>
@@ -120,10 +120,14 @@ export class StaffTasksPage implements OnInit, OnDestroy {
   proofCompletionNote = "";
   private gpsWatchId: number | null = null;
   private lastGpsSentAt = 0;
+  private socket: WebSocket | null = null;
+  private pollTimer = 0;
+  private reconnectTimer = 0;
+  private destroyed = false;
   readonly columns = [{ label: "Open", status: "open" }, { label: "In Progress", status: "in_progress" }, { label: "Blocked", status: "blocked" }, { label: "Done", status: "completed" }];
   constructor(readonly staff: StaffAppService) {}
-  ngOnInit() { if (this.canReadTasks()) void this.load(); }
-  ngOnDestroy() { this.stopGps(); }
+  ngOnInit() { if (this.canReadTasks()) { void this.load(); void this.connectRealtime(); this.pollTimer = window.setInterval(() => { if (navigator.onLine && document.visibilityState === "visible") void this.load(); }, 15000); } }
+  ngOnDestroy() { this.destroyed = true; this.stopGps(); window.clearInterval(this.pollTimer); window.clearTimeout(this.reconnectTimer); this.socket?.close(); }
   async load() {
     this.loading.set(true); this.loadError.set(""); this.targetLoadError.set("");
     try { this.tasks.set(await this.staff.tasks()); }
@@ -166,6 +170,16 @@ export class StaffTasksPage implements OnInit, OnDestroy {
     finally { this.pendingFieldJobId.set(""); }
   }
   private stopGps() { if (this.gpsWatchId !== null && typeof navigator !== "undefined") navigator.geolocation.clearWatch(this.gpsWatchId); this.gpsWatchId = null; this.gpsJobId.set(""); }
+  private async connectRealtime() {
+    if (this.destroyed || !navigator.onLine || this.socket) return;
+    try {
+      const url = await this.staff.realtimeSocketTicketUrl(); if (!url || this.destroyed) return;
+      const socket = new WebSocket(url, this.staff.realtimeSocketProtocols()); this.socket = socket;
+      socket.onmessage = (event) => { try { if (JSON.parse(String(event.data))?.type === "staff.task.updated") void this.load(); } catch {} };
+      socket.onerror = () => socket.close();
+      socket.onclose = () => { if (this.socket === socket) this.socket = null; if (!this.destroyed) this.reconnectTimer = window.setTimeout(() => void this.connectRealtime(), 5000); };
+    } catch { if (!this.destroyed) this.reconnectTimer = window.setTimeout(() => void this.connectRealtime(), 5000); }
+  }
   private async mutateTask(taskId: string, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
     if (this.pendingTaskId()) return;
     this.pendingTaskId.set(taskId);

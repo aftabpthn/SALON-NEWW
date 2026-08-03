@@ -55,8 +55,8 @@
       <header>
         <h2>{{ 'inventory.ui.30bd7af0c2' | translate }}</h2>
         <div class="panel-actions">
-          <button type="button" [disabled]="!result" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button>
-          <button type="button" [disabled]="!result" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button>
+          <button type="button" [disabled]="!canExportReports || !result" (click)="exportCsv()">{{ 'inventory.ui.5755f9ac0a' | translate }}</button>
+          <button type="button" [disabled]="!canExportReports || !result" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button>
         </div>
       </header>
       @if (loading) {

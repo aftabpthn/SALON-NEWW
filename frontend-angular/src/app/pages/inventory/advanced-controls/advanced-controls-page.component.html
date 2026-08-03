@@ -25,7 +25,7 @@
 
   @if (activeTab === 'exceptions') {
     <section class="command-strip" aria-label="Exception actions">
-      <button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">Export evidence</button>
+      <button type="button" [disabled]="!canExportReports || !filteredExceptions.length" (click)="exportEvidence()">Export evidence</button>
       <button type="button" [disabled]="!filteredExceptions.length" (click)="reviewException()">Review exception</button>
       <button type="button" [disabled]="!filteredExceptions.length" (click)="openActionRoute(filteredExceptions[0])">Open action route</button>
     </section>
@@ -83,7 +83,7 @@
 
   @if (activeTab === 'exceptions') {
     <section class="panel">
-      <header><h2>{{ 'inventory.ui.bec0df1287' | translate }}</h2><div class="panel-actions"><button type="button" [disabled]="!filteredExceptions.length" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.43bba59126' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
+      <header><h2>{{ 'inventory.ui.bec0df1287' | translate }}</h2><div class="panel-actions"><button type="button" [disabled]="!canExportReports || !filteredExceptions.length" (click)="exportEvidence()">{{ 'inventory.ui.e656be48d6' | translate }}</button><button class="icon-button" type="button" [attr.aria-label]="'inventory.ui.43bba59126' | translate" [disabled]="loading" (click)="reload()"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i></button></div></header>
       @if (loading) {
         <div class="loading-state">{{ 'inventory.ui.56d2e1b1c1' | translate }}</div>
       }
@@ -181,6 +181,7 @@
       <label>{{ 'inventory.ui.e3d400bee8' | translate }}<input type="number" min="1" max="3650" [(ngModel)]="policy.expiryWindowDays" /></label>
       <label>{{ 'inventory.ui.a692bbeff4' | translate }}<input type="number" min="0" max="10000" [(ngModel)]="policy.countVarianceThresholdBps" /></label>
       @if (supportsCountValueVarianceThreshold) { <label>Stock-count value approval (₹)<input type="number" min="0" step="0.01" [(ngModel)]="countValueVarianceThresholdRupees" /></label> }
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.allowZeroUnauditedAudit" />Allow approvers to set unaudited stock to zero</label>
       <label>Reorder history (days)<input type="number" min="14" max="365" [(ngModel)]="policy.reorderHistoryDays" /></label>
       <label>Reorder coverage (days)<input type="number" min="7" max="180" [(ngModel)]="policy.reorderCoverageDays" /></label>
       <label>Partial delivery<select [(ngModel)]="policy.partialDeliveryPolicy"><option value="allow">Allow</option><option value="block">Block</option></select></label>
@@ -198,6 +199,27 @@
       <label>{{ 'inventory.ui.24e8505587' | translate }}<input [(ngModel)]="policy.approvalMatrix['negativeStock']" /></label>
       <label>{{ 'inventory.ui.eb2cf73d0b' | translate }}<input [(ngModel)]="policy.approvalMatrix['stockCount']" /></label>
       <label>{{ 'inventory.ui.f5595ea0c0' | translate }}<input [(ngModel)]="policy.approvalMatrix['backbarOverride']" /></label>
+      @for (action of stockActions; track action) {
+        <label class="toggle"><input type="checkbox" [(ngModel)]="policy.stockActionMatrix[action]" />Allow {{ action }}</label>
+      }
+      <label>PO number prefix<input maxlength="12" [(ngModel)]="policy.purchaseOrderSettings.numberPrefix" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.approvalRequired" />PO approval required</label>
+      <label>PO auto-approval threshold (paise)<input type="number" min="0" [(ngModel)]="policy.purchaseOrderSettings.approvalThresholdPaise" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.bulkRaiseEnabled" />Bulk raise purchase orders</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.purchaseOrderSettings.supplierElectronicDelivery" />Supplier electronic delivery</label>
+      <label>Price caption<input maxlength="30" [(ngModel)]="policy.labelSettings.priceCaption" /></label>
+      <label>Label width (mm)<input type="number" min="20" max="100" [(ngModel)]="policy.labelSettings.widthMm" /></label>
+      <label>Label height (mm)<input type="number" min="15" max="80" [(ngModel)]="policy.labelSettings.heightMm" /></label>
+      <label>Label columns<input type="number" min="1" max="8" [(ngModel)]="policy.labelSettings.columns" /></label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showName" />Show product name</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showPrice" />Show price</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showSku" />Show SKU</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showBatch" />Show batch</label>
+      <label class="toggle"><input type="checkbox" [(ngModel)]="policy.labelSettings.showExpiry" />Show expiry</label>
+      <label>Product term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['product']" /></label>
+      <label>Retail term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['retail']" /></label>
+      <label>Consumable term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['consumable']" /></label>
+      <label>Stock term<input maxlength="30" [(ngModel)]="policy.labelSettings.terms['stock']" /></label>
     </div>
     @if (negativeStockRequests.length) {
       <div class="table-scroll"><table><thead><tr><th>{{ 'inventory.ui.dd3b86d1ef' | translate }}</th><th>{{ 'inventory.ui.2f0039e913' | translate }}</th><th>{{ 'inventory.ui.f219cc0614' | translate }}</th><th>{{ 'inventory.ui.bcdf8d373d' | translate }}</th><th>{{ 'inventory.ui.bae7d5be70' | translate }}</th><th>{{ 'inventory.ui.97c89a4d66' | translate }}</th></tr></thead><tbody>@for (row of negativeStockRequests; track row) {

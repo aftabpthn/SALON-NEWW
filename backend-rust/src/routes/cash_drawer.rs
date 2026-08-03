@@ -23,6 +23,10 @@ const MAX_NOTES_LEN: usize = 1_000;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/pos/cash-drawer/current", get(current))
+        .route(
+            "/pos/cash-drawer/settings",
+            get(cash_control_settings).put(save_cash_control_settings),
+        )
         .route("/pos/cash-drawer/open", post(open))
         .route(
             "/pos/cash-drawer/movements",
@@ -67,39 +71,41 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BusinessDateQuery {
-    business_date: Option<String>,
+pub(crate) struct BusinessDateQuery {
+    pub(crate) business_date: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OpenRequest {
-    opening_cash_paise: i64,
-    business_date: Option<String>,
-    notes: Option<String>,
+pub(crate) struct OpenRequest {
+    pub(crate) opening_cash_paise: i64,
+    pub(crate) business_date: Option<String>,
+    pub(crate) notes: Option<String>,
+    #[serde(default)]
+    pub(crate) holiday_exception: bool,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MovementRequest {
-    movement_type: String,
-    amount_paise: i64,
-    business_date: Option<String>,
-    reference_type: Option<String>,
-    reference_id: Option<String>,
-    notes: String,
-    mfa_code: Option<String>,
-    cash_drawer_till_id: Option<String>,
-    idempotency_key: String,
+pub(crate) struct MovementRequest {
+    pub(crate) movement_type: String,
+    pub(crate) amount_paise: i64,
+    pub(crate) business_date: Option<String>,
+    pub(crate) reference_type: Option<String>,
+    pub(crate) reference_id: Option<String>,
+    pub(crate) notes: String,
+    pub(crate) mfa_code: Option<String>,
+    pub(crate) cash_drawer_till_id: Option<String>,
+    pub(crate) idempotency_key: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CloseRequest {
-    counted_cash_paise: Option<i64>,
-    denomination_breakdown: Option<cash_drawer_service::CashCountBreakdown>,
-    business_date: Option<String>,
-    notes: Option<String>,
+pub(crate) struct CloseRequest {
+    pub(crate) counted_cash_paise: Option<i64>,
+    pub(crate) denomination_breakdown: Option<cash_drawer_service::CashCountBreakdown>,
+    pub(crate) business_date: Option<String>,
+    pub(crate) notes: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,15 +146,15 @@ struct CorrectionRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProviderReconciliationRequest {
-    provider: String,
-    settlement_date: String,
-    statement_reference: String,
-    statement_gross_paise: i64,
-    fee_paise: i64,
-    bank_net_paise: i64,
-    notes: Option<String>,
-    mfa_code: Option<String>,
+pub(crate) struct ProviderReconciliationRequest {
+    pub(crate) provider: String,
+    pub(crate) settlement_date: String,
+    pub(crate) statement_reference: String,
+    pub(crate) statement_gross_paise: i64,
+    pub(crate) fee_paise: i64,
+    pub(crate) bank_net_paise: i64,
+    pub(crate) notes: Option<String>,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,9 +166,9 @@ struct ProviderReconciliationImportRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReviewRequest {
-    review_note: String,
-    mfa_code: Option<String>,
+pub(crate) struct ReviewRequest {
+    pub(crate) review_note: String,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -170,8 +176,16 @@ struct ReviewRequest {
 struct TillRequest {
     till_code: String,
     till_name: String,
+    terminal_id: Option<String>,
     opening_cash_paise: i64,
     notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CashControlSettingsRequest {
+    max_cash_paise: i64,
+    variance_alert_paise: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,9 +196,9 @@ struct TillCloseRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApprovalRequest {
-    approval_note: Option<String>,
-    mfa_code: Option<String>,
+pub(crate) struct ApprovalRequest {
+    pub(crate) approval_note: Option<String>,
+    pub(crate) mfa_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,7 +209,7 @@ struct ActionMfaRequest {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct DrawerResponse {
+pub(crate) struct DrawerResponse {
     id: String,
     business_date: NaiveDate,
     opening_cash_paise: i64,
@@ -221,6 +235,7 @@ struct TillResponse {
     drawer_session_id: String,
     till_code: String,
     till_name: String,
+    terminal_id: Option<String>,
     opening_cash_paise: i64,
     expected_cash_paise: Option<i64>,
     counted_cash_paise: Option<i64>,
@@ -233,7 +248,7 @@ struct TillResponse {
     blind: bool,
 }
 
-async fn current(
+pub(crate) async fn current(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -254,7 +269,7 @@ async fn current(
     }))))
 }
 
-async fn open(
+pub(crate) async fn open(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -264,6 +279,17 @@ async fn open(
         return Err(AppError::validation("openingCashPaise cannot be negative"));
     }
     validate_optional_text(payload.notes.as_deref(), "notes", MAX_NOTES_LEN)?;
+    if payload.holiday_exception
+        && (!is_approver(&claims.role)
+            || payload
+                .notes
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty()))
+    {
+        return Err(AppError::forbidden(
+            "holiday exception requires owner, admin, or manager access and notes",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let session = cash_drawer_service::open(
         &state,
@@ -273,13 +299,70 @@ async fn open(
         parse_date(payload.business_date.as_deref())?,
         payload.opening_cash_paise,
         payload.notes.as_deref().unwrap_or_default(),
+        payload.holiday_exception,
     )
     .await?;
     publish_cash_drawer(&state, &tenant_id, &branch_id, &session.id, "drawer.opened");
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn record_movement(
+async fn cash_control_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<cash_drawer_repository::CashControlSettings> {
+    if !can_manage_financial(&claims) {
+        return Err(AppError::forbidden(
+            "financial management access is required",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = cash_drawer_repository::control_settings(&state.db, &tenant_id, &branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load cash control settings"))?;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn save_cash_control_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<CashControlSettingsRequest>,
+) -> ApiResult<cash_drawer_repository::CashControlSettings> {
+    if !is_approver(&claims.role) {
+        return Err(AppError::forbidden(
+            "only owner, admin, or manager can change cash controls",
+        ));
+    }
+    if !(0..=MAX_FINANCIAL_AMOUNT_PAISE).contains(&payload.max_cash_paise)
+        || !(0..=MAX_FINANCIAL_AMOUNT_PAISE).contains(&payload.variance_alert_paise)
+    {
+        return Err(AppError::validation(
+            "cash control values are outside the allowed range",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = cash_drawer_repository::save_control_settings(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        payload.max_cash_paise,
+        payload.variance_alert_paise,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save cash control settings"))?;
+    state.publish_pos_event(
+        &tenant_id,
+        &branch_id,
+        "cash_drawer",
+        &branch_id,
+        "cash.controls_updated",
+    );
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+pub(crate) async fn record_movement(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -369,7 +452,7 @@ async fn record_movement(
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn list_movements(
+pub(crate) async fn list_movements(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<BusinessDateQuery>,
@@ -433,7 +516,7 @@ async fn reverse_movement(
     Ok(Json(ApiResponse::ok(row)))
 }
 
-async fn close(
+pub(crate) async fn close(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -503,7 +586,7 @@ async fn handover(
     Ok(Json(ApiResponse::ok(response(session, false))))
 }
 
-async fn approve(
+pub(crate) async fn approve(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -779,7 +862,7 @@ async fn change_deposit_status(
     Ok(Json(ApiResponse::ok(row)))
 }
 
-async fn list_provider_reconciliations(
+pub(crate) async fn list_provider_reconciliations(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(query): Query<BusinessDateQuery>,
@@ -794,7 +877,7 @@ async fn list_provider_reconciliations(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
-async fn create_provider_reconciliation(
+pub(crate) async fn create_provider_reconciliation(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -893,7 +976,7 @@ async fn import_provider_reconciliations(
     Ok(Json(ApiResponse::ok(imported)))
 }
 
-async fn review_provider_reconciliation(
+pub(crate) async fn review_provider_reconciliation(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -988,6 +1071,10 @@ async fn create_till(
         &id,
         payload.till_code.trim(),
         payload.till_name.trim(),
+        payload
+            .terminal_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty()),
         payload.opening_cash_paise,
         payload.notes.as_deref().unwrap_or_default().trim(),
     )
@@ -1213,6 +1300,7 @@ fn till_response(
         drawer_session_id: till.drawer_session_id,
         till_code: till.till_code,
         till_name: till.till_name,
+        terminal_id: till.terminal_id,
         opening_cash_paise: till.opening_cash_paise,
         expected_cash_paise: reveal_expected.then_some(till.expected_cash_paise),
         counted_cash_paise: till.counted_cash_paise,

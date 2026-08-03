@@ -126,6 +126,14 @@ pub struct ReorderSuggestion {
     pub sku: String,
     pub current_stock: i32,
     pub reorder_level: i32,
+    pub alert_level: i32,
+    pub desired_level: i32,
+    pub order_level: i32,
+    pub safety_stock_level: i32,
+    pub pending_po_quantity: i64,
+    pub pending_transfer_quantity: i64,
+    pub undelivered_quantity: i64,
+    pub recommended_quantity: i32,
     pub suggested_quantity: i32,
     pub priority: String,
     pub reason: String,
@@ -432,7 +440,16 @@ pub async fn gl_reconciliation(
     let mut rows = Vec::new();
     let mut exception_rows = Vec::new();
     let mut audit_rows = Vec::new();
+    let mut valuation_methods = Vec::new();
     for (selected_id, selected_name) in selected {
+        let valuation_method = sqlx::query_scalar::<_, String>(
+            "SELECT COALESCE((SELECT valuation_method FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'weighted_average')",
+        )
+        .bind(tenant_id).bind(&selected_id).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load inventory valuation policy"))?;
+        if !valuation_methods.contains(&valuation_method) {
+            valuation_methods.push(valuation_method);
+        }
         let (snapshot, branch_audit) = tokio::try_join!(
             inventory_repository::gl_reconciliation_snapshot(
                 &state.db,
@@ -511,7 +528,13 @@ pub async fn gl_reconciliation(
     Ok(GlReconciliationResponse {
         as_of_date: as_of,
         account_code: INVENTORY_ASSET_ACCOUNT.into(),
-        valuation_method: "ledger movement cost".into(),
+        valuation_method: if valuation_methods.len() == 1 {
+            valuation_methods
+                .pop()
+                .unwrap_or_else(|| "weighted_average".into())
+        } else {
+            "mixed".into()
+        },
         summary: GlReconciliationSummary {
             inventory_value_paise,
             gl_value_paise,
@@ -2185,35 +2208,54 @@ fn build_response(
 fn build_reorder_suggestions(items: Vec<InventoryControlItem>) -> Vec<ReorderSuggestion> {
     let mut rows = items
         .into_iter()
-        .filter(|item| item.stock_quantity <= item.reorder_point)
-        .map(|item| {
-            let suggested_quantity = item
-                .reorder_point
-                .saturating_sub(item.stock_quantity)
-                .max(1);
+        .filter_map(|item| {
+            let desired_level = if item.desired_level > 0 {
+                item.desired_level
+            } else {
+                item.reorder_point
+            };
+            let undelivered_quantity = item
+                .pending_po_quantity
+                .saturating_add(item.pending_transfer_quantity);
+            let recommended_quantity = i64::from(desired_level)
+                .saturating_sub(i64::from(item.stock_quantity))
+                .saturating_sub(undelivered_quantity)
+                .clamp(0, i64::from(i32::MAX)) as i32;
+            if recommended_quantity == 0 {
+                return None;
+            }
+            let suggested_quantity = recommended_quantity.max(item.order_level).max(1);
             let priority = if item.stock_quantity <= 0 {
                 "critical"
-            } else if item.stock_quantity < item.reorder_point {
+            } else if item.stock_quantity <= item.alert_level {
                 "high"
             } else {
                 "medium"
             };
-            ReorderSuggestion {
+            Some(ReorderSuggestion {
                 product_id: item.id,
                 product_name: item.name,
                 sku: item.sku,
                 current_stock: item.stock_quantity,
                 reorder_level: item.reorder_point,
+                alert_level: item.alert_level,
+                desired_level,
+                order_level: item.order_level,
+                safety_stock_level: item.safety_stock_level,
+                pending_po_quantity: item.pending_po_quantity,
+                pending_transfer_quantity: item.pending_transfer_quantity,
+                undelivered_quantity,
+                recommended_quantity,
                 suggested_quantity,
                 priority: priority.into(),
                 reason: if item.stock_quantity <= 0 {
                     "Out of stock".into()
                 } else {
-                    "At or below reorder level".into()
+                    "Desired level gap after undelivered stock".into()
                 },
                 estimated_value_paise: i64::from(suggested_quantity)
                     .saturating_mul(item.unit_cost_paise.max(0)),
-            }
+            })
         })
         .collect::<Vec<_>>();
     rows.sort_by(|a, b| {
@@ -2289,6 +2331,12 @@ mod tests {
                 name: "Low".into(),
                 stock_quantity: 3,
                 reorder_point: 5,
+                alert_level: 3,
+                desired_level: 10,
+                order_level: 4,
+                safety_stock_level: 2,
+                pending_po_quantity: 2,
+                pending_transfer_quantity: 1,
                 unit_cost_paise: 100,
                 created_at: now,
                 last_outbound_at: None,
@@ -2299,6 +2347,12 @@ mod tests {
                 name: "Out".into(),
                 stock_quantity: 0,
                 reorder_point: 4,
+                alert_level: 1,
+                desired_level: 4,
+                order_level: 1,
+                safety_stock_level: 1,
+                pending_po_quantity: 0,
+                pending_transfer_quantity: 0,
                 unit_cost_paise: 250,
                 created_at: now,
                 last_outbound_at: None,
@@ -2309,6 +2363,12 @@ mod tests {
                 name: "Ok".into(),
                 stock_quantity: 8,
                 reorder_point: 5,
+                alert_level: 5,
+                desired_level: 8,
+                order_level: 1,
+                safety_stock_level: 1,
+                pending_po_quantity: 0,
+                pending_transfer_quantity: 0,
                 unit_cost_paise: 100,
                 created_at: now,
                 last_outbound_at: None,
@@ -2317,7 +2377,9 @@ mod tests {
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].product_id, "out");
         assert_eq!(rows[0].suggested_quantity, 4);
-        assert_eq!(rows[1].suggested_quantity, 2);
+        assert_eq!(rows[1].recommended_quantity, 4);
+        assert_eq!(rows[1].suggested_quantity, 4);
+        assert_eq!(rows[1].undelivered_quantity, 3);
     }
 
     #[test]

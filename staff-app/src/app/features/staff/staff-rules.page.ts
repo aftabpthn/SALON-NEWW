@@ -9,7 +9,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   imports: [DatePipe, FormsModule, StaffPageStateComponent],
   template: `
     <section class="page">
-      <header class="page-head"><div><p class="eyebrow">Learning</p><h1>Courses, Rules & SOP</h1></div></header>
+      <header class="page-head"><div><p class="eyebrow">Learning</p><h1>Training & company documents</h1></div></header>
       @if (loading() && !rules().length) { <section staffPageState class="notice">Loading current rules...</section> }
       @if (error()) { <section staffPageState class="notice"><span>{{ error() }}</span><button type="button" class="link-button" (click)="load()">Retry</button></section> }
       @if (message()) { <section staffPageState class="notice success" role="status">{{ message() }}</section> }
@@ -28,7 +28,7 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
                 <span><strong>{{ rule.title }}</strong><small>{{ label(rule.documentType) }} · {{ label(rule.category) }} · v{{ rule.documentVersion }}</small></span>
                 <em [class.done]="!!rule.acknowledgedAt">{{ rule.trainingCompletedAt ? 'Completed' : rule.enrolmentStatus ? label(rule.enrolmentStatus) : rule.acknowledgedAt ? 'Acknowledged' : rule.mandatoryAcknowledgement ? 'Required' : 'Read' }}</em>
               </button>
-            } @empty { <div class="empty">No current rules or SOPs.</div> }
+            } @empty { <div class="empty">No current documents.</div> }
           </article>
           <article class="panel rule-detail">
             @if (selected(); as rule) {
@@ -93,7 +93,7 @@ export class StaffRulesPage implements OnInit {
   readonly saving = signal(false);
   readonly error = signal("");
   readonly message = signal("");
-  readonly categories = ["service", "hygiene", "attendance", "behavior", "safety"];
+  readonly categories = ["service", "hygiene", "attendance", "behavior", "safety", "company", "training"];
   category = "";
   outstandingOnly = false;
   confirmed = false;

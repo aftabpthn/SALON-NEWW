@@ -112,6 +112,45 @@ pub fn router() -> Router<AppState> {
             post(resolve_privacy_request),
         )
         .route(
+            "/security/privacy-requests/:request_id/approve-deletion",
+            post(approve_privacy_deletion),
+        )
+        .route(
+            "/security/privacy-requests/:request_id/execute-deletion",
+            post(execute_privacy_deletion),
+        )
+        .route("/security/data-governance", get(data_governance))
+        .route(
+            "/security/data-governance/retention-policies/:record_class",
+            axum::routing::put(save_retention_policy),
+        )
+        .route(
+            "/security/data-governance/legal-holds",
+            post(create_legal_hold),
+        )
+        .route(
+            "/security/data-governance/legal-holds/:hold_id/release",
+            post(release_legal_hold),
+        )
+        .route("/security/pii-exports", post(request_pii_export))
+        .route(
+            "/security/pii-exports/:export_id/decision",
+            post(decide_pii_export),
+        )
+        .route(
+            "/security/pii-exports/:export_id/download",
+            post(download_pii_export),
+        )
+        .route(
+            "/security/compliance-evidence/:framework/:control_key",
+            axum::routing::put(save_compliance_evidence),
+        )
+        .route("/security/pen-test-findings", post(create_pen_test_finding))
+        .route(
+            "/security/pen-test-findings/:finding_id",
+            patch(update_pen_test_finding),
+        )
+        .route(
             "/security/disclosure-reports",
             get(list_disclosure_reports).post(create_disclosure_report),
         )
@@ -360,6 +399,86 @@ struct PrivacyRequestCreateRequest {
 struct ResolveRequest {
     #[serde(default)]
     resolution_note: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RetentionPolicyRequest {
+    retention_days: i32,
+    disposition: String,
+    legal_basis: String,
+    owner_user_id: String,
+    version: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LegalHoldRequest {
+    subject_type: String,
+    subject_id: String,
+    reason: String,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PiiExportRequest {
+    #[serde(default)]
+    subject_id: String,
+    row_limit: i32,
+    reason: String,
+    mfa_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct PiiExportDecisionRequest {
+    decision: String,
+    #[serde(default)]
+    note: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PiiExportDownloadRequest {
+    download_token: String,
+    mfa_code: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MfaReauthenticationRequest {
+    mfa_code: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ComplianceEvidenceRequest {
+    title: String,
+    owner_user_id: String,
+    status: String,
+    #[serde(default)]
+    evidence_reference: String,
+    #[serde(default)]
+    independent_assessor: String,
+    valid_until: Option<String>,
+    #[serde(default)]
+    notes: String,
+    version: Option<i32>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PenTestFindingRequest {
+    title: String,
+    severity: String,
+    status: String,
+    owner_user_id: String,
+    #[serde(default)]
+    remediation_note: String,
+    #[serde(default)]
+    risk_acceptance_reason: String,
+    risk_acceptance_expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    version: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -1242,6 +1361,321 @@ async fn resolve_privacy_request(
             &claims.sub,
             &request_id,
             &payload.resolution_note,
+        )
+        .await?,
+    )))
+}
+
+async fn data_governance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_security_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::data_governance_snapshot(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn save_retention_policy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(record_class): Path<String>,
+    Json(payload): Json<RetentionPolicyRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::save_retention_policy(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &record_class,
+            payload.retention_days,
+            &payload.disposition,
+            &payload.legal_basis,
+            &payload.owner_user_id,
+            payload.version,
+        )
+        .await?,
+    )))
+}
+
+async fn create_legal_hold(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<LegalHoldRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::create_legal_hold(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &payload.subject_type,
+            &payload.subject_id,
+            &payload.reason,
+            payload.expires_at,
+        )
+        .await?,
+    )))
+}
+
+async fn release_legal_hold(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(hold_id): Path<String>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::release_legal_hold(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &hold_id,
+        )
+        .await?,
+    )))
+}
+
+async fn request_pii_export(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<PiiExportRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    if !claims.masked_fields.is_empty() {
+        return Err(AppError::forbidden(
+            "roles with field masking cannot request PII exports",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.session_id,
+        payload.mfa_code.as_deref(),
+        "pii.export",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        security_service::request_pii_export(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &payload.subject_id,
+            payload.row_limit,
+            &payload.reason,
+        )
+        .await?,
+    )))
+}
+
+async fn decide_pii_export(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(export_id): Path<String>,
+    Json(payload): Json<PiiExportDecisionRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    if !claims.masked_fields.is_empty() {
+        return Err(AppError::forbidden(
+            "roles with field masking cannot approve PII exports",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::decide_pii_export(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &export_id,
+            &payload.decision,
+            &payload.note,
+        )
+        .await?,
+    )))
+}
+
+async fn download_pii_export(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(export_id): Path<String>,
+    Json(payload): Json<PiiExportDownloadRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    if !claims.masked_fields.is_empty() {
+        return Err(AppError::forbidden(
+            "roles with field masking cannot download PII exports",
+        ));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.session_id,
+        payload.mfa_code.as_deref(),
+        "pii.export.download",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        security_service::download_pii_export(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &export_id,
+            &payload.download_token,
+        )
+        .await?,
+    )))
+}
+
+async fn approve_privacy_deletion(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(request_id): Path<String>,
+) -> ApiResult<PrivacyRequestRecord> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::approve_privacy_deletion(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &request_id,
+        )
+        .await?,
+    )))
+}
+
+async fn execute_privacy_deletion(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(request_id): Path<String>,
+    Json(payload): Json<MfaReauthenticationRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        &claims.session_id,
+        payload.mfa_code.as_deref(),
+        "privacy.deletion",
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(
+        security_service::execute_privacy_deletion(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &request_id,
+        )
+        .await?,
+    )))
+}
+
+async fn save_compliance_evidence(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((framework, control_key)): Path<(String, String)>,
+    Json(payload): Json<ComplianceEvidenceRequest>,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::save_compliance_evidence(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            &framework,
+            &control_key,
+            &payload.title,
+            &payload.owner_user_id,
+            &payload.status,
+            &payload.evidence_reference,
+            &payload.independent_assessor,
+            payload.valid_until.as_deref(),
+            &payload.notes,
+            payload.version,
+        )
+        .await?,
+    )))
+}
+
+async fn create_pen_test_finding(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<PenTestFindingRequest>,
+) -> ApiResult<Value> {
+    save_pen_test_finding(state, claims, headers, None, payload).await
+}
+
+async fn update_pen_test_finding(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(finding_id): Path<String>,
+    Json(payload): Json<PenTestFindingRequest>,
+) -> ApiResult<Value> {
+    save_pen_test_finding(state, claims, headers, Some(finding_id), payload).await
+}
+
+async fn save_pen_test_finding(
+    state: AppState,
+    claims: AuthClaims,
+    headers: HeaderMap,
+    finding_id: Option<String>,
+    payload: PenTestFindingRequest,
+) -> ApiResult<Value> {
+    require_security_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        security_service::save_pen_test_finding(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            finding_id.as_deref(),
+            &payload.title,
+            &payload.severity,
+            &payload.status,
+            &payload.owner_user_id,
+            &payload.remediation_note,
+            &payload.risk_acceptance_reason,
+            payload.risk_acceptance_expires_at,
+            payload.version,
         )
         .await?,
     )))

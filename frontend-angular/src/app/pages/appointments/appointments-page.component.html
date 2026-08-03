@@ -44,6 +44,8 @@
       <a class="report-link" routerLink="/appointment-reports">Report</a>
       <button type="button" [class.active]="activeCommand === 'block'" (click)="openCommand('block')">Block time</button>
       <button type="button" [class.active]="activeCommand === 'waitlist'" (click)="openCommand('waitlist')">Waitlist</button>
+      <button type="button" [class.active]="activeCommand === 'queue'" (click)="openCommand('queue')">Queue</button>
+      <button type="button" [class.active]="activeCommand === 'classes'" (click)="openCommand('classes')">Classes</button>
       <button type="button" [class.active]="activeCommand === 'move'" (click)="openCommand('move')">Move</button>
       <button class="primary" type="button" [class.active]="newBookingOpen" (click)="openNewBooking()">New booking</button>
     </div>
@@ -140,6 +142,9 @@
               <span>
                 <b>{{ item.client }}</b>
                 <small>{{ item.service }}</small>
+                @if (consumptionStatusLabel(item.inventoryConsumptionStatus)) {
+                  <small class="consumption-badge">{{ consumptionStatusLabel(item.inventoryConsumptionStatus) }}</small>
+                }
               </span>
               <strong>{{ item.time }}</strong>
               <em>{{ item.status }}</em>
@@ -163,6 +168,9 @@
                     <b>{{ appointment.client }}</b>
                     <span>{{ appointment.service }}</span>
                     <small>{{ appointment.status }}</small>
+                    @if (consumptionStatusLabel(appointment.inventoryConsumptionStatus)) {
+                      <small class="consumption-badge">{{ consumptionStatusLabel(appointment.inventoryConsumptionStatus) }}</small>
+                    }
                   </div>
                 }
                 @if (!resource.appointments.length) {
@@ -185,6 +193,9 @@
                       <strong>{{ appointment.time }}</strong>
                       <b>{{ appointment.client }}</b>
                       <span>{{ appointment.service }}</span>
+                      @if (consumptionStatusLabel(appointment.inventoryConsumptionStatus)) {
+                        <small class="consumption-badge">{{ consumptionStatusLabel(appointment.inventoryConsumptionStatus) }}</small>
+                      }
                     </button>
                   }
                   @if (!column.appointments.length) {
@@ -336,6 +347,9 @@
                               @if (item.staffPreference !== 'any' && item.requestedStaffId) {
                                 <em class="staff-request-badge">♥ {{ requestedStaffLabel(item) }} requested</em>
                               }
+                              @if (consumptionStatusLabel(item.inventoryConsumptionStatus)) {
+                                <em class="consumption-badge">{{ consumptionStatusLabel(item.inventoryConsumptionStatus) }}</em>
+                              }
                               <small>{{ statusLabel(item.status) }}</small>
                             </button>
                           }
@@ -451,6 +465,9 @@
               @if (row.bookingNumber) {
                 <small>Booking {{ row.bookingNumber }}</small>
               }
+              @if (!history.waitlist && row.restorable) {
+                <button class="mini" type="button" (click)="openHistoryRestore(row)">Restore</button>
+              }
             </article>
           } @empty {
             <div class="compact-empty">No records yet</div>
@@ -556,6 +573,9 @@
             <div class="drawer-actions">
               <button type="button" (click)="openEditAppointment(appointment)">Edit Booking</button>
               <button type="button" (click)="openRescheduleAppointment(appointment)">Reschedule</button>
+              @if (appointment.status === 'cancelled' || appointment.status === 'no-show') {
+                <button type="button" (click)="openLifecycleAction('restore', appointment)">Restore</button>
+              }
               <button type="button" [disabled]="!clientPhone(appointment.clientId) || clientSmsSending" (click)="sendClientSms(appointment)">{{ clientSmsSending ? 'Queuing...' : 'SMS client' }}</button>
             </div>
           </section>
@@ -640,7 +660,46 @@
         </div>
         <footer>
           <button type="button" [disabled]="noShowSaving" (click)="submitNoShow(false)">Mark only</button>
+          @if (lifecycleFeePolicy?.due) {
+            <button type="button" [disabled]="noShowSaving" (click)="submitNoShow(false, true)">Waive fee</button>
+          }
           <button class="primary" type="button" [disabled]="noShowSaving" (click)="submitNoShow(true)">{{ noShowSaving ? 'Saving...' : 'Create fee link' }}</button>
+        </footer>
+      </aside>
+    }
+
+    @if (lifecycleTarget; as target) {
+      <aside class="command-flyout" aria-label="Appointment lifecycle action">
+        <header>
+          <div><span class="section-label">{{ lifecycleAction === 'restore' ? 'Restore' : 'Cancel' }}</span><h2>{{ target.client }}</h2></div>
+          <button class="icon-button" type="button" aria-label="Close appointment action" (click)="closeLifecycleAction()">×</button>
+        </header>
+        <div class="command-form">
+          <label>
+            Reason
+            <textarea rows="3" maxlength="500" [(ngModel)]="lifecycleReason" name="lifecycleReason"></textarea>
+          </label>
+          @if (lifecycleAction === 'cancel' && lifecycleFeePolicy?.due) {
+            <label>
+              Fee decision · {{ (lifecycleFeePolicy?.amountPaise || 0) / 100 | currency:'INR':'symbol':'1.0-2' }}
+              <select [(ngModel)]="lifecycleFeeAction" name="lifecycleFeeAction">
+                <option value="pending">Keep fee pending</option>
+                <option value="charge">Create payment link</option>
+                <option value="waive">Waive with permission</option>
+              </select>
+            </label>
+          }
+          @if (lifecycleAction === 'restore') {
+            <label>
+              Outside-hours override reason
+              <input maxlength="500" [(ngModel)]="lifecycleOutsideHoursReason" name="lifecycleOutsideHoursReason" placeholder="Only when required" />
+            </label>
+          }
+          @if (appointmentActionError) { <p class="status-action-error">{{ appointmentActionError }}</p> }
+        </div>
+        <footer>
+          <button type="button" (click)="closeLifecycleAction()">Close</button>
+          <button class="primary" type="button" [disabled]="lifecycleSaving" (click)="submitLifecycleAction()">{{ lifecycleSaving ? 'Saving...' : lifecycleAction === 'restore' ? 'Restore' : 'Cancel appointment' }}</button>
         </footer>
       </aside>
     }
@@ -653,6 +712,12 @@
           }
           @if (activeCommand === 'waitlist') {
             <h2>Waitlist</h2>
+          }
+          @if (activeCommand === 'queue') {
+            <h2>Walk-in queue</h2>
+          }
+          @if (activeCommand === 'classes') {
+            <h2>Classes</h2>
           }
           @if (activeCommand === 'move') {
             <h2>Move appointment</h2>
@@ -673,7 +738,7 @@
               </select>
             </label>
           }
-          @if (activeCommand === 'waitlist') {
+          @if (activeCommand === 'waitlist' || activeCommand === 'queue' || activeCommand === 'classes') {
             <label>
               Client
               <select [(ngModel)]="commandClientId" name="commandClientId">
@@ -684,7 +749,7 @@
               </select>
             </label>
           }
-          @if (activeCommand === 'waitlist') {
+          @if (activeCommand === 'waitlist' || activeCommand === 'queue' || activeCommand === 'classes') {
             <label>
               Service
               <select [(ngModel)]="commandServiceId" name="commandServiceId">
@@ -719,6 +784,48 @@
               }
             </div>
           }
+          @if (activeCommand === 'classes') {
+            <label>
+              Class template
+              <select [(ngModel)]="classTemplateId" name="classTemplateId">
+                <option value="">Create new template</option>
+                @for (template of classTemplates; track template.id) {
+                  <option [value]="template.id">{{ template.name }}</option>
+                }
+              </select>
+            </label>
+            @if (!classTemplateId) {
+              <label>Class name <input maxlength="160" [(ngModel)]="classTemplateName" name="classTemplateName" /></label>
+              <div class="field-row">
+                <label>Capacity <input type="number" min="1" max="1000" [(ngModel)]="classCapacity" name="classCapacity" /></label>
+                <label>Waitlist capacity <input type="number" min="0" max="5000" [(ngModel)]="classWaitlistCapacity" name="classWaitlistCapacity" /></label>
+              </div>
+              <div class="field-row">
+                <label>Late booking minutes <input type="number" min="0" [(ngModel)]="classLateBookingMinutes" name="classLateBookingMinutes" /></label>
+                <label>Late cancellation minutes <input type="number" min="0" [(ngModel)]="classLateCancelMinutes" name="classLateCancelMinutes" /></label>
+              </div>
+              <div class="field-row">
+                <label>Late cancellation fee ₹ <input type="number" min="0" step="0.01" [(ngModel)]="classLateCancelFee" name="classLateCancelFee" /></label>
+                <label>No-show fee ₹ <input type="number" min="0" step="0.01" [(ngModel)]="classNoShowFee" name="classNoShowFee" /></label>
+              </div>
+            }
+            <label>
+              Room
+              <select [(ngModel)]="classRoomResourceId" name="classRoomResourceId">
+                <option value="">No room</option>
+                @for (resource of chairRooms; track resource.id) { <option [value]="resource.id">{{ resource.name }}</option> }
+              </select>
+            </label>
+            <div class="field-row">
+              <label>
+                Recurrence
+                <select [(ngModel)]="classRecurrence" name="classRecurrence">
+                  <option value="none">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option>
+                </select>
+              </label>
+              <label>Sessions <input type="number" min="1" max="52" [(ngModel)]="classRecurrenceCount" name="classRecurrenceCount" /></label>
+            </div>
+          }
           @if (activeCommand === 'block') {
             <fieldset class="block-staff-picker">
               <legend>Staff</legend>
@@ -736,9 +843,9 @@
               </div>
             </fieldset>
           }
-          @if (activeCommand === 'move') {
+          @if (activeCommand === 'move' || activeCommand === 'queue' || activeCommand === 'classes') {
             <label>
-              Staff
+              {{ activeCommand === 'classes' ? 'Instructor' : activeCommand === 'queue' ? 'Requested provider' : 'Staff' }}
               <select [(ngModel)]="commandStaffId" name="commandStaffId">
                 <option value="">Select staff</option>
                 @for (person of staff; track person.id) {
@@ -747,6 +854,7 @@
               </select>
             </label>
           }
+          @if (activeCommand !== 'queue') {
           <div class="field-row">
             <label>
               Date
@@ -770,6 +878,7 @@
               </div>
             </div>
           </div>
+          }
           @if (activeCommand === 'block') {
             <label>
               Duration
@@ -801,6 +910,45 @@
               @if (activeCommand === 'block' && blackouts.length === 0) {
                 <p>No records yet</p>
               }
+            </section>
+          }
+          @if (activeCommand === 'queue') {
+            <section class="command-records phase7-records">
+              <h3>Active queue</h3>
+              @for (entry of walkInQueue; track entry.id) {
+                <article>
+                  <div>
+                    <strong>{{ entry.clientName || clientName(entry.clientId) }} · {{ entry.status }}</strong>
+                    <small>{{ entry.durationMinutes }} min · ETA {{ timeText(entry.estimatedStartAt) }}</small>
+                    <select [(ngModel)]="entry.assignedStaffId" [name]="'queueStaff-' + entry.id">
+                      <option value="">Unassigned</option>
+                      @for (person of staff; track person.id) { <option [value]="person.id">{{ person.name }}</option> }
+                    </select>
+                  </div>
+                  <span class="phase7-actions">
+                    @if (entry.status === 'waiting') { <button type="button" (click)="updateQueueStatus(entry, 'called')">Call</button> }
+                    @if (entry.status === 'called') { <button type="button" (click)="updateQueueStatus(entry, 'in_service')">Start</button> }
+                    @if (entry.status === 'in_service') { <button type="button" (click)="updateQueueStatus(entry, 'completed')">Complete</button> }
+                    @if (entry.status === 'waiting' || entry.status === 'called') { <button type="button" (click)="updateQueueStatus(entry, 'cancelled')">Cancel</button> }
+                  </span>
+                </article>
+              }
+              @if (!walkInQueue.length) { <p>No records yet</p> }
+            </section>
+          }
+          @if (activeCommand === 'classes') {
+            <section class="command-records phase7-records">
+              <h3>Upcoming sessions</h3>
+              @for (session of classSessions; track session.id) {
+                <article>
+                  <div>
+                    <strong>{{ session.name }} · {{ shortDate(session.startsAt) }} {{ timeText(session.startsAt) }}</strong>
+                    <small>{{ session.instructorName }} · {{ session.bookedCount }}/{{ session.capacity }} · waitlist {{ session.waitlistCount }}</small>
+                  </div>
+                  <button type="button" (click)="registerClassGuest(session)">Register</button>
+                </article>
+              }
+              @if (!classSessions.length) { <p>No records yet</p> }
             </section>
           }
         </form>
@@ -963,6 +1111,7 @@
               <span>
                 <button class="mini" type="button" (click)="addServiceLine()">Add service</button>
                 <button class="mini" type="button" (click)="addParallelServiceLine()">Add parallel</button>
+                <button class="mini" type="button" (click)="addSplitServiceLine()">Add split</button>
               </span>
             </div>
             @for (line of bookingLines; track trackLine(lineIndex, line); let lineIndex = $index) {
@@ -1117,8 +1266,26 @@
                         <select [ngModel]="line.staffPreference" [name]="'staffPreference' + line.id" (ngModelChange)="setStaffPreference(line, $any($event))">
                           <option value="any">Any available staff</option>
                           <option value="preferred">♥ Preferred staff</option>
+                          <option value="first_available">First available provider</option>
+                          <option value="gender_female">Female provider preferred</option>
+                          <option value="gender_male">Male provider preferred</option>
                         </select>
                       </label>
+                      <label>
+                        Service timing
+                        <select [(ngModel)]="line.serviceMode" [name]="'serviceMode' + line.id">
+                          <option value="sequential">Sequential</option>
+                          <option value="gap">Gap / processing</option>
+                          <option value="parallel">Parallel</option>
+                          <option value="segmented">Split / segmented</option>
+                        </select>
+                      </label>
+                      @if (line.serviceMode === 'segmented') {
+                        <label>
+                          Segment label
+                          <input [(ngModel)]="line.segmentLabel" [name]="'segmentLabel' + line.id" maxlength="120" placeholder="Segment" />
+                        </label>
+                      }
                       <label>
                         Date
                         <as-date-picker ariaLabel="Booking date" [(value)]="appointmentDate" (valueChange)="onDateChange()"></as-date-picker>
@@ -1156,6 +1323,26 @@
                       <button class="mini danger" type="button" [disabled]="bookingLines.length === 1" (click)="removeServiceLine(line.id)">Remove</button>
                     </section>
                   }
+                  @if (bookingGuestCount > 1) {
+                    <div class="recurrence-fields">
+                      <label>
+                        Booking type
+                        <select [(ngModel)]="bookingType" name="bookingType">
+                          @if (bookingGuestCount === 2) { <option value="couple">Couple</option> }
+                          <option value="group">Family / group</option>
+                          @if (bookingGuestCount >= 7) { <option value="large_group">Large group</option> }
+                        </select>
+                      </label>
+                      <label>
+                        Group name
+                        <input [(ngModel)]="bookingGroupName" name="bookingGroupName" maxlength="120" placeholder="Optional" />
+                      </label>
+                    </div>
+                  }
+                  <label>
+                    Outside-hours override reason
+                    <input [(ngModel)]="outsideHoursOverrideReason" name="outsideHoursOverrideReason" maxlength="500" placeholder="Only when required" />
+                  </label>
                   @if (!editingAppointmentId) {
                     <div class="recurrence-fields">
                       <label>

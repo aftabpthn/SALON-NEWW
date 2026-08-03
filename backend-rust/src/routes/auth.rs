@@ -393,7 +393,7 @@ pub async fn dev_session(
     .map_err(|_| AppError::internal("failed to resolve local tenant"))?
     .ok_or_else(|| AppError::not_found("local tenant is not configured"))?;
     let branch_id: String = sqlx::query_scalar(
-        "SELECT id::TEXT FROM branches WHERE tenant_id=$1::UUID AND active=TRUE AND (id::TEXT='branch_hyd' OR scope_id::TEXT='branch_hyd' OR LOWER(name)=LOWER('branch_hyd')) ORDER BY (id::TEXT='branch_hyd') DESC LIMIT 1",
+        "SELECT id::TEXT FROM branches WHERE tenant_id=$1::UUID AND active=TRUE ORDER BY (id::TEXT='branch_hyd' OR scope_id::TEXT='branch_hyd' OR LOWER(name)=LOWER('branch_hyd')) DESC,name LIMIT 1",
     )
     .bind(&tenant_id)
     .fetch_optional(&state.db)
@@ -1134,6 +1134,9 @@ async fn issue_new_session(
                 .or(user.role_id.as_deref()),
             role,
             permissions,
+            masked_fields: access
+                .map(|item| item.masked_fields.as_slice())
+                .unwrap_or(&[]),
             permission_version: user.permission_version,
             session_id: &session_id,
             must_change_password: user.must_change_password,
@@ -1217,6 +1220,9 @@ async fn rotate_session(
                 .or(user.role_id.as_deref()),
             role,
             permissions,
+            masked_fields: access
+                .map(|item| item.masked_fields.as_slice())
+                .unwrap_or(&[]),
             permission_version: user.permission_version,
             session_id: &session_id,
             must_change_password: user.must_change_password,

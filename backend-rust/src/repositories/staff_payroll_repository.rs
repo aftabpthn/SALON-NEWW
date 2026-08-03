@@ -600,17 +600,24 @@ pub async fn tip_sources(
     }
     sqlx::query_as(
         r#"
-        SELECT s.staff_id,COALESCE(SUM(s.tip_paise),0)::BIGINT AS tip_paise
+        SELECT tip.staff_id,COALESCE(SUM(tip.amount_paise),0)::BIGINT AS tip_paise
           FROM pos_sales s
-         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.staff_id=ANY($3)
-           AND s.business_date BETWEEN $4 AND $5
-           AND s.tip_paise > 0
+          CROSS JOIN LATERAL (
+            SELECT split->>'staffId' staff_id,(split->>'amountPaise')::BIGINT amount_paise
+            FROM jsonb_array_elements(COALESCE(s.tip_splits,'[]'::JSONB)) split
+            WHERE jsonb_array_length(COALESCE(s.tip_splits,'[]'::JSONB))>0
+            UNION ALL SELECT s.staff_id,s.tip_paise
+            WHERE jsonb_array_length(COALESCE(s.tip_splits,'[]'::JSONB))=0
+          ) tip
+         WHERE s.tenant_id=$1 AND s.branch_id=$2 AND tip.staff_id=ANY($3)
+           AND s.business_date BETWEEN $4 AND $5 AND tip.amount_paise>0
            AND LOWER(s.status) NOT IN ('draft','void','voided','refunded','cancelled')
            AND NOT EXISTS (
              SELECT 1 FROM staff_tip_payout_items item
-              WHERE item.tenant_id=s.tenant_id AND item.branch_id=s.branch_id AND item.sale_id=s.id
+              WHERE item.tenant_id=s.tenant_id AND item.branch_id=s.branch_id
+                AND item.sale_id=s.id AND item.staff_id=tip.staff_id
            )
-         GROUP BY s.staff_id
+         GROUP BY tip.staff_id
         "#,
     )
     .bind(tenant_id)
@@ -645,11 +652,23 @@ pub async fn run_for_period(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    cycle: &str,
+    subject_staff_id: &str,
     period_start: NaiveDate,
     period_end: NaiveDate,
 ) -> Result<Option<PayrollRunRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 AND cycle='monthly' AND period_start=$3 AND period_end=$4")
-        .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end).fetch_optional(db).await
+    sqlx::query_as("SELECT id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at FROM staff_payroll_runs WHERE tenant_id=$1 AND branch_id=$2 AND cycle=$3 AND subject_staff_id=$4 AND period_start=$5 AND period_end=$6")
+        .bind(tenant_id).bind(branch_id).bind(cycle).bind(subject_staff_id).bind(period_start).bind(period_end).fetch_optional(db).await
+}
+
+pub async fn final_settlement_ready(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM staff_lifecycle_cases WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND case_type='offboarding' AND status='completed' AND settlement_status='ready')")
+        .bind(tenant_id).bind(branch_id).bind(staff_id).fetch_one(db).await
 }
 
 pub async fn list_runs(
@@ -833,6 +852,7 @@ pub async fn replace_calculated_run(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    cycle: &str,
     period_start: NaiveDate,
     period_end: NaiveDate,
     actor_user_id: &str,
@@ -854,8 +874,8 @@ pub async fn replace_calculated_run(
     let mut tx = db.begin().await?;
     let run: PayrollRunRecord = sqlx::query_as(
         r#"
-        INSERT INTO staff_payroll_runs(tenant_id,branch_id,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by)
-        VALUES($1,$2,$3,$4,'calculated',$5,$6,$7,$8,$9,$10)
+        INSERT INTO staff_payroll_runs(tenant_id,branch_id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by)
+        VALUES($1,$2,$3,$4,$5,'calculated',$6,$7,$8,$9,$10,$11)
         ON CONFLICT (tenant_id,branch_id,cycle,period_start,period_end)
         DO UPDATE SET status='calculated',gross_paise=EXCLUDED.gross_paise,deductions_paise=EXCLUDED.deductions_paise,
           net_paise=EXCLUDED.net_paise,staff_count=EXCLUDED.staff_count,invalid_count=EXCLUDED.invalid_count,
@@ -863,7 +883,7 @@ pub async fn replace_calculated_run(
         RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at
         "#,
     )
-    .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end)
+    .bind(tenant_id).bind(branch_id).bind(cycle).bind(period_start).bind(period_end)
     .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
     .fetch_one(&mut *tx).await?;
     sqlx::query(
@@ -984,6 +1004,8 @@ pub async fn replace_selected_calculated_items(
     db: &PgPool,
     tenant_id: &str,
     branch_id: &str,
+    cycle: &str,
+    subject_staff_id: &str,
     period_start: NaiveDate,
     period_end: NaiveDate,
     actor_user_id: &str,
@@ -1010,14 +1032,14 @@ pub async fn replace_selected_calculated_items(
     let mut tx = db.begin().await?;
     let run: PayrollRunRecord = sqlx::query_as(
         r#"
-        INSERT INTO staff_payroll_runs(tenant_id,branch_id,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by)
-        VALUES($1,$2,$3,$4,'calculated',$5,$6,$7,$8,$9,$10)
-        ON CONFLICT (tenant_id,branch_id,cycle,period_start,period_end)
+        INSERT INTO staff_payroll_runs(tenant_id,branch_id,cycle,subject_staff_id,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by)
+        VALUES($1,$2,$3,$4,$5,$6,'calculated',$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (tenant_id,branch_id,cycle,period_start,period_end,subject_staff_id)
         DO UPDATE SET status='calculated',reviewed_by=NULL,reviewed_at=NULL,updated_at=NOW()
         RETURNING id,cycle,period_start,period_end,status,gross_paise,deductions_paise,net_paise,staff_count,invalid_count,created_by,reviewed_at,finalized_at,paid_at,created_at,updated_at
         "#,
     )
-    .bind(tenant_id).bind(branch_id).bind(period_start).bind(period_end)
+    .bind(tenant_id).bind(branch_id).bind(cycle).bind(subject_staff_id).bind(period_start).bind(period_end)
     .bind(gross_paise).bind(deductions_paise).bind(net_paise).bind(items.len() as i32).bind(invalid_count).bind(actor_user_id)
     .fetch_one(&mut *tx).await?;
     let before_snapshots: Vec<SelectedItemSnapshot> = sqlx::query_as(

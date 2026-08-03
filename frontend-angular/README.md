@@ -11,7 +11,7 @@
 ## Start manually
 - `cd frontend-angular`
 - `npm install`
-- `npm start`
+- `npm start -- --host 127.0.0.1 --port 4200`
 
 ## Build manually
 - `npm run build`

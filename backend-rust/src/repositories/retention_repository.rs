@@ -233,6 +233,51 @@ pub async fn reissue_gift_card(
     Ok(Some(replacement))
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn transfer_gift_card(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    target_client_id: &str,
+    reason: &str,
+    key: &str,
+    actor: &str,
+) -> Result<Option<GiftCardRecord>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let replay: Option<String> = sqlx::query_scalar("SELECT id FROM customer_liability_lifecycle_events WHERE tenant_id=$1 AND branch_id=$2 AND liability_type='gift_card' AND liability_id=$3 AND idempotency_key=$4")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(key).fetch_optional(&mut *tx).await?;
+    if replay.is_some() {
+        tx.commit().await?;
+        return gift_card(db, tenant_id, branch_id, id).await;
+    }
+    let card: Option<(String, i64, String)> = sqlx::query_as("SELECT client_id,balance_paise,status FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+        .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(&mut *tx).await?;
+    let Some((source_client_id, balance, status)) = card else {
+        return Ok(None);
+    };
+    if status != "active" || balance <= 0 || source_client_id == target_client_id {
+        return Ok(None);
+    }
+    let target_exists = sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(target_client_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !target_exists {
+        return Ok(None);
+    }
+    sqlx::query("UPDATE gift_cards SET client_id=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(target_client_id).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,balance_before_paise,balance_after_paise,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'gift_card',$3,'transfer',$2,$2,$4,$5,$6,$6,$7,$8,$9)")
+        .bind(tenant_id).bind(branch_id).bind(id).bind(source_client_id).bind(target_client_id).bind(balance).bind(reason).bind(actor).bind(key).execute(&mut *tx).await?;
+    tx.commit().await?;
+    gift_card(db, tenant_id, branch_id, id).await
+}
+
 pub async fn reward_balance(
     db: &PgPool,
     tenant_id: &str,

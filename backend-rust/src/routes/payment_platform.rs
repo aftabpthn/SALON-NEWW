@@ -38,6 +38,18 @@ pub fn router() -> Router<AppState> {
             post(set_provider_status),
         )
         .route("/pos/payment-platform/payments", post(create_payment))
+        .route(
+            "/pos/payment-platform/payments/:id/capture",
+            post(capture_payment),
+        )
+        .route(
+            "/pos/payment-platform/payments/:id/void",
+            post(void_payment),
+        )
+        .route(
+            "/pos/payment-platform/payments/:id/reconcile",
+            post(reconcile_payment),
+        )
         .route("/pos/payment-platform/setup-sessions", post(create_setup))
         .route(
             "/pos/payment-platform/terminal-sessions",
@@ -64,18 +76,28 @@ struct OnboardingPayload {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OperationPayload<T> {
-    provider: String,
-    idempotency_key: String,
-    sale_id: Option<String>,
-    client_id: Option<String>,
-    mfa_code: Option<String>,
-    request: T,
+pub(crate) struct OperationPayload<T> {
+    pub provider: String,
+    pub idempotency_key: String,
+    pub sale_id: Option<String>,
+    pub client_id: Option<String>,
+    pub mfa_code: Option<String>,
+    pub request: T,
 }
 
 #[derive(Deserialize)]
 struct ProviderStatusPayload {
     enabled: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PaymentActionPayload {
+    idempotency_key: String,
+    amount_paise: Option<i64>,
+    currency: Option<String>,
+    reference: Option<String>,
+    mfa_code: Option<String>,
 }
 
 async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
@@ -115,7 +137,8 @@ async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResul
     .map_err(|_| AppError::internal("failed to load payment merchant accounts"))?;
     let operations = sqlx::query_scalar::<_, Value>(
         r#"SELECT jsonb_build_object(
-          'pending',COUNT(*) FILTER (WHERE status IN ('pending','requires_action','processing')),
+          'pending',COUNT(*) FILTER (WHERE status IN ('pending','requires_action','processing','capture_pending','void_pending')),
+          'unknown',COUNT(*) FILTER (WHERE status='unknown'),
           'failed',COUNT(*) FILTER (WHERE status IN ('failed','canceled')),
           'payoutsPending',COUNT(*) FILTER (WHERE operation_type='payout' AND status IN ('pending','processing'))
         ) FROM payment_provider_operations WHERE tenant_id=$1 AND branch_id=$2"#,
@@ -125,6 +148,22 @@ async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResul
     .fetch_one(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to load payment operation summary"))?;
+    let recent_operations = sqlx::query_scalar::<_, Value>(
+        r#"SELECT COALESCE(jsonb_agg(jsonb_build_object(
+          'id',id,'provider',provider,'operationType',operation_type,'saleId',sale_id,
+          'amountPaise',amount_paise,'currency',currency,'status',status,
+          'captureMethod',capture_method,'providerObjectId',provider_object_id,
+          'uncertainSince',uncertain_since,'lastReconciledAt',last_reconciled_at,
+          'lastError',last_error,'createdAt',created_at,'updatedAt',updated_at
+        ) ORDER BY created_at DESC),'[]'::jsonb)
+        FROM (SELECT * FROM payment_provider_operations WHERE tenant_id=$1 AND branch_id=$2
+          ORDER BY created_at DESC LIMIT 50) rows"#,
+    )
+    .bind(&tenant)
+    .bind(&branch)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load recent payment operations"))?;
     let disputes = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*)::BIGINT FROM payment_disputes WHERE tenant_id=$1 AND branch_id=$2 AND status IN ('open','under_review')",
     )
@@ -136,6 +175,7 @@ async fn overview(State(state): State<AppState>, headers: HeaderMap) -> ApiResul
     Ok(Json(ApiResponse::ok(json!({
         "accounts":accounts,
         "operations":operations,
+        "recentOperations":recent_operations,
         "openDisputes":disputes,
         "providers":{
             "stripe":{"configured":state.settings.payment_provider_enabled("stripe"),"enabled":stripe_enabled,"webhookConfigured":state.settings.payment_provider_webhook_configured("stripe")},
@@ -315,7 +355,7 @@ async fn set_provider_status(
     }))))
 }
 
-async fn create_payment(
+pub(crate) async fn create_payment(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -327,6 +367,8 @@ async fn create_payment(
     }
     let account =
         active_merchant_account(&state, &tenant, &branch, &payload.provider, true).await?;
+    let capture_method =
+        platform::payment_capture_method(payload.request.capture_method.as_deref())?;
     operation(
         &state,
         &claims,
@@ -339,6 +381,7 @@ async fn create_payment(
         payload.client_id.unwrap_or_default(),
         payload.request.amount_paise,
         &payload.request.currency,
+        capture_method,
         |key| {
             platform::create_payment(
                 &state.settings,
@@ -350,6 +393,258 @@ async fn create_payment(
         },
     )
     .await
+}
+
+#[derive(sqlx::FromRow)]
+struct ProviderPaymentOperation {
+    id: String,
+    provider_account_id: String,
+    provider: String,
+    provider_object_id: String,
+    sale_id: String,
+    amount_paise: i64,
+    currency: String,
+    status: String,
+    capture_method: String,
+}
+
+async fn capture_payment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PaymentActionPayload>,
+) -> ApiResult<Value> {
+    run_payment_action(&state, &claims, &headers, &id, "capture", payload).await
+}
+
+async fn void_payment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<PaymentActionPayload>,
+) -> ApiResult<Value> {
+    run_payment_action(&state, &claims, &headers, &id, "void", payload).await
+}
+
+async fn run_payment_action(
+    state: &AppState,
+    claims: &AuthClaims,
+    headers: &HeaderMap,
+    id: &str,
+    action: &str,
+    payload: PaymentActionPayload,
+) -> ApiResult<Value> {
+    let (tenant, branch) = tenant_branch(headers)?;
+    require_payment_manage(claims)?;
+    validate_idempotency(&payload.idempotency_key)?;
+    security_service::require_action_mfa(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &tenant,
+        &branch,
+        &claims.sub,
+        &claims.session_id,
+        payload.mfa_code.as_deref(),
+        if action == "capture" {
+            "payments.capture"
+        } else {
+            "payments.void"
+        },
+    )
+    .await?;
+    let operation = payment_operation(state, &tenant, &branch, id).await?;
+    if operation.provider_object_id.is_empty() {
+        return Err(AppError::conflict(
+            "provider payment reference is not available; reconcile the operation first",
+        ));
+    }
+    if action == "capture" && operation.capture_method != "manual" {
+        return Err(AppError::conflict(
+            "only manually authorized payments can be captured",
+        ));
+    }
+    if action == "capture" && operation.status == "succeeded" {
+        return Err(AppError::conflict("payment is already captured"));
+    }
+    if action == "void" && operation.status == "succeeded" {
+        return Err(AppError::conflict(
+            "captured payments must use the invoice refund workflow",
+        ));
+    }
+    let amount = payload.amount_paise.unwrap_or(operation.amount_paise);
+    if action == "capture" && (!(1..=operation.amount_paise).contains(&amount)) {
+        return Err(AppError::validation(
+            "capture amount must be within the authorized amount",
+        ));
+    }
+    let currency = payload
+        .currency
+        .unwrap_or_else(|| operation.currency.clone())
+        .to_ascii_uppercase();
+    if currency != operation.currency {
+        return Err(AppError::validation(
+            "payment action currency must match the authorization currency",
+        ));
+    }
+    let reference = payload
+        .reference
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("{}:{action}", operation.id));
+    let action_id = Uuid::new_v4().to_string();
+    let reserved = sqlx::query(
+        "INSERT INTO payment_provider_actions (id,tenant_id,branch_id,operation_id,sale_id,provider,provider_payment_id,action,amount_paise,currency,idempotency_key,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (tenant_id,branch_id,idempotency_key) DO NOTHING",
+    )
+    .bind(&action_id).bind(&tenant).bind(&branch).bind(&operation.id).bind(&operation.sale_id)
+    .bind(&operation.provider).bind(&operation.provider_object_id).bind(action).bind(if action == "capture" { amount } else { 0 })
+    .bind(&currency).bind(&payload.idempotency_key).bind(&claims.sub).execute(&state.db).await
+    .map_err(|_| AppError::internal("failed to reserve payment action"))?;
+    if reserved.rows_affected() == 0 {
+        let existing = sqlx::query_as::<_, (String, Value)>(
+            "SELECT status,result_json FROM payment_provider_actions WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3",
+        )
+        .bind(&tenant).bind(&branch).bind(&payload.idempotency_key).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load payment action"))?;
+        if existing.0 == "succeeded" {
+            return Ok(Json(ApiResponse::ok(existing.1)));
+        }
+        return Err(AppError::conflict(format!(
+            "payment action is {}; reconcile it before retrying",
+            existing.0
+        )));
+    }
+    let result = if action == "capture" {
+        platform::capture_payment(
+            &state.settings,
+            &operation.provider,
+            &operation.provider_account_id,
+            &operation.provider_object_id,
+            amount,
+            &currency,
+            &reference,
+            &payload.idempotency_key,
+        )
+        .await
+    } else {
+        platform::void_payment(
+            &state.settings,
+            &operation.provider,
+            &operation.provider_account_id,
+            &operation.provider_object_id,
+            &reference,
+            &payload.idempotency_key,
+        )
+        .await
+    };
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => {
+            let status = provider_failure_status(&error);
+            let _ = sqlx::query("UPDATE payment_provider_actions SET status=$2,last_error=$3,updated_at=NOW() WHERE id=$1")
+                .bind(&action_id).bind(status).bind(error.message()).execute(&state.db).await;
+            let _ = sqlx::query("UPDATE payment_provider_operations SET status=CASE WHEN $2='unknown' THEN 'unknown' ELSE status END,uncertain_since=CASE WHEN $2='unknown' THEN COALESCE(uncertain_since,NOW()) ELSE uncertain_since END,last_error=$3,updated_at=NOW() WHERE id=$1")
+                .bind(&operation.id).bind(status).bind(error.message()).execute(&state.db).await;
+            return Err(error);
+        }
+    };
+    let operation_status = if action == "void" {
+        if matches!(result.status.as_str(), "canceled" | "cancelled") {
+            "canceled"
+        } else {
+            "void_pending"
+        }
+    } else if matches!(result.status.as_str(), "succeeded" | "captured") {
+        "succeeded"
+    } else {
+        "capture_pending"
+    };
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| AppError::internal("failed to finish payment action"))?;
+    sqlx::query("UPDATE payment_provider_actions SET status='succeeded',provider_action_id=$2,result_json=$3::jsonb,last_error='',completed_at=NOW(),updated_at=NOW() WHERE id=$1")
+        .bind(&action_id).bind(&result.provider_action_id).bind(result.payload.to_string()).execute(&mut *tx).await
+        .map_err(|_| AppError::internal("failed to save payment action result"))?;
+    sqlx::query("UPDATE payment_provider_operations SET status=$2,result_json=result_json||$3::jsonb,uncertain_since=NULL,last_error='',updated_at=NOW() WHERE id=$1")
+        .bind(&operation.id).bind(operation_status).bind(json!({"lastAction":action,"lastActionId":result.provider_action_id}).to_string()).execute(&mut *tx).await
+        .map_err(|_| AppError::internal("failed to update payment operation"))?;
+    tx.commit()
+        .await
+        .map_err(|_| AppError::internal("failed to commit payment action"))?;
+    audit(state,&tenant,&branch,&claims.sub,&format!("payments.{action}.requested"),json!({"operationId":operation.id,"provider":operation.provider,"providerActionId":result.provider_action_id,"amountPaise":if action=="capture"{amount}else{0}})).await?;
+    Ok(Json(ApiResponse::ok(result.payload)))
+}
+
+async fn reconcile_payment(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    let (tenant, branch) = tenant_branch(&headers)?;
+    require_payment_manage(&claims)?;
+    let operation = payment_operation(&state, &tenant, &branch, &id).await?;
+    if operation.provider_object_id.is_empty() {
+        return Err(AppError::conflict(
+            "provider payment reference is unavailable; manual provider review is required",
+        ));
+    }
+    let result = platform::retrieve_payment(
+        &state.settings,
+        &operation.provider,
+        &operation.provider_account_id,
+        &operation.provider_object_id,
+    )
+    .await?;
+    let status = result
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown")
+        .to_ascii_lowercase();
+    sqlx::query("UPDATE payment_provider_operations SET status=$4,result_json=result_json||$5::jsonb,last_reconciled_at=NOW(),uncertain_since=CASE WHEN $4='unknown' THEN COALESCE(uncertain_since,NOW()) ELSE NULL END,last_error='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+        .bind(&tenant).bind(&branch).bind(&operation.id).bind(&status).bind(result.to_string()).execute(&state.db).await
+        .map_err(|_| AppError::internal("failed to reconcile payment operation"))?;
+    if status == "succeeded" {
+        settle_payment_operation(&state, &operation.provider, &operation.provider_object_id)
+            .await?;
+    }
+    audit(
+        &state,
+        &tenant,
+        &branch,
+        &claims.sub,
+        "payments.payment.reconciled",
+        json!({"operationId":operation.id,"provider":operation.provider,"status":status}),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(result)))
+}
+
+async fn payment_operation(
+    state: &AppState,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+) -> Result<ProviderPaymentOperation, AppError> {
+    sqlx::query_as(
+        r#"SELECT operation.id,account.provider_account_id,
+          operation.provider,operation.provider_object_id,operation.sale_id,operation.amount_paise,
+          operation.currency,operation.status,operation.capture_method
+        FROM payment_provider_operations operation
+        JOIN payment_merchant_accounts account ON account.id=operation.merchant_account_id
+          AND account.tenant_id=operation.tenant_id AND account.branch_id=operation.branch_id
+        WHERE operation.tenant_id=$1 AND operation.branch_id=$2 AND operation.id=$3
+          AND operation.operation_type='payment'"#,
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load payment operation"))?
+    .ok_or_else(|| AppError::not_found("payment operation was not found"))
 }
 
 async fn create_setup(
@@ -373,6 +668,7 @@ async fn create_setup(
         payload.client_id.unwrap_or_default(),
         0,
         &payload.request.currency,
+        "automatic",
         |key| {
             platform::create_setup(
                 &state.settings,
@@ -407,6 +703,7 @@ async fn create_terminal_session(
         String::new(),
         0,
         "USD",
+        "automatic",
         |key| {
             platform::create_terminal_session(&state.settings, &payload.provider, &account.1, key)
         },
@@ -446,6 +743,7 @@ async fn create_payout(
         String::new(),
         payload.request.amount_paise,
         &payload.request.currency,
+        "automatic",
         |key| {
             platform::create_payout(
                 &state.settings,
@@ -504,6 +802,7 @@ async fn operation<F, Fut>(
     client_id: String,
     amount_paise: i64,
     currency: &str,
+    capture_method: &str,
     provider_call: F,
 ) -> ApiResult<Value>
 where
@@ -511,17 +810,26 @@ where
     Fut: std::future::Future<Output = Result<Value, AppError>>,
 {
     validate_idempotency(&idempotency_key)?;
-    if let Some(existing)=sqlx::query_scalar::<_,Value>("SELECT result_json FROM payment_provider_operations WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3 AND result_json<>'{}'::jsonb").bind(tenant).bind(branch).bind(&idempotency_key).fetch_optional(&state.db).await.map_err(|_|AppError::internal("failed to read payment idempotency key"))?{
-        return Ok(Json(ApiResponse::ok(existing)));
+    if let Some((status, result))=sqlx::query_as::<_,(String,Value)>("SELECT status,result_json FROM payment_provider_operations WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3").bind(tenant).bind(branch).bind(&idempotency_key).fetch_optional(&state.db).await.map_err(|_|AppError::internal("failed to read payment idempotency key"))?{
+        if result != json!({}) {
+            return Ok(Json(ApiResponse::ok(result)));
+        }
+        return Err(AppError::conflict(format!("payment operation is {status}; reconcile it before retrying")));
     }
     let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO payment_provider_operations (id,tenant_id,branch_id,merchant_account_id,provider,operation_type,sale_id,client_id,amount_paise,currency,status,idempotency_key,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12) ON CONFLICT (tenant_id,branch_id,idempotency_key) DO NOTHING")
-        .bind(&id).bind(tenant).bind(branch).bind(&account.0).bind(&account.2).bind(operation_type).bind(&sale_id).bind(&client_id).bind(amount_paise).bind(currency.to_ascii_uppercase()).bind(&idempotency_key).bind(&claims.sub).execute(&state.db).await.map_err(|_|AppError::internal("failed to reserve payment operation"))?;
+    let reserved=sqlx::query("INSERT INTO payment_provider_operations (id,tenant_id,branch_id,merchant_account_id,provider,operation_type,sale_id,client_id,amount_paise,currency,status,idempotency_key,created_by_user_id,capture_method) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12,$13) ON CONFLICT (tenant_id,branch_id,idempotency_key) DO NOTHING")
+        .bind(&id).bind(tenant).bind(branch).bind(&account.0).bind(&account.2).bind(operation_type).bind(&sale_id).bind(&client_id).bind(amount_paise).bind(currency.to_ascii_uppercase()).bind(&idempotency_key).bind(&claims.sub).bind(capture_method).execute(&state.db).await.map_err(|_|AppError::internal("failed to reserve payment operation"))?;
+    if reserved.rows_affected() == 0 {
+        return Err(AppError::conflict(
+            "payment operation is already reserved; reload its status before retrying",
+        ));
+    }
     let result = provider_call(idempotency_key.clone()).await;
     let result = match result {
         Ok(value) => value,
         Err(error) => {
-            let _=sqlx::query("UPDATE payment_provider_operations SET status='failed',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3").bind(tenant).bind(branch).bind(&idempotency_key).execute(&state.db).await;
+            let status = provider_failure_status(&error);
+            let _=sqlx::query("UPDATE payment_provider_operations SET status=$4,uncertain_since=CASE WHEN $4='unknown' THEN COALESCE(uncertain_since,NOW()) ELSE NULL END,last_error=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3").bind(tenant).bind(branch).bind(&idempotency_key).bind(status).bind(error.message()).execute(&state.db).await;
             return Err(error);
         }
     };
@@ -536,7 +844,7 @@ where
         .and_then(Value::as_str)
         .unwrap_or("pending")
         .to_ascii_lowercase();
-    sqlx::query("UPDATE payment_provider_operations SET provider_object_id=$4,status=$5,result_json=$6::jsonb,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
+    sqlx::query("UPDATE payment_provider_operations SET provider_object_id=$4,status=$5,result_json=$6::jsonb,uncertain_since=NULL,last_error='',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
       .bind(tenant).bind(branch).bind(&idempotency_key).bind(provider_object_id).bind(&status).bind(result.to_string()).execute(&state.db).await.map_err(|_|AppError::internal("failed to save payment provider response"))?;
     audit(state,tenant,branch,&claims.sub,&format!("payments.{operation_type}.created"),json!({"provider":account.2,"providerObjectId":provider_object_id,"idempotencyKey":idempotency_key})).await?;
     Ok(Json(ApiResponse::ok(result)))
@@ -638,6 +946,17 @@ fn validate_idempotency(value: &str) -> Result<(), AppError> {
         ));
     }
     Ok(())
+}
+
+fn provider_failure_status(error: &AppError) -> &'static str {
+    if matches!(
+        error.code(),
+        "VALIDATION_FAILED" | "PAYMENT_PROVIDER_REJECTED"
+    ) {
+        "failed"
+    } else {
+        "unknown"
+    }
 }
 
 fn account_state(
@@ -960,11 +1279,7 @@ async fn process_provider_event(
     object: &Value,
     merchant_id: &str,
 ) -> Result<(), AppError> {
-    let object_id = if provider == "stripe" {
-        text_at(object, "/id")
-    } else {
-        text_at(object, "/pspReference")
-    };
+    let object_id = provider_event_payment_reference(provider, event_type, object);
     let status = if provider == "stripe" {
         text_at(object, "/status")
     } else if text_at(object, "/success") == "true" {
@@ -981,11 +1296,19 @@ async fn process_provider_event(
         json!({"avsResult":object.pointer("/additionalData/avsResult"),"cvcResult":object.pointer("/additionalData/cvcResult")})
     };
     sqlx::query("UPDATE payment_provider_operations SET status=$3,security_json=$4::jsonb,result_json=result_json||$5::jsonb,updated_at=NOW() WHERE provider=$1 AND provider_object_id=$2").bind(provider).bind(&object_id).bind(&status).bind(security.to_string()).bind(json!({"webhookEventType":event_type}).to_string()).execute(&state.db).await.map_err(|_|AppError::internal("failed to update payment operation from webhook"))?;
+    let adyen_capture_settled =
+        provider == "adyen" && event_type == "CAPTURE" && status == "succeeded";
+    let adyen_automatic_authorisation = provider == "adyen"
+        && event_type == "AUTHORISATION"
+        && status == "succeeded"
+        && payment_capture_method(state, provider, &object_id).await? == "automatic";
     if (provider == "stripe" && event_type == "payment_intent.succeeded")
-        || (provider == "adyen" && event_type == "AUTHORISATION" && status == "succeeded")
+        || adyen_capture_settled
+        || adyen_automatic_authorisation
     {
         settle_payment_operation(state, provider, &object_id).await?;
     }
+    update_gateway_refund_from_webhook(state, provider, event_type, object, &status).await?;
     if provider == "stripe" && event_type.starts_with("payout.") {
         upsert_stripe_settlement(state, object, merchant_id).await?;
     }
@@ -998,6 +1321,60 @@ async fn process_provider_event(
     {
         upsert_payment_dispute(state, provider, event_type, object).await?;
     }
+    Ok(())
+}
+
+fn provider_event_payment_reference(provider: &str, event_type: &str, object: &Value) -> String {
+    if provider == "stripe" {
+        return text_at(object, "/id");
+    }
+    if matches!(event_type, "CAPTURE" | "CANCELLATION" | "REFUND") {
+        let original = text_at(object, "/originalReference");
+        if !original.is_empty() {
+            return original;
+        }
+    }
+    text_at(object, "/pspReference")
+}
+
+async fn payment_capture_method(
+    state: &AppState,
+    provider: &str,
+    provider_object_id: &str,
+) -> Result<String, AppError> {
+    sqlx::query_scalar("SELECT capture_method FROM payment_provider_operations WHERE provider=$1 AND provider_object_id=$2 AND operation_type='payment'")
+        .bind(provider).bind(provider_object_id).fetch_optional(&state.db).await
+        .map_err(|_| AppError::internal("failed to load payment capture method"))
+        .map(|value| value.unwrap_or_else(|| "automatic".into()))
+}
+
+async fn update_gateway_refund_from_webhook(
+    state: &AppState,
+    provider: &str,
+    event_type: &str,
+    object: &Value,
+    event_status: &str,
+) -> Result<(), AppError> {
+    let provider_refund_id = if provider == "stripe" && event_type.starts_with("refund.") {
+        text_at(object, "/id")
+    } else if provider == "adyen" && event_type == "REFUND" {
+        text_at(object, "/pspReference")
+    } else {
+        return Ok(());
+    };
+    if provider_refund_id.is_empty() {
+        return Ok(());
+    }
+    let status = if matches!(event_status, "succeeded" | "processed") {
+        "processed"
+    } else {
+        "failed"
+    };
+    sqlx::query("UPDATE pos_gateway_refunds SET status=$3,payload_json=payload_json||$4::jsonb WHERE provider=$1 AND provider_refund_id=$2")
+        .bind(provider).bind(provider_refund_id).bind(status)
+        .bind(json!({"webhookEventType":event_type,"providerStatus":event_status}).to_string())
+        .execute(&state.db).await
+        .map_err(|_| AppError::internal("failed to update provider refund status"))?;
     Ok(())
 }
 
@@ -1190,11 +1567,47 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{constant_time_eq, validate_idempotency};
+    use super::{
+        constant_time_eq, provider_event_payment_reference, provider_failure_status,
+        validate_idempotency,
+    };
+    use crate::models::common::AppError;
+    use serde_json::json;
     #[test]
     fn payment_idempotency_contract_is_strict() {
         assert!(validate_idempotency("payment:123456").is_ok());
         assert!(validate_idempotency("short").is_err());
         assert!(!constant_time_eq(b"abc", b"abd"));
+    }
+
+    #[test]
+    fn transport_failure_never_becomes_a_decline() {
+        assert_eq!(
+            provider_failure_status(&AppError::service_unavailable(
+                "PAYMENT_PROVIDER_UNAVAILABLE",
+                "timeout",
+            )),
+            "unknown"
+        );
+        assert_eq!(
+            provider_failure_status(&AppError::service_unavailable(
+                "PAYMENT_PROVIDER_REJECTED",
+                "declined",
+            )),
+            "failed"
+        );
+    }
+
+    #[test]
+    fn adyen_modification_webhooks_reconcile_the_original_payment() {
+        let event = json!({"pspReference":"capture-1","originalReference":"payment-1"});
+        assert_eq!(
+            provider_event_payment_reference("adyen", "CAPTURE", &event),
+            "payment-1"
+        );
+        assert_eq!(
+            provider_event_payment_reference("adyen", "AUTHORISATION", &event),
+            "capture-1"
+        );
     }
 }

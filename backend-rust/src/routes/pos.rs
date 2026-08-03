@@ -21,6 +21,7 @@ use crate::{
         self, CreatePaymentMethod, PaymentMethodRecord, UpdatePaymentMethod,
     },
     repositories::pos_enterprise_repository,
+    repositories::wallet_repository::{self, StoreCreditIssue, StoreCreditWriteResult},
     routes::context::{current_business_date, tenant_branch},
     services::accounting_service,
     services::auth_service::AuthClaims,
@@ -33,6 +34,7 @@ use crate::{
     services::invoice_pdf::{self, InvoicePdfLayout},
     services::membership_service,
     services::payment_gateway_service,
+    services::payment_platform_service,
     services::razorpay_payment_service,
     services::security_service,
     services::wallet_service,
@@ -447,8 +449,10 @@ pub struct PosSalePayload {
     pub coupon_discount_paise: Option<i64>,
     pub coupon_discount: Option<f64>,
     pub reward_discount_paise: Option<i64>,
+    pub discount_reason: Option<String>,
     pub tip_paise: Option<i64>,
     pub tip_total: Option<f64>,
+    pub tip_splits: Option<Value>,
     #[serde(alias = "roundTotal", alias = "round_total")]
     pub round_to_nearest_rupee: Option<bool>,
     pub status: Option<String>,
@@ -460,6 +464,8 @@ pub struct PosSalePayload {
     pub reverse_charge: Option<bool>,
     pub cash_drawer_till_id: Option<String>,
     pub terminal_id: Option<String>,
+    pub cart_version: Option<i64>,
+    pub separate_group_invoice: Option<bool>,
     #[serde(alias = "wallet_credit_paise")]
     pub wallet_credit_paise: Option<i64>,
 }
@@ -473,8 +479,8 @@ struct OfflineCheckoutRequest {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FinalizeRequest {
-    cash_drawer_till_id: Option<String>,
+pub(crate) struct FinalizeRequest {
+    pub cash_drawer_till_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -508,6 +514,7 @@ pub struct PosSaleLineInput {
     pub price_paise: Option<i64>,
     pub unit_price: Option<f64>,
     pub price: Option<f64>,
+    pub other_fee_paise: Option<i64>,
     pub discount_paise: Option<i64>,
     pub discount_amount_paise: Option<i64>,
     pub discount_value: Option<f64>,
@@ -909,6 +916,7 @@ pub struct InvoiceLifecycleRequest {
     pub idempotency_key: Option<String>,
     pub lines: Option<Vec<InvoiceRefundLineInput>>,
     pub restock: Option<bool>,
+    pub evidence_reference: Option<String>,
     pub mfa_code: Option<String>,
     pub refund_method: Option<String>,
     pub cash_drawer_till_id: Option<String>,
@@ -997,6 +1005,8 @@ struct InvoiceCorrectionRequestRow {
 pub struct InvoiceRefundLineInput {
     pub sale_line_id: String,
     pub quantity: i64,
+    pub restock_quantity: Option<i64>,
+    pub discard_quantity: Option<i64>,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1193,13 +1203,27 @@ pub struct PosSaleResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PosSaleDetailsResponse {
+pub(crate) struct PosSaleDetailsResponse {
     pub sale: PosSaleResponse,
     pub invoice: PosSaleResponse,
     pub lines: Vec<PosSaleLineResponse>,
     pub payments: Vec<PosPaymentResponse>,
     pub payment_split: PosPaymentSplitResponse,
     pub client_kpi: Option<PosClientKpiResponse>,
+    pub transaction_context: PosTransactionContext,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PosTransactionContext {
+    pub discount_reason: String,
+    pub cart_version: i64,
+    pub cart_owner_terminal_id: String,
+    pub buyer_gstin: String,
+    pub place_of_supply_state_code: String,
+    pub reverse_charge: bool,
+    pub tax_mode: String,
+    pub separate_group_invoice: bool,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1225,6 +1249,7 @@ pub struct PosSaleLineResponse {
     pub staff_splits: Value,
     pub quantity: i64,
     pub unit_price_paise: i64,
+    pub other_fee_paise: i64,
     pub gross_paise: i64,
     pub taxable_paise: i64,
     pub discount_paise: i64,
@@ -1417,6 +1442,7 @@ struct PosLineRow {
     pub staff_splits: Value,
     pub quantity: i64,
     pub unit_price_paise: i64,
+    pub other_fee_paise: i64,
     pub gross_paise: i64,
     pub taxable_paise: i64,
     pub discount_paise: i64,
@@ -1556,6 +1582,8 @@ struct PosClientKpiRow {
 
 #[derive(Debug, FromRow)]
 struct ClientPackageCreditRow {
+    pub source_branch_id: String,
+    pub credit_owner_id: String,
     pub remaining_qty: i32,
     pub unit_value_paise: i64,
     pub issued_value_paise: i64,
@@ -1603,7 +1631,7 @@ struct PosCheckoutResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PosInvoicePrintResponse {
+pub(crate) struct PosInvoicePrintResponse {
     pub invoice: PosSaleResponse,
     pub lines: Vec<PosSaleLineResponse>,
     pub payments: Vec<PosPaymentResponse>,
@@ -1859,6 +1887,7 @@ struct NormalizedLine {
     staff_splits: Value,
     quantity: i64,
     unit_price_paise: i64,
+    other_fee_paise: i64,
     item_discount_paise: i64,
     discount_type: String,
     discount_value_paise: i64,
@@ -1876,6 +1905,7 @@ struct CalculatedLine {
     staff_splits: Value,
     quantity: i64,
     unit_price_paise: i64,
+    other_fee_paise: i64,
     gross_paise: i64,
     taxable_paise: i64,
     discount_paise: i64,
@@ -2009,6 +2039,7 @@ fn line_input_from_row(row: &PosLineRow) -> PosSaleLineInput {
         price_paise: None,
         unit_price: None,
         price: None,
+        other_fee_paise: Some(row.other_fee_paise),
         discount_paise: None,
         discount_amount_paise: amount_discount,
         discount_value: percent_discount,
@@ -2069,6 +2100,9 @@ fn merge_line_input(mut current: PosSaleLineInput, patch: PosSaleLineInput) -> P
     if patch.price.is_some() {
         current.price = patch.price;
     }
+    if patch.other_fee_paise.is_some() {
+        current.other_fee_paise = patch.other_fee_paise;
+    }
     if patch.discount_paise.is_some() {
         current.discount_paise = patch.discount_paise;
     }
@@ -2124,8 +2158,10 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         coupon_discount_paise: Some(sale.coupon_discount_paise),
         coupon_discount: None,
         reward_discount_paise: None,
+        discount_reason: None,
         tip_paise: Some(sale.tip_paise),
         tip_total: None,
+        tip_splits: None,
         round_to_nearest_rupee: Some(sale.round_off_paise != 0),
         status: Some(sale.status.clone()),
         force_unpaid: None,
@@ -2135,6 +2171,8 @@ fn line_payload_for_recalc(sale: &PosSaleRow, drafts: &[LineDraft]) -> PosSalePa
         reverse_charge: None,
         cash_drawer_till_id: None,
         terminal_id: None,
+        cart_version: None,
+        separate_group_invoice: None,
         wallet_credit_paise: None,
     }
 }
@@ -2449,18 +2487,19 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
         .unwrap_or_else(|| "-".to_string());
 
     let line_rows = if details.lines.is_empty() {
-        "<tr><td colspan=\"7\" class=\"empty\">No items</td></tr>".to_string()
+        "<tr><td colspan=\"8\" class=\"empty\">No items</td></tr>".to_string()
     } else {
         details
             .lines
             .iter()
             .map(|line| {
                 format!(
-                    "<tr><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num strong\">{}</td></tr>",
+                    "<tr><td>{}</td><td>{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num strong\">{}</td></tr>",
                     escape_invoice_html(&line.item_name),
                     escape_invoice_html(&line.staff_id),
                     line.quantity,
                     format_invoice_money_html(line.unit_price_paise),
+                    format_invoice_money_html(line.other_fee_paise),
                     format_invoice_money_html(line.discount_paise),
                     format_invoice_money_html(line.gst_paise),
                     format_invoice_money_html(line.line_total_paise)
@@ -2548,7 +2587,7 @@ fn render_invoice_print_html(details: &PosSaleDetailsResponse) -> String {
       <div class="box"><div class="label">Unpaid</div><div class="value">{unpaid}</div></div>
     </section>
     <table>
-      <thead><tr><th>Item</th><th>Staff</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Discount</th><th class="num">GST</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>Item</th><th>Staff</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Other fee</th><th class="num">Discount</th><th class="num">GST</th><th class="num">Total</th></tr></thead>
       <tbody>{line_rows}</tbody>
     </table>
     <section class="summary">
@@ -2632,7 +2671,7 @@ fn client_kpi_response(row: PosClientKpiRow) -> PosClientKpiResponse {
     }
 }
 
-async fn read_client_kpi(
+pub(crate) async fn read_client_kpi(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -2863,6 +2902,55 @@ fn normalize_discount_type(value: String) -> String {
     }
 }
 
+fn validated_discount_reason(payload: &PosSalePayload) -> Result<String, AppError> {
+    let reward = payload.reward_discount_paise.unwrap_or(0).max(0);
+    let invoice_discount = payload
+        .bill_discount_paise
+        .or(payload.discount_paise)
+        .unwrap_or_else(|| rupees_to_paise(payload.discount.unwrap_or(0.0)))
+        .saturating_sub(reward)
+        .max(0);
+    let line_discount = payload
+        .lines
+        .as_ref()
+        .or(payload.items.as_ref())
+        .is_some_and(|lines| {
+            lines.iter().any(|line| {
+                let kind = line
+                    .discount_type
+                    .as_deref()
+                    .unwrap_or("amount")
+                    .trim()
+                    .to_ascii_lowercase();
+                kind != "membership"
+                    && (line
+                        .discount_paise
+                        .or(line.discount_amount_paise)
+                        .unwrap_or(0)
+                        > 0
+                        || line.discount_value.unwrap_or(0.0) > 0.0)
+            })
+        });
+    let reason = payload
+        .discount_reason
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if invoice_discount > 0 || line_discount {
+        if !(3..=500).contains(&reason.len()) {
+            return Err(AppError::validation(
+                "discountReason must contain 3 to 500 characters for manual discounts",
+            ));
+        }
+    } else if reason.len() > 500 {
+        return Err(AppError::validation(
+            "discountReason cannot exceed 500 characters",
+        ));
+    }
+    Ok(reason)
+}
+
 fn normalize_line(
     line: PosSaleLineInput,
     fallback_staff_id: &str,
@@ -2912,7 +3000,14 @@ fn normalize_line(
         .unwrap_or_else(|| rupees_to_paise(line.unit_price.or(line.price).unwrap_or(0.0)))
         .max(0);
 
-    let gross_paise = quantity.saturating_mul(unit_price_paise);
+    let other_fee_paise = line.other_fee_paise.unwrap_or(0);
+    if !(0..=100_000_000).contains(&other_fee_paise) {
+        return Err(AppError::validation(
+            "otherFeePaise must be between 0 and 100000000",
+        ));
+    }
+
+    let gross_paise = quantity.saturating_mul(unit_price_paise.saturating_add(other_fee_paise));
     let discount_type =
         normalize_discount_type(line.discount_type.unwrap_or_else(|| "amount".to_string()));
     let mut discount_value_paise = 0i64;
@@ -2954,6 +3049,7 @@ fn normalize_line(
         staff_splits,
         quantity,
         unit_price_paise,
+        other_fee_paise,
         item_discount_paise,
         discount_type,
         discount_value_paise,
@@ -3041,9 +3137,54 @@ fn normalize_staff_splits(raw: Value, fallback_staff_id: &str) -> Result<Value, 
     Ok(Value::Array(rows))
 }
 
+fn normalize_tip_splits(raw: Value, expected_tip_paise: i64) -> Result<Value, AppError> {
+    let Some(items) = raw.as_array() else {
+        return Err(AppError::validation("tipSplits must be an array"));
+    };
+    if items.len() > 25 {
+        return Err(AppError::validation("tipSplits supports up to 25 staff"));
+    }
+
+    let mut total = 0i64;
+    let mut staff_ids = HashSet::new();
+    let mut rows = Vec::with_capacity(items.len());
+    for item in items {
+        let staff_id = item
+            .get("staffId")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let amount_paise = item
+            .get("amountPaise")
+            .and_then(Value::as_i64)
+            .unwrap_or_default();
+        if staff_id.is_empty() || amount_paise <= 0 {
+            return Err(AppError::validation(
+                "each tip split needs staffId and positive amountPaise",
+            ));
+        }
+        if !staff_ids.insert(staff_id) {
+            return Err(AppError::validation(
+                "tipSplits cannot contain duplicate staff",
+            ));
+        }
+        total = total
+            .checked_add(amount_paise)
+            .ok_or_else(|| AppError::validation("tip split total is too large"))?;
+        rows.push(serde_json::json!({
+            "staffId": staff_id,
+            "amountPaise": amount_paise
+        }));
+    }
+    if !rows.is_empty() && total != expected_tip_paise {
+        return Err(AppError::validation("tip split total must equal tipPaise"));
+    }
+    Ok(Value::Array(rows))
+}
+
 #[cfg(test)]
 mod staff_split_tests {
-    use super::normalize_staff_splits;
+    use super::{normalize_staff_splits, normalize_tip_splits};
 
     #[test]
     fn staff_splits_reject_duplicate_staff() {
@@ -3053,6 +3194,31 @@ mod staff_split_tests {
                 {"staffId": "staff-1", "percent": 50}
             ]),
             "",
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn tip_splits_require_unique_staff_and_exact_total() {
+        assert!(normalize_tip_splits(
+            serde_json::json!([
+                {"staffId": "staff-1", "amountPaise": 400},
+                {"staffId": "staff-2", "amountPaise": 600}
+            ]),
+            1000,
+        )
+        .is_ok());
+        assert!(normalize_tip_splits(
+            serde_json::json!([
+                {"staffId": "staff-1", "amountPaise": 500},
+                {"staffId": "staff-1", "amountPaise": 500}
+            ]),
+            1000,
+        )
+        .is_err());
+        assert!(normalize_tip_splits(
+            serde_json::json!([{"staffId": "staff-1", "amountPaise": 999}]),
+            1000,
         )
         .is_err());
     }
@@ -3482,7 +3648,10 @@ fn calculate_pos(payload: &PosSalePayload) -> Result<PosCalculation, AppError> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let subtotal_paise = normalized.iter().fold(0i64, |sum, line| {
-        sum.saturating_add(line.quantity.saturating_mul(line.unit_price_paise))
+        sum.saturating_add(
+            line.quantity
+                .saturating_mul(line.unit_price_paise.saturating_add(line.other_fee_paise)),
+        )
     });
     let item_discount_paise = normalized.iter().fold(0i64, |sum, line| {
         sum.saturating_add(line.item_discount_paise)
@@ -3500,7 +3669,9 @@ fn calculate_pos(payload: &PosSalePayload) -> Result<PosCalculation, AppError> {
     let mut calculated = Vec::with_capacity(normalized.len());
 
     for (index, line) in normalized.into_iter().enumerate() {
-        let gross_paise = line.quantity.saturating_mul(line.unit_price_paise);
+        let gross_paise = line
+            .quantity
+            .saturating_mul(line.unit_price_paise.saturating_add(line.other_fee_paise));
         let taxable_before_bill = gross_paise.saturating_sub(line.item_discount_paise);
         let bill_share = if index == last_index {
             invoice_level_discount_paise
@@ -3531,6 +3702,7 @@ fn calculate_pos(payload: &PosSalePayload) -> Result<PosCalculation, AppError> {
             staff_splits: line.staff_splits,
             quantity: line.quantity,
             unit_price_paise: line.unit_price_paise,
+            other_fee_paise: line.other_fee_paise,
             gross_paise,
             taxable_paise,
             discount_paise,
@@ -3671,11 +3843,12 @@ async fn hydrate_appointment_booked_prices(
     if normalize_pos_source(payload.source.clone()) != "appointment" {
         return Ok(());
     }
-    let reference_id = canonical_appointment_reference(
+    let reference_id = appointment_invoice_reference(
         state,
         tenant_id,
         branch_id,
         payload.reference_id.as_deref().unwrap_or_default(),
+        payload.separate_group_invoice.unwrap_or(false),
     )
     .await?;
     payload.source = Some("appointment".to_string());
@@ -3749,28 +3922,26 @@ async fn hydrate_pos_tax_metadata(
             && line.gst_rate.is_none();
         let code_missing =
             line.hsn_sac_code.is_none() && line.hsn_code.is_none() && line.sac_code.is_none();
-        if !tax_missing && !code_missing {
-            continue;
-        }
         let defaults = if line_type == "service" {
-            sqlx::query_as::<_, (i32, String)>(
-                "SELECT gst_percent, sac_code FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
+            sqlx::query_as::<_, (i32, String, i64)>(
+                "SELECT gst_percent, sac_code, other_fee_paise FROM services WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
             )
             .bind(tenant_id).bind(branch_id).bind(item_id).fetch_optional(&state.db).await
         } else {
-            sqlx::query_as::<_, (i32, String)>(
-                "SELECT gst_percent, hsn_code FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
+            sqlx::query_as::<_, (i32, String, i64)>(
+                "SELECT gst_percent, hsn_code, 0::BIGINT FROM inventory_items WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE",
             )
             .bind(tenant_id).bind(branch_id).bind(item_id).fetch_optional(&state.db).await
         }
         .map_err(|_| AppError::internal("failed to load GST item defaults"))?;
-        if let Some((gst_percent, code)) = defaults {
+        if let Some((gst_percent, code, other_fee_paise)) = defaults {
             if tax_missing {
                 line.gst_percent = Some(gst_percent.clamp(0, 100));
             }
             if code_missing && !code.is_empty() {
                 line.hsn_sac_code = Some(code);
             }
+            line.other_fee_paise = Some(other_fee_paise);
         }
     }
     Ok(())
@@ -3929,6 +4100,37 @@ mod gst_tests {
         assert_eq!(split_gst(101, "intra_state"), (50, 51, 0));
         assert_eq!(split_gst(101, "inter_state"), (0, 0, 101));
         assert_eq!(split_gst(101, "reverse_charge"), (0, 0, 0));
+    }
+}
+
+#[cfg(test)]
+mod billing_completion_tests {
+    use super::{calculate_pos, validated_discount_reason, PosSaleLineInput, PosSalePayload};
+
+    #[test]
+    fn other_fee_is_taxed_and_manual_discount_requires_reason() {
+        let mut payload = PosSalePayload {
+            lines: Some(vec![PosSaleLineInput {
+                line_type: Some("service".to_string()),
+                item_id: Some("service-1".to_string()),
+                item_name: Some("Service".to_string()),
+                quantity: Some(2),
+                unit_price_paise: Some(10_000),
+                other_fee_paise: Some(500),
+                gst_percent: Some(18),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+        let calculation = calculate_pos(&payload).expect("valid POS calculation");
+        assert_eq!(calculation.subtotal_paise, 21_000);
+        assert_eq!(calculation.tax_paise, 3_780);
+        assert_eq!(calculation.total_paise, 24_780);
+
+        payload.bill_discount_paise = Some(100);
+        assert!(validated_discount_reason(&payload).is_err());
+        payload.discount_reason = Some("Service recovery".to_string());
+        assert!(validated_discount_reason(&payload).is_ok());
     }
 }
 
@@ -4335,6 +4537,8 @@ async fn get_pos_sale(
     let line_count = lines.len() as i64;
     let response = sale_response(sale, line_count);
     let payment_split = payment_split_response(&payments, response.total_paise);
+    let transaction_context =
+        read_pos_transaction_context(&state, &tenant_id, &branch_id, &id).await?;
     Ok(Json(ApiResponse::ok(PosSaleDetailsResponse {
         sale: response.clone(),
         invoice: response,
@@ -4342,6 +4546,7 @@ async fn get_pos_sale(
         payments,
         payment_split,
         client_kpi,
+        transaction_context,
     })))
 }
 
@@ -4637,7 +4842,7 @@ async fn receive_pos_client_unpaid(
     Ok(Json(ApiResponse::ok(client_due_receipt_response(receipt)?)))
 }
 
-async fn get_pos_invoice_print(
+pub(crate) async fn get_pos_invoice_print(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -5444,7 +5649,7 @@ async fn list_pos_invoice_action_history(
     Ok(Json(ApiResponse::ok(rows)))
 }
 
-async fn record_pos_invoice_action(
+pub(crate) async fn record_pos_invoice_action(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -6861,10 +7066,18 @@ async fn sync_offline_checkout(
             "operationId must be at least 10 characters",
         ));
     }
+    validate_offline_checkout_payload(&request.checkout)?;
     let (sale_source, sale_reference) =
         offline_checkout_sale_reference(&request.checkout, &operation_id)?;
     let sale_reference = if sale_source == "appointment" {
-        canonical_appointment_reference(&state, &tenant_id, &branch_id, &sale_reference).await?
+        appointment_invoice_reference(
+            &state,
+            &tenant_id,
+            &branch_id,
+            &sale_reference,
+            request.checkout.separate_group_invoice.unwrap_or(false),
+        )
+        .await?
     } else {
         sale_reference
     };
@@ -6918,6 +7131,53 @@ fn valid_offline_operation_id(value: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
+fn validate_offline_checkout_payload(checkout: &PosSalePayload) -> Result<(), AppError> {
+    let has_payments = checkout
+        .payments
+        .as_ref()
+        .is_some_and(|payments| !payments.is_empty());
+    let has_liability_mutation = checkout
+        .lines
+        .as_ref()
+        .into_iter()
+        .flatten()
+        .chain(checkout.items.as_ref().into_iter().flatten())
+        .any(|line| {
+            let kind = line
+                .line_type
+                .as_deref()
+                .or(line.item_type.as_deref())
+                .or(line.kind.as_deref())
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase();
+            matches!(
+                kind.as_str(),
+                "membership"
+                    | "package"
+                    | "gift_card"
+                    | "redemption"
+                    | "membership_redeem"
+                    | "package_redeem"
+            )
+        });
+    let has_package_redemptions = checkout.package_redemptions.as_ref().is_some_and(|value| {
+        !value.is_null() && value.as_array().is_none_or(|rows| !rows.is_empty())
+    });
+    if checkout.force_unpaid != Some(true)
+        || has_payments
+        || checkout.wallet_credit_paise.unwrap_or_default() != 0
+        || checkout.reward_discount_paise.unwrap_or_default() != 0
+        || has_liability_mutation
+        || has_package_redemptions
+    {
+        return Err(AppError::validation(
+            "offline checkout can only queue an unpaid service or product invoice",
+        ));
+    }
+    Ok(())
+}
+
 fn offline_checkout_sale_reference(
     checkout: &PosSalePayload,
     operation_id: &str,
@@ -6937,7 +7197,10 @@ fn offline_checkout_sale_reference(
 
 #[cfg(test)]
 mod offline_checkout_tests {
-    use super::{offline_checkout_sale_reference, valid_offline_operation_id, PosSalePayload};
+    use super::{
+        offline_checkout_sale_reference, valid_offline_operation_id,
+        validate_offline_checkout_payload, PosPaymentInput, PosSalePayload,
+    };
 
     #[test]
     fn offline_operation_id_is_replay_safe() {
@@ -6972,6 +7235,27 @@ mod offline_checkout_tests {
             },
             "device-operation-123"
         )
+        .is_err());
+    }
+
+    #[test]
+    fn offline_checkout_never_records_a_payment() {
+        assert!(validate_offline_checkout_payload(&PosSalePayload {
+            force_unpaid: Some(true),
+            payments: Some(Vec::new()),
+            wallet_credit_paise: Some(0),
+            ..PosSalePayload::default()
+        })
+        .is_ok());
+        assert!(validate_offline_checkout_payload(&PosSalePayload {
+            force_unpaid: Some(false),
+            payments: Some(vec![PosPaymentInput {
+                method: Some("card".into()),
+                amount_paise: Some(100),
+                ..PosPaymentInput::default()
+            }]),
+            ..PosSalePayload::default()
+        })
         .is_err());
     }
 }
@@ -7380,6 +7664,9 @@ fn normalize_pos_source(source: Option<String>) -> String {
         "customer_package_purchase" | "customer-package-purchase" => {
             "customer_package_purchase".to_string()
         }
+        "customer_product_purchase" | "customer-product-purchase" => {
+            "customer_product_purchase".to_string()
+        }
         "offline_sync" | "offline-sync" => "offline_sync".to_string(),
         _ => source.trim().to_string(),
     }
@@ -7398,6 +7685,7 @@ fn replayable_pos_reference(source: &str, reference_id: &str) -> bool {
                 | "customer_membership_purchase"
                 | "customer_gift_card_purchase"
                 | "customer_package_purchase"
+                | "customer_product_purchase"
         )
 }
 
@@ -7407,6 +7695,7 @@ fn customer_commerce_source(source: &str) -> bool {
         "customer_membership_purchase"
             | "customer_gift_card_purchase"
             | "customer_package_purchase"
+            | "customer_product_purchase"
     )
 }
 
@@ -7513,10 +7802,30 @@ pub(crate) fn customer_package_checkout_line(
     }
 }
 
+pub(crate) fn customer_product_checkout_line(
+    product_id: String,
+    product_name: String,
+    quantity: i64,
+    price_paise: i64,
+    gst_percent: i32,
+    hsn_code: String,
+) -> PosSaleLineInput {
+    PosSaleLineInput {
+        line_type: Some("product".to_string()),
+        item_id: Some(product_id),
+        item_name: Some(product_name),
+        quantity: Some(quantity),
+        unit_price_paise: Some(price_paise),
+        gst_percent: Some(gst_percent),
+        hsn_code: Some(hsn_code),
+        ..PosSaleLineInput::default()
+    }
+}
+
 #[cfg(test)]
 mod customer_commerce_policy_tests {
     use super::{
-        customer_gift_card_checkout_line, normalize_pos_source,
+        customer_gift_card_checkout_line, customer_product_checkout_line, normalize_pos_source,
         should_defer_customer_commerce_benefits,
     };
 
@@ -7537,6 +7846,22 @@ mod customer_commerce_policy_tests {
         assert_eq!(line.unit_price_paise, Some(25_050));
         assert_eq!(line.tax_percent, Some(0));
     }
+
+    #[test]
+    fn product_checkout_line_uses_server_price_tax_and_quantity() {
+        let line = customer_product_checkout_line(
+            "product-1".into(),
+            "Shampoo".into(),
+            2,
+            12_500,
+            18,
+            "3305".into(),
+        );
+        assert_eq!(line.line_type.as_deref(), Some("product"));
+        assert_eq!(line.quantity, Some(2));
+        assert_eq!(line.unit_price_paise, Some(12_500));
+        assert_eq!(line.gst_percent, Some(18));
+    }
 }
 
 pub(crate) async fn create_customer_commerce_checkout(
@@ -7547,6 +7872,7 @@ pub(crate) async fn create_customer_commerce_checkout(
     source: &str,
     idempotency_key: &str,
     line: PosSaleLineInput,
+    coupon_code: Option<&str>,
 ) -> Result<CustomerCommerceCheckout, AppError> {
     if !customer_commerce_source(source) {
         return Err(AppError::validation("unsupported customer commerce source"));
@@ -7573,6 +7899,10 @@ pub(crate) async fn create_customer_commerce_checkout(
             source: Some(source.to_string()),
             reference_id: Some(idempotency_key.trim().to_string()),
             lines: Some(vec![line]),
+            coupon_code: coupon_code
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
             payments: Some(Vec::new()),
             status: Some("open".to_string()),
             ..PosSalePayload::default()
@@ -7762,7 +8092,9 @@ pub(crate) async fn canonical_appointment_reference(
     sqlx::query_scalar::<_, String>(
         "SELECT COALESCE(NULLIF(a.booking_group_id, ''), a.id)
            FROM appointments a
-          WHERE a.id=$1 AND a.tenant_id=$2 AND a.branch_id=$3",
+          WHERE (a.id=$1 OR a.booking_group_id=$1) AND a.tenant_id=$2 AND a.branch_id=$3
+          ORDER BY CASE WHEN a.id=$1 THEN 0 ELSE 1 END
+          LIMIT 1",
     )
     .bind(appointment_id)
     .bind(tenant_id)
@@ -7771,6 +8103,34 @@ pub(crate) async fn canonical_appointment_reference(
     .await
     .map_err(|_| AppError::internal("failed to resolve appointment invoice reference"))
     .map(|reference| reference.unwrap_or_else(|| appointment_id.to_string()))
+}
+
+async fn appointment_invoice_reference(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+    separate_group_invoice: bool,
+) -> Result<String, AppError> {
+    if !separate_group_invoice {
+        return canonical_appointment_reference(state, tenant_id, branch_id, appointment_id).await;
+    }
+    let appointment_id = appointment_id.trim();
+    if appointment_id.is_empty() {
+        return Err(AppError::validation(
+            "appointment source requires referenceId",
+        ));
+    }
+    sqlx::query_scalar::<_, String>(
+        "SELECT id FROM appointments WHERE id=$1 AND tenant_id=$2 AND branch_id=$3",
+    )
+    .bind(appointment_id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to resolve separate appointment invoice"))?
+    .ok_or_else(|| AppError::not_found("appointment was not found"))
 }
 
 pub(crate) async fn find_appointment_pos_sale(
@@ -7833,6 +8193,49 @@ pub(crate) async fn create_or_resume_appointment_draft(
         sale_id: details.sale.id,
         total_paise: details.sale.total_paise,
         status: details.sale.status,
+    })
+}
+
+pub(crate) async fn append_appointment_draft_line(
+    state: &AppState,
+    headers: &HeaderMap,
+    sale_id: &str,
+    reference_id: &str,
+    line: PosSaleLineInput,
+    max_discount_paise: Option<i64>,
+) -> Result<AppointmentPosDraft, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(headers)?;
+    let sale = load_pos_sale(state, &tenant_id, &branch_id, sale_id).await?;
+    if sale.source != "appointment" || sale.reference_id != reference_id {
+        return Err(AppError::forbidden(
+            "invoice does not belong to this appointment",
+        ));
+    }
+    if !sale_is_line_editable(&sale.status) {
+        return Err(AppError::validation(
+            "only an appointment draft can receive recommendations",
+        ));
+    }
+    let mut drafts = read_line_drafts(state, &tenant_id, &branch_id, sale_id).await?;
+    drafts.push(LineDraft {
+        id: None,
+        input: line,
+    });
+    replace_invoice_lines(
+        state,
+        &tenant_id,
+        &branch_id,
+        &sale,
+        drafts,
+        "appointment.recommendation_added",
+        max_discount_paise,
+    )
+    .await?;
+    let saved = load_pos_sale(state, &tenant_id, &branch_id, sale_id).await?;
+    Ok(AppointmentPosDraft {
+        sale_id: saved.id,
+        total_paise: saved.total_paise,
+        status: saved.status,
     })
 }
 
@@ -7904,6 +8307,33 @@ pub(crate) async fn create_no_show_charge(
     provider: &str,
     idempotency_key: &str,
 ) -> Result<NoShowChargeResult, AppError> {
+    create_appointment_fee_charge(
+        state,
+        tenant_id,
+        branch_id,
+        appointment_id,
+        client_id,
+        staff_id,
+        amount_paise,
+        provider,
+        idempotency_key,
+        "no_show",
+    )
+    .await
+}
+
+pub(crate) async fn create_appointment_fee_charge(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+    client_id: &str,
+    staff_id: &str,
+    amount_paise: i64,
+    provider: &str,
+    idempotency_key: &str,
+    fee_type: &str,
+) -> Result<NoShowChargeResult, AppError> {
     if amount_paise <= 0 {
         return Err(AppError::validation(
             "amountPaise must be greater than zero",
@@ -7928,11 +8358,18 @@ pub(crate) async fn create_no_show_charge(
         PosSalePayload {
             client_id: Some(client_id.to_string()),
             staff_id: Some(staff_id.to_string()),
-            source: Some("appointment_no_show".to_string()),
+            source: Some(format!("appointment_{fee_type}")),
             reference_id: Some(appointment_id.to_string()),
             lines: Some(vec![PosSaleLineInput {
                 line_type: Some("custom".to_string()),
-                item_name: Some("No-show fee".to_string()),
+                item_name: Some(
+                    if fee_type == "cancellation" {
+                        "Cancellation fee"
+                    } else {
+                        "No-show fee"
+                    }
+                    .to_string(),
+                ),
                 quantity: Some(1),
                 unit_price_paise: Some(amount_paise),
                 ..PosSaleLineInput::default()
@@ -7999,6 +8436,7 @@ async fn persist_pos_sale(
 ) -> Result<PosSaleDetailsResponse, AppError> {
     let checkout_started = std::time::Instant::now();
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let discount_reason = validated_discount_reason(&payload)?;
     let cash_drawer_till_id = payload.cash_drawer_till_id.clone().unwrap_or_default();
     hydrate_appointment_booked_prices(state, &tenant_id, &branch_id, &mut payload).await?;
     hydrate_pos_tax_metadata(state, &tenant_id, &branch_id, &mut payload).await?;
@@ -8075,9 +8513,21 @@ async fn persist_pos_sale(
         ));
     }
     let reference_id = if source == "appointment" {
-        canonical_appointment_reference(state, &tenant_id, &branch_id, &reference_id).await?
+        appointment_invoice_reference(
+            state,
+            &tenant_id,
+            &branch_id,
+            &reference_id,
+            payload.separate_group_invoice.unwrap_or(false),
+        )
+        .await?
     } else {
         reference_id
+    };
+    let reference_lock_id = if source == "appointment" {
+        canonical_appointment_reference(state, &tenant_id, &branch_id, &reference_id).await?
+    } else {
+        reference_id.clone()
     };
     let booking_advance_allocations = if source == "appointment"
         && !payload
@@ -8162,7 +8612,7 @@ async fn persist_pos_sale(
         .await
         .map_err(|_| AppError::internal("failed to start pos invoice transaction"))?;
     if replayable_pos_reference(&source, &reference_id) {
-        let lock_key = format!("{tenant_id}|{branch_id}|{reference_id}");
+        let lock_key = format!("{tenant_id}|{branch_id}|{reference_lock_id}");
         sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
             .bind(lock_key)
             .execute(&mut *tx)
@@ -8185,6 +8635,22 @@ async fn persist_pos_sale(
                 .await
                 .map_err(|_| AppError::internal("failed to finish pos reference retry"))?;
             return load_pos_sale_details(state, &tenant_id, &branch_id, &existing_id).await;
+        }
+        if source == "appointment" {
+            let overlaps: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND source='appointment' AND (reference_id=$3 OR reference_id IN (SELECT id FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND (id=$3 OR booking_group_id=$3))))",
+            )
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .bind(&reference_lock_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|_| AppError::internal("failed to check booking group invoice"))?;
+            if overlaps {
+                return Err(AppError::conflict(
+                    "appointment or booking group already has an invoice",
+                ));
+            }
         }
     }
     let business_date = sqlx::query_scalar::<_, NaiveDate>("SELECT CURRENT_DATE")
@@ -8224,9 +8690,10 @@ async fn persist_pos_sale(
             tip_paise, round_off_paise, total_paise, paid_paise,
             status, source, reference_id, package_redemptions, invoice_type, business_date,
             seller_gstin, seller_state_code, buyer_gstin, place_of_supply_state_code, tax_mode, reverse_charge,
-            cgst_paise, sgst_paise, igst_paise, fiscal_year, invoice_number_sequence_id, terminal_id, finalized_at, created_at, updated_at
+            cgst_paise, sgst_paise, igst_paise, fiscal_year, invoice_number_sequence_id, terminal_id,
+            discount_reason, cart_owner_terminal_id, separate_group_invoice, finalized_at, created_at, updated_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NULLIF($34,''),CASE WHEN $17 = 'draft' THEN NULL ELSE NOW() END,NOW(),NOW())
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NULLIF($34,''),$35,$34,$36,CASE WHEN $17 = 'draft' THEN NULL ELSE NOW() END,NOW(),NOW())
         RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number,
                   subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise,
                   tip_paise, round_off_paise, total_paise, paid_paise,
@@ -8267,6 +8734,8 @@ async fn persist_pos_sale(
     .bind(&invoice_sequence.fiscal_year)
     .bind(&invoice_sequence.sequence_id)
     .bind(terminal_id)
+    .bind(&discount_reason)
+    .bind(payload.separate_group_invoice.unwrap_or(false))
     .fetch_one(&mut *tx)
     .await
     .map_err(|_| AppError::internal("failed to create pos sale"))?;
@@ -8496,6 +8965,8 @@ async fn persist_pos_sale(
             &package_redemptions,
         )
         .await?;
+        accounting_service::post_benefit_redemption(&mut tx, &tenant_id, &branch_id, &sale_id)
+            .await?;
         post_membership_rewards(
             &mut tx,
             &tenant_id,
@@ -8575,6 +9046,8 @@ async fn persist_pos_sale(
     let client_kpi = read_client_kpi(state, &tenant_id, &branch_id, &sale.client_id).await?;
     let response = sale_response(sale, lines.len() as i64);
     let payment_split = payment_split_response(&payment_rows, response.total_paise);
+    let transaction_context =
+        read_pos_transaction_context(state, &tenant_id, &branch_id, &sale_id).await?;
     tracing::info!(
         target: "pos.checkout",
         tenant_id = %tenant_id,
@@ -8591,10 +9064,11 @@ async fn persist_pos_sale(
         payments: payment_rows,
         payment_split,
         client_kpi,
+        transaction_context,
     })
 }
 
-async fn replace_pos_invoice_draft(
+pub(crate) async fn replace_pos_invoice_draft(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -8606,6 +9080,35 @@ async fn replace_pos_invoice_draft(
     if existing.status != "draft" {
         return Err(AppError::validation("only held invoices can be updated"));
     }
+    let existing_context =
+        read_pos_transaction_context(&state, &tenant_id, &branch_id, &id).await?;
+    let expected_cart_version = payload
+        .cart_version
+        .unwrap_or(existing_context.cart_version);
+    if payload.discount_reason.is_none() {
+        payload.discount_reason = Some(existing_context.discount_reason.clone());
+    }
+    if payload.buyer_gstin.is_none() {
+        payload.buyer_gstin = Some(existing_context.buyer_gstin.clone());
+    }
+    if payload.place_of_supply_state_code.is_none() {
+        payload.place_of_supply_state_code =
+            Some(existing_context.place_of_supply_state_code.clone());
+    }
+    if payload.reverse_charge.is_none() {
+        payload.reverse_charge = Some(existing_context.reverse_charge);
+    }
+    if payload.separate_group_invoice.is_none() {
+        payload.separate_group_invoice = Some(existing_context.separate_group_invoice);
+    }
+    let discount_reason = validated_discount_reason(&payload)?;
+    let cart_owner_terminal_id = payload
+        .terminal_id
+        .as_deref()
+        .filter(|terminal_id| !terminal_id.trim().is_empty())
+        .unwrap_or(&existing_context.cart_owner_terminal_id)
+        .trim()
+        .to_string();
     if existing.source == "appointment" {
         payload.source = Some(existing.source.clone());
         payload.reference_id = Some(existing.reference_id.clone());
@@ -8630,6 +9133,19 @@ async fn replace_pos_invoice_draft(
         &gst_context,
         payload.round_to_nearest_rupee.unwrap_or(false),
     );
+    let existing_tip_splits = sqlx::query_scalar::<_, Value>(
+        "SELECT tip_splits FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(&id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load invoice tip splits"))?;
+    let tip_splits = normalize_tip_splits(
+        payload.tip_splits.take().unwrap_or(existing_tip_splits),
+        calculation.tip_paise,
+    )?;
     enforce_discount_rules(
         &state,
         &tenant_id,
@@ -8682,8 +9198,30 @@ async fn replace_pos_invoice_draft(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start draft update transaction"))?;
+    if !cart_owner_terminal_id.is_empty() {
+        let valid: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pos_terminals WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND status='active')")
+            .bind(&tenant_id).bind(&branch_id).bind(&cart_owner_terminal_id).fetch_one(&mut *tx).await
+            .map_err(|_| AppError::internal("failed to validate POS terminal"))?;
+        if !valid {
+            return Err(AppError::validation("active POS terminal was not found"));
+        }
+    }
+    let next_cart_version = sqlx::query_scalar::<_, i64>(
+        "UPDATE pos_sales SET cart_version=cart_version+1,cart_owner_terminal_id=$5,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='draft' AND cart_version=$4 RETURNING cart_version",
+    )
+    .bind(&id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .bind(expected_cart_version)
+    .bind(&cart_owner_terminal_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|_| AppError::internal("failed to lock held invoice"))?
+    .ok_or_else(|| {
+        AppError::conflict("held invoice changed on another device; reload before saving")
+    })?;
     let sale = sqlx::query_as::<_, PosSaleRow>(
-        "UPDATE pos_sales SET client_id=$4, staff_id=$5, subtotal_paise=$6, bill_discount_paise=$7, coupon_code=$8, coupon_discount_paise=$9, discount_paise=$10, tax_paise=$11, tip_paise=$12, round_off_paise=$13, total_paise=$14, paid_paise=$15, source=$16, reference_id=$17, package_redemptions=$18::jsonb, seller_gstin=$19, seller_state_code=$20, buyer_gstin=$21, place_of_supply_state_code=$22, tax_mode=$23, reverse_charge=$24, cgst_paise=$25, sgst_paise=$26, igst_paise=$27, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='draft' RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number, subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise, tip_paise, round_off_paise, total_paise, paid_paise, status, source, reference_id, package_redemptions, invoice_type, finalized_at, created_at, updated_at",
+        "UPDATE pos_sales SET client_id=$4, staff_id=$5, subtotal_paise=$6, bill_discount_paise=$7, coupon_code=$8, coupon_discount_paise=$9, discount_paise=$10, tax_paise=$11, tip_paise=$12, round_off_paise=$13, total_paise=$14, paid_paise=$15, source=$16, reference_id=$17, package_redemptions=$18::jsonb, seller_gstin=$19, seller_state_code=$20, buyer_gstin=$21, place_of_supply_state_code=$22, tax_mode=$23, reverse_charge=$24, cgst_paise=$25, sgst_paise=$26, igst_paise=$27, tip_splits=$28::jsonb, discount_reason=$29, separate_group_invoice=$30, updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='draft' RETURNING id, tenant_id, branch_id, client_id, staff_id, invoice_number, subtotal_paise, bill_discount_paise, coupon_code, coupon_discount_paise, discount_paise, tax_paise, tip_paise, round_off_paise, total_paise, paid_paise, status, source, reference_id, package_redemptions, invoice_type, finalized_at, created_at, updated_at",
     )
     .bind(&id).bind(&tenant_id).bind(&branch_id).bind(client_id.trim()).bind(staff_id.trim())
     .bind(calculation.subtotal_paise).bind(calculation.bill_discount_paise).bind(&calculation.coupon_code).bind(calculation.coupon_discount_paise)
@@ -8692,6 +9230,9 @@ async fn replace_pos_invoice_draft(
     .bind(&gst_context.seller_gstin).bind(&gst_context.seller_state_code).bind(&gst_context.buyer_gstin)
     .bind(&gst_context.place_of_supply_state_code).bind(&gst_context.tax_mode).bind(gst_context.reverse_charge)
     .bind(calculation.cgst_paise).bind(calculation.sgst_paise).bind(calculation.igst_paise)
+    .bind(&tip_splits)
+    .bind(&discount_reason)
+    .bind(payload.separate_group_invoice.unwrap_or(false))
     .fetch_optional(&mut *tx).await.map_err(|_| AppError::internal("failed to update held invoice"))?
     .ok_or_else(|| AppError::not_found("held invoice was not found"))?;
 
@@ -8731,7 +9272,7 @@ async fn replace_pos_invoice_draft(
         prepared_payments,
     )
     .await?;
-    insert_pos_event(&mut tx, &tenant_id, &branch_id, &id, "invoice.draft_updated", serde_json::json!({ "invoiceNumber": sale.invoice_number, "totalPaise": sale.total_paise, "paidPaise": sale.paid_paise })).await?;
+    insert_pos_event(&mut tx, &tenant_id, &branch_id, &id, "invoice.draft_updated", serde_json::json!({ "invoiceNumber": sale.invoice_number, "totalPaise": sale.total_paise, "paidPaise": sale.paid_paise, "cartVersion": next_cart_version, "cartOwnerTerminalId": cart_owner_terminal_id, "discountReason": discount_reason })).await?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit held invoice"))?;
@@ -8747,6 +9288,8 @@ async fn replace_pos_invoice_draft(
     let client_kpi = read_client_kpi(&state, &tenant_id, &branch_id, &sale.client_id).await?;
     let response = sale_response(sale, lines.len() as i64);
     let payment_split = payment_split_response(&payment_rows, response.total_paise);
+    let transaction_context =
+        read_pos_transaction_context(&state, &tenant_id, &branch_id, &id).await?;
     Ok(Json(ApiResponse::ok(PosSaleDetailsResponse {
         sale: response.clone(),
         invoice: response,
@@ -8754,6 +9297,7 @@ async fn replace_pos_invoice_draft(
         payments: payment_rows,
         payment_split,
         client_kpi,
+        transaction_context,
     })))
 }
 
@@ -11353,6 +11897,7 @@ async fn apply_pos_payment_effects(
                 &sale.package_redemptions,
             )
             .await?;
+            accounting_service::post_benefit_redemption(tx, tenant_id, branch_id, sale_id).await?;
             post_membership_rewards(
                 tx,
                 tenant_id,
@@ -11399,7 +11944,7 @@ async fn apply_pos_payment_effects(
     Ok((new_paid, new_status, appointment_events))
 }
 
-async fn finalize_pos_invoice(
+pub(crate) async fn finalize_pos_invoice(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
@@ -11622,6 +12167,7 @@ async fn finalize_pos_invoice(
             &finalized.package_redemptions,
         )
         .await?;
+        accounting_service::post_benefit_redemption(&mut tx, &tenant_id, &branch_id, &id).await?;
         post_membership_rewards(
             &mut tx,
             &tenant_id,
@@ -11688,6 +12234,8 @@ async fn finalize_pos_invoice(
     let client_kpi = read_client_kpi(&state, &tenant_id, &branch_id, &finalized.client_id).await?;
     let response = sale_response(finalized, line_count);
     let payment_split = payment_split_response(&payments, response.total_paise);
+    let transaction_context =
+        read_pos_transaction_context(&state, &tenant_id, &branch_id, &id).await?;
     Ok(Json(ApiResponse::ok(PosSaleDetailsResponse {
         sale: response.clone(),
         invoice: response,
@@ -11695,10 +12243,11 @@ async fn finalize_pos_invoice(
         payments,
         payment_split,
         client_kpi,
+        transaction_context,
     })))
 }
 
-async fn void_pos_invoice(
+pub(crate) async fn void_pos_invoice(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -11777,19 +12326,27 @@ struct ResolvedRefundLine {
     line_type: String,
     item_id: String,
     quantity: i64,
+    sold_quantity: i64,
+    unit_price_paise: i64,
+    taxable_paise: i64,
     amount_paise: i64,
-    restock: bool,
+    restock_quantity: i64,
+    discard_quantity: i64,
 }
 
 #[derive(Debug, FromRow)]
 struct GatewayRefundPayment {
     id: String,
+    provider: String,
+    provider_account_id: String,
     provider_payment_id: String,
+    currency: String,
     available_paise: i64,
 }
 
 struct GatewayRefundResult {
     pos_payment_id: String,
+    provider: String,
     provider_payment_id: String,
     provider_refund_id: String,
     amount_paise: i64,
@@ -11817,7 +12374,7 @@ async fn refundable_payments(
     branch_id: &str,
     sale_id: &str,
 ) -> Result<Vec<RefundPaymentAvailability>, AppError> {
-    sqlx::query_as("SELECT payment.id AS pos_payment_id,payment.method,payment.amount_paise-COALESCE(SUM(allocation.amount_paise),0)::BIGINT AS available_paise,(payment.idempotency_key LIKE 'razorpay:%' AND payment.method_reference<>'') AS is_gateway FROM pos_payments payment LEFT JOIN pos_refund_payment_allocations allocation ON allocation.tenant_id=payment.tenant_id AND allocation.branch_id=payment.branch_id AND allocation.pos_payment_id=payment.id WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND payment.sale_id=$3 GROUP BY payment.id,payment.method,payment.amount_paise,payment.idempotency_key,payment.method_reference,payment.created_at HAVING payment.amount_paise>COALESCE(SUM(allocation.amount_paise),0) ORDER BY payment.created_at,payment.id")
+    sqlx::query_as("SELECT payment.id AS pos_payment_id,payment.method,payment.amount_paise-COALESCE(SUM(allocation.amount_paise),0)::BIGINT AS available_paise,((payment.idempotency_key LIKE 'razorpay:%' AND payment.method_reference<>'') OR EXISTS(SELECT 1 FROM payment_provider_operations operation WHERE operation.tenant_id=payment.tenant_id AND operation.branch_id=payment.branch_id AND operation.sale_id=payment.sale_id AND operation.provider_object_id=payment.method_reference AND operation.operation_type='payment')) AS is_gateway FROM pos_payments payment LEFT JOIN pos_refund_payment_allocations allocation ON allocation.tenant_id=payment.tenant_id AND allocation.branch_id=payment.branch_id AND allocation.pos_payment_id=payment.id WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND payment.sale_id=$3 GROUP BY payment.id,payment.method,payment.amount_paise,payment.idempotency_key,payment.method_reference,payment.created_at HAVING payment.amount_paise>COALESCE(SUM(allocation.amount_paise),0) ORDER BY payment.created_at,payment.id")
         .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_all(&mut **tx).await
         .map_err(|_| AppError::internal("failed to load refundable invoice payments"))
 }
@@ -11835,7 +12392,10 @@ fn plan_manual_refund_allocations(
         .filter(|payment| !payment.is_gateway && payment.available_paise > 0)
         .map(|payment| payment.method.to_ascii_lowercase())
         .collect::<HashSet<_>>();
-    let method = if requested_method.is_empty() {
+    let automatic_split = requested_method.eq_ignore_ascii_case("original_tender");
+    let method = if automatic_split {
+        String::new()
+    } else if requested_method.is_empty() {
         if methods.len() != 1 {
             return Err(AppError::validation(
                 "refundMethod is required when multiple payment methods are refundable",
@@ -11850,7 +12410,7 @@ fn plan_manual_refund_allocations(
     for payment in payments.iter().filter(|payment| {
         !payment.is_gateway
             && payment.available_paise > 0
-            && payment.method.eq_ignore_ascii_case(&method)
+            && (automatic_split || payment.method.eq_ignore_ascii_case(&method))
     }) {
         let amount = remaining.min(payment.available_paise);
         if amount > 0 {
@@ -11873,6 +12433,200 @@ fn plan_manual_refund_allocations(
     Ok(allocations)
 }
 
+fn plan_exchange_credit_allocations(
+    payments: &[RefundPaymentAvailability],
+    amount_paise: i64,
+) -> Result<Vec<RefundPaymentAllocation>, AppError> {
+    let mut remaining = amount_paise;
+    let mut allocations = Vec::new();
+    for payment in payments
+        .iter()
+        .filter(|payment| payment.available_paise > 0)
+    {
+        let amount = remaining.min(payment.available_paise);
+        if amount > 0 {
+            allocations.push(RefundPaymentAllocation {
+                pos_payment_id: payment.pos_payment_id.clone(),
+                method: payment.method.clone(),
+                amount_paise: amount,
+            });
+            remaining = remaining.saturating_sub(amount);
+        }
+        if remaining == 0 {
+            break;
+        }
+    }
+    if remaining > 0 {
+        return Err(AppError::validation(
+            "invoice does not have enough refundable payment balance",
+        ));
+    }
+    Ok(allocations)
+}
+
+async fn reverse_unused_refunded_liabilities(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    refund_id: &str,
+    client_id: &str,
+    actor_user_id: &str,
+    reason: &str,
+    lines: &[ResolvedRefundLine],
+) -> Result<(i64, i64), AppError> {
+    let mut deferred_revenue_paise = 0i64;
+    let mut customer_credit_paise = 0i64;
+    for line in lines {
+        if !matches!(
+            line.line_type.as_str(),
+            "membership" | "package" | "gift_card"
+        ) {
+            continue;
+        }
+        if line.quantity != line.sold_quantity {
+            return Err(AppError::validation(
+                "membership, package, and gift card refunds require the full unused invoice line",
+            ));
+        }
+        match line.line_type.as_str() {
+            "membership" => {
+                let memberships = sqlx::query_scalar::<_, String>(
+                    "SELECT id FROM client_memberships WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND membership_id=$5 FOR UPDATE",
+                )
+                .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                .fetch_all(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to lock refunded membership"))?;
+                if memberships.is_empty() {
+                    return Err(AppError::conflict(
+                        "membership entitlement was not found for this invoice",
+                    ));
+                }
+                let used = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM client_membership_credits credit WHERE credit.tenant_id=$1 AND credit.branch_id=$2 AND credit.client_id=$3 AND credit.source_sale_id=$4 AND credit.membership_id=$5 AND (credit.remaining_qty<>credit.total_qty OR EXISTS(SELECT 1 FROM pos_membership_redemptions redemption WHERE redemption.tenant_id=credit.tenant_id AND redemption.client_membership_credit_id=credit.id)))",
+                )
+                .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                .fetch_one(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to validate refunded membership usage"))?;
+                if used {
+                    return Err(AppError::conflict(
+                        "used membership benefits cannot be refunded",
+                    ));
+                }
+                sqlx::query("UPDATE client_membership_credits SET active=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND membership_id=$5")
+                    .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                    .execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to deactivate refunded membership benefits"))?;
+                sqlx::query("UPDATE client_memberships SET active=FALSE,cancelled_at=NOW(),cancel_reason=$6,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND membership_id=$5")
+                    .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id).bind(reason)
+                    .execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to cancel refunded membership"))?;
+                sqlx::query("INSERT INTO membership_lifecycle_ledger (tenant_id,branch_id,client_membership_id,event_type,source_sale_id,reason) VALUES ($1,$2,$3,'cancelled',$4,$5) ON CONFLICT DO NOTHING")
+                    .bind(tenant_id).bind(branch_id).bind(&memberships[0]).bind(sale_id).bind(reason)
+                    .execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to audit refunded membership"))?;
+                deferred_revenue_paise = deferred_revenue_paise.saturating_add(line.taxable_paise);
+            }
+            "package" => {
+                let credits = sqlx::query_as::<_, (String, String, i64)>(
+                    "SELECT id,client_id,remaining_qty::BIGINT FROM client_package_credits WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND package_id=$5 FOR UPDATE",
+                )
+                .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                .fetch_all(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to lock refunded package"))?;
+                if credits.is_empty() {
+                    return Err(AppError::conflict(
+                        "package entitlement was not found for this invoice",
+                    ));
+                }
+                let used = sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM client_package_credits credit WHERE credit.tenant_id=$1 AND credit.branch_id=$2 AND credit.client_id=$3 AND credit.source_sale_id=$4 AND credit.package_id=$5 AND (credit.remaining_qty<>credit.total_qty OR EXISTS(SELECT 1 FROM pos_package_redemptions redemption WHERE redemption.tenant_id=credit.tenant_id AND redemption.client_package_credit_id=credit.id)))",
+                )
+                .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                .fetch_one(&mut **tx).await
+                .map_err(|_| AppError::internal("failed to validate refunded package usage"))?;
+                if used {
+                    return Err(AppError::conflict(
+                        "used package benefits cannot be refunded",
+                    ));
+                }
+                sqlx::query("UPDATE client_package_credits SET active=FALSE,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND source_sale_id=$4 AND package_id=$5")
+                    .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(&line.item_id)
+                    .execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to deactivate refunded package"))?;
+                for (credit_id, credit_client_id, quantity_before) in credits {
+                    sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,quantity_before,quantity_after,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'package',$3,'refund',$2,$2,$4,$4,$5,0,$6,$7,$8)")
+                        .bind(tenant_id).bind(branch_id).bind(&credit_id).bind(&credit_client_id).bind(quantity_before as i32).bind(reason).bind(actor_user_id).bind(format!("refund:{refund_id}:{credit_id}"))
+                        .execute(&mut **tx).await
+                        .map_err(|_| AppError::internal("failed to audit refunded package"))?;
+                }
+                deferred_revenue_paise = deferred_revenue_paise.saturating_add(line.taxable_paise);
+            }
+            "gift_card" => {
+                let code = line.item_id.trim().to_ascii_uppercase();
+                if let Some(reload_code) = code.strip_prefix("RELOAD:") {
+                    let reloads = sqlx::query_as::<_, (String, i64, i64)>(
+                        "SELECT transaction.gift_card_id,transaction.delta_paise,transaction.balance_after_paise FROM gift_card_transactions transaction JOIN gift_cards card ON card.id=transaction.gift_card_id AND card.tenant_id=transaction.tenant_id AND card.branch_id=transaction.branch_id WHERE transaction.tenant_id=$1 AND transaction.branch_id=$2 AND transaction.sale_id=$3 AND transaction.transaction_type='reload' AND card.code=$4",
+                    )
+                    .bind(tenant_id).bind(branch_id).bind(sale_id).bind(reload_code)
+                    .fetch_all(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to load refunded gift card reload"))?;
+                    if reloads.len() != 1 {
+                        return Err(AppError::conflict(
+                            "gift card reload entitlement could not be reconciled",
+                        ));
+                    }
+                    let (card_id, reload_paise, reload_balance) = &reloads[0];
+                    let card = sqlx::query_as::<_, (String, i64, i64, String)>("SELECT client_id,balance_paise,initial_amount_paise,status FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE")
+                        .bind(tenant_id).bind(branch_id).bind(card_id).fetch_one(&mut **tx).await
+                        .map_err(|_| AppError::internal("failed to lock refunded gift card reload"))?;
+                    if card.3 != "active" || card.1 != *reload_balance || card.2 <= *reload_paise {
+                        return Err(AppError::conflict(
+                            "used or changed gift card reload cannot be refunded",
+                        ));
+                    }
+                    let balance_after = card.1 - reload_paise;
+                    sqlx::query("UPDATE gift_cards SET initial_amount_paise=initial_amount_paise-$4,balance_paise=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                        .bind(tenant_id).bind(branch_id).bind(card_id).bind(reload_paise).bind(balance_after)
+                        .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to reverse gift card reload"))?;
+                    sqlx::query("INSERT INTO gift_card_transactions (tenant_id,branch_id,gift_card_id,sale_id,transaction_type,delta_paise,balance_after_paise,idempotency_key,notes) VALUES ($1,$2,$3,$4,'adjustment_debit',$5,$6,$7,$8)")
+                        .bind(tenant_id).bind(branch_id).bind(card_id).bind(sale_id).bind(-reload_paise).bind(balance_after).bind(format!("refund:{refund_id}:{card_id}")).bind(reason)
+                        .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to record gift card reload refund"))?;
+                    sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,balance_before_paise,balance_after_paise,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'gift_card',$3,'refund',$2,$2,$4,$4,$5,$6,$7,$8,$9)")
+                        .bind(tenant_id).bind(branch_id).bind(card_id).bind(&card.0).bind(card.1).bind(balance_after).bind(reason).bind(actor_user_id).bind(format!("refund:{refund_id}:{card_id}"))
+                        .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to audit gift card reload refund"))?;
+                } else {
+                    let cards = sqlx::query_as::<_, (String, String, i64)>(
+                        "SELECT card.id,card.client_id,card.balance_paise FROM gift_cards card WHERE card.tenant_id=$1 AND card.branch_id=$2 AND card.source_sale_id=$3 AND card.initial_amount_paise=$4 AND card.status='active' AND card.balance_paise=card.initial_amount_paise AND ($5='' OR card.code=$5 OR card.code LIKE $5||'-%') AND NOT EXISTS(SELECT 1 FROM gift_card_transactions transaction WHERE transaction.tenant_id=card.tenant_id AND transaction.branch_id=card.branch_id AND transaction.gift_card_id=card.id AND transaction.transaction_type<>'issue') FOR UPDATE",
+                    )
+                    .bind(tenant_id).bind(branch_id).bind(sale_id).bind(line.unit_price_paise).bind(&code)
+                    .fetch_all(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to lock refunded gift cards"))?;
+                    if cards.len() != line.quantity as usize {
+                        return Err(AppError::conflict(
+                            "used or changed gift cards cannot be refunded",
+                        ));
+                    }
+                    for (card_id, card_client_id, balance_before) in cards {
+                        sqlx::query("UPDATE gift_cards SET balance_paise=0,status='voided',updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                            .bind(tenant_id).bind(branch_id).bind(&card_id).execute(&mut **tx).await
+                            .map_err(|_| AppError::internal("failed to void refunded gift card"))?;
+                        sqlx::query("INSERT INTO gift_card_transactions (tenant_id,branch_id,gift_card_id,sale_id,transaction_type,delta_paise,balance_after_paise,idempotency_key,notes) VALUES ($1,$2,$3,$4,'adjustment_debit',$5,0,$6,$7)")
+                            .bind(tenant_id).bind(branch_id).bind(&card_id).bind(sale_id).bind(-balance_before).bind(format!("refund:{refund_id}:{card_id}")).bind(reason)
+                            .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to record gift card refund"))?;
+                        sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,balance_before_paise,balance_after_paise,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'gift_card',$3,'refund',$2,$2,$4,$4,$5,0,$6,$7,$8)")
+                            .bind(tenant_id).bind(branch_id).bind(&card_id).bind(&card_client_id).bind(balance_before).bind(reason).bind(actor_user_id).bind(format!("refund:{refund_id}:{card_id}"))
+                            .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to audit gift card refund"))?;
+                    }
+                }
+                customer_credit_paise = customer_credit_paise.saturating_add(line.taxable_paise);
+            }
+            _ => unreachable!(),
+        }
+    }
+    Ok((deferred_revenue_paise, customer_credit_paise))
+}
+
 async fn resolve_refund_lines(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
@@ -11891,14 +12645,15 @@ async fn resolve_refund_lines(
                 "return lines must have unique saleLineId values and positive quantities",
             ));
         }
-        let line = sqlx::query_as::<_, (String, String, i64, i64)>(
-            "SELECT line_type, item_id, quantity, line_total_paise FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND id=$4 FOR UPDATE",
+        let line = sqlx::query_as::<_, (String, String, i64, i64, i64, i64)>(
+            "SELECT line_type, item_id, quantity, unit_price_paise, taxable_paise, line_total_paise FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND id=$4 FOR UPDATE",
         )
         .bind(tenant_id).bind(branch_id).bind(sale_id).bind(&sale_line_id)
         .fetch_optional(&mut **tx).await
         .map_err(|_| AppError::internal("failed to load invoice line for return"))?
         .ok_or_else(|| AppError::validation("return line does not belong to this invoice"))?;
-        let (line_type, item_id, sold_quantity, line_total_paise) = line;
+        let (line_type, item_id, sold_quantity, unit_price_paise, taxable_paise, line_total_paise) =
+            line;
         let (returned_quantity, returned_amount) = sqlx::query_as::<_, (i64, i64)>(
             "SELECT COALESCE(SUM(quantity),0)::BIGINT, COALESCE(SUM(amount_paise),0)::BIGINT FROM pos_invoice_refund_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND sale_line_id=$4",
         )
@@ -11918,13 +12673,24 @@ async fn resolve_refund_lines(
             remaining_quantity,
             returned_amount,
         );
+        let (restock_quantity, discard_quantity) = refund_disposition(
+            &line_type,
+            requested.quantity,
+            requested.restock_quantity,
+            requested.discard_quantity,
+            restock_requested,
+        )?;
         resolved.push(ResolvedRefundLine {
             sale_line_id,
             line_type: line_type.clone(),
             item_id,
             quantity: requested.quantity,
+            sold_quantity,
+            unit_price_paise,
+            taxable_paise,
             amount_paise,
-            restock: restock_requested && line_type == "product",
+            restock_quantity,
+            discard_quantity,
         });
     }
     Ok(resolved)
@@ -11944,15 +12710,71 @@ fn proportional_refund_amount(
     }
 }
 
-async fn razorpay_refund_candidates(
+fn refund_disposition(
+    line_type: &str,
+    quantity: i64,
+    restock_quantity: Option<i64>,
+    discard_quantity: Option<i64>,
+    legacy_restock: bool,
+) -> Result<(i64, i64), AppError> {
+    let split = match (restock_quantity, discard_quantity) {
+        (None, None) if legacy_restock && line_type == "product" => (quantity, 0),
+        (None, None) => (0, quantity),
+        (restock, discard) => (restock.unwrap_or(0), discard.unwrap_or(0)),
+    };
+    if split.0 < 0
+        || split.1 < 0
+        || split.0.saturating_add(split.1) != quantity
+        || (line_type != "product" && split.0 != 0)
+    {
+        return Err(AppError::validation(
+            "each return line must split its full quantity into valid restock and discard quantities",
+        ));
+    }
+    Ok(split)
+}
+
+async fn gateway_refund_candidates(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: &str,
     branch_id: &str,
     sale_id: &str,
 ) -> Result<Vec<GatewayRefundPayment>, AppError> {
-    sqlx::query_as("SELECT p.id, p.method_reference AS provider_payment_id, p.amount_paise - COALESCE(SUM(gr.amount_paise),0)::BIGINT AS available_paise FROM pos_payments p LEFT JOIN pos_gateway_refunds gr ON gr.tenant_id=p.tenant_id AND gr.branch_id=p.branch_id AND gr.pos_payment_id=p.id AND gr.status IN ('pending','processed') WHERE p.tenant_id=$1 AND p.branch_id=$2 AND p.sale_id=$3 AND p.idempotency_key LIKE 'razorpay:%' AND p.method_reference <> '' GROUP BY p.id, p.method_reference, p.amount_paise HAVING p.amount_paise > COALESCE(SUM(gr.amount_paise),0) ORDER BY p.created_at, p.id")
-        .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_all(&mut **tx).await
-        .map_err(|_| AppError::internal("failed to load Razorpay refund candidates"))
+    sqlx::query_as(
+        r#"SELECT * FROM (
+      SELECT p.id,'razorpay'::TEXT AS provider,''::TEXT AS provider_account_id,
+        p.method_reference AS provider_payment_id,'INR'::TEXT AS currency,
+        p.amount_paise-COALESCE(SUM(gr.amount_paise),0)::BIGINT AS available_paise,p.created_at
+      FROM pos_payments p
+      LEFT JOIN pos_gateway_refunds gr ON gr.tenant_id=p.tenant_id AND gr.branch_id=p.branch_id
+        AND gr.pos_payment_id=p.id AND gr.status IN ('pending','processed')
+      WHERE p.tenant_id=$1 AND p.branch_id=$2 AND p.sale_id=$3
+        AND p.idempotency_key LIKE 'razorpay:%' AND p.method_reference<>''
+      GROUP BY p.id,p.method_reference,p.amount_paise,p.created_at
+      HAVING p.amount_paise>COALESCE(SUM(gr.amount_paise),0)
+      UNION ALL
+      SELECT p.id,operation.provider,account.provider_account_id,p.method_reference,
+        operation.currency,p.amount_paise-COALESCE(SUM(gr.amount_paise),0)::BIGINT,p.created_at
+      FROM pos_payments p
+      JOIN payment_provider_operations operation ON operation.tenant_id=p.tenant_id
+        AND operation.branch_id=p.branch_id AND operation.sale_id=p.sale_id
+        AND operation.provider_object_id=p.method_reference AND operation.operation_type='payment'
+      JOIN payment_merchant_accounts account ON account.id=operation.merchant_account_id
+      LEFT JOIN pos_gateway_refunds gr ON gr.tenant_id=p.tenant_id AND gr.branch_id=p.branch_id
+        AND gr.pos_payment_id=p.id AND gr.status IN ('pending','processed')
+      WHERE p.tenant_id=$1 AND p.branch_id=$2 AND p.sale_id=$3 AND p.method_reference<>''
+        AND operation.provider IN ('stripe','adyen')
+      GROUP BY p.id,operation.provider,account.provider_account_id,p.method_reference,
+        operation.currency,p.amount_paise,p.created_at
+      HAVING p.amount_paise>COALESCE(SUM(gr.amount_paise),0)
+    ) candidates ORDER BY created_at,id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|_| AppError::internal("failed to load provider refund candidates"))
 }
 
 async fn create_refund_credit_note(
@@ -11986,7 +12808,8 @@ async fn create_refund_credit_note(
 #[cfg(test)]
 mod item_return_tests {
     use super::{
-        plan_manual_refund_allocations, proportional_refund_amount, RefundPaymentAvailability,
+        plan_exchange_credit_allocations, plan_manual_refund_allocations,
+        proportional_refund_amount, refund_disposition, RefundPaymentAvailability,
     };
 
     #[test]
@@ -12016,10 +12839,34 @@ mod item_return_tests {
         assert_eq!(allocations.len(), 1);
         assert_eq!(allocations[0].pos_payment_id, "cash-payment");
         assert_eq!(allocations[0].amount_paise, 2_000);
+        let split = plan_manual_refund_allocations(&payments, "original_tender", 7_000).unwrap();
+        assert_eq!(split.len(), 2);
+        assert_eq!(split[0].amount_paise, 5_000);
+        assert_eq!(split[1].amount_paise, 2_000);
+        let exchange = plan_exchange_credit_allocations(&payments, 7_000).unwrap();
+        assert_eq!(exchange.len(), 2);
+        assert_eq!(
+            exchange.iter().map(|row| row.amount_paise).sum::<i64>(),
+            7_000
+        );
+    }
+
+    #[test]
+    fn return_disposition_requires_a_complete_product_split() {
+        assert_eq!(
+            refund_disposition("product", 4, Some(3), Some(1), false).unwrap(),
+            (3, 1)
+        );
+        assert!(refund_disposition("product", 4, Some(2), Some(1), false).is_err());
+        assert!(refund_disposition("service", 1, Some(1), Some(0), false).is_err());
+        assert_eq!(
+            refund_disposition("product", 2, None, None, true).unwrap(),
+            (2, 0)
+        );
     }
 }
 
-async fn refund_pos_invoice(
+pub(crate) async fn refund_pos_invoice(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
@@ -12056,6 +12903,7 @@ async fn refund_pos_invoice(
         .unwrap_or_default()
         .trim()
         .to_ascii_lowercase();
+    let exchange_credit = refund_method == "exchange_credit";
     let requested_till_id = payload
         .cash_drawer_till_id
         .unwrap_or_default()
@@ -12063,15 +12911,59 @@ async fn refund_pos_invoice(
         .to_string();
     let requested_lines = payload.lines.unwrap_or_default();
     let restock_requested = payload.restock.unwrap_or(false);
+    let evidence_reference = payload
+        .evidence_reference
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if !requested_lines.is_empty() && evidence_reference.is_empty() {
+        return Err(AppError::validation(
+            "evidenceReference is required for item returns",
+        ));
+    }
     let mut tx = state
         .db
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to start refund transaction"))?;
     let sale = load_sale_for_update(&mut tx, &tenant_id, &branch_id, &id).await?;
+    let inventory_policy = crate::repositories::purchase_repository::inventory_receipt_policy(
+        &mut tx, &tenant_id, &branch_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to load inventory lock policy"))?;
+    let inventory_date = current_business_date();
+    if inventory_policy
+        .financial_lock_date
+        .is_some_and(|lock| inventory_date <= lock)
+    {
+        return Err(AppError::conflict(
+            "return date is inside the inventory financial lock period",
+        ));
+    }
+    let sale_business_date = sqlx::query_scalar::<_, NaiveDate>(
+        "SELECT COALESCE(business_date,created_at::DATE) FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_one(&mut *tx).await
+    .map_err(|_| AppError::internal("failed to load invoice business date"))?;
+    if inventory_policy.edit_lock_days > 0
+        && inventory_date
+            .signed_duration_since(sale_business_date)
+            .num_days()
+            > i64::from(inventory_policy.edit_lock_days)
+    {
+        return Err(AppError::conflict(
+            "invoice is outside the inventory edit window; post an approved correction entry",
+        ));
+    }
     if matches!(sale.status.as_str(), "draft" | "voided" | "cancelled") || sale.paid_paise <= 0 {
         return Err(AppError::validation(
             "only paid or partially paid invoices can be refunded",
+        ));
+    }
+    if exchange_credit && sale.client_id.trim().is_empty() {
+        return Err(AppError::validation(
+            "client is required for exchange credit",
         ));
     }
     if !key.is_empty()
@@ -12095,6 +12987,15 @@ async fn refund_pos_invoice(
     let refunded =
         sum_lifecycle_amount(&mut tx, "pos_invoice_refunds", &tenant_id, &branch_id, &id).await?;
     let remaining = sale.paid_paise.saturating_sub(refunded);
+    if requested_lines.is_empty()
+        && sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type IN ('membership','package','gift_card'))")
+            .bind(&tenant_id).bind(&branch_id).bind(&id).fetch_one(&mut *tx).await
+            .map_err(|_| AppError::internal("failed to validate refundable liabilities"))?
+    {
+        return Err(AppError::validation(
+            "membership, package, and gift card refunds require selected invoice lines",
+        ));
+    }
     let refund_lines = if requested_lines.is_empty() {
         Vec::new()
     } else {
@@ -12139,8 +13040,24 @@ async fn refund_pos_invoice(
         "partial_refund"
     };
     let refund_id = uuid::Uuid::new_v4().to_string();
+    let (deferred_revenue_paise, customer_credit_paise) = reverse_unused_refunded_liabilities(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        &id,
+        &refund_id,
+        &sale.client_id,
+        &claims.sub,
+        &reason,
+        &refund_lines,
+    )
+    .await?;
     let payments = refundable_payments(&mut tx, &tenant_id, &branch_id, &id).await?;
-    let candidates = razorpay_refund_candidates(&mut tx, &tenant_id, &branch_id, &id).await?;
+    let candidates = if exchange_credit {
+        Vec::new()
+    } else {
+        gateway_refund_candidates(&mut tx, &tenant_id, &branch_id, &id).await?
+    };
     let mut manual_refund_paise = amount;
     for payment in &candidates {
         let provider_amount = manual_refund_paise.min(payment.available_paise);
@@ -12149,8 +13066,11 @@ async fn refund_pos_invoice(
             break;
         }
     }
-    let manual_allocations =
-        plan_manual_refund_allocations(&payments, &refund_method, manual_refund_paise)?;
+    let manual_allocations = if exchange_credit {
+        plan_exchange_credit_allocations(&payments, amount)?
+    } else {
+        plan_manual_refund_allocations(&payments, &refund_method, manual_refund_paise)?
+    };
     let mut provider_results = Vec::new();
     let mut gateway_remaining = amount;
     if !candidates.is_empty() && gateway_remaining > 0 {
@@ -12163,12 +13083,6 @@ async fn refund_pos_invoice(
                 "idempotencyKey must be at least 10 characters and contain only letters, numbers, hyphens, or underscores for gateway refunds",
             ));
         }
-        if !state.settings.razorpay_payment_links_enabled() {
-            return Err(AppError::service_unavailable(
-                "PAYMENT_PROVIDER_NOT_CONFIGURED",
-                "Razorpay refund credentials are not configured",
-            ));
-        }
         for (index, payment) in candidates.into_iter().enumerate() {
             if gateway_remaining == 0 {
                 break;
@@ -12176,31 +13090,63 @@ async fn refund_pos_invoice(
             let provider_amount = gateway_remaining.min(payment.available_paise);
             let provider_key = format!("{key}-{index}");
             // ponytail: provider call holds the invoice lock; move to a durable refund worker if provider latency becomes a throughput concern.
-            let provider_refund = razorpay_payment_service::create_payment_refund(
-                &state.settings,
-                &payment.provider_payment_id,
-                provider_amount,
-                &provider_key,
-                &refund_id,
-            )
-            .await?;
+            let (provider_refund_id, provider_status, provider_payload) =
+                if payment.provider == "razorpay" {
+                    if !state.settings.razorpay_payment_links_enabled() {
+                        return Err(AppError::service_unavailable(
+                            "PAYMENT_PROVIDER_NOT_CONFIGURED",
+                            "Razorpay refund credentials are not configured",
+                        ));
+                    }
+                    let result = razorpay_payment_service::create_payment_refund(
+                        &state.settings,
+                        &payment.provider_payment_id,
+                        provider_amount,
+                        &provider_key,
+                        &refund_id,
+                    )
+                    .await?;
+                    (result.provider_refund_id, result.status, result.payload)
+                } else {
+                    let result = payment_platform_service::refund_payment(
+                        &state.settings,
+                        &payment.provider,
+                        &payment.provider_account_id,
+                        &payment.provider_payment_id,
+                        provider_amount,
+                        &payment.currency,
+                        &refund_id,
+                        &provider_key,
+                    )
+                    .await?;
+                    (result.provider_action_id, result.status, result.payload)
+                };
             provider_results.push(GatewayRefundResult {
                 pos_payment_id: payment.id,
+                provider: payment.provider,
                 provider_payment_id: payment.provider_payment_id,
-                provider_refund_id: provider_refund.provider_refund_id,
+                provider_refund_id,
                 amount_paise: provider_amount,
-                status: if provider_refund.status.eq_ignore_ascii_case("processed") {
+                status: if matches!(
+                    provider_status.to_ascii_lowercase().as_str(),
+                    "processed" | "succeeded"
+                ) {
                     "processed".to_string()
                 } else {
                     "pending".to_string()
                 },
-                payload: provider_refund.payload,
+                payload: provider_payload,
             });
             gateway_remaining = gateway_remaining.saturating_sub(provider_amount);
         }
     }
-    sqlx::query("INSERT INTO pos_invoice_refunds (id, tenant_id, branch_id, sale_id, actor_user_id, amount_paise, reason, notes, idempotency_key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
-        .bind(&refund_id).bind(&tenant_id).bind(&branch_id).bind(&id).bind(&claims.sub).bind(amount).bind(&reason).bind(&notes).bind(&key)
+    let settlement_method = if exchange_credit {
+        "exchange_credit"
+    } else {
+        "original_tender"
+    };
+    sqlx::query("INSERT INTO pos_invoice_refunds (id, tenant_id, branch_id, sale_id, actor_user_id, amount_paise, reason, notes, idempotency_key, settlement_method) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+        .bind(&refund_id).bind(&tenant_id).bind(&branch_id).bind(&id).bind(&claims.sub).bind(amount).bind(&reason).bind(&notes).bind(&key).bind(settlement_method)
         .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save invoice refund"))?;
     let credit_note_number = create_refund_credit_note(
         &mut tx,
@@ -12214,9 +13160,42 @@ async fn refund_pos_invoice(
         &notes,
     )
     .await?;
+    let exchange_store_credit_id = if exchange_credit {
+        let exchange_key = format!("exchange-{refund_id}");
+        let result = wallet_repository::issue_store_credit_in_tx(
+            &mut tx,
+            StoreCreditIssue {
+                tenant_id: &tenant_id,
+                branch_id: &branch_id,
+                client_id: &sale.client_id,
+                amount_paise: amount,
+                source_type: "exchange",
+                source_id: &refund_id,
+                expires_at: None,
+                reason: &reason,
+                idempotency_key: &exchange_key,
+            },
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to issue exchange credit"))?;
+        match result {
+            StoreCreditWriteResult::Saved(credit) => Some(credit.id),
+            StoreCreditWriteResult::MissingClient => {
+                return Err(AppError::not_found("client was not found"));
+            }
+            _ => return Err(AppError::conflict("exchange credit could not be issued")),
+        }
+    } else {
+        None
+    };
+    if let Some(credit_id) = exchange_store_credit_id.as_ref() {
+        sqlx::query("UPDATE pos_invoice_refunds SET exchange_store_credit_id=$4 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(&tenant_id).bind(&branch_id).bind(&refund_id).bind(credit_id)
+            .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to link exchange credit"))?;
+    }
     for provider_result in &provider_results {
-        sqlx::query("INSERT INTO pos_gateway_refunds (tenant_id, branch_id, sale_id, refund_id, pos_payment_id, provider, provider_payment_id, provider_refund_id, amount_paise, status, idempotency_key, payload_json) VALUES ($1,$2,$3,$4,$5,'razorpay',$6,$7,$8,$9,$10,$11::jsonb)")
-            .bind(&tenant_id).bind(&branch_id).bind(&id).bind(&refund_id).bind(&provider_result.pos_payment_id).bind(&provider_result.provider_payment_id).bind(&provider_result.provider_refund_id).bind(provider_result.amount_paise).bind(&provider_result.status).bind(format!("{key}-{}", provider_result.pos_payment_id)).bind(provider_result.payload.to_string())
+        sqlx::query("INSERT INTO pos_gateway_refunds (tenant_id, branch_id, sale_id, refund_id, pos_payment_id, provider, provider_payment_id, provider_refund_id, amount_paise, status, idempotency_key, payload_json) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)")
+            .bind(&tenant_id).bind(&branch_id).bind(&id).bind(&refund_id).bind(&provider_result.pos_payment_id).bind(&provider_result.provider).bind(&provider_result.provider_payment_id).bind(&provider_result.provider_refund_id).bind(provider_result.amount_paise).bind(&provider_result.status).bind(format!("{key}-{}", provider_result.pos_payment_id)).bind(provider_result.payload.to_string())
             .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to record gateway refund"))?;
     }
     let mut payment_allocations = manual_allocations;
@@ -12246,10 +13225,10 @@ async fn refund_pos_invoice(
             .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save refund payment allocation"))?;
     }
     for line in &refund_lines {
-        sqlx::query("INSERT INTO pos_invoice_refund_lines (tenant_id, branch_id, refund_id, sale_id, sale_line_id, quantity, amount_paise, restock_requested) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(&tenant_id).bind(&branch_id).bind(&refund_id).bind(&id).bind(&line.sale_line_id).bind(line.quantity).bind(line.amount_paise).bind(line.restock)
+        sqlx::query("INSERT INTO pos_invoice_refund_lines (tenant_id, branch_id, refund_id, sale_id, sale_line_id, quantity, amount_paise, restock_requested, restock_quantity, discard_quantity, evidence_reference) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)")
+            .bind(&tenant_id).bind(&branch_id).bind(&refund_id).bind(&id).bind(&line.sale_line_id).bind(line.quantity).bind(line.amount_paise).bind(line.restock_quantity>0).bind(line.restock_quantity).bind(line.discard_quantity).bind(&evidence_reference)
             .execute(&mut *tx).await.map_err(|_| AppError::internal("failed to save returned invoice line"))?;
-        if line.restock {
+        if line.restock_quantity > 0 {
             inventory_adjustment_service::restock_pos_product_return(
                 &mut tx,
                 &tenant_id,
@@ -12259,7 +13238,8 @@ async fn refund_pos_invoice(
                 &line.sale_line_id,
                 &line.line_type,
                 &line.item_id,
-                line.quantity,
+                line.restock_quantity,
+                &claims.sub,
             )
             .await?;
         }
@@ -12278,13 +13258,20 @@ async fn refund_pos_invoice(
         sale.total_paise,
     )
     .await?;
-    let settlements = payment_allocations
-        .iter()
-        .map(|allocation| accounting_service::RefundSettlement {
-            method: allocation.method.clone(),
-            amount_paise: allocation.amount_paise,
-        })
-        .collect::<Vec<_>>();
+    let settlements = if exchange_credit {
+        vec![accounting_service::RefundSettlement {
+            method: "store_credit".to_string(),
+            amount_paise: amount,
+        }]
+    } else {
+        payment_allocations
+            .iter()
+            .map(|allocation| accounting_service::RefundSettlement {
+                method: allocation.method.clone(),
+                amount_paise: allocation.amount_paise,
+            })
+            .collect::<Vec<_>>()
+    };
     let cash_refund_paise = settlements
         .iter()
         .filter(|settlement| settlement.method.eq_ignore_ascii_case("cash"))
@@ -12304,10 +13291,18 @@ async fn refund_pos_invoice(
         )
         .await?;
     }
-    accounting_service::post_refund(&mut tx, &tenant_id, &branch_id, &refund_id, &settlements)
-        .await?;
+    accounting_service::post_refund_with_liabilities(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        &refund_id,
+        &settlements,
+        deferred_revenue_paise,
+        customer_credit_paise,
+    )
+    .await?;
     reverse_happy_hour_lock(&mut tx, &tenant_id, &branch_id, &id, amount).await?;
-    insert_pos_event_with_actor(&mut tx, &tenant_id, &branch_id, &id, &claims.sub, "invoice.refunded", serde_json::json!({ "invoiceNumber": sale.invoice_number, "amountPaise": amount, "creditNoteNumber": credit_note_number, "gatewayRefundPaise": amount.saturating_sub(gateway_remaining), "manualSettlementPaise": gateway_remaining, "returnedLineCount": refund_lines.len(), "restockedLineCount": refund_lines.iter().filter(|line| line.restock).count(), "status": next_status, "reason": reason })).await?;
+    insert_pos_event_with_actor(&mut tx, &tenant_id, &branch_id, &id, &claims.sub, "invoice.refunded", serde_json::json!({ "invoiceNumber": sale.invoice_number, "amountPaise": amount, "creditNoteNumber": credit_note_number, "gatewayRefundPaise": if exchange_credit { 0 } else { amount.saturating_sub(gateway_remaining) }, "manualSettlementPaise": if exchange_credit { 0 } else { gateway_remaining }, "settlementMethod": settlement_method, "exchangeStoreCreditId": exchange_store_credit_id, "returnedLineCount": refund_lines.len(), "restockedQuantity": refund_lines.iter().map(|line|line.restock_quantity).sum::<i64>(), "discardedQuantity": refund_lines.iter().map(|line|line.discard_quantity).sum::<i64>(), "evidenceReference": evidence_reference, "status": next_status, "reason": reason })).await?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit invoice refund"))?;
@@ -12647,6 +13642,7 @@ async fn create_pos_discount_rule(
 
 async fn create_pos_gift_card(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<GiftCardCreateRequest>,
 ) -> ApiResult<Value> {
@@ -12659,6 +13655,12 @@ async fn create_pos_gift_card(
     let idempotency_key = payload.idempotency_key.as_deref().unwrap_or("").trim();
     if idempotency_key.is_empty() {
         return Err(AppError::validation("idempotencyKey is required"));
+    }
+    let reason = payload.notes.as_deref().unwrap_or("").trim();
+    if reason.is_empty() {
+        return Err(AppError::validation(
+            "notes are required for manual gift card issue",
+        ));
     }
     if let Some(card) = sqlx::query_as::<_, (String, String, i64, i64, String, Option<NaiveDate>)>(
         "SELECT id, code, initial_amount_paise, balance_paise, status, expires_at FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3",
@@ -12709,9 +13711,29 @@ async fn create_pos_gift_card(
         .execute(&mut *tx)
         .await
         .map_err(|_| AppError::internal("failed to save gift card issue"))?;
+    accounting_service::post_customer_credit_change(
+        &mut tx,
+        &tenant_id,
+        &branch_id,
+        "gift_card_manual_issue",
+        &card.0,
+        "Manual gift card issue",
+        payload.amount_paise,
+        "GIFT_CARD_PROMOTION_EXPENSE",
+    )
+    .await?;
     tx.commit()
         .await
         .map_err(|_| AppError::internal("failed to commit gift card"))?;
+    security_service::record_audit(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        "gift_card.manual_issue",
+        serde_json::json!({"giftCardId":&card.0,"amountPaise":payload.amount_paise,"reason":reason}),
+    )
+    .await?;
     Ok(Json(ApiResponse::ok(serde_json::json!({
         "id": card.0, "code": card.1, "initialAmountPaise": card.2, "balancePaise": card.3, "status": card.4, "expiresAt": card.5, "notes": payload.notes.unwrap_or_default()
     }))))
@@ -13262,7 +14284,7 @@ fn lifecycle_amount(
     Ok(amount)
 }
 
-async fn load_pos_sale_details(
+pub(crate) async fn load_pos_sale_details(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -13274,6 +14296,8 @@ async fn load_pos_sale_details(
     let client_kpi = read_client_kpi(state, tenant_id, branch_id, &sale.client_id).await?;
     let response = sale_response(sale, lines.len() as i64);
     let payment_split = payment_split_response(&payments, response.total_paise);
+    let transaction_context =
+        read_pos_transaction_context(state, tenant_id, branch_id, sale_id).await?;
 
     Ok(PosSaleDetailsResponse {
         sale: response.clone(),
@@ -13282,7 +14306,36 @@ async fn load_pos_sale_details(
         payments,
         payment_split,
         client_kpi,
+        transaction_context,
     })
+}
+
+async fn read_pos_transaction_context(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) -> Result<PosTransactionContext, AppError> {
+    sqlx::query_as::<_, (String, i64, String, String, String, bool, String, bool)>(
+        "SELECT discount_reason,cart_version,cart_owner_terminal_id,buyer_gstin,place_of_supply_state_code,reverse_charge,tax_mode,separate_group_invoice FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load POS transaction context"))?
+    .map(|row| PosTransactionContext {
+        discount_reason: row.0,
+        cart_version: row.1,
+        cart_owner_terminal_id: row.2,
+        buyer_gstin: row.3,
+        place_of_supply_state_code: row.4,
+        reverse_charge: row.5,
+        tax_mode: row.6,
+        separate_group_invoice: row.7,
+    })
+    .ok_or_else(|| AppError::not_found("pos invoice was not found"))
 }
 
 async fn read_line_drafts(
@@ -13444,11 +14497,11 @@ async fn insert_calculated_line(
         r#"
         INSERT INTO pos_sale_lines (
           id, tenant_id, branch_id, sale_id, line_type, item_id, item_name,
-          staff_id, staff_splits, quantity, unit_price_paise, gross_paise, taxable_paise,
+          staff_id, staff_splits, quantity, unit_price_paise, other_fee_paise, gross_paise, taxable_paise,
           discount_paise, discount_type, discount_value_paise, discount_bps,
           tax_percent, gst_paise, hsn_sac_code, cgst_paise, sgst_paise, igst_paise, reverse_charge,
           line_total_paise, created_at, updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW(),NOW())
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,NOW(),NOW())
         "#,
     )
     .bind(line_id)
@@ -13462,6 +14515,7 @@ async fn insert_calculated_line(
     .bind(&line.staff_splits)
     .bind(line.quantity)
     .bind(line.unit_price_paise)
+    .bind(line.other_fee_paise)
     .bind(line.gross_paise)
     .bind(line.taxable_paise)
     .bind(line.discount_paise)
@@ -14011,6 +15065,16 @@ async fn post_membership_rewards(
         .and_then(Value::as_i64)
         .unwrap_or(0)
         .clamp(0, i64::from(i32::MAX));
+    let expiry_days = settings
+        .pointer("/loyaltyTiers/expiryDays")
+        .and_then(Value::as_i64)
+        .unwrap_or(0)
+        .clamp(0, 36_500);
+    let point_value_paise = settings
+        .pointer("/creditsBenefits/rewardPointValuePaise")
+        .and_then(Value::as_i64)
+        .unwrap_or(100)
+        .max(0);
     let redeemed = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(quantity),0)::BIGINT FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3 AND line_type='redemption' AND item_id='reward_points'")
         .bind(tenant_id).bind(branch_id).bind(sale_id).fetch_one(&mut **tx).await
         .map_err(|_| AppError::internal("failed to load reward redemption"))?;
@@ -14055,6 +15119,15 @@ async fn post_membership_rewards(
             "reward redemption exceeds supported range",
         ));
     }
+    expire_reward_points(
+        tx,
+        tenant_id,
+        branch_id,
+        client_id,
+        staff_id,
+        point_value_paise,
+    )
+    .await?;
     let mut reward_source = (branch_id.to_string(), client_id.to_string(), 0_i32);
     if redeemed > 0 {
         reward_source = sqlx::query_as::<_, (String, String, i32)>(
@@ -14095,9 +15168,18 @@ async fn post_membership_rewards(
         sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'redeemed',$5,$6,$7,'POS reward redemption') ON CONFLICT DO NOTHING")
             .bind(tenant_id).bind(&reward_source.0).bind(&reward_source.1).bind(sale_id).bind(redeemed as i32).bind(source_balance).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post reward redemption"))?;
+        accounting_service::post_loyalty_redeemed(
+            tx,
+            tenant_id,
+            &reward_source.0,
+            sale_id,
+            redeemed.saturating_mul(point_value_paise),
+        )
+        .await?;
     }
     let earned = reward_points_for_sale(total_paise, rate);
     if enabled && earned > 0 {
+        let earned_points = earned.min(i64::from(i32::MAX)) as i32;
         let mut target_balance = if reward_source.0 == branch_id && reward_source.1 == client_id {
             source_balance
         } else {
@@ -14105,10 +15187,71 @@ async fn post_membership_rewards(
                 .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(&mut **tx).await
                 .map_err(|_| AppError::internal("failed to load reward balance"))?.unwrap_or(0)
         };
-        target_balance = target_balance.saturating_add(earned.min(i64::from(i32::MAX)) as i32);
-        sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,staff_id,note) VALUES ($1,$2,$3,$4,'earned',$5,$6,$7,'POS sale reward') ON CONFLICT DO NOTHING")
-            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned.min(i64::from(i32::MAX)) as i32).bind(target_balance).bind(staff_id).execute(&mut **tx).await
+        target_balance = target_balance.saturating_add(earned_points);
+        sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,source_sale_id,transaction_type,points,balance_after,expires_at,staff_id,note) VALUES ($1,$2,$3,$4,'earned',$5,$6,CASE WHEN $7>0 THEN CURRENT_DATE+$7::INT ELSE NULL END,$8,'POS sale reward') ON CONFLICT DO NOTHING")
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(sale_id).bind(earned_points).bind(target_balance).bind(expiry_days).bind(staff_id).execute(&mut **tx).await
             .map_err(|_| AppError::internal("failed to post earned rewards"))?;
+        accounting_service::post_loyalty_earned(
+            tx,
+            tenant_id,
+            branch_id,
+            sale_id,
+            i64::from(earned_points).saturating_mul(point_value_paise),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn expire_reward_points(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: &str,
+    target_branch_id: &str,
+    target_client_id: &str,
+    actor: &str,
+    point_value_paise: i64,
+) -> Result<(), AppError> {
+    let owners = sqlx::query_as::<_, (String, String)>(
+        "SELECT DISTINCT branch_id,client_id FROM membership_reward_ledger WHERE tenant_id=$1 AND ((branch_id=$2 AND client_id=$3) OR membership_cross_location_allowed($1,branch_id,$2,client_id,$3,'loyalty'))",
+    )
+    .bind(tenant_id).bind(target_branch_id).bind(target_client_id).fetch_all(&mut **tx).await
+    .map_err(|_| AppError::internal("failed to load reward expiry candidates"))?;
+    for (branch_id, client_id) in owners {
+        sqlx::query(
+            "SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+        )
+        .bind(tenant_id)
+        .bind(&branch_id)
+        .bind(&client_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|_| AppError::internal("failed to lock reward expiry balance"))?;
+        let (balance, expired_earned, redeemed, already_expired) = sqlx::query_as::<_, (i64, i64, i64, i64)>(
+            "SELECT COALESCE((SELECT balance_after FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 ORDER BY created_at DESC,id DESC LIMIT 1),0)::BIGINT,COALESCE(SUM(points) FILTER (WHERE transaction_type='earned' AND expires_at<CURRENT_DATE),0)::BIGINT,COALESCE(SUM(points) FILTER (WHERE transaction_type='redeemed'),0)::BIGINT,COALESCE(-SUM(points) FILTER (WHERE transaction_type='expired'),0)::BIGINT FROM membership_reward_ledger WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3",
+        )
+        .bind(tenant_id).bind(&branch_id).bind(&client_id).fetch_one(&mut **tx).await
+        .map_err(|_| AppError::internal("failed to calculate reward expiry"))?;
+        let expiring = expired_earned
+            .saturating_sub(redeemed)
+            .saturating_sub(already_expired)
+            .clamp(0, balance);
+        if expiring == 0 {
+            continue;
+        }
+        let key = format!("loyalty-expiry:{client_id}:{}", Utc::now().date_naive());
+        let posted = sqlx::query("INSERT INTO membership_reward_ledger (tenant_id,branch_id,client_id,transaction_type,points,balance_after,staff_id,note,idempotency_key) VALUES ($1,$2,$3,'expired',$4,$5,$6,'Reward points expired',$7) ON CONFLICT DO NOTHING")
+            .bind(tenant_id).bind(&branch_id).bind(&client_id).bind(-(expiring as i32)).bind((balance-expiring) as i32).bind(actor).bind(key).execute(&mut **tx).await
+            .map_err(|_| AppError::internal("failed to expire reward points"))?;
+        if posted.rows_affected() > 0 {
+            accounting_service::post_loyalty_expired(
+                tx,
+                tenant_id,
+                &branch_id,
+                &format!("{client_id}:{}", Utc::now().date_naive()),
+                expiring.saturating_mul(point_value_paise),
+            )
+            .await?;
+        }
     }
     Ok(())
 }
@@ -14982,9 +16125,10 @@ async fn consume_membership_redemptions(
             .execute(&mut **tx)
             .await
             .map_err(|_| AppError::internal("failed to consume membership credit"))?;
-        sqlx::query("INSERT INTO pos_membership_redemptions (tenant_id, branch_id, sale_id, client_id, client_membership_credit_id, membership_id, membership_name, service_id, service_name, staff_id, quantity, unit_value_paise, redeemed_value_paise, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())")
+        sqlx::query("INSERT INTO pos_membership_redemptions (tenant_id, branch_id, source_branch_id, sale_id, client_id, client_membership_credit_id, membership_id, membership_name, service_id, service_name, staff_id, quantity, unit_value_paise, redeemed_value_paise, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())")
             .bind(tenant_id)
             .bind(branch_id)
+            .bind(&credit.source_branch_id)
             .bind(sale_id)
             .bind(client_id)
             .bind(credit_id)
@@ -15057,6 +16201,31 @@ async fn issue_gift_cards(
     rows: &[(String, i64, i64, i64)],
 ) -> Result<(), AppError> {
     for (line_code, quantity, amount_paise, line_index) in rows {
+        if let Some(reload_code) = line_code.trim().strip_prefix("RELOAD:") {
+            if *quantity != 1 || reload_code.trim().is_empty() {
+                return Err(AppError::validation(
+                    "gift card reload requires one active card",
+                ));
+            }
+            let idempotency_key = format!("gift-card-reload:{sale_id}:{line_index}");
+            let card = sqlx::query_as::<_, (String, i64)>("SELECT id,balance_paise FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND code=$3 AND client_id=$4 AND status='active' AND (expires_at IS NULL OR expires_at>=CURRENT_DATE) FOR UPDATE")
+                .bind(tenant_id).bind(branch_id).bind(reload_code.trim().to_ascii_uppercase()).bind(client_id)
+                .fetch_optional(&mut **tx).await.map_err(|_| AppError::internal("failed to load gift card for reload"))?
+                .ok_or_else(|| AppError::validation("active gift card was not found for this client"))?;
+            let balance_after = card.1.saturating_add(*amount_paise);
+            let inserted = sqlx::query("INSERT INTO gift_card_transactions (tenant_id,branch_id,gift_card_id,sale_id,transaction_type,delta_paise,balance_after_paise,idempotency_key,notes) VALUES ($1,$2,$3,$4,'reload',$5,$6,$7,'Paid POS gift card reload') ON CONFLICT (tenant_id,branch_id,gift_card_id,idempotency_key) WHERE idempotency_key<>'' DO NOTHING")
+                .bind(tenant_id).bind(branch_id).bind(&card.0).bind(sale_id).bind(amount_paise).bind(balance_after).bind(&idempotency_key)
+                .execute(&mut **tx).await.map_err(|_| AppError::internal("failed to record gift card reload"))?;
+            if inserted.rows_affected() > 0 {
+                sqlx::query("UPDATE gift_cards SET initial_amount_paise=initial_amount_paise+$4,balance_paise=$5,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+                    .bind(tenant_id).bind(branch_id).bind(&card.0).bind(amount_paise).bind(balance_after).execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to reload gift card"))?;
+                sqlx::query("INSERT INTO customer_liability_lifecycle_events (tenant_id,branch_id,liability_type,liability_id,action,source_branch_id,target_branch_id,source_client_id,target_client_id,balance_before_paise,balance_after_paise,reason,actor_user_id,idempotency_key) VALUES ($1,$2,'gift_card',$3,'reload',$2,$2,$4,$4,$5,$6,'Paid POS gift card reload','pos',$7)")
+                    .bind(tenant_id).bind(branch_id).bind(&card.0).bind(client_id).bind(card.1).bind(balance_after).bind(&idempotency_key).execute(&mut **tx).await
+                    .map_err(|_| AppError::internal("failed to audit gift card reload"))?;
+            }
+            continue;
+        }
         for item_index in 0..*quantity {
             let idempotency_key = format!("gift-card-sale:{sale_id}:{line_index}:{item_index}");
             let existing = sqlx::query_scalar::<_, String>("SELECT id FROM gift_cards WHERE tenant_id=$1 AND branch_id=$2 AND idempotency_key=$3")
@@ -15153,10 +16322,15 @@ async fn consume_package_redemptions(
         let quantity = package_redemption_i32(row, &["quantity"]);
         let credit = sqlx::query_as::<_, ClientPackageCreditRow>(
             r#"
-            SELECT remaining_qty, unit_value_paise, issued_value_paise, package_id, package_name, service_id, service_name, expires_at
+            SELECT branch_id AS source_branch_id, client_id AS credit_owner_id,
+                   remaining_qty, unit_value_paise, issued_value_paise, package_id,
+                   package_name, service_id, service_name, expires_at
               FROM client_package_credits
-             WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND client_id=$4
+             WHERE id=$1 AND tenant_id=$2
+               AND ((branch_id=$3 AND client_id=$4)
+                 OR membership_cross_location_allowed($2,branch_id,$3,client_id,$4,'service_credit'))
                AND active=TRUE
+               AND frozen_at IS NULL
                AND remaining_qty > 0
              FOR UPDATE
             "#,
@@ -15216,8 +16390,8 @@ async fn consume_package_redemptions(
         }
 
         let remaining = credit.remaining_qty - quantity;
-        let redeemed_before = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(redeemed_value_paise),0)::BIGINT FROM pos_package_redemptions WHERE tenant_id=$1 AND branch_id=$2 AND client_package_credit_id=$3")
-            .bind(tenant_id).bind(branch_id).bind(&credit_id).fetch_one(&mut **tx).await
+        let redeemed_before = sqlx::query_scalar::<_, i64>("SELECT COALESCE(SUM(redeemed_value_paise),0)::BIGINT FROM pos_package_redemptions WHERE tenant_id=$1 AND client_package_credit_id=$2")
+            .bind(tenant_id).bind(&credit_id).fetch_one(&mut **tx).await
             .map_err(|_| AppError::internal("failed to total package redemption value"))?;
         let remaining_value = credit
             .issued_value_paise
@@ -15236,8 +16410,8 @@ async fn consume_package_redemptions(
         )
         .bind(&credit_id)
         .bind(tenant_id)
-        .bind(branch_id)
-        .bind(client_id)
+            .bind(&credit.source_branch_id)
+            .bind(&credit.credit_owner_id)
         .bind(remaining)
         .bind(remaining > 0)
         .execute(&mut **tx)
@@ -15247,14 +16421,15 @@ async fn consume_package_redemptions(
         sqlx::query(
             r#"
             INSERT INTO pos_package_redemptions (
-              tenant_id, branch_id, sale_id, client_id, client_package_credit_id, package_id,
+              tenant_id, branch_id, source_branch_id, sale_id, client_id, client_package_credit_id, package_id,
               package_name, service_id, service_name, staff_id, quantity,
               unit_value_paise, redeemed_value_paise, created_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
             "#,
         )
         .bind(tenant_id)
         .bind(branch_id)
+        .bind(&credit.source_branch_id)
         .bind(sale_id)
         .bind(client_id)
         .bind(&credit_id)
@@ -15373,7 +16548,7 @@ async fn read_line_rows(
     sqlx::query_as::<_, PosLineRow>(
         r#"
         SELECT id, sale_id, line_type, item_id, item_name, quantity,
-               staff_id, staff_splits, unit_price_paise, gross_paise, taxable_paise,
+               staff_id, staff_splits, unit_price_paise, other_fee_paise, gross_paise, taxable_paise,
                discount_paise, discount_type, discount_value_paise, discount_bps,
                tax_percent, gst_paise, hsn_sac_code, cgst_paise, sgst_paise, igst_paise, reverse_charge,
                line_total_paise, created_at, updated_at
@@ -15401,6 +16576,7 @@ fn line_response(row: PosLineRow) -> PosSaleLineResponse {
         staff_splits: row.staff_splits,
         quantity: row.quantity,
         unit_price_paise: row.unit_price_paise,
+        other_fee_paise: row.other_fee_paise,
         gross_paise: row.gross_paise,
         taxable_paise: row.taxable_paise,
         discount_paise: row.discount_paise,

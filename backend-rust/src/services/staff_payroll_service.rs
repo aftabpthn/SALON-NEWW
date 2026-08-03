@@ -402,6 +402,27 @@ pub async fn preview(
     staff_id: &str,
 ) -> Result<PayrollPreview, AppError> {
     let (period_start, period_end) = period(year, month)?;
+    preview_period(
+        db,
+        tenant_id,
+        branch_id,
+        "monthly",
+        period_start,
+        period_end,
+        staff_id,
+    )
+    .await
+}
+
+pub async fn preview_period(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    cycle: &'static str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    staff_id: &str,
+) -> Result<PayrollPreview, AppError> {
     let staff = repository::staff_sources(db, tenant_id, branch_id, staff_id, period_end)
         .await
         .map_err(|_| AppError::internal("failed to load payroll staff"))?;
@@ -1073,7 +1094,7 @@ pub async fn preview(
     let salary_rows = items.iter().map(preview_salary_row).collect::<Vec<_>>();
 
     Ok(PayrollPreview {
-        cycle: "monthly",
+        cycle,
         period_start,
         period_end,
         staff_count: items.len(),
@@ -1099,7 +1120,51 @@ pub async fn run_payroll(
     staff_id: &str,
     reason: &str,
 ) -> Result<PayrollRunDetail, AppError> {
-    let mut result = preview(db, tenant_id, branch_id, year, month, staff_id).await?;
+    let (period_start, period_end) = period(year, month)?;
+    run_payroll_period(
+        db,
+        tenant_id,
+        branch_id,
+        actor_user_id,
+        "monthly",
+        period_start,
+        period_end,
+        staff_id,
+        reason,
+    )
+    .await
+}
+
+pub async fn run_payroll_period(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_user_id: &str,
+    cycle: &'static str,
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    staff_id: &str,
+    reason: &str,
+) -> Result<PayrollRunDetail, AppError> {
+    if cycle == "final_settlement"
+        && !repository::final_settlement_ready(db, tenant_id, branch_id, staff_id)
+            .await
+            .map_err(|_| AppError::internal("failed to validate final settlement readiness"))?
+    {
+        return Err(AppError::conflict(
+            "final settlement requires a completed offboarding case marked ready",
+        ));
+    }
+    let mut result = preview_period(
+        db,
+        tenant_id,
+        branch_id,
+        cycle,
+        period_start,
+        period_end,
+        staff_id,
+    )
+    .await?;
     if result.items.is_empty() {
         return Err(AppError::validation(
             "no active employees found for this payroll period",
@@ -1109,6 +1174,8 @@ pub async fn run_payroll(
         db,
         tenant_id,
         branch_id,
+        cycle,
+        if cycle == "monthly" { "" } else { staff_id },
         result.period_start,
         result.period_end,
     )
@@ -1200,6 +1267,7 @@ pub async fn run_payroll(
             db,
             tenant_id,
             branch_id,
+            cycle,
             result.period_start,
             result.period_end,
             actor_user_id,
@@ -1214,6 +1282,8 @@ pub async fn run_payroll(
             db,
             tenant_id,
             branch_id,
+            cycle,
+            if cycle == "monthly" { "" } else { staff_id },
             result.period_start,
             result.period_end,
             actor_user_id,
@@ -3086,7 +3156,7 @@ fn attendance_policy_errors(
     errors
 }
 
-fn period(year: i32, month: u32) -> Result<(NaiveDate, NaiveDate), AppError> {
+pub(crate) fn period(year: i32, month: u32) -> Result<(NaiveDate, NaiveDate), AppError> {
     if !(2000..=2100).contains(&year) || !(1..=12).contains(&month) {
         return Err(AppError::validation("payroll year or month is invalid"));
     }

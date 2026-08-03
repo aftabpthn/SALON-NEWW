@@ -4,6 +4,10 @@ Use a dedicated staging tenant and real API/database records. Do not paste crede
 
 Record each run with date, tester, app commit, backend commit, device/browser, evidence link, and `PASS` or `FAIL`. An item remains pending until its evidence exists.
 
+## Three-Persona Browser Gate
+
+Use `.github/workflows/staff-production-certification.yml` against an HTTPS staging Staff App. Its protected `E2E_STAFF_PERSONAS` secret must contain exactly `restricted-provider`, `senior-provider-frontdesk`, and `manager`, each with allowed and denied paths that match the configured role. The run must pass on phone Chromium and phone WebKit, including session reload, explicit-deny routing, offline/online shell state, no API `5xx`, no horizontal overflow, and no password/token/MFA/PIN in local storage.
+
 ## Push Notifications
 
 Prerequisites:

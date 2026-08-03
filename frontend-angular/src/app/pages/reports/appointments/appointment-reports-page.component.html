@@ -33,6 +33,9 @@
 @if (error) {
   <p class="inline-error">{{ error }}</p>
 }
+@if (filterError) {
+  <p class="inline-error">{{ filterError }}</p>
+}
 @if (!loading && !error && !filteredRows.length) {
   <div class="empty-state"><strong>No records yet</strong></div>
 }

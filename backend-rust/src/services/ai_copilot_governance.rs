@@ -163,7 +163,19 @@ pub struct ProposeActionRequest {
     #[serde(default)]
     pub payload: Value,
     #[serde(default)]
+    pub evidence: Vec<String>,
+    #[serde(default)]
+    pub action_owner_user_id: String,
+    #[serde(default)]
+    pub source_refs: Vec<Value>,
+    #[serde(default = "default_recommendation_confidence")]
+    pub confidence: String,
+    #[serde(default)]
     pub scope: ScopeRequest,
+}
+
+fn default_recommendation_confidence() -> String {
+    "medium".into()
 }
 
 /// The decision a human records against a pending proposal.
@@ -191,6 +203,18 @@ pub async fn propose_action(
         .ok_or_else(|| AppError::validation("unsupported copilot action type"))?;
     if request.title.trim().is_empty() {
         return Err(AppError::validation("action title is required"));
+    }
+    if request.evidence.is_empty()
+        || request
+            .evidence
+            .iter()
+            .any(|value| value.trim().is_empty() || value.chars().count() > 500)
+    {
+        return Err(AppError::validation("action evidence is required"));
+    }
+    let confidence = request.confidence.trim().to_ascii_lowercase();
+    if !matches!(confidence.as_str(), "high" | "medium" | "low") {
+        return Err(AppError::validation("action confidence is invalid"));
     }
 
     // Proposing still requires being able to read the domain it touches.
@@ -236,6 +260,16 @@ pub async fn propose_action(
             status,
             requested_by: &claims.sub,
             requested_role: &claims.role,
+            evidence_json: json!(request.evidence),
+            action_owner_user_id: if request.action_owner_user_id.trim().is_empty() {
+                &claims.sub
+            } else {
+                request.action_owner_user_id.trim()
+            },
+            source_refs: json!(request.source_refs),
+            confidence: &confidence,
+            prompt_version: "ai-copilot-governance-v1",
+            model_name: "rust-deterministic",
             decided_by,
             // Pending money-moving proposals go stale rather than linger forever.
             expires_in_hours: if matches!(mode, ApprovalMode::ExplicitApproval) {

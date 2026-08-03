@@ -1,5 +1,5 @@
 import { DatePipe } from "@angular/common";
-import { Component, OnInit, signal } from "@angular/core";
+import { Component, HostListener, OnInit, signal } from "@angular/core";
 import { StaffAppService, StaffEnterpriseOs } from "../../core/staff-app.service";
 import { StaffPageStateComponent } from "./staff-page-state.component";
 
@@ -48,6 +48,9 @@ export class StaffQueuePage implements OnInit {
   readonly loading = signal(false);
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadQueue()) void this.load(); }
+
+  @HostListener("window:aura:queue-updated")
+  onQueueUpdated() { if (this.canReadQueue() && navigator.onLine) void this.load(); }
   async load() {
     this.loading.set(true);
     try {

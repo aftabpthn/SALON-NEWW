@@ -1,7 +1,10 @@
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, inventory_governance_service as svc},
+    services::{
+        auth_service::AuthClaims, inventory_adjustment_service as adjustments,
+        inventory_governance_service as svc,
+    },
     state::AppState,
 };
 use axum::{
@@ -17,6 +20,12 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase")]
 struct SupplierQuery {
     supplier_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdjustmentQuery {
+    inventory_item_id: Option<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -84,6 +93,11 @@ pub fn router() -> Router<AppState> {
             "/inventory/floor-closings/:id/review",
             post(review_floor_closing),
         )
+        .route(
+            "/inventory/adjustments",
+            get(list_adjustments).post(request_adjustment),
+        )
+        .route("/inventory/adjustments/:id/review", post(review_adjustment))
 }
 fn manager(c: &AuthClaims) -> Result<(), AppError> {
     if matches!(
@@ -106,11 +120,56 @@ fn manager(c: &AuthClaims) -> Result<(), AppError> {
     }
 }
 fn owner(c: &AuthClaims) -> Result<(), AppError> {
-    if matches!(c.role.as_str(), "owner" | "admin") {
+    if matches!(c.role.as_str(), "owner" | "admin")
+        || c.permissions
+            .iter()
+            .any(|permission| permission == "inventory.approve")
+    {
         Ok(())
     } else {
         Err(AppError::forbidden("owner approval role is required"))
     }
+}
+
+async fn list_adjustments(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Query(q): Query<AdjustmentQuery>,
+) -> ApiResult<Vec<crate::repositories::inventory_repository::InventoryAdjustmentRecord>> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        adjustments::list_adjustments(&s, &t, &b, q.inventory_item_id.as_deref().unwrap_or(""))
+            .await?,
+    )))
+}
+
+async fn request_adjustment(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Json(p): Json<adjustments::AdjustmentWrite>,
+) -> ApiResult<crate::repositories::inventory_repository::InventoryAdjustmentRecord> {
+    manager(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        adjustments::request_adjustment(&s, &t, &b, &c.sub, p).await?,
+    )))
+}
+
+async fn review_adjustment(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<adjustments::AdjustmentReviewWrite>,
+) -> ApiResult<crate::repositories::inventory_repository::InventoryAdjustmentRecord> {
+    owner(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        adjustments::review_adjustment(&s, &t, &b, &c.sub, &id, p).await?,
+    )))
 }
 async fn get_policy(State(s): State<AppState>, h: HeaderMap) -> ApiResult<Value> {
     let (t, b) = tenant_branch(&h)?;
@@ -145,6 +204,11 @@ async fn save_price(
     Json(p): Json<svc::PriceWrite>,
 ) -> ApiResult<Value> {
     manager(&c)?;
+    if c.has_field_mask("inventory.cost") {
+        return Err(AppError::forbidden(
+            "product cost visibility permission is required to manage supplier prices",
+        ));
+    }
     let (t, b) = tenant_branch(&h)?;
     Ok(Json(ApiResponse::ok(
         svc::save_price(&s.db, &t, &b, &c.sub, p).await?,
@@ -290,8 +354,10 @@ async fn checkout(
     Json(p): Json<svc::CheckoutWrite>,
 ) -> ApiResult<Value> {
     manager(&c)?;
-    let (t,b)=tenant_branch(&h)?;
-    Ok(Json(ApiResponse::ok(svc::checkout(&s.db,&t,&b,&c.sub,p).await?)))
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::checkout(&s.db, &t, &b, &c.sub, p).await?,
+    )))
 }
 async fn convert(
     State(s): State<AppState>,
@@ -300,8 +366,10 @@ async fn convert(
     Json(p): Json<svc::ConversionWrite>,
 ) -> ApiResult<Value> {
     manager(&c)?;
-    let (t,b)=tenant_branch(&h)?;
-    Ok(Json(ApiResponse::ok(svc::convert(&s.db,&t,&b,&c.sub,p).await?)))
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::convert(&s.db, &t, &b, &c.sub, p).await?,
+    )))
 }
 async fn reverse_movement(
     State(s): State<AppState>,
@@ -311,8 +379,10 @@ async fn reverse_movement(
     Json(p): Json<svc::MovementReversalWrite>,
 ) -> ApiResult<Value> {
     manager(&c)?;
-    let (t,b)=tenant_branch(&h)?;
-    Ok(Json(ApiResponse::ok(svc::reverse_movement(&s.db,&t,&b,&c.sub,&id,p).await?)))
+    let (t, b) = tenant_branch(&h)?;
+    Ok(Json(ApiResponse::ok(
+        svc::reverse_movement(&s.db, &t, &b, &c.sub, &id, p).await?,
+    )))
 }
 async fn save_floor_location(
     State(s): State<AppState>,

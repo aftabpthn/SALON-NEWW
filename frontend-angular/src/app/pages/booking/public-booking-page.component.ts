@@ -1,8 +1,9 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
+import { Meta, Title } from '@angular/platform-browser';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
@@ -42,6 +43,9 @@ type BookingPayment = {
 export class PublicBookingPageComponent implements OnInit {
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
+  private readonly document = inject(DOCUMENT);
+  private readonly meta = inject(Meta);
+  private readonly title = inject(Title);
   readonly steps = ['Services', 'Staff', 'Date & time', 'Verify', 'Review', 'Confirm'];
   tenant = { id: '', name: '' };
   branches: Branch[] = [];
@@ -146,10 +150,32 @@ export class PublicBookingPageComponent implements OnInit {
         longitude: branch.longitude == null ? null : Number(branch.longitude), bookingDepositPercent: Number(branch.bookingDepositPercent) || 0,
       })).filter((branch: Branch) => branch.id) : [];
       this.branchId = this.branches[0]?.id || '';
+      this.updateMetadata();
       await this.loadCatalog();
     } catch (error) {
       this.error = this.message(error, 'Booking portal could not be loaded');
     } finally { this.loading = false; }
+  }
+
+  private updateMetadata() {
+    const name = this.tenant.name || 'AuraShine';
+    const pageTitle = `Book an appointment | ${name}`;
+    this.title.setTitle(pageTitle);
+    this.meta.updateTag({ name: 'description', content: `Book, reschedule or cancel appointments online with ${name}.` });
+    this.meta.updateTag({ property: 'og:title', content: pageTitle });
+    this.meta.updateTag({ property: 'og:type', content: 'website' });
+    const id = 'public-booking-structured-data';
+    const script = this.document.getElementById(id) || this.document.head.appendChild(this.document.createElement('script'));
+    script.id = id;
+    script.setAttribute('type', 'application/ld+json');
+    script.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'HealthAndBeautyBusiness',
+      name,
+      url: this.document.location.href,
+      location: this.branches.map((branch) => ({ '@type': 'Place', name: branch.name, address: branch.address })),
+      potentialAction: { '@type': 'ReserveAction', target: this.document.location.href },
+    });
   }
 
   async loadCatalog() {
@@ -236,7 +262,7 @@ export class PublicBookingPageComponent implements OnInit {
     this.busy = true;
     try {
       const result = await firstValueFrom(this.http.post<any>(this.url('/booking-portal/v2/slots'), {
-        branchId: this.branchId, serviceIds: this.selectedServiceIds, date: this.bookingDate, limit: 12,
+        tenantId: this.tenant.id, branchId: this.branchId, serviceIds: this.selectedServiceIds, date: this.bookingDate, limit: 12,
       }));
       const slots: Slot[] = Array.isArray(result.slots) ? result.slots : [];
       this.slots = this.staffMode === 'specific'
@@ -255,7 +281,7 @@ export class PublicBookingPageComponent implements OnInit {
     try {
       const headers = new HttpHeaders({ 'x-public-booking-token': branch.bookingToken });
       const result = await firstValueFrom(this.http.post<any>(this.url('/booking-portal/v2/nearby-alternatives'), {
-        branchId: branch.id, serviceIds: this.selectedServiceIds, date: this.bookingDate, limit: 3,
+        tenantId: this.tenant.id, branchId: branch.id, serviceIds: this.selectedServiceIds, date: this.bookingDate, limit: 3,
       }, { headers }));
       this.nearbyAlternatives = (Array.isArray(result?.alternatives) ? result.alternatives : [])
         .map((alternative: any) => ({
@@ -385,7 +411,7 @@ export class PublicBookingPageComponent implements OnInit {
     try {
       const headers = new HttpHeaders({ 'x-public-booking-token': branch.bookingToken });
       const hold = await firstValueFrom(this.http.post<any>(this.url('/booking-portal/v2/holds'), {
-        branchId: branch.id, serviceIds: this.selectedServiceIds, startAt: this.selectedSlot.startAt,
+        tenantId: this.tenant.id, branchId: branch.id, serviceIds: this.selectedServiceIds, startAt: this.selectedSlot.startAt,
         endAt: this.selectedSlot.endAt, mobile: this.mobile.trim(),
       }, { headers }));
       const result = await firstValueFrom(this.http.post<any>(this.url('/booking-portal/v2/confirm'), {
@@ -644,7 +670,10 @@ export class PublicBookingPageComponent implements OnInit {
     if (!this.location || item.latitude == null || item.longitude == null) return item;
     return { ...item, distanceKm: this.distanceKm(this.location.latitude, this.location.longitude, item.latitude, item.longitude) };
   }
-  private today() { return new Date().toISOString().slice(0, 10); }
+  private today() {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
   private actionHeaders(token: string) { return new HttpHeaders({ 'x-public-booking-token': token }); }
   private bookingStorageKey() {
     return `aurashine-public-bookings:${this.route.snapshot.paramMap.get('tenantSlug') || ''}`;

@@ -179,6 +179,16 @@ The verified Git `main` snapshot adds no unported operational POS capability bey
 - `GET /api/v1/pos/reliability` exposes database query latency/pool state, queue depth/lag/dead-letter counts and current financial matching exceptions. Checkout latency is emitted as structured `pos.checkout` tracing data.
 - A focused PostgreSQL concurrency test verifies that two checkout writers serialize through `FOR UPDATE`, preventing a lost payment update.
 
+## Phase 12 Cash Register And EOD Evidence
+
+- Opening a later business date now fails while any earlier drawer remains open or pending approval; intervening closed holidays do not create a false missing-day requirement.
+- A closed branch holiday requires an owner/admin/manager exception with notes, and the exception is retained in the append-only day-close history.
+- Branch cash limits and variance-alert thresholds are persisted, manager controlled, enforced for opening/manual cash-in, and reused by the financial-risk scan.
+- Tills can be assigned to an active branch POS terminal; duplicate active assignment inside one drawer is database constrained.
+- Every completed drawer close writes one immutable snapshot. Day lock/reopen actions write immutable history instead of relying on the mutable current lock row.
+- Day lock and Z-report generation fail closed until invoice paid values, payment rows, register expected cash, invoice/payment journals, close snapshots, balanced journals, and provider exceptions reconcile.
+- EOD accounting batch retries return the existing immutable batch instead of updating previously posted evidence.
+
 ## Deferred By Design
 
 - No Express/SQLite source was copied.

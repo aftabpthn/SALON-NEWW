@@ -12,6 +12,8 @@ export type BackbarRecipeLine = {
   minQty?: number;
   maxQty?: number;
   usageProfile?: 'root_touch_up' | 'full_colour' | 'custom';
+  trackAutomatically?: boolean;
+  allowManualOverride?: boolean;
 };
 
 export type BackbarService = {
@@ -33,6 +35,7 @@ export type BackbarItem = {
   reorderPoint: number;
   unitCostPaise: number;
   dualUseStock: boolean;
+  batchTracked: boolean;
   productUsage: 'retail' | 'consumable' | 'dual_use';
   active: boolean;
 };
@@ -46,7 +49,7 @@ export type BackbarStaff = {
 };
 
 export type BackbarClient = { id:string; firstName:string; lastName:string; phone?:string; active:boolean };
-export type BackbarAppointment = { id:string; clientId:string; staffId:string; serviceIds:string[]; startAt:string; status:string };
+export type BackbarAppointment = { id:string; clientId:string; staffId:string; serviceIds:string[]; startAt:string; status:string; recipeSnapshots:Array<{serviceId:string;versionNumber:number;recipe:BackbarRecipeLine[]}> };
 
 export type BackbarUsage = {
   id: string;
@@ -113,6 +116,7 @@ export type BackbarContainer = {
   events: BackbarContainerEvent[];
 };
 export type BackbarContainerLabel={id:string;productName:string;barcode:string;capacityQuantity:number;unit:string;status:string;batchNumber:string;qrSvg:string};
+export type BackbarBatch={id:string;inventoryItemId:string;batchNumber:string;expiryDate?:string;quantity:number};
 
 export type ColorBowlLine = {
   usageId: string;
@@ -360,11 +364,17 @@ export class BackbarControlService {
   }
 
   async appointments() {
-    const rows = await firstValueFrom(this.api.get<BackbarAppointment[]>('/appointments'));
-    return Array.isArray(rows) ? rows : [];
+    const rows = await firstValueFrom(this.api.get<any[]>('/appointments'));
+    return (Array.isArray(rows) ? rows : []).map((row):BackbarAppointment=>({
+      id:String(row.id??''),clientId:String(row.clientId??row.client_id??''),staffId:String(row.staffId??row.staff_id??''),
+      serviceIds:Array.isArray(row.serviceIds)?row.serviceIds.map(String):Array.isArray(row.service_ids)?row.service_ids.map(String):[],
+      startAt:String(row.startAt??row.start_at??''),status:String(row.status??''),
+      recipeSnapshots:Array.isArray(row.inventoryRecipeSnapshots)?row.inventoryRecipeSnapshots:Array.isArray(row.inventory_recipe_snapshots)?row.inventory_recipe_snapshots:[],
+    }));
   }
 
   containers() { return this.get<BackbarContainer[]>('/inventory/backbar-containers'); }
+  batches() { return this.get<BackbarBatch[]>('/inventory/batches'); }
   containerLabel(id:string){return this.get<BackbarContainerLabel>(`/inventory/backbar-containers/${id}/label`);}
   product360(productId: string) { return this.get<BackbarProduct360>(`/inventory/${productId}/360`); }
 
@@ -374,6 +384,10 @@ export class BackbarControlService {
 
   reviewUsage(id: string, payload: Record<string, unknown>) {
     return firstValueFrom(this.api.patch(`/inventory/backbar-usage/${id}/review`, payload));
+  }
+
+  reverseUsage(id: string, reason: string) {
+    return firstValueFrom(this.api.post(`/inventory/backbar-usage/${id}/reverse`, { reason, idempotencyKey: crypto.randomUUID() }));
   }
 
   createContainer(payload: Record<string, unknown>) {

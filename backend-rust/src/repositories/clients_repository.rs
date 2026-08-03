@@ -121,8 +121,10 @@ pub struct ClientServiceHistoryRecord {
 pub struct ClientNoteRecord {
     pub id: String,
     pub client_id: String,
+    pub appointment_id: Option<String>,
     pub note_type: String,
     pub note: String,
+    pub visibility: String,
     pub created_by: String,
     pub created_at: DateTime<Utc>,
 }
@@ -138,6 +140,13 @@ pub struct ClientFormDefinitionRecord {
     pub body: String,
     pub fields_json: Value,
     pub requires_signature: bool,
+    pub scope_type: String,
+    pub scope_ids_json: Value,
+    pub required: bool,
+    pub valid_for_days: Option<i32>,
+    pub review_required: bool,
+    pub staff_mode_allowed: bool,
+    pub guest_mode_allowed: bool,
     pub active: bool,
     pub created_at: DateTime<Utc>,
 }
@@ -162,6 +171,19 @@ pub struct ClientFormSubmissionRecord {
     pub form_type: String,
     pub form_version: i32,
     pub responses_json: Value,
+    pub appointment_id: Option<String>,
+    pub service_id: String,
+    pub membership_id: String,
+    pub package_id: String,
+    pub mode: String,
+    pub status: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub finalized_at: Option<DateTime<Utc>>,
+    pub corrects_submission_id: Option<String>,
+    pub correction_reason: String,
+    pub version: i32,
+    pub review_status: String,
+    pub review_note: String,
     pub signature_name: String,
     pub signature_sha256: String,
     pub signed_at: Option<DateTime<Utc>>,
@@ -173,13 +195,35 @@ pub struct ClientFormSubmissionRecord {
 pub struct ClientTreatmentPhotoRecord {
     pub id: String,
     pub appointment_id: Option<String>,
+    pub service_id: String,
     pub caption: String,
     pub file_name: String,
     pub content_type: String,
     pub byte_size: i32,
     pub sha256: String,
     pub photo_type: String,
+    pub consent_event_id: Option<String>,
+    pub scan_status: String,
+    pub scanned_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+}
+
+pub struct StaffFormSubmissionWrite<'a> {
+    pub submission_id: &'a str,
+    pub definition_id: &'a str,
+    pub responses_json: &'a Value,
+    pub appointment_id: &'a str,
+    pub service_id: &'a str,
+    pub membership_id: &'a str,
+    pub package_id: &'a str,
+    pub mode: &'a str,
+    pub status: &'a str,
+    pub corrects_submission_id: &'a str,
+    pub correction_reason: &'a str,
+    pub signature_name: &'a str,
+    pub signature_sha256: &'a str,
+    pub expected_version: i32,
+    pub actor: &'a str,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -228,6 +272,47 @@ pub struct ClientReviewRecord {
     pub review_text: String,
     pub reviewed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientProfile360Record {
+    pub gender: String,
+    pub address: String,
+    pub city: String,
+    pub postal_code: String,
+    pub preferred_language: String,
+    pub occupation: String,
+    pub marketing_source: String,
+    pub source_detail: String,
+    pub version: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientMergeHistoryRecord {
+    pub id: String,
+    pub source_client_id: String,
+    pub source_client_name: String,
+    pub target_client_id: String,
+    pub merged_by: String,
+    pub merged_at: DateTime<Utc>,
+    pub reversed_by: Option<String>,
+    pub reversed_at: Option<DateTime<Utc>>,
+    pub reversal_reason: String,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientCrossLocationVisitRecord {
+    pub branch_id: String,
+    pub branch_name: String,
+    pub client_id: String,
+    pub appointment_id: String,
+    pub start_at: DateTime<Utc>,
+    pub status: String,
+    pub service_names: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -1724,10 +1809,11 @@ pub async fn timeline(
                  CASE WHEN submission.form_type='consent' THEN 'Consent' ELSE 'Custom forms' END,
                  submission.form_name || ' v' || submission.form_version,
                  CASE WHEN submission.signature_name='' THEN '' ELSE 'Signed by ' || submission.signature_name END,
-                 submission.submitted_at, NULL::BIGINT, NULL::TEXT, NULL::TEXT, NULL::BIGINT, NULL::BIGINT
+                 COALESCE(submission.finalized_at,submission.submitted_at), NULL::BIGINT, NULL::TEXT, NULL::TEXT, NULL::BIGINT, NULL::BIGINT
             FROM client_form_submissions submission
            WHERE submission.tenant_id=$1 AND submission.branch_id=$2
              AND submission.client_id IN (SELECT id FROM scoped_clients)
+             AND submission.status='submitted'
           UNION ALL
           SELECT 'photo:' || photo.id, 'Custom forms', 'Treatment photo',
                  COALESCE(NULLIF(photo.caption,''), photo.file_name), photo.created_at,
@@ -1870,7 +1956,7 @@ pub async fn list_notes(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Vec<ClientNoteRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,client_id,note_type,note,created_by,created_at FROM client_notes WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY created_at DESC,id DESC LIMIT 200")
+    sqlx::query_as("SELECT id,client_id,appointment_id,note_type,note,visibility,created_by,created_at FROM client_notes WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY created_at DESC,id DESC LIMIT 200")
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 
@@ -1879,12 +1965,14 @@ pub async fn create_note(
     tenant_id: &str,
     branch_id: &str,
     client_id: &str,
+    appointment_id: Option<&str>,
     note_type: &str,
     note: &str,
+    visibility: &str,
     created_by: &str,
 ) -> Result<Option<ClientNoteRecord>, sqlx::Error> {
-    sqlx::query_as("INSERT INTO client_notes (tenant_id,branch_id,client_id,note_type,note,created_by) SELECT $1,$2,id,$4,$5,$6 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,client_id,note_type,note,created_by,created_at")
-        .bind(tenant_id).bind(branch_id).bind(client_id).bind(note_type).bind(note).bind(created_by).fetch_optional(db).await
+    sqlx::query_as("INSERT INTO client_notes (tenant_id,branch_id,client_id,appointment_id,note_type,note,visibility,created_by) SELECT $1,$2,client.id,$4,$5,$6,$7,$8 FROM clients client WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$3 AND ($4::TEXT IS NULL OR EXISTS(SELECT 1 FROM appointments appointment WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.client_id=$3 AND appointment.id=$4)) RETURNING id,client_id,appointment_id,note_type,note,visibility,created_by,created_at")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(appointment_id).bind(note_type).bind(note).bind(visibility).bind(created_by).fetch_optional(db).await
 }
 
 pub async fn list_family_members(
@@ -2086,7 +2174,7 @@ pub async fn list_form_definitions(
     branch_id: &str,
 ) -> Result<Vec<ClientFormDefinitionRecord>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT DISTINCT ON (form_key) id,form_key,name,form_type,version,body,fields_json,requires_signature,active,created_at FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 ORDER BY form_key,version DESC",
+        "SELECT DISTINCT ON (form_key) id,form_key,name,form_type,version,body,fields_json,requires_signature,scope_type,scope_ids_json,required,valid_for_days,review_required,staff_mode_allowed,guest_mode_allowed,active,created_at FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 ORDER BY form_key,version DESC",
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -2100,7 +2188,7 @@ pub async fn get_form_definition(
     branch_id: &str,
     id: &str,
 ) -> Result<Option<ClientFormDefinitionRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,form_key,name,form_type,version,body,fields_json,requires_signature,active,created_at FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+    sqlx::query_as("SELECT id,form_key,name,form_type,version,body,fields_json,requires_signature,scope_type,scope_ids_json,required,valid_for_days,review_required,staff_mode_allowed,guest_mode_allowed,active,created_at FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
         .bind(tenant_id).bind(branch_id).bind(id).fetch_optional(db).await
 }
 
@@ -2115,6 +2203,13 @@ pub async fn create_form_definition(
     body: &str,
     fields_json: &Value,
     requires_signature: bool,
+    scope_type: &str,
+    scope_ids_json: &Value,
+    required: bool,
+    valid_for_days: Option<i32>,
+    review_required: bool,
+    staff_mode_allowed: bool,
+    guest_mode_allowed: bool,
     created_by: &str,
 ) -> Result<ClientFormDefinitionRecord, sqlx::Error> {
     let mut tx = db.begin().await?;
@@ -2123,9 +2218,9 @@ pub async fn create_form_definition(
         .execute(&mut *tx)
         .await?;
     let row = sqlx::query_as::<_, ClientFormDefinitionRecord>(
-        r#"INSERT INTO client_form_definitions(tenant_id,branch_id,form_key,name,form_type,version,body,fields_json,requires_signature,created_by)
-           VALUES($1,$2,$3,$4,$5,COALESCE((SELECT MAX(version)+1 FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 AND form_key=$3),1),$6,$7,$8,$9)
-           RETURNING id,form_key,name,form_type,version,body,fields_json,requires_signature,active,created_at"#,
+        r#"INSERT INTO client_form_definitions(tenant_id,branch_id,form_key,name,form_type,version,body,fields_json,requires_signature,scope_type,scope_ids_json,required,valid_for_days,review_required,staff_mode_allowed,guest_mode_allowed,created_by)
+           VALUES($1,$2,$3,$4,$5,COALESCE((SELECT MAX(version)+1 FROM client_form_definitions WHERE tenant_id=$1 AND branch_id=$2 AND form_key=$3),1),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+           RETURNING id,form_key,name,form_type,version,body,fields_json,requires_signature,scope_type,scope_ids_json,required,valid_for_days,review_required,staff_mode_allowed,guest_mode_allowed,active,created_at"#,
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -2135,6 +2230,13 @@ pub async fn create_form_definition(
     .bind(body)
     .bind(fields_json)
     .bind(requires_signature)
+    .bind(scope_type)
+    .bind(scope_ids_json)
+    .bind(required)
+    .bind(valid_for_days)
+    .bind(review_required)
+    .bind(staff_mode_allowed)
+    .bind(guest_mode_allowed)
     .bind(created_by)
     .fetch_one(&mut *tx)
     .await?;
@@ -2186,7 +2288,7 @@ pub async fn list_form_submissions(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Vec<ClientFormSubmissionRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,definition_id,form_key,form_name,form_type,form_version,responses_json,signature_name,signature_sha256,signed_at,submitted_at FROM client_form_submissions WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY submitted_at DESC,id DESC")
+    sqlx::query_as("SELECT submission.id,submission.definition_id,submission.form_key,submission.form_name,submission.form_type,submission.form_version,submission.responses_json,submission.appointment_id,submission.service_id,submission.membership_id,submission.package_id,submission.mode,submission.status,submission.expires_at,submission.finalized_at,submission.corrects_submission_id,submission.correction_reason,submission.version,COALESCE((SELECT review.decision FROM client_form_review_events review WHERE review.tenant_id=submission.tenant_id AND review.branch_id=submission.branch_id AND review.submission_id=submission.id ORDER BY review.created_at DESC,review.id DESC LIMIT 1),CASE WHEN definition.review_required THEN 'pending' ELSE 'not_required' END) AS review_status,COALESCE((SELECT review.note FROM client_form_review_events review WHERE review.tenant_id=submission.tenant_id AND review.branch_id=submission.branch_id AND review.submission_id=submission.id ORDER BY review.created_at DESC,review.id DESC LIMIT 1),'') AS review_note,submission.signature_name,submission.signature_sha256,submission.signed_at,submission.submitted_at FROM client_form_submissions submission JOIN client_form_definitions definition ON definition.id=submission.definition_id AND definition.tenant_id=submission.tenant_id AND definition.branch_id=submission.branch_id WHERE submission.tenant_id=$1 AND submission.branch_id=$2 AND (submission.client_id=$3 OR submission.client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY submission.updated_at DESC,submission.id DESC")
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 
@@ -2203,15 +2305,67 @@ pub async fn create_form_submission(
     submitted_by: &str,
 ) -> Result<Option<ClientFormSubmissionRecord>, sqlx::Error> {
     sqlx::query_as(
-        r#"INSERT INTO client_form_submissions(tenant_id,branch_id,client_id,definition_id,form_key,form_name,form_type,form_version,responses_json,signature_name,signature_sha256,signed_at,submitted_by)
-           SELECT $1,$2,client.id,definition.id,definition.form_key,definition.name,definition.form_type,definition.version,$5,$6,$7,CASE WHEN $6='' THEN NULL ELSE NOW() END,$8
-           FROM clients client JOIN client_form_definitions definition ON definition.tenant_id=client.tenant_id AND definition.branch_id=client.branch_id AND definition.id=$4 AND definition.active=TRUE
-           WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$3
-           RETURNING id,definition_id,form_key,form_name,form_type,form_version,responses_json,signature_name,signature_sha256,signed_at,submitted_at"#,
+        r#"WITH inserted AS (
+             INSERT INTO client_form_submissions(tenant_id,branch_id,client_id,definition_id,form_key,form_name,form_type,form_version,responses_json,status,expires_at,finalized_at,signature_name,signature_sha256,signed_at,submitted_by)
+             SELECT $1,$2,client.id,definition.id,definition.form_key,definition.name,definition.form_type,definition.version,$5,'submitted',CASE WHEN definition.valid_for_days IS NULL THEN NULL ELSE NOW()+MAKE_INTERVAL(days=>definition.valid_for_days) END,NOW(),$6,$7,CASE WHEN $6='' THEN NULL ELSE NOW() END,$8
+             FROM clients client JOIN client_form_definitions definition ON definition.tenant_id=client.tenant_id AND definition.branch_id=client.branch_id AND definition.id=$4 AND definition.active=TRUE
+             WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$3 RETURNING *)
+           SELECT inserted.id,inserted.definition_id,inserted.form_key,inserted.form_name,inserted.form_type,inserted.form_version,inserted.responses_json,inserted.appointment_id,inserted.service_id,inserted.membership_id,inserted.package_id,inserted.mode,inserted.status,inserted.expires_at,inserted.finalized_at,inserted.corrects_submission_id,inserted.correction_reason,inserted.version,CASE WHEN definition.review_required THEN 'pending' ELSE 'not_required' END AS review_status,''::TEXT AS review_note,inserted.signature_name,inserted.signature_sha256,inserted.signed_at,inserted.submitted_at
+           FROM inserted JOIN client_form_definitions definition ON definition.id=inserted.definition_id"#,
     )
     .bind(tenant_id).bind(branch_id).bind(client_id).bind(definition_id)
     .bind(responses_json).bind(signature_name).bind(signature_sha256).bind(submitted_by)
     .fetch_optional(db).await
+}
+
+pub async fn get_form_submission(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    submission_id: &str,
+) -> Result<Option<ClientFormSubmissionRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT submission.id,submission.definition_id,submission.form_key,submission.form_name,submission.form_type,submission.form_version,submission.responses_json,submission.appointment_id,submission.service_id,submission.membership_id,submission.package_id,submission.mode,submission.status,submission.expires_at,submission.finalized_at,submission.corrects_submission_id,submission.correction_reason,submission.version,COALESCE((SELECT review.decision FROM client_form_review_events review WHERE review.tenant_id=submission.tenant_id AND review.branch_id=submission.branch_id AND review.submission_id=submission.id ORDER BY review.created_at DESC,review.id DESC LIMIT 1),CASE WHEN definition.review_required THEN 'pending' ELSE 'not_required' END) AS review_status,COALESCE((SELECT review.note FROM client_form_review_events review WHERE review.tenant_id=submission.tenant_id AND review.branch_id=submission.branch_id AND review.submission_id=submission.id ORDER BY review.created_at DESC,review.id DESC LIMIT 1),'') AS review_note,submission.signature_name,submission.signature_sha256,submission.signed_at,submission.submitted_at FROM client_form_submissions submission JOIN client_form_definitions definition ON definition.id=submission.definition_id AND definition.tenant_id=submission.tenant_id AND definition.branch_id=submission.branch_id WHERE submission.tenant_id=$1 AND submission.branch_id=$2 AND submission.client_id=$3 AND submission.id=$4")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(submission_id).fetch_optional(db).await
+}
+
+pub async fn save_staff_form_submission(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    input: StaffFormSubmissionWrite<'_>,
+) -> Result<Option<ClientFormSubmissionRecord>, sqlx::Error> {
+    let finalized = input.status == "submitted";
+    let saved_id = if input.submission_id.is_empty() {
+        sqlx::query_scalar::<_, String>(r#"INSERT INTO client_form_submissions(tenant_id,branch_id,client_id,definition_id,form_key,form_name,form_type,form_version,responses_json,appointment_id,service_id,membership_id,package_id,mode,status,expires_at,finalized_at,corrects_submission_id,correction_reason,signature_name,signature_sha256,signed_at,submitted_by)
+          SELECT $1,$2,client.id,definition.id,definition.form_key,definition.name,definition.form_type,definition.version,$5,NULLIF($6,''),$7,$8,$9,$10,$11,CASE WHEN $12 AND definition.valid_for_days IS NOT NULL THEN NOW()+MAKE_INTERVAL(days=>definition.valid_for_days) END,CASE WHEN $12 THEN NOW() END,NULLIF($13,''),$14,$15,$16,CASE WHEN $15='' THEN NULL ELSE NOW() END,$17
+          FROM clients client JOIN client_form_definitions definition ON definition.tenant_id=client.tenant_id AND definition.branch_id=client.branch_id AND definition.id=$4 AND definition.active=TRUE
+          WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$3 AND ($13='' OR EXISTS(SELECT 1 FROM client_form_submissions prior WHERE prior.tenant_id=$1 AND prior.branch_id=$2 AND prior.client_id=$3 AND prior.id=$13 AND prior.status='submitted')) RETURNING id"#)
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(input.definition_id).bind(input.responses_json).bind(input.appointment_id).bind(input.service_id).bind(input.membership_id).bind(input.package_id).bind(input.mode).bind(input.status).bind(finalized).bind(input.corrects_submission_id).bind(input.correction_reason).bind(input.signature_name).bind(input.signature_sha256).bind(input.actor).fetch_optional(db).await?
+    } else {
+        sqlx::query_scalar::<_, String>(r#"UPDATE client_form_submissions submission SET responses_json=$6,appointment_id=NULLIF($7,''),service_id=$8,membership_id=$9,package_id=$10,mode=$11,status=$12,expires_at=CASE WHEN $13 AND definition.valid_for_days IS NOT NULL THEN NOW()+MAKE_INTERVAL(days=>definition.valid_for_days) END,finalized_at=CASE WHEN $13 THEN NOW() END,correction_reason=$14,signature_name=$15,signature_sha256=$16,signed_at=CASE WHEN $15='' THEN NULL ELSE NOW() END,version=submission.version+1,updated_at=NOW()
+          FROM client_form_definitions definition WHERE submission.tenant_id=$1 AND submission.branch_id=$2 AND submission.client_id=$3 AND submission.id=$4 AND submission.definition_id=$5 AND submission.definition_id=definition.id AND submission.status='draft' AND submission.version=$17 AND submission.submitted_by=$18 RETURNING submission.id"#)
+            .bind(tenant_id).bind(branch_id).bind(client_id).bind(input.submission_id).bind(input.definition_id).bind(input.responses_json).bind(input.appointment_id).bind(input.service_id).bind(input.membership_id).bind(input.package_id).bind(input.mode).bind(input.status).bind(finalized).bind(input.correction_reason).bind(input.signature_name).bind(input.signature_sha256).bind(input.expected_version).bind(input.actor).fetch_optional(db).await?
+    };
+    match saved_id {
+        Some(id) => get_form_submission(db, tenant_id, branch_id, client_id, &id).await,
+        None => Ok(None),
+    }
+}
+
+pub async fn create_form_review_event(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    submission_id: &str,
+    decision: &str,
+    note: &str,
+    actor: &str,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar("INSERT INTO client_form_review_events(tenant_id,branch_id,client_id,submission_id,decision,note,reviewed_by) SELECT $1,$2,submission.client_id,submission.id,$5,$6,$7 FROM client_form_submissions submission JOIN client_form_definitions definition ON definition.id=submission.definition_id AND definition.tenant_id=submission.tenant_id AND definition.branch_id=submission.branch_id WHERE submission.tenant_id=$1 AND submission.branch_id=$2 AND submission.client_id=$3 AND submission.id=$4 AND submission.status='submitted' AND definition.review_required=TRUE RETURNING JSONB_BUILD_OBJECT('id',id,'submissionId',submission_id,'decision',decision,'note',note,'reviewedBy',reviewed_by,'createdAt',created_at)")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(submission_id).bind(decision).bind(note).bind(actor).fetch_optional(db).await
 }
 
 pub async fn list_treatment_photos(
@@ -2220,7 +2374,7 @@ pub async fn list_treatment_photos(
     branch_id: &str,
     client_id: &str,
 ) -> Result<Vec<ClientTreatmentPhotoRecord>, sqlx::Error> {
-    sqlx::query_as("SELECT id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at FROM client_treatment_photos WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY created_at DESC,id DESC")
+    sqlx::query_as("SELECT id,appointment_id,service_id,caption,file_name,content_type,byte_size,sha256,photo_type,consent_event_id,scan_status,scanned_at,created_at FROM client_treatment_photos WHERE tenant_id=$1 AND branch_id=$2 AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)) ORDER BY created_at DESC,id DESC")
         .bind(tenant_id).bind(branch_id).bind(client_id).fetch_all(db).await
 }
 
@@ -2231,23 +2385,26 @@ pub async fn save_treatment_photo(
     branch_id: &str,
     client_id: &str,
     appointment_id: Option<&str>,
+    service_id: &str,
     caption: &str,
     file_name: &str,
     content_type: &str,
     sha256: &str,
     photo_type: &str,
+    consent_event_id: Option<&str>,
     content: Vec<u8>,
     uploaded_by: &str,
 ) -> Result<Option<ClientTreatmentPhotoRecord>, sqlx::Error> {
     sqlx::query_as(
-        r#"INSERT INTO client_treatment_photos(tenant_id,branch_id,client_id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,content,uploaded_by)
-           SELECT $1,$2,client.id,$4,$5,$6,$7,$8,$9,$10,$11,$12 FROM clients client
+        r#"INSERT INTO client_treatment_photos(tenant_id,branch_id,client_id,appointment_id,service_id,caption,file_name,content_type,byte_size,sha256,photo_type,consent_event_id,content,uploaded_by)
+           SELECT $1,$2,client.id,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14 FROM clients client
            WHERE client.tenant_id=$1 AND client.branch_id=$2 AND client.id=$3
              AND ($4::TEXT IS NULL OR EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND id=$4))
-           RETURNING id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at"#,
+             AND ($5='' OR EXISTS(SELECT 1 FROM appointments appointment WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.client_id=$3 AND appointment.id=$4 AND appointment.service_ids_json ? $5))
+           RETURNING id,appointment_id,service_id,caption,file_name,content_type,byte_size,sha256,photo_type,consent_event_id,scan_status,scanned_at,created_at"#,
     )
-    .bind(tenant_id).bind(branch_id).bind(client_id).bind(appointment_id).bind(caption)
-    .bind(file_name).bind(content_type).bind(content.len() as i32).bind(sha256).bind(photo_type).bind(content).bind(uploaded_by)
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(appointment_id).bind(service_id).bind(caption)
+    .bind(file_name).bind(content_type).bind(content.len() as i32).bind(sha256).bind(photo_type).bind(consent_event_id).bind(content).bind(uploaded_by)
     .fetch_optional(db).await
 }
 
@@ -2275,10 +2432,33 @@ pub async fn update_treatment_photo(
         r#"UPDATE client_treatment_photos SET caption=COALESCE($5,caption),photo_type=COALESCE($6,photo_type)
            WHERE tenant_id=$1 AND branch_id=$2 AND id=$4
              AND (client_id=$3 OR client_id IN (SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3))
-           RETURNING id,appointment_id,caption,file_name,content_type,byte_size,sha256,photo_type,created_at"#,
+           RETURNING id,appointment_id,service_id,caption,file_name,content_type,byte_size,sha256,photo_type,consent_event_id,scan_status,scanned_at,created_at"#,
     )
     .bind(tenant_id).bind(branch_id).bind(client_id).bind(photo_id).bind(caption).bind(photo_type)
     .fetch_optional(db).await
+}
+
+pub async fn record_photo_consent(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    opted_in: bool,
+    reason: &str,
+    actor: &str,
+) -> Result<Option<ClientConsentEventRecord>, sqlx::Error> {
+    sqlx::query_as("INSERT INTO client_consent_events(tenant_id,branch_id,client_id,channel,opted_in,source,reason,recorded_by) SELECT $1,$2,id,'photos',$4,'staff-app',$5,$6 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING id,channel,opted_in,source,reason,recorded_by,recorded_at")
+        .bind(tenant_id).bind(branch_id).bind(client_id).bind(opted_in).bind(reason).bind(actor).fetch_optional(db).await
+}
+
+pub async fn latest_photo_consent(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Option<ClientConsentEventRecord>, sqlx::Error> {
+    sqlx::query_as("SELECT id,channel,opted_in,source,reason,recorded_by,recorded_at FROM client_consent_events WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3 AND channel='photos' ORDER BY recorded_at DESC,id DESC LIMIT 1")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(db).await
 }
 
 pub async fn delete_treatment_photo(
@@ -2540,6 +2720,212 @@ pub async fn merge_clients(
     .await?;
     tx.commit().await?;
     Ok(true)
+}
+
+pub async fn list_merge_history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    target_client_id: &str,
+) -> Result<Vec<ClientMergeHistoryRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT history.id,history.source_client_id,
+                  BTRIM(CONCAT_WS(' ',history.source_snapshot->>'first_name',history.source_snapshot->>'last_name')) AS source_client_name,
+                  history.target_client_id,history.merged_by,history.merged_at,
+                  history.reversed_by,history.reversed_at,history.reversal_reason
+             FROM client_merge_history history
+            WHERE history.tenant_id=$1 AND history.branch_id=$2 AND history.target_client_id=$3
+            ORDER BY history.merged_at DESC,history.id DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(target_client_id)
+    .fetch_all(db)
+    .await
+}
+
+pub async fn reverse_client_merge(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    target_client_id: &str,
+    source_client_id: &str,
+    reason: &str,
+    actor: &str,
+) -> Result<bool, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let history_id = sqlx::query_scalar::<_, String>(
+        r#"SELECT id FROM client_merge_history
+            WHERE tenant_id=$1 AND branch_id=$2 AND source_client_id=$3
+              AND target_client_id=$4 AND reversed_at IS NULL
+            FOR UPDATE"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(source_client_id)
+    .bind(target_client_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(history_id) = history_id else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let restored = sqlx::query(
+        "UPDATE clients SET active=TRUE,merged_into_client_id=NULL,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=FALSE AND merged_into_client_id=$4",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(source_client_id)
+    .bind(target_client_id)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    if restored != 1 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    sqlx::query("UPDATE client_merge_history SET reversed_by=$5,reversed_at=NOW(),reversal_reason=$6 WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND target_client_id=$4")
+        .bind(tenant_id).bind(branch_id).bind(&history_id).bind(target_client_id).bind(actor).bind(reason)
+        .execute(&mut *tx).await?;
+    record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        target_client_id,
+        "client.merge.reversed",
+        actor,
+        serde_json::json!({"sourceClientId":source_client_id,"reason":reason}),
+    )
+    .await?;
+    record_audit_tx(
+        &mut tx,
+        tenant_id,
+        branch_id,
+        source_client_id,
+        "client.merge.restored",
+        actor,
+        serde_json::json!({"targetClientId":target_client_id,"reason":reason}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+pub async fn get_profile_360(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Option<ClientProfile360Record>, sqlx::Error> {
+    sqlx::query_as("SELECT gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,version,updated_at FROM client_profile_360 WHERE tenant_id=$1 AND branch_id=$2 AND client_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(client_id).fetch_optional(db).await
+}
+
+pub async fn cross_location_visits(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    authorized_branch_ids: &[String],
+) -> Result<Vec<ClientCrossLocationVisitRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT appointment.branch_id,branch.name AS branch_name,appointment.client_id,
+                  appointment.id AS appointment_id,appointment.start_at,appointment.status,
+                  COALESCE((SELECT STRING_AGG(service.name, ', ' ORDER BY service.name)
+                    FROM services service WHERE service.tenant_id=appointment.tenant_id
+                     AND service.branch_id=appointment.branch_id
+                     AND service.id IN (SELECT JSONB_ARRAY_ELEMENTS_TEXT(COALESCE(NULLIF(appointment.service_ids_json,''),'[]')::JSONB))),'') AS service_names
+             FROM customer_account_clients selected_link
+             JOIN customer_account_clients linked
+               ON linked.tenant_id=selected_link.tenant_id AND linked.account_id=selected_link.account_id
+             JOIN appointments appointment
+               ON appointment.tenant_id=linked.tenant_id AND appointment.branch_id=linked.branch_id
+              AND appointment.client_id=linked.client_id
+             JOIN branches branch ON branch.tenant_id::TEXT=appointment.tenant_id
+              AND COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)=appointment.branch_id
+            WHERE selected_link.tenant_id=$1 AND selected_link.branch_id=$2 AND selected_link.client_id=$3
+              AND appointment.branch_id=ANY($4) AND appointment.branch_id<>$2
+            ORDER BY appointment.start_at DESC,appointment.id DESC LIMIT 200"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(authorized_branch_ids)
+    .fetch_all(db).await
+}
+
+pub async fn financial_exposure(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH scope_ids AS (SELECT $3::TEXT id UNION ALL SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)
+           SELECT JSONB_BUILD_OBJECT(
+             'refundTotalPaise',COALESCE((SELECT SUM(refund.amount_paise) FROM pos_invoice_refunds refund JOIN pos_sales sale ON sale.tenant_id=refund.tenant_id AND sale.branch_id=refund.branch_id AND sale.id=refund.sale_id WHERE refund.tenant_id=$1 AND refund.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),0),
+             'creditNoteTotalPaise',COALESCE((SELECT SUM(note.amount_paise) FROM pos_credit_notes note JOIN pos_sales sale ON sale.tenant_id=note.tenant_id AND sale.branch_id=note.branch_id AND sale.id=note.sale_id WHERE note.tenant_id=$1 AND note.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),0),
+             'chargebackTotalPaise',COALESCE((SELECT SUM(dispute.amount_paise) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids) AND dispute.status IN ('open','under_review','lost')),0),
+             'openChargebacks',COALESCE((SELECT COUNT(*) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids) AND dispute.status IN ('open','under_review')),0),
+             'refunds',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',refund.id,'saleId',refund.sale_id,'amountPaise',refund.amount_paise,'reason',refund.reason,'createdAt',refund.created_at) ORDER BY refund.created_at DESC) FROM pos_invoice_refunds refund JOIN pos_sales sale ON sale.tenant_id=refund.tenant_id AND sale.branch_id=refund.branch_id AND sale.id=refund.sale_id WHERE refund.tenant_id=$1 AND refund.branch_id=$2 AND sale.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB),
+             'chargebacks',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',dispute.id,'saleId',dispute.sale_id,'amountPaise',dispute.amount_paise,'reason',dispute.reason,'status',dispute.status,'openedAt',dispute.opened_at) ORDER BY dispute.opened_at DESC) FROM payment_disputes dispute WHERE dispute.tenant_id=$1 AND dispute.branch_id=$2 AND dispute.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB)
+           )"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(db).await
+}
+
+pub async fn client_attribution(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"WITH scope_ids AS (SELECT $3::TEXT id UNION ALL SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND merged_into_client_id=$3)
+           SELECT JSONB_BUILD_OBJECT(
+             'leads',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('id',lead.id,'source',lead.source,'stage',lead.stage,'qualificationStatus',lead.qualification_status,'convertedAppointmentId',lead.converted_appointment_id,'createdAt',lead.created_at) ORDER BY lead.created_at DESC) FROM marketing_leads lead WHERE lead.tenant_id=$1 AND lead.branch_id=$2 AND lead.client_id IN (SELECT id FROM scope_ids)),'[]'::JSONB),
+             'bookingSources',COALESCE((SELECT JSONB_AGG(JSONB_BUILD_OBJECT('source',source,'appointments',appointments,'firstSeenAt',first_seen_at,'lastSeenAt',last_seen_at) ORDER BY last_seen_at DESC) FROM (SELECT NULLIF(appointment.source,'') source,COUNT(*)::BIGINT appointments,MIN(appointment.created_at) first_seen_at,MAX(appointment.created_at) last_seen_at FROM appointments appointment WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.client_id IN (SELECT id FROM scope_ids) AND NULLIF(appointment.source,'') IS NOT NULL GROUP BY appointment.source) sources),'[]'::JSONB)
+           )"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).fetch_one(db).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_profile_360(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    client_id: &str,
+    gender: &str,
+    address: &str,
+    city: &str,
+    postal_code: &str,
+    preferred_language: &str,
+    occupation: &str,
+    marketing_source: &str,
+    source_detail: &str,
+    expected_version: Option<i32>,
+    actor: &str,
+) -> Result<Option<ClientProfile360Record>, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as(
+        r#"INSERT INTO client_profile_360(tenant_id,branch_id,client_id,gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,updated_by)
+           SELECT $1,$2,id,$4,$5,$6,$7,$8,$9,$10,$11,$13 FROM clients
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND merged_into_client_id IS NULL
+           ON CONFLICT(tenant_id,branch_id,client_id) DO UPDATE SET
+             gender=EXCLUDED.gender,address=EXCLUDED.address,city=EXCLUDED.city,postal_code=EXCLUDED.postal_code,
+             preferred_language=EXCLUDED.preferred_language,occupation=EXCLUDED.occupation,
+             marketing_source=EXCLUDED.marketing_source,source_detail=EXCLUDED.source_detail,
+             version=client_profile_360.version+1,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+           WHERE $12::INTEGER IS NOT NULL AND client_profile_360.version=$12
+           RETURNING gender,address,city,postal_code,preferred_language,occupation,marketing_source,source_detail,version,updated_at"#,
+    )
+    .bind(tenant_id).bind(branch_id).bind(client_id).bind(gender).bind(address).bind(city)
+    .bind(postal_code).bind(preferred_language).bind(occupation).bind(marketing_source)
+    .bind(source_detail).bind(expected_version).bind(actor).fetch_optional(&mut *tx).await?;
+    if row.is_some() {
+        record_audit_tx(&mut tx, tenant_id, branch_id, client_id, "client.profile_360.updated", actor,
+            serde_json::json!({"version":row.as_ref().map(|item: &ClientProfile360Record| item.version)})).await?;
+    }
+    tx.commit().await?;
+    Ok(row)
 }
 
 async fn record_audit_tx(
@@ -2833,13 +3219,62 @@ mod tests {
     use super::{
         automation_candidates, branch_return_tracker, bulk_import, create_form_definition,
         create_form_submission, create_note, delete_treatment_photo, get_clinical_profile,
-        get_treatment_photo, list_communications, list_form_definitions, list_notes,
-        memory_relationships, save_clinical_profile, save_treatment_photo, update_treatment_photo,
+        get_treatment_photo, list_communications, list_form_definitions, list_merge_history,
+        list_notes, memory_relationships, merge_clients, reverse_client_merge,
+        save_clinical_profile, save_treatment_photo, update_treatment_photo,
     };
     use chrono::{DateTime, Utc};
     use serde_json::json;
     use sqlx::PgPool;
     use std::time::{Duration, Instant};
+
+    #[sqlx::test(migrations = false)]
+    async fn client_merge_is_reversible_without_moving_history(pool: PgPool) {
+        for statement in [
+            "CREATE TABLE clients(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,first_name TEXT NOT NULL,last_name TEXT NOT NULL DEFAULT '',active BOOLEAN NOT NULL DEFAULT TRUE,merged_into_client_id TEXT,updated_at TIMESTAMPTZ)",
+            "CREATE TABLE client_merge_history(id TEXT PRIMARY KEY DEFAULT 'merge-1',tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,source_client_id TEXT NOT NULL,target_client_id TEXT NOT NULL,source_snapshot JSONB NOT NULL,merged_by TEXT NOT NULL,merged_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),reversed_by TEXT,reversed_at TIMESTAMPTZ,reversal_reason TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE client_audit_events(id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,tenant_id TEXT NOT NULL,branch_id TEXT NOT NULL,client_id TEXT NOT NULL,event_type TEXT NOT NULL,actor_user_id TEXT NOT NULL,details_json JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+            "INSERT INTO clients(id,tenant_id,branch_id,first_name) VALUES('source','tenant','branch','Source'),('target','tenant','branch','Target')",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        assert!(
+            merge_clients(&pool, "tenant", "branch", "source", "target", "maker")
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            list_merge_history(&pool, "tenant", "branch", "target")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(reverse_client_merge(
+            &pool,
+            "tenant",
+            "branch",
+            "target",
+            "source",
+            "verified duplicate was incorrect",
+            "checker"
+        )
+        .await
+        .unwrap());
+        let state: (bool, Option<String>) =
+            sqlx::query_as("SELECT active,merged_into_client_id FROM clients WHERE id='source'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(state, (true, None));
+        let reversed: bool = sqlx::query_scalar(
+            "SELECT reversed_at IS NOT NULL FROM client_merge_history WHERE id='merge-1'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(reversed);
+    }
 
     #[sqlx::test(migrations = false)]
     async fn memory_graph_is_bounded_with_large_client_scope(pool: PgPool) {
@@ -3059,8 +3494,10 @@ mod tests {
             "tenant-1",
             "branch-1",
             "client-1",
+            None,
             "preference",
             "Prefers quiet appointments",
+            "management",
             "owner-1",
         )
         .await
@@ -3105,6 +3542,7 @@ mod tests {
 
         let fields =
             json!([{"key":"all_clear","label":"All clear","type":"boolean","required":true}]);
+        let scope_ids = json!([]);
         let first = create_form_definition(
             &pool,
             "tenant-1",
@@ -3114,6 +3552,13 @@ mod tests {
             "consent",
             "",
             &fields,
+            true,
+            "guest",
+            &scope_ids,
+            false,
+            None,
+            false,
+            true,
             true,
             "owner-1",
         )
@@ -3128,6 +3573,13 @@ mod tests {
             "consent",
             "Updated terms",
             &fields,
+            true,
+            "guest",
+            &scope_ids,
+            false,
+            None,
+            false,
+            true,
             true,
             "owner-1",
         )
@@ -3185,11 +3637,13 @@ mod tests {
             "branch-1",
             "client-1",
             None,
+            "",
             "Before service",
             "before.png",
             "image/png",
             "photo-hash",
             "before",
+            None,
             vec![1, 2, 3],
             "owner-1",
         )

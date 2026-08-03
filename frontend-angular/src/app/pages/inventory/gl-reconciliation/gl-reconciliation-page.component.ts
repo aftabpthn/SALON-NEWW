@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
+import { AuthService } from '../../../core/services/auth.service';
 
 type Tab = 'summary' | 'exceptions' | 'audit';
 type GlBranchRow = {
@@ -40,6 +41,7 @@ type GlReconciliation = {
 export class GlReconciliationPageComponent implements OnInit {
   private readonly language = inject(LanguageService);
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
 
   readonly tabs: Array<{ id: Tab; label: string }> = [
     { id: 'summary', label: 'Branch Summary' },
@@ -52,6 +54,7 @@ export class GlReconciliationPageComponent implements OnInit {
   loading = true;
   error = '';
   result: GlReconciliation | null = null;
+  get canExportReports() { return this.auth.hasAccess(['owner', 'admin'], ['reports.export']); }
 
   ngOnInit() {
     void this.runReconciliation();
@@ -83,7 +86,7 @@ export class GlReconciliationPageComponent implements OnInit {
   }
 
   exportCsv() {
-    if (!this.result) return;
+    if (!this.result || !this.canExportReports) return;
     const rows = [
       ['As of', 'Branch', 'Products', 'Inventory value paise', 'GL stock value paise', 'Difference paise', 'Missing cost products', 'Status'].map((value) => this.language.textValue(value)),
       ...this.result.rows.map((row) => [
@@ -105,7 +108,7 @@ export class GlReconciliationPageComponent implements OnInit {
   }
 
   exportEvidence() {
-    if (!this.result) return;
+    if (!this.result || !this.canExportReports) return;
     this.download(
       JSON.stringify(this.result, null, 2),
       `inventory-gl-evidence-${this.result.asOfDate}.json`,

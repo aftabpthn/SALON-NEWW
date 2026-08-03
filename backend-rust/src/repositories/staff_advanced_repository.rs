@@ -107,6 +107,8 @@ pub struct StaffTaskRecord {
     pub version: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +126,8 @@ pub struct StaffTaskInput {
     /// task it already created instead of writing a second one. Tasks created
     /// from the staff screen leave this `None`.
     pub origin_action_draft_id: Option<String>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -735,7 +739,7 @@ pub async fn list_tasks(
         SELECT t.id,t.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
           t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
-          t.completed_at,t.version,t.created_at,t.updated_at
+          t.completed_at,t.version,t.created_at,t.updated_at,t.client_id,t.appointment_id
         FROM staff_tasks t
         LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
         WHERE t.tenant_id=$1 AND t.branch_id=$2
@@ -765,13 +769,15 @@ pub async fn create_task(
         WITH inserted AS (
           INSERT INTO staff_tasks(
             tenant_id,branch_id,staff_id,title,description,task_type,priority,due_at,status,
-            assigned_by,completed_at,origin_action_draft_id
+            assigned_by,completed_at,origin_action_draft_id,client_id,appointment_id
           )
           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                 CASE WHEN $9='completed' THEN NOW() ELSE NULL END,$11
-          WHERE $3::TEXT IS NULL OR EXISTS(
+                 CASE WHEN $9='completed' THEN NOW() ELSE NULL END,$11,$12,$13
+          WHERE ($3::TEXT IS NULL OR EXISTS(
             SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
-          )
+          ))
+          AND ($12::TEXT IS NULL OR EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$12))
+          AND ($13::TEXT IS NULL OR EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$13))
           -- A task already written for this draft is the same task, not a new
           -- one: a retry after a crash must not duplicate it.
           ON CONFLICT (origin_action_draft_id) WHERE origin_action_draft_id IS NOT NULL
@@ -781,7 +787,7 @@ pub async fn create_task(
         SELECT t.id,t.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
           t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
-          t.completed_at,t.version,t.created_at,t.updated_at
+          t.completed_at,t.version,t.created_at,t.updated_at,t.client_id,t.appointment_id
         FROM inserted t
         LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
         "#,
@@ -797,6 +803,8 @@ pub async fn create_task(
     .bind(&input.status)
     .bind(actor_user_id)
     .bind(&input.origin_action_draft_id)
+    .bind(&input.client_id)
+    .bind(&input.appointment_id)
     .fetch_optional(db)
     .await
 }
@@ -816,7 +824,7 @@ pub async fn task_by_action_origin(
         SELECT t.id,t.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
           t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
-          t.completed_at,t.version,t.created_at,t.updated_at
+          t.completed_at,t.version,t.created_at,t.updated_at,t.client_id,t.appointment_id
         FROM staff_tasks t
         LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
         WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.origin_action_draft_id=$3
@@ -944,17 +952,19 @@ pub async fn update_task(
           UPDATE staff_tasks SET
             staff_id=$5,title=$6,description=$7,task_type=$8,priority=$9,due_at=$10,
             status=$11,completed_at=CASE WHEN $11='completed' THEN COALESCE(completed_at,NOW()) ELSE NULL END,
-            version=version+1,updated_at=NOW()
+            client_id=$12,appointment_id=$13,version=version+1,updated_at=NOW()
           WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND version=$4
             AND ($5::TEXT IS NULL OR EXISTS(
               SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$5
             ))
+            AND ($12::TEXT IS NULL OR EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$12))
+            AND ($13::TEXT IS NULL OR EXISTS(SELECT 1 FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND id=$13))
           RETURNING *
         )
         SELECT t.id,t.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
           t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
-          t.completed_at,t.version,t.created_at,t.updated_at
+          t.completed_at,t.version,t.created_at,t.updated_at,t.client_id,t.appointment_id
         FROM updated t
         LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
         "#,
@@ -970,6 +980,8 @@ pub async fn update_task(
     .bind(&input.priority)
     .bind(input.due_at)
     .bind(&input.status)
+    .bind(&input.client_id)
+    .bind(&input.appointment_id)
     .fetch_optional(db)
     .await
 }
@@ -1656,6 +1668,68 @@ pub async fn mobile_device_auth(
     .await
 }
 
+pub async fn record_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    user_id: &str,
+    device_uid: &str,
+    platform: &str,
+    app_version: &str,
+    event_type: &str,
+    network_type: &str,
+    online: bool,
+    metadata: &Value,
+    occurred_at: DateTime<Utc>,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO staff_mobile_device_telemetry
+           (tenant_id,branch_id,staff_id,user_id,device_uid,platform,app_version,event_type,network_type,online,metadata_json,occurred_at)
+           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
+           WHERE EXISTS(SELECT 1 FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND active=TRUE)
+           RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(user_id)
+    .bind(device_uid)
+    .bind(platform)
+    .bind(app_version)
+    .bind(event_type)
+    .bind(network_type)
+    .bind(online)
+    .bind(metadata)
+    .bind(occurred_at)
+    .fetch_one(db)
+    .await
+}
+
+pub async fn list_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+             'id',telemetry.id,'staffId',telemetry.staff_id,
+             'staffName',COALESCE(NULLIF(staff.appointment_display_name,''),NULLIF(TRIM(CONCAT_WS(' ',staff.first_name,staff.last_name)),''),staff.id),
+             'deviceUid',telemetry.device_uid,'platform',telemetry.platform,'appVersion',telemetry.app_version,
+             'eventType',telemetry.event_type,'networkType',telemetry.network_type,'online',telemetry.online,
+             'metadata',telemetry.metadata_json,'occurredAt',telemetry.occurred_at
+           )
+           FROM staff_mobile_device_telemetry telemetry
+           JOIN staff ON staff.tenant_id=telemetry.tenant_id AND staff.branch_id=telemetry.branch_id AND staff.id=telemetry.staff_id
+           WHERE telemetry.tenant_id=$1 AND telemetry.branch_id=$2
+           ORDER BY telemetry.occurred_at DESC LIMIT 500"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
 pub async fn save_mobile_push_subscription(
     db: &PgPool,
     tenant_id: &str,
@@ -1746,7 +1820,7 @@ pub async fn mobile_tasks(
         SELECT t.id,t.staff_id,
           COALESCE(NULLIF(s.appointment_display_name,''),TRIM(s.first_name || ' ' || s.last_name),'') AS staff_name,
           t.title,t.description,t.task_type,t.priority,t.due_at,t.status,t.assigned_by,
-          t.completed_at,t.version,t.created_at,t.updated_at
+          t.completed_at,t.version,t.created_at,t.updated_at,t.client_id,t.appointment_id
         FROM staff_tasks t
         LEFT JOIN staff s ON s.id=t.staff_id AND s.tenant_id=t.tenant_id AND s.branch_id=t.branch_id
         WHERE t.tenant_id=$1 AND t.branch_id=$2 AND t.staff_id=$3

@@ -18,6 +18,11 @@ interface SecurityPolicy {
   auditRetentionDays: number;
   auditPageSize: number;
   sessionRevocationEnabled: boolean;
+  staffAppInactivityMinutes: number;
+  staffAppGeofenceMode: 'full_access' | 'read_only' | 'blocked';
+  staffAppGeofenceRadiusMeters: number;
+  staffAppGeofenceExemptRoles: string[];
+  staffContactVerificationRequired: boolean;
 }
 
 interface SecurityPolicyView {
@@ -191,10 +196,90 @@ interface PrivacyRequest {
   requestType: string;
   summary: string;
   status: string;
+  approvalStatus: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  executionStatus: string;
+  executionSummaryJson: Record<string, unknown>;
   resolutionNote: string;
   resolvedBy?: string;
   resolvedAt?: string;
   createdAt: string;
+}
+
+interface RetentionPolicy {
+  id: string;
+  recordClass: string;
+  retentionDays: number;
+  disposition: string;
+  legalBasis: string;
+  ownerUserId: string;
+  active: boolean;
+  version: number;
+  updatedAt: string;
+}
+
+interface LegalHold {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  reason: string;
+  status: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+interface PiiExport {
+  id: string;
+  subjectType: string;
+  subjectId: string;
+  rowLimit: number;
+  reason: string;
+  status: string;
+  requestedBy: string;
+  approvedBy?: string;
+  approvalNote?: string;
+  expiresAt?: string;
+  downloadedAt?: string;
+  createdAt: string;
+}
+
+interface ComplianceEvidenceItem {
+  id: string;
+  framework: string;
+  controlKey: string;
+  title: string;
+  ownerUserId: string;
+  status: string;
+  evidenceReference: string;
+  independentAssessor: string;
+  validUntil?: string;
+  notes: string;
+  version: number;
+  updatedAt: string;
+}
+
+interface PenTestFinding {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  ownerUserId: string;
+  remediationNote: string;
+  riskAcceptanceReason: string;
+  riskAcceptanceExpiresAt?: string;
+  version: number;
+  updatedAt: string;
+}
+
+interface DataGovernance {
+  retentionPolicies: RetentionPolicy[];
+  legalHolds: LegalHold[];
+  piiExports: PiiExport[];
+  evidenceItems: ComplianceEvidenceItem[];
+  penTestFindings: PenTestFinding[];
+  consentEvidence: { clientEvents: number; activeClientConsents: number; biometricConsents: number };
+  openUnacceptedPenTestFindings: number;
 }
 
 interface DisclosureReport {
@@ -341,9 +426,30 @@ export class SecurityCenterPageComponent implements OnInit {
   playbookDraft = { playbookKey: '', title: '', severity: 'warning', checklistText: '' };
   privacyRequests: PrivacyRequest[] = [];
   privacyDraft = { subjectType: 'client', subjectId: '', requestType: 'access', summary: '' };
+  dataGovernance?: DataGovernance;
+  retentionDraft: { recordClass: string; retentionDays: number | null; disposition: string; legalBasis: string; ownerUserId: string; version: number | null } = {
+    recordClass: '', retentionDays: null, disposition: 'review', legalBasis: '', ownerUserId: '', version: null,
+  };
+  legalHoldDraft = { subjectType: 'client', subjectId: '', reason: '' };
+  piiExportDraft: { subjectId: string; rowLimit: number | null; reason: string; mfaCode: string } = {
+    subjectId: '', rowLimit: null, reason: '', mfaCode: '',
+  };
+  privacyDeletionMfaCode = '';
+  piiDownloadTokens: Record<string, string> = {};
+  piiDownloadMfaCode = '';
+  evidenceDraft = { framework: 'soc2', controlKey: '', title: '', ownerUserId: '', status: 'planned', evidenceReference: '', independentAssessor: '', notes: '', version: null as number | null };
+  penTestDraft = { id: '', title: '', severity: 'high', status: 'open', ownerUserId: '', remediationNote: '', riskAcceptanceReason: '', riskAcceptanceExpiresAt: '', version: null as number | null };
   disclosureReports: DisclosureReport[] = [];
   disclosureDraft = { reporterName: '', reporterContact: '', summary: '', details: '', severity: 'warning' };
   policy?: SecurityPolicy;
+
+  get staffGeofenceExemptRoles(): string {
+    return this.policy?.staffAppGeofenceExemptRoles.join(', ') || '';
+  }
+
+  set staffGeofenceExemptRoles(value: string) {
+    if (this.policy) this.policy.staffAppGeofenceExemptRoles = value.split(',').map((role) => role.trim()).filter(Boolean);
+  }
   mfaStatus?: MfaStatus;
   mfaSetup?: MfaSetup;
   mfaCode = '';
@@ -453,6 +559,7 @@ export class SecurityCenterPageComponent implements OnInit {
       elevations: this.api.get<Envelope<{ elevations: TemporaryElevation[] }>>('security/elevations'),
       playbooks: this.api.get<Envelope<{ playbooks: IncidentPlaybook[] }>>('security/playbooks?status=all'),
       privacyRequests: this.api.get<Envelope<{ requests: PrivacyRequest[] }>>('security/privacy-requests?status=all'),
+      dataGovernance: this.api.get<Envelope<DataGovernance>>('security/data-governance'),
       disclosureReports: this.api.get<Envelope<{ reports: DisclosureReport[] }>>('security/disclosure-reports?status=all'),
       policy: this.api.get<Envelope<SecurityPolicyView>>('security/policy'),
       privileged: this.api.get<Envelope<PrivilegedSessionStatus>>('security/privileged-session'),
@@ -478,6 +585,7 @@ export class SecurityCenterPageComponent implements OnInit {
         this.elevations = this.unwrap(result.elevations).elevations;
         this.playbooks = this.unwrap(result.playbooks).playbooks;
         this.privacyRequests = this.unwrap(result.privacyRequests).requests;
+        this.dataGovernance = this.unwrap(result.dataGovernance);
         this.disclosureReports = this.unwrap(result.disclosureReports).reports;
         this.policy = { ...this.unwrap(result.policy).settings };
         this.privilegedStatus = this.unwrap(result.privileged);
@@ -889,6 +997,182 @@ export class SecurityCenterPageComponent implements OnInit {
     });
   }
 
+  saveRetentionPolicy(): void {
+    const draft = this.retentionDraft;
+    if (!draft.recordClass.trim() || draft.retentionDays === null || !draft.legalBasis.trim() || !draft.ownerUserId.trim() || this.saving) return;
+    this.saving = true;
+    this.api.put<Envelope<RetentionPolicy>>(
+      `security/data-governance/retention-policies/${encodeURIComponent(draft.recordClass.trim())}`,
+      { retentionDays: draft.retentionDays, disposition: draft.disposition, legalBasis: draft.legalBasis.trim(), ownerUserId: draft.ownerUserId.trim(), version: draft.version },
+    ).subscribe({
+      next: () => {
+        this.retentionDraft = { recordClass: '', retentionDays: null, disposition: 'review', legalBasis: '', ownerUserId: '', version: null };
+        this.notice = 'Retention policy saved.';
+        this.saving = false;
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to save retention policy.'); this.saving = false; },
+    });
+  }
+
+  editRetentionPolicy(policy: RetentionPolicy): void {
+    this.retentionDraft = { recordClass: policy.recordClass, retentionDays: policy.retentionDays, disposition: policy.disposition, legalBasis: policy.legalBasis, ownerUserId: policy.ownerUserId, version: policy.version };
+  }
+
+  createLegalHold(): void {
+    const draft = this.legalHoldDraft;
+    if (!draft.subjectId.trim() || !draft.reason.trim() || this.saving) return;
+    this.saving = true;
+    this.api.post<Envelope<LegalHold>>('security/data-governance/legal-holds', {
+      subjectType: draft.subjectType, subjectId: draft.subjectId.trim(), reason: draft.reason.trim(), expiresAt: null,
+    }).subscribe({
+      next: () => {
+        this.legalHoldDraft = { subjectType: 'client', subjectId: '', reason: '' };
+        this.notice = 'Legal hold created.';
+        this.saving = false;
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to create legal hold.'); this.saving = false; },
+    });
+  }
+
+  releaseLegalHold(hold: LegalHold): void {
+    if (!window.confirm('Release this legal hold?')) return;
+    this.api.post<Envelope<LegalHold>>(`security/data-governance/legal-holds/${encodeURIComponent(hold.id)}/release`, {}).subscribe({
+      next: () => { this.notice = 'Legal hold released.'; this.reloadPrivacyDisclosure(); },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to release legal hold.'); },
+    });
+  }
+
+  requestPiiExport(): void {
+    const draft = this.piiExportDraft;
+    if (draft.rowLimit === null || !draft.reason.trim() || !draft.mfaCode.trim() || this.saving) return;
+    this.saving = true;
+    this.api.post<Envelope<PiiExport>>('security/pii-exports', {
+      subjectId: draft.subjectId.trim(), rowLimit: draft.rowLimit, reason: draft.reason.trim(), mfaCode: draft.mfaCode.trim(),
+    }).subscribe({
+      next: () => {
+        this.piiExportDraft = { subjectId: '', rowLimit: null, reason: '', mfaCode: '' };
+        this.notice = 'PII export requested for independent approval.';
+        this.saving = false;
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to request PII export.'); this.saving = false; },
+    });
+  }
+
+  decidePiiExport(item: PiiExport, decision: 'approved' | 'rejected'): void {
+    const note = decision === 'rejected' ? window.prompt('Rejection reason')?.trim() : '';
+    if (decision === 'rejected' && !note) return;
+    this.api.post<Envelope<PiiExport & { downloadToken?: string }>>(
+      `security/pii-exports/${encodeURIComponent(item.id)}/decision`, { decision, note: note || '' },
+    ).subscribe({
+      next: (response) => {
+        const result = this.unwrap(response);
+        if (result.downloadToken) this.piiDownloadTokens[item.id] = result.downloadToken;
+        this.notice = decision === 'approved' ? 'PII export approved. Download token expires in 15 minutes.' : 'PII export rejected.';
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to decide PII export.'); },
+    });
+  }
+
+  downloadPiiExport(item: PiiExport): void {
+    const token = this.piiDownloadTokens[item.id];
+    if (!token || !this.piiDownloadMfaCode.trim()) return;
+    this.api.post<Envelope<Record<string, unknown>>>(`security/pii-exports/${encodeURIComponent(item.id)}/download`, {
+      downloadToken: token, mfaCode: this.piiDownloadMfaCode.trim(),
+    }).subscribe({
+      next: (response) => {
+        const payload = this.unwrap(response);
+        const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `pii-export-${item.id}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        delete this.piiDownloadTokens[item.id];
+        this.piiDownloadMfaCode = '';
+        this.notice = 'PII export downloaded once.';
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to download PII export.'); },
+    });
+  }
+
+  approvePrivacyDeletion(request: PrivacyRequest): void {
+    this.api.post<Envelope<PrivacyRequest>>(`security/privacy-requests/${encodeURIComponent(request.id)}/approve-deletion`, {}).subscribe({
+      next: () => { this.notice = 'Deletion approved.'; this.reloadPrivacyDisclosure(); },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to approve deletion.'); },
+    });
+  }
+
+  executePrivacyDeletion(request: PrivacyRequest): void {
+    if (!this.privacyDeletionMfaCode.trim() || !window.confirm('Execute irreversible customer anonymization and session revocation?')) return;
+    this.api.post<Envelope<Record<string, unknown>>>(`security/privacy-requests/${encodeURIComponent(request.id)}/execute-deletion`, {
+      mfaCode: this.privacyDeletionMfaCode.trim(),
+    }).subscribe({
+      next: () => {
+        this.privacyDeletionMfaCode = '';
+        this.notice = 'Customer deletion executed.';
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to execute customer deletion.'); },
+    });
+  }
+
+  saveComplianceEvidence(): void {
+    const draft = this.evidenceDraft;
+    if (!draft.controlKey.trim() || !draft.title.trim() || !draft.ownerUserId.trim() || this.saving) return;
+    this.saving = true;
+    this.api.put<Envelope<ComplianceEvidenceItem>>(
+      `security/compliance-evidence/${encodeURIComponent(draft.framework)}/${encodeURIComponent(draft.controlKey.trim())}`,
+      { title: draft.title.trim(), ownerUserId: draft.ownerUserId.trim(), status: draft.status, evidenceReference: draft.evidenceReference.trim(), independentAssessor: draft.independentAssessor.trim(), validUntil: null, notes: draft.notes.trim(), version: draft.version },
+    ).subscribe({
+      next: () => {
+        this.evidenceDraft = { framework: 'soc2', controlKey: '', title: '', ownerUserId: '', status: 'planned', evidenceReference: '', independentAssessor: '', notes: '', version: null };
+        this.notice = 'Compliance evidence item saved.';
+        this.saving = false;
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to save compliance evidence.'); this.saving = false; },
+    });
+  }
+
+  editComplianceEvidence(item: ComplianceEvidenceItem): void {
+    this.evidenceDraft = { framework: item.framework, controlKey: item.controlKey, title: item.title, ownerUserId: item.ownerUserId, status: item.status, evidenceReference: item.evidenceReference, independentAssessor: item.independentAssessor, notes: item.notes, version: item.version };
+  }
+
+  savePenTestFinding(): void {
+    const draft = this.penTestDraft;
+    if (!draft.title.trim() || !draft.ownerUserId.trim() || this.saving) return;
+    this.saving = true;
+    const path = draft.id ? `security/pen-test-findings/${encodeURIComponent(draft.id)}` : 'security/pen-test-findings';
+    const request = {
+      title: draft.title.trim(), severity: draft.severity, status: draft.status, ownerUserId: draft.ownerUserId.trim(),
+      remediationNote: draft.remediationNote.trim(), riskAcceptanceReason: draft.riskAcceptanceReason.trim(),
+      riskAcceptanceExpiresAt: draft.riskAcceptanceExpiresAt ? new Date(draft.riskAcceptanceExpiresAt).toISOString() : null, version: draft.version,
+    };
+    const save = draft.id ? this.api.patch<Envelope<PenTestFinding>>(path, request) : this.api.post<Envelope<PenTestFinding>>(path, request);
+    save.subscribe({
+      next: () => {
+        this.penTestDraft = { id: '', title: '', severity: 'high', status: 'open', ownerUserId: '', remediationNote: '', riskAcceptanceReason: '', riskAcceptanceExpiresAt: '', version: null };
+        this.notice = 'Pen-test finding recorded.';
+        this.saving = false;
+        this.reloadPrivacyDisclosure();
+      },
+      error: (error) => { this.errorMessage = this.errorText(error, 'Unable to save pen-test finding.'); this.saving = false; },
+    });
+  }
+
+  editPenTestFinding(item: PenTestFinding): void {
+    this.penTestDraft = {
+      id: item.id, title: item.title, severity: item.severity, status: item.status, ownerUserId: item.ownerUserId,
+      remediationNote: item.remediationNote, riskAcceptanceReason: item.riskAcceptanceReason,
+      riskAcceptanceExpiresAt: item.riskAcceptanceExpiresAt?.slice(0, 16) || '', version: item.version,
+    };
+  }
+
   createDisclosureReport(): void {
     if (!this.disclosureDraft.summary.trim() || this.saving) return;
     this.saving = true;
@@ -1278,10 +1562,12 @@ export class SecurityCenterPageComponent implements OnInit {
   private reloadPrivacyDisclosure(): void {
     forkJoin({
       privacy: this.api.get<Envelope<{ requests: PrivacyRequest[] }>>('security/privacy-requests?status=all'),
+      governance: this.api.get<Envelope<DataGovernance>>('security/data-governance'),
       disclosure: this.api.get<Envelope<{ reports: DisclosureReport[] }>>('security/disclosure-reports?status=all'),
     }).subscribe({
       next: (result) => {
         this.privacyRequests = this.unwrap(result.privacy).requests;
+        this.dataGovernance = this.unwrap(result.governance);
         this.disclosureReports = this.unwrap(result.disclosure).reports;
       },
       error: (error) => { this.errorMessage = this.errorText(error, 'Unable to refresh privacy governance.'); },

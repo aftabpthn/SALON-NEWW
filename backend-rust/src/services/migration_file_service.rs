@@ -2861,6 +2861,50 @@ async fn scan_file_with_clamd(path: &Path) -> Result<(), AppError> {
     parse_clamd_verdict(&response)
 }
 
+pub async fn scan_upload_bytes(bytes: &[u8], scanner_required: bool) -> Result<(), AppError> {
+    let address =
+        std::env::var("CLAMD_ADDRESS").or_else(|_| std::env::var("MIGRATION_CLAMD_ADDRESS"));
+    let address = match address {
+        Ok(address) if !address.trim().is_empty() => address,
+        _ if !scanner_required => return Ok(()),
+        _ => return Err(AppError::internal("malware scanner is not configured")),
+    };
+    let mut stream = timeout(Duration::from_secs(10), TcpStream::connect(address.trim()))
+        .await
+        .map_err(|_| AppError::internal("malware scanner connection timed out"))?
+        .map_err(|_| AppError::internal("malware scanner is unavailable"))?;
+    stream
+        .write_all(b"zINSTREAM\0")
+        .await
+        .map_err(|_| AppError::internal("malware scan could not start"))?;
+    for chunk in bytes.chunks(1024 * 1024) {
+        stream
+            .write_all(&(chunk.len() as u32).to_be_bytes())
+            .await
+            .map_err(|_| AppError::internal("malware scanner disconnected"))?;
+        stream
+            .write_all(chunk)
+            .await
+            .map_err(|_| AppError::internal("malware scanner disconnected"))?;
+    }
+    stream
+        .write_all(&0_u32.to_be_bytes())
+        .await
+        .map_err(|_| AppError::internal("malware scan could not finish"))?;
+    let mut response = Vec::new();
+    let mut reader = BufReader::new(stream.take(4096));
+    timeout(Duration::from_secs(30), reader.read_until(0, &mut response))
+        .await
+        .map_err(|_| AppError::internal("malware scan timed out"))?
+        .map_err(|_| AppError::internal("malware scan result is unavailable"))?;
+    if !response.ends_with(&[0]) {
+        return Err(AppError::internal(
+            "malware scanner returned an incomplete result",
+        ));
+    }
+    parse_clamd_verdict(&response)
+}
+
 fn parse_clamd_verdict(response: &[u8]) -> Result<(), AppError> {
     let verdict = String::from_utf8_lossy(&response);
     if verdict.trim_end_matches(['\0', '\r', '\n']).ends_with("OK") {

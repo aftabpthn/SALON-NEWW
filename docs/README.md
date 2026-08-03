@@ -8,6 +8,8 @@
 - Active docs live directly in `docs/`.
 - Old/imported reference docs live in `docs/archive/` and should only be used when converting old CRM logic.
 
+Endpoint references in this README are catalog entries, not automatic runtime claims. [ROUTE_CATALOG.md](./ROUTE_CATALOG.md) is authoritative: `mounted` is callable in the current Rust router, `future` is a non-callable contract target, `external` requires a provider boundary, and `retired` must not be called.
+
 ## Top 5 Start Docs
 
 - [PRD.md](./PRD.md) — product scope, users, core features, and non-negotiables.
@@ -20,7 +22,9 @@
 - [SECURITY_HARDENING_ROADMAP.md](./SECURITY_HARDENING_ROADMAP.md) — Rust-specific security gap tracker.
 - [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — compact UI tokens referenced by UI/UX guidelines.
 - [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) — current Rust inventory, audit, supplier, backbar, laundry and forecast contracts.
+- [ZENOTI_MASTER_PARITY_REGISTER.md](./ZENOTI_MASTER_PARITY_REGISTER.md) — locked public Zenoti capability index, Aura evidence map, route truth and product-owner gate.
 - [INVENTORY_ZENOTI_PARITY_REGISTER.md](./INVENTORY_ZENOTI_PARITY_REGISTER.md) — permanent Zenoti-to-AuraShine inventory workflow and verification register.
+- [STAFF_APP_ZENOTI_PARITY_REGISTER.md](./STAFF_APP_ZENOTI_PARITY_REGISTER.md) — linked Staff App parity and certification sub-register.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
 - [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.
 
@@ -63,21 +67,20 @@ multi-tenant salon SaaS operations.
 - Customer-facing online booking website with service/staff/slot selection, confirmation, cancellation, rescheduling and payment-ready event tracking.
 - Permission matrix with owner, manager, receptionist, staff, accountant, inventory manager and custom role definitions enforced by RBAC.
 - Audit and compliance ledger for booking creation, bill edits, client deletion, payment changes, discount approval and login history.
-- Testing and quality center with unit/API/form-validation tests, server syntax checks, Angular error boundary and demo seed data.
+- Testing and quality center with unit/API/form-validation tests, server syntax checks and Angular error boundaries. Production code never depends on demo data.
 - Deployment readiness with Docker, Compose, `.env.example`, production static serving, PostgreSQL/Redis integration, and deployment guide.
 
 ## Run
 
-```bash
-cd backend-rust
-cargo run
-
-cd ../frontend-angular
-npm start
+```powershell
+.\backend-rust\scripts\restart-backend-dev.ps1 -Port 8082
+cd frontend-angular
+npm start -- --host 127.0.0.1 --port 4200
 ```
 
 - Angular app: http://127.0.0.1:4200
-- API: http://127.0.0.1:8080/api/health
+- API: http://127.0.0.1:8082/health
+- Proxied API: http://127.0.0.1:4200/api/v1/health
 
 ## Build
 
@@ -308,18 +311,24 @@ POST   /api/security/backups
 
 Security data persists in `security_audit_logs`, `security_activity_events`, `security_sessions`, `security_permissions`, `encrypted_secrets` and `security_backups`. API requests receive protection headers and rate-limit headers, and activity events are tracked without blocking business requests.
 
-Offline-first endpoints:
+Offline and device-delivery endpoints:
 
 ```text
-GET    /api/offline/summary
-POST   /api/offline/cache-snapshots
-POST   /api/offline/sync-items
-POST   /api/offline/sync
-POST   /api/offline/appointments
-POST   /api/offline/billing
+POST   /api/v1/pos/offline-checkout
+GET    /api/v1/pos/offline-checkout/:operationId
+POST   /api/v1/staff/mobile/sync
+GET    /api/v1/staff/mobile/conflicts
+POST   /api/v1/staff/mobile/conflicts/:id/resolve
+POST   /api/v1/staff/self/mobile/telemetry
+GET    /api/v1/staff/mobile/telemetry
 ```
 
-Offline data persists in `offline_cache_snapshots` and `offline_sync_items`. Offline appointments run through the smart booking conflict engine, while offline billing runs through POS checkout so invoices, payments, client history and inventory deduction remain consistent.
+Staff App snapshots and allowlisted mutations use its encrypted, user-bound
+device store and server idempotency/conflict contracts. POS offline checkout is
+restricted to unpaid service/product invoices; payments and customer-liability
+mutations remain online-only. Device telemetry persists in
+`staff_mobile_device_telemetry`. See
+[HARDWARE_SUPPORT_MATRIX.md](./HARDWARE_SUPPORT_MATRIX.md).
 
 White-label endpoints:
 
@@ -581,10 +590,9 @@ from persisted truth tables.
 1. Clone the repository.
 2. Run `npm install` in `frontend-angular/` when dependencies are missing or changed.
 3. Copy `.env.example` to `.env` and set production secrets.
-4. Start backend with `cd backend-rust && cargo run`.
-5. Start frontend with `cd frontend-angular && npm start`.
-6. Verify backend at `http://127.0.0.1:8080/health` and frontend at
-   `http://127.0.0.1:4200`.
+4. Start/rebuild the backend with `.\backend-rust\scripts\restart-backend-dev.ps1 -Port 8082`.
+5. Start the frontend from `frontend-angular` with `npm start -- --host 127.0.0.1 --port 4200`.
+6. Verify `http://127.0.0.1:8082/health`, `http://127.0.0.1:4200`, and `http://127.0.0.1:4200/api/v1/health`.
 
 ### 11. Development Workflow
 

@@ -1,4 +1,4 @@
-use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -6,6 +6,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
+    config::Settings,
     models::common::AppError,
     repositories::staff_advanced_repository::{
         self as repository, BiometricConsentRecord, BiometricDeviceInput, BiometricDeviceRecord,
@@ -20,6 +21,56 @@ use crate::{
     },
     services::{auth_service, entitlement_service, staff_attendance_service},
 };
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffAppReleasePolicy {
+    pub current_version: String,
+    pub minimum_version: String,
+    pub latest_version: String,
+    pub update_url: String,
+    pub blocked: bool,
+}
+
+pub fn staff_app_release_policy(
+    settings: &Settings,
+    current: &str,
+) -> Result<StaffAppReleasePolicy, AppError> {
+    let current_parts = version_parts(current)?;
+    let minimum_parts = version_parts(&settings.staff_app_minimum_version)?;
+    version_parts(&settings.staff_app_latest_version)?;
+    Ok(StaffAppReleasePolicy {
+        current_version: current.to_string(),
+        minimum_version: settings.staff_app_minimum_version.clone(),
+        latest_version: settings.staff_app_latest_version.clone(),
+        update_url: settings.staff_app_update_url.clone().unwrap_or_default(),
+        blocked: settings.staff_app_force_update_enabled && current_parts < minimum_parts,
+    })
+}
+
+pub(crate) fn staff_app_version_is_supported(settings: &Settings, current: &str) -> bool {
+    staff_app_release_policy(settings, current).is_ok_and(|policy| !policy.blocked)
+}
+
+fn version_parts(value: &str) -> Result<[u64; 3], AppError> {
+    let clean = value
+        .trim()
+        .trim_start_matches('v')
+        .split(['-', '+'])
+        .next()
+        .unwrap_or("");
+    let parts = clean
+        .split('.')
+        .map(str::parse::<u64>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| AppError::validation("app version must use major.minor.patch"))?;
+    if parts.len() != 3 {
+        return Err(AppError::validation(
+            "app version must use major.minor.patch",
+        ));
+    }
+    Ok([parts[0], parts[1], parts[2]])
+}
 
 const TARGET_TYPES: &[&str] = &[
     "service",
@@ -157,6 +208,8 @@ pub struct StaffTaskRequest {
     pub due_at: Option<DateTime<Utc>>,
     pub status: Option<String>,
     pub version: Option<i32>,
+    pub client_id: Option<String>,
+    pub appointment_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -312,13 +365,45 @@ pub struct MobilePushSubscriptionRequest {
 #[serde(rename_all = "camelCase")]
 pub struct SelfPushSubscriptionRequest {
     pub device_id: String,
+    #[serde(default)]
     pub endpoint: String,
     pub platform: String,
     pub provider: String,
+    #[serde(default)]
     pub auth_secret: String,
+    #[serde(default)]
     pub p256dh: String,
     #[serde(default)]
+    pub push_token: String,
+    #[serde(default)]
     pub metadata: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileCrashReportRequest {
+    pub device_id: String,
+    pub platform: String,
+    pub app_version: String,
+    pub error_type: String,
+    pub message: String,
+    pub source_path: String,
+    pub fingerprint: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileDeviceTelemetryRequest {
+    pub device_uid: String,
+    pub platform: String,
+    pub app_version: String,
+    pub event_type: String,
+    pub network_type: String,
+    pub online: bool,
+    #[serde(default)]
+    pub metadata: Value,
+    pub occurred_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -861,6 +946,7 @@ pub async fn process_biometric_event(
             Some(request.punch_at),
             "biometric_gateway",
             "",
+            None,
         )
         .await
     } else {
@@ -871,6 +957,7 @@ pub async fn process_biometric_event(
             staff_id,
             business_date,
             Some(request.punch_at),
+            0,
             0,
             "",
         )
@@ -1046,23 +1133,30 @@ pub async fn save_self_push_subscription(
     staff_id: &str,
     request: SelfPushSubscriptionRequest,
 ) -> Result<MobilePushSubscriptionRecord, AppError> {
+    let platform = request.platform.trim();
+    let provider = request.provider.trim();
     let endpoint = request.endpoint.trim();
-    if endpoint.is_empty() || endpoint.chars().count() > 4_096 || !endpoint.starts_with("https://")
-    {
-        return Err(AppError::validation("web push endpoint is invalid"));
-    }
-    if request.platform.trim() != "web" || request.provider.trim() != "web-push" {
-        return Err(AppError::validation("web push provider is invalid"));
-    }
-    if request.auth_secret.trim().is_empty()
-        || request.p256dh.trim().is_empty()
-        || request.auth_secret.chars().count() > 1_024
-        || request.p256dh.chars().count() > 1_024
-    {
-        return Err(AppError::validation(
-            "web push subscription keys are invalid",
-        ));
-    }
+    let push_token = request.push_token.trim();
+    let subscription = if platform == "web" && provider == "web-push" {
+        if endpoint.is_empty()
+            || endpoint.chars().count() > 4_096
+            || !endpoint.starts_with("https://")
+            || request.auth_secret.trim().is_empty()
+            || request.p256dh.trim().is_empty()
+            || request.auth_secret.chars().count() > 1_024
+            || request.p256dh.chars().count() > 1_024
+        {
+            return Err(AppError::validation("web push subscription is invalid"));
+        }
+        json!({"endpoint":endpoint,"keys":{"auth":request.auth_secret.trim(),"p256dh":request.p256dh.trim()},"platform":platform,"provider":provider})
+    } else if matches!((platform, provider), ("android", "fcm") | ("ios", "apns")) {
+        if push_token.chars().count() < 16 || push_token.chars().count() > 4_096 {
+            return Err(AppError::validation("native push token is invalid"));
+        }
+        json!({"pushToken":push_token,"platform":platform,"provider":provider})
+    } else {
+        return Err(AppError::validation("mobile push provider is invalid"));
+    };
     let key = encryption_key.ok_or_else(|| {
         AppError::service_unavailable(
             "PUSH_ENCRYPTION_NOT_CONFIGURED",
@@ -1075,15 +1169,9 @@ pub async fn save_self_push_subscription(
         .filter(|device| device.active && device.staff_id == staff_id)
         .ok_or_else(|| AppError::not_found("mobile device was not found"))?;
     let provider_metadata = json!({
-        "platform": "web",
-        "provider": "web-push",
+        "platform": platform,
+        "provider": provider,
         "metadata": request.metadata,
-    });
-    let subscription = json!({
-        "endpoint": endpoint,
-        "keys": {"auth": request.auth_secret.trim(), "p256dh": request.p256dh.trim()},
-        "platform": "web",
-        "provider": "web-push",
     });
     let token = subscription.to_string();
     let ciphertext = crate::services::security_service::encrypt_secret(key, &token)?;
@@ -1100,6 +1188,90 @@ pub async fn save_self_push_subscription(
     .await
     .map_err(internal("save self mobile push subscription"))?
     .ok_or_else(|| AppError::not_found("mobile device was not found"))
+}
+
+pub async fn save_mobile_crash_report(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    user_id: &str,
+    request: MobileCrashReportRequest,
+) -> Result<String, AppError> {
+    let platform = required_enum(&request.platform, &["web", "android", "ios"], "platform")?;
+    sqlx::query_scalar::<_, String>(
+        r#"INSERT INTO staff_mobile_crash_reports
+           (tenant_id,branch_id,staff_id,user_id,device_id,platform,app_version,error_type,message,source_path,fingerprint,occurred_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           ON CONFLICT (tenant_id,branch_id,staff_id,fingerprint,occurred_at)
+           DO UPDATE SET message=EXCLUDED.message
+           RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(staff_id)
+    .bind(user_id)
+    .bind(required_text(&request.device_id, 200, "device id")?)
+    .bind(platform)
+    .bind(required_text(&request.app_version, 40, "app version")?)
+    .bind(required_text(&request.error_type, 100, "error type")?)
+    .bind(required_text(&request.message, 500, "crash message")?)
+    .bind(required_text(&request.source_path, 300, "source path")?)
+    .bind(required_text(&request.fingerprint, 128, "crash fingerprint")?)
+    .bind(request.occurred_at)
+    .fetch_one(db)
+    .await
+    .map_err(internal("save mobile crash report"))
+}
+
+pub async fn record_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    user_id: &str,
+    request: MobileDeviceTelemetryRequest,
+) -> Result<String, AppError> {
+    let now = Utc::now();
+    if request.occurred_at > now + Duration::minutes(5)
+        || request.occurred_at < now - Duration::days(30)
+    {
+        return Err(AppError::validation("device telemetry time is invalid"));
+    }
+    if !request.metadata.is_object() {
+        return Err(AppError::validation("device telemetry metadata is invalid"));
+    }
+    repository::record_mobile_device_telemetry(
+        db,
+        tenant_id,
+        branch_id,
+        staff_id,
+        user_id,
+        &required_text(&request.device_uid, 200, "device uid")?,
+        &required_enum(&request.platform, &["web", "android", "ios"], "platform")?,
+        &required_text(&request.app_version, 40, "app version")?,
+        &required_enum(
+            &request.event_type,
+            &["launch", "resume", "network_change"],
+            "telemetry event",
+        )?,
+        &required_text(&request.network_type, 40, "network type")?,
+        request.online,
+        &request.metadata,
+        request.occurred_at,
+    )
+    .await
+    .map_err(internal("save mobile device telemetry"))
+}
+
+pub async fn list_mobile_device_telemetry(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<Value>, AppError> {
+    repository::list_mobile_device_telemetry(db, tenant_id, branch_id)
+        .await
+        .map_err(internal("load mobile device telemetry"))
 }
 
 pub async fn mobile_dashboard(
@@ -1314,6 +1486,7 @@ async fn apply_mobile_mutation(
                     payload.occurred_at,
                     "mobile_sync",
                     "",
+                    None,
                 )
                 .await
             } else {
@@ -1324,6 +1497,7 @@ async fn apply_mobile_mutation(
                     &device.staff_id,
                     payload.business_date,
                     payload.occurred_at,
+                    0,
                     0,
                     "",
                 )
@@ -1345,6 +1519,7 @@ async fn apply_mobile_mutation(
                 payload.start_date,
                 payload.end_date,
                 payload.reason.as_deref().unwrap_or(""),
+                vec![],
             )
             .await
             .map_err(|_| "leave_policy_conflict")?;
@@ -1710,9 +1885,16 @@ fn task_input(request: StaffTaskRequest) -> Result<StaffTaskInput, AppError> {
             TASK_STATUSES,
             "task status",
         )?,
+        client_id: optional_id(request.client_id.as_deref(), "guest")?,
+        appointment_id: optional_id(request.appointment_id.as_deref(), "appointment")?,
         // Set only by `create_task_for_action`, never from a request body.
         origin_action_draft_id: None,
     })
+}
+
+fn optional_id(value: Option<&str>, label: &str) -> Result<Option<String>, AppError> {
+    let value = clean(value.unwrap_or(""), 120, label)?;
+    Ok((!value.is_empty()).then_some(value))
 }
 
 fn performance_row(source: PerformanceSourceRecord) -> StaffPerformanceRow {
@@ -2080,7 +2262,8 @@ fn database_write_error(
 mod tests {
     use super::{
         adjustment_input, incentive_input, mobile_business_date, performance_row, sha256_text,
-        weighted_score, IncentiveRuleRequest, IncentiveSlabRequest, PayrollAdjustmentRuleRequest,
+        version_parts, weighted_score, IncentiveRuleRequest, IncentiveSlabRequest,
+        PayrollAdjustmentRuleRequest,
     };
     use crate::repositories::staff_advanced_repository::PerformanceSourceRecord;
     use chrono::{DateTime, NaiveDate, Utc};
@@ -2187,5 +2370,11 @@ mod tests {
         assert!(adjustment_input(request("allowance", "weekly_off_worked")).is_ok());
         assert!(adjustment_input(request("deduction", "weekly_off_worked")).is_err());
         assert!(adjustment_input(request("allowance", "sandwich_penalty")).is_err());
+    }
+
+    #[test]
+    fn staff_app_versions_are_compared_numerically() {
+        assert!(version_parts("1.10.0").unwrap() > version_parts("1.9.9").unwrap());
+        assert!(version_parts("1.0").is_err());
     }
 }

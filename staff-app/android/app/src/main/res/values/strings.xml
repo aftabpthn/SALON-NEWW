@@ -4,4 +4,5 @@
     <string name="title_activity_main">Aura Staff OS</string>
     <string name="package_name">com.aura.staff</string>
     <string name="custom_url_scheme">com.aura.staff</string>
+    <string name="default_notification_channel_id">staff-operations</string>
 </resources>

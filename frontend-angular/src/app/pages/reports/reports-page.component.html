@@ -206,6 +206,9 @@
   @if (profitError) {
     <p class="inline-error">{{ profitError }}</p>
   }
+  @if (profitPanelError) {
+    <p class="inline-error">{{ profitPanelError }}</p>
+  }
   @if (profitLoading) {
     <p class="profit-state">{{ 'profit.loading' | translate }}</p>
   }

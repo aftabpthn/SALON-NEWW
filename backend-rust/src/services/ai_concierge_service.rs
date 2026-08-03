@@ -43,6 +43,28 @@ pub struct GovernanceRequest {
     pub transcript_retention_days: i32,
     pub prompt_version: String,
     pub booking_url: Option<String>,
+    #[serde(default)]
+    pub default_action_owner_user_id: String,
+    #[serde(default = "default_max_requests_per_minute")]
+    pub max_requests_per_minute: i32,
+    #[serde(default = "default_max_latency_ms")]
+    pub max_latency_ms: i32,
+    #[serde(default)]
+    pub monthly_cost_budget_paise: i64,
+    #[serde(default = "default_evaluation_retention_days")]
+    pub evaluation_retention_days: i32,
+    #[serde(default)]
+    pub model_allowlist: Vec<String>,
+}
+
+fn default_max_requests_per_minute() -> i32 {
+    60
+}
+fn default_max_latency_ms() -> i32 {
+    15_000
+}
+fn default_evaluation_retention_days() -> i32 {
+    90
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,6 +118,10 @@ pub struct VoiceWebhookRequest {
     pub ring_duration_seconds: Option<i32>,
     pub conversation_duration_seconds: Option<i32>,
     pub recording_url: Option<String>,
+    pub recording_consent_status: Option<String>,
+    pub call_queue: Option<String>,
+    pub extension: Option<String>,
+    pub voicemail: Option<bool>,
     pub transcript: Option<String>,
     pub locale: Option<String>,
 }
@@ -274,13 +300,19 @@ async fn previous_tool(
 
 pub fn default_governance() -> AiGovernanceRecord {
     AiGovernanceRecord {
-        enabled: true,
+        enabled: false,
         allowed_channels: json!(["web"]),
         require_booking_confirmation: true,
         redact_sensitive_data: true,
         transcript_retention_days: 90,
         prompt_version: "receptionist-v1".into(),
         booking_url: String::new(),
+        default_action_owner_user_id: String::new(),
+        max_requests_per_minute: default_max_requests_per_minute(),
+        max_latency_ms: default_max_latency_ms(),
+        monthly_cost_budget_paise: 0,
+        evaluation_retention_days: default_evaluation_retention_days(),
+        model_allowlist: json!([]),
         updated_by: String::new(),
         created_at: chrono::Utc::now(),
         updated_at: None,
@@ -315,6 +347,26 @@ pub async fn save_governance(
             "AI booking confirmation cannot be disabled",
         ));
     }
+    if !(1..=600).contains(&request.max_requests_per_minute) {
+        return Err(AppError::validation(
+            "AI request limit must be between 1 and 600 per minute",
+        ));
+    }
+    if !(500..=60_000).contains(&request.max_latency_ms) {
+        return Err(AppError::validation(
+            "AI latency limit must be between 500 and 60000 ms",
+        ));
+    }
+    if request.monthly_cost_budget_paise < 0 {
+        return Err(AppError::validation(
+            "AI monthly cost budget cannot be negative",
+        ));
+    }
+    if !(1..=3650).contains(&request.evaluation_retention_days) {
+        return Err(AppError::validation(
+            "AI evaluation retention must be between 1 and 3650 days",
+        ));
+    }
     let mut channels = request
         .allowed_channels
         .into_iter()
@@ -331,7 +383,25 @@ pub async fn save_governance(
     if !booking_url.is_empty() && !booking_url.starts_with("https://") {
         return Err(AppError::validation("AI booking URL must use HTTPS"));
     }
-    repository::save_governance(
+    let action_owner = if request.enabled && request.default_action_owner_user_id.trim().is_empty()
+    {
+        actor_id
+    } else {
+        request.default_action_owner_user_id.trim()
+    };
+    let mut models = request
+        .model_allowlist
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    models.sort();
+    models.dedup();
+    if models.len() > 20 || models.iter().any(|value| value.chars().count() > 120) {
+        return Err(AppError::validation("AI model allowlist is invalid"));
+    }
+    let before = governance(db, tenant_id, branch_id).await?;
+    let saved = repository::save_governance(
         db,
         tenant_id,
         branch_id,
@@ -342,10 +412,27 @@ pub async fn save_governance(
         request.transcript_retention_days,
         &prompt_version,
         &booking_url,
+        action_owner,
+        request.max_requests_per_minute,
+        request.max_latency_ms,
+        request.monthly_cost_budget_paise,
+        request.evaluation_retention_days,
+        &json!(models),
         actor_id,
     )
     .await
-    .map_err(|_| AppError::internal("failed to save AI governance"))
+    .map_err(|_| AppError::internal("failed to save AI governance"))?;
+    repository::record_workforce_policy_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        &serde_json::to_value(before).unwrap_or_else(|_| json!({})),
+        &serde_json::to_value(&saved).unwrap_or_else(|_| json!({})),
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to audit AI governance"))?;
+    Ok(saved)
 }
 
 pub async fn open_web_session(
@@ -355,6 +442,8 @@ pub async fn open_web_session(
     user_id: &str,
     request: OpenSessionRequest,
 ) -> Result<AiSessionRecord, AppError> {
+    let governance = governance(db, tenant_id, branch_id).await?;
+    ensure_channel(&governance, "web")?;
     let locale = limited(request.locale.as_deref().unwrap_or("en-IN"), 20, "locale")?;
     repository::open_session(
         db,
@@ -518,6 +607,12 @@ async fn process_message(
 ) -> Result<ConciergeResponse, AppError> {
     let governance = governance(db, tenant_id, branch_id).await?;
     ensure_channel(&governance, &session.channel)?;
+    let request_count = repository::consume_workforce_request(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to enforce AI request limit"))?;
+    if request_count > i64::from(governance.max_requests_per_minute) {
+        return Err(AppError::rate_limited("AI request limit exceeded"));
+    }
     let raw_body = limited(&request.body, 4_000, "AI message")?;
     let stored_body = if governance.redact_sensitive_data {
         redact(&raw_body)
@@ -700,6 +795,7 @@ pub async fn record_voice_call_event(
     settings: &Settings,
     request: VoiceWebhookRequest,
     client_id: Option<String>,
+    lead_id: Option<String>,
 ) -> Result<VoiceWebhookResponse, AppError> {
     let provider = normalize_provider(request.provider.as_deref())?;
     let call_id = limited(&request.call_id, 120, "voice call id")?;
@@ -708,7 +804,45 @@ pub async fn record_voice_call_event(
     let status = normalize_call_status(request.status.as_deref(), request.transcript.as_deref());
     let caller_phone = limited(&request.from, 40, "caller phone")?;
     let normalized_phone = normalize_phone(&caller_phone);
-    let transcript = request.transcript.unwrap_or_default().trim().to_string();
+    let recording_consent_status =
+        normalize_recording_consent(request.recording_consent_status.as_deref())?;
+    let sensitive_allowed = matches!(
+        recording_consent_status.as_str(),
+        "granted" | "legal_notice"
+    );
+    let raw_transcript = request.transcript.unwrap_or_default().trim().to_string();
+    let raw_recording_url = request.recording_url.unwrap_or_default().trim().to_string();
+    if sensitive_allowed
+        && !raw_recording_url.is_empty()
+        && !raw_recording_url.starts_with("https://")
+    {
+        return Err(AppError::validation("voice recording URL must use HTTPS"));
+    }
+    let sensitive_payload_discarded =
+        !sensitive_allowed && (!raw_transcript.is_empty() || !raw_recording_url.is_empty());
+    let transcript = if sensitive_allowed {
+        raw_transcript
+    } else {
+        String::new()
+    };
+    let recording_url = if sensitive_allowed {
+        raw_recording_url
+    } else {
+        String::new()
+    };
+    let recording_retention_until = if transcript.is_empty() && recording_url.is_empty() {
+        None
+    } else {
+        let days =
+            repository::transcript_retention_days(db, &request.tenant_id, &request.branch_id)
+                .await
+                .map_err(|_| AppError::internal("failed to load voice retention policy"))?
+                .clamp(1, 3650);
+        Some(Utc::now() + Duration::days(i64::from(days)))
+    };
+    let call_queue = optional_limited(request.call_queue.as_deref(), 120, "voice queue")?;
+    let extension = optional_limited(request.extension.as_deref(), 40, "voice extension")?;
+    let voicemail = request.voicemail.unwrap_or(false);
     let transcript_available = !transcript.is_empty();
     let mut session_id = String::new();
     let mut reply_text = String::new();
@@ -772,9 +906,15 @@ pub async fn record_voice_call_event(
             .conversation_duration_seconds
             .unwrap_or_default()
             .max(0),
-        request.recording_url.as_deref().unwrap_or(""),
+        &recording_url,
+        &recording_consent_status,
+        recording_retention_until,
+        &call_queue,
+        &extension,
+        voicemail,
         transcript_available,
         client_id.as_deref(),
+        lead_id.as_deref(),
         if session_id.is_empty() {
             None
         } else {
@@ -786,7 +926,7 @@ pub async fn record_voice_call_event(
         callback_required,
         callback_due_at,
         lost_reason,
-        &json!({"source":"voice_webhook"}),
+        &json!({"source":"voice_webhook","sensitivePayloadDiscarded":sensitive_payload_discarded}),
     )
     .await
     .map_err(|_| AppError::internal("failed to store voice call record"))?;
@@ -917,7 +1057,9 @@ async fn call_provider(
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(14))
+        .timeout(std::time::Duration::from_millis(
+            governance.max_latency_ms as u64,
+        ))
         .build()
     {
         Ok(client) => client,
@@ -1315,6 +1457,34 @@ fn limited(value: &str, max: usize, label: &'static str) -> Result<String, AppEr
     }
 }
 
+fn optional_limited(
+    value: Option<&str>,
+    max: usize,
+    label: &'static str,
+) -> Result<String, AppError> {
+    let value = value.unwrap_or_default().trim();
+    if value.chars().count() > max {
+        Err(AppError::validation(format!("{label} is invalid")))
+    } else {
+        Ok(value.into())
+    }
+}
+
+fn normalize_recording_consent(value: Option<&str>) -> Result<String, AppError> {
+    match value
+        .unwrap_or("unknown")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "unknown" => Ok("unknown".into()),
+        "granted" => Ok("granted".into()),
+        "declined" | "denied" => Ok("declined".into()),
+        "legal_notice" | "legal-notice" => Ok("legal_notice".into()),
+        _ => Err(AppError::validation("recording consent status is invalid")),
+    }
+}
+
 fn redact(value: &str) -> String {
     value
         .split_whitespace()
@@ -1451,8 +1621,8 @@ fn owner_claims() -> AuthClaims {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_governance, local_response, provider_payload, redact, AuthClaims, ProviderEnvelope,
-        ProviderResponse,
+        default_governance, local_response, normalize_recording_consent, provider_payload, redact,
+        ProviderEnvelope, ProviderResponse,
     };
 
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
@@ -1515,6 +1685,16 @@ mod tests {
             redact("call 9876543210 at me@example.com"),
             "call [redacted] at [redacted]"
         );
+    }
+
+    #[test]
+    fn recording_consent_accepts_only_known_states() {
+        assert_eq!(
+            normalize_recording_consent(Some("GRANTED")).unwrap(),
+            "granted"
+        );
+        assert_eq!(normalize_recording_consent(None).unwrap(), "unknown");
+        assert!(normalize_recording_consent(Some("assumed")).is_err());
     }
 
     #[test]

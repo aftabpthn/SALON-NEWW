@@ -16,6 +16,7 @@ export const NAVIGATION_ACCESS_RULES: readonly NavigationAccessRule[] = [
   { path: '/staff/fines-deductions', roles: ['owner', 'admin', 'manager', 'accountant'], permissions: ['staff.payroll.read', 'staff.payroll.manage'] },
   { path: '/staff/attendance-summary', roles: ['owner', 'admin', 'manager', 'analyst'], permissions: ['staff.attendance.read', 'staff.attendance.manage'] },
   { path: '/staff/leave-management', roles: ['owner', 'admin', 'manager'], permissions: ['staff.leave.read', 'staff.leave.manage'] },
+  { path: '/staff/control-center', roles: ['owner', 'admin', 'manager'], permissions: ['staff.hrms.read', 'staff.hrms.manage'] },
   { path: '/staff', roles: ['owner', 'admin', 'manager', 'analyst'], permissions: ['staff.read', 'staff.manage', 'staff.analytics.read'] },
   { path: '/staff-os', roles: ['owner', 'admin', 'manager', 'analyst'], permissions: ['staff.read', 'staff.manage', 'staff.analytics.read'] },
   { path: '/command-center', roles: ['owner', 'admin', 'manager', 'analyst'], permissions: ['reports.read'] },

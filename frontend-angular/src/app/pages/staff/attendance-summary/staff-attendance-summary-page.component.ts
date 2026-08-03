@@ -66,6 +66,7 @@ type AttendanceDetail = {
 
 type AttendanceBreak = { id?: string; startedAt: string; endedAt: string; comments: string };
 type AttendanceOperation = { id: string; title: string; operationType: string; status: string; attendanceStatus?: string; taskStatus?: string };
+type AttendanceCorrectionRequest = { id: string; staffId: string; staffName: string; businessDate: string; requestedClockInAt: string | null; requestedClockOutAt: string | null; workTaskName: string; reason: string; status: string; reviewNote: string; version: number };
 type PayrollPreview = { salaryRows?: PayrollSalaryRow[]; items?: Array<{ staffId: string; validationErrors?: string[]; validationWarnings?: string[] }> };
 type PayrollSalaryRow = Record<string, unknown> & { staffId?: string; employeeCode?: string | null };
 type CorrectionForm = {
@@ -133,8 +134,11 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
   physicalOpen = false;
   physicalSaving = false;
   physicalForm: PhysicalAttendanceForm = this.emptyPhysicalForm();
+  correctionRequests: AttendanceCorrectionRequest[] = [];
+  correctionDecisionNotes: Record<string, string> = {};
+  decidingCorrectionId = '';
 
-  ngOnInit() { void this.loadSummary(); }
+  ngOnInit() { void this.loadSummary(); void this.loadCorrectionRequests(); }
 
   isVisible(column: AttendanceColumn) { return this.visibleColumns[column]; }
 
@@ -240,6 +244,24 @@ export class StaffAttendanceSummaryPageComponent implements OnInit {
     this.physicalForm = this.emptyPhysicalForm();
     this.physicalForm.staffId = this.staffId || this.staffOptions[0]?.id || '';
     this.physicalOpen = true;
+  }
+
+  async loadCorrectionRequests() {
+    try {
+      const result = await firstValueFrom(this.api.get<ApiEnvelope<AttendanceCorrectionRequest[]>>('/staff-attendance/correction-requests?status=pending'));
+      this.correctionRequests = result.data || [];
+    } catch (error) { this.error = this.message(error, 'Attendance correction requests could not be loaded.'); }
+  }
+
+  async decideCorrectionRequest(request: AttendanceCorrectionRequest, decision: 'approved' | 'rejected') {
+    const reviewNote = String(this.correctionDecisionNotes[request.id] || '').trim();
+    if (decision === 'rejected' && !reviewNote) { this.error = 'A rejection reason is required.'; return; }
+    this.decidingCorrectionId = request.id; this.error = '';
+    try {
+      await firstValueFrom(this.api.post<ApiEnvelope<AttendanceCorrectionRequest>>(`/staff-attendance/correction-requests/${encodeURIComponent(request.id)}/decision`, { version: request.version, decision, reviewNote }));
+      await Promise.all([this.loadCorrectionRequests(), this.loadSummary()]);
+    } catch (error) { this.error = this.message(error, 'Attendance correction could not be decided.'); }
+    finally { this.decidingCorrectionId = ''; }
   }
 
   closePhysicalAttendance() { if (!this.physicalSaving) this.physicalOpen = false; }

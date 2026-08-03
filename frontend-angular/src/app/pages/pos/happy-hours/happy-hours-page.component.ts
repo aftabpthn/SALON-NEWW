@@ -287,6 +287,8 @@ export class HappyHoursPageComponent implements OnInit {
   busy = false;
   message = '';
   error = '';
+  /** Catalogue names whose last load failed, so an empty picker is not read as "no items". */
+  private readonly catalogFailures = new Set<string>();
 
   constructor(private readonly api: ApiService) {}
 
@@ -1038,13 +1040,20 @@ export class HappyHoursPageComponent implements OnInit {
   activeCoupons(): Coupon[] { return this.coupons.filter((row) => row.active); }
 
   private loadCatalog(): void {
-    this.readCatalog('/api/v1/services', (rows) => this.services = rows);
-    this.readCatalog('/api/v1/products', (rows) => this.products = rows);
-    this.readCatalog('/api/v1/clients', (rows) => this.clients = rows);
+    this.readCatalog('/api/v1/services', 'services', (rows) => this.services = rows);
+    this.readCatalog('/api/v1/inventory?pageSize=200', 'products', (rows) => this.products = rows);
+    this.readCatalog('/api/v1/clients', 'clients', (rows) => this.clients = rows);
   }
 
-  private readCatalog(path: string, assign: (rows: CatalogItem[]) => void): void {
-    this.api.get<any>(path).subscribe({ next: (response) => assign(this.rows(response)), error: () => assign([]) });
+  private readCatalog(path: string, label: string, assign: (rows: CatalogItem[]) => void): void {
+    this.api.get<any>(path).subscribe({
+      next: (response) => { this.catalogFailures.delete(label); assign(this.rows(response)); },
+      error: () => { this.catalogFailures.add(label); },
+    });
+  }
+
+  catalogError(): string {
+    return this.catalogFailures.size ? `Unable to load ${[...this.catalogFailures].join(', ')}` : '';
   }
 
   private run(request: Observable<any>, success: string, close = false, reload: () => void = () => this.load()): void {

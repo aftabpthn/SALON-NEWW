@@ -19,7 +19,7 @@ use crate::{
     repositories::auth_repository::{self, AuthAuditInput},
     services::{
         auth_service::{self, AuthClaims},
-        entitlement_service, security_service,
+        entitlement_service, security_service, staff_advanced_service,
     },
     state::{AppSessionCacheEntry, AppState},
 };
@@ -47,6 +47,11 @@ pub async fn require_auth(
         return Err(AppError::unauthenticated("invalid token type"));
     }
 
+    let is_staff_app = req
+        .headers()
+        .get("x-staff-app")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == "1");
     let is_local_dev_admin = is_local_env(&state.settings.app_env)
         && state.settings.enable_dev_session
         && claims.sub == "dev-admin";
@@ -59,7 +64,7 @@ pub async fn require_auth(
             &claims.session_id,
             claims.branch_id.as_deref(),
         );
-        let used_cache = if !claims.session_id.is_empty() {
+        let used_cache = if should_use_auth_cache(&claims.session_id, is_staff_app) {
             apply_auth_cache(&state, &mut claims, req.uri().path(), &cache_key).await?
         } else {
             false
@@ -168,8 +173,35 @@ pub async fn require_auth(
         return Err(AppError::forbidden(message));
     }
 
+    if is_staff_app
+        && state.settings.staff_app_force_update_enabled
+        && !req
+            .uri()
+            .path()
+            .ends_with("/staff/self/mobile/release-policy")
+    {
+        let version = req
+            .headers()
+            .get("x-staff-app-version")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        if !staff_advanced_service::staff_app_version_is_supported(&state.settings, version) {
+            return Err(
+                AppError::forbidden("Staff App update is required").with_details(
+                    serde_json::json!({
+                        "forceUpdate":true,
+                        "minimumVersion":state.settings.staff_app_minimum_version.clone(),
+                        "updateUrl":state.settings.staff_app_update_url.clone()
+                    }),
+                ),
+            );
+        }
+    }
+
     if request_mutates_data(req.method()) {
         entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
+    } else {
+        entitlement_service::ensure_can_login(&state.db, &claims.tenant_id).await?;
     }
 
     let tenant_header = HeaderValue::from_str(&claims.tenant_id)
@@ -410,6 +442,13 @@ fn matched_mask<'a>(key: &str, path: &str, masked_fields: &'a [String]) -> Optio
     let has_mask = |mask: &str| masked_fields.iter().any(|value| value == mask);
     if has_mask("client.contact") && is_contact_field(key) {
         Some("client.contact")
+    } else if has_mask("client.clinical")
+        && ["client", "appointment", "form", "treatment"]
+            .iter()
+            .any(|domain| path.contains(domain))
+        && is_clinical_field(&normalized_key)
+    {
+        Some("client.clinical")
     } else if has_mask("staff.payroll")
         && path.contains("staff-payroll")
         && is_money_field(&normalized_key)
@@ -444,7 +483,27 @@ fn is_contact_field(key: &str) -> bool {
             | "workPhone"
             | "email"
             | "recipient"
+            | "address"
+            | "addressLine1"
+            | "addressLine2"
+            | "city"
+            | "postalCode"
+            | "pincode"
     )
+}
+
+fn is_clinical_field(normalized_key: &str) -> bool {
+    [
+        "clinical",
+        "medical",
+        "allerg",
+        "sensitiv",
+        "diagnos",
+        "treatmentnote",
+        "formresponse",
+    ]
+    .iter()
+    .any(|value| normalized_key.contains(value))
 }
 
 fn is_money_field(normalized_key: &str) -> bool {
@@ -460,6 +519,9 @@ fn masked_export_blocked(path: &str, masked_fields: &[String]) -> bool {
     }
     masked_fields.iter().any(|mask| match mask.as_str() {
         "client.contact" => path.contains("client"),
+        "client.clinical" => {
+            path.contains("client") || path.contains("appointment") || path.contains("form")
+        }
         "staff.payroll" => path.contains("staff-payroll") || path.contains("payslip"),
         "inventory.cost" => {
             path.contains("inventory") || path.contains("products") || path.contains("purchases")
@@ -509,6 +571,10 @@ fn password_change_required(path: &str, must_change_password: bool) -> bool {
 
 fn mfa_enrollment_required(path: &str, required: bool) -> bool {
     required && !path.contains("/auth/mfa/") && !path.ends_with("/auth/change-password")
+}
+
+fn should_use_auth_cache(session_id: &str, is_staff_app: bool) -> bool {
+    !session_id.is_empty() && !is_staff_app
 }
 
 fn scope_header_mismatch(
@@ -582,7 +648,7 @@ mod tests {
 
     use super::{
         mask_value, masked_export_blocked, mfa_enrollment_required, password_change_required,
-        request_mutates_data, scope_header_mismatch,
+        request_mutates_data, scope_header_mismatch, should_use_auth_cache,
     };
     use crate::services::auth_service::AuthClaims;
 
@@ -628,6 +694,13 @@ mod tests {
     }
 
     #[test]
+    fn phase1_staff_app_sessions_always_use_authoritative_revocation_state() {
+        assert!(!should_use_auth_cache("session-1", true));
+        assert!(should_use_auth_cache("session-1", false));
+        assert!(!should_use_auth_cache("", false));
+    }
+
+    #[test]
     fn mfa_enrollment_gate_allows_only_setup_and_password_change() {
         assert!(mfa_enrollment_required("/api/v1/staff", true));
         assert!(!mfa_enrollment_required("/api/v1/auth/mfa/setup", true));
@@ -665,20 +738,40 @@ mod tests {
     #[test]
     fn configured_profiles_mask_only_sensitive_fields() {
         let mut payload = serde_json::json!({
-            "data": { "name": "Real Name", "phone": "9999999999", "grossPaise": 2500 }
+            "data": {
+                "name": "Real Name",
+                "phone": "9999999999",
+                "address": "Real address",
+                "grossPaise": 2500
+            }
         });
         let mut hits = BTreeSet::new();
         mask_value(
             &mut payload,
             "/api/v1/staff-payroll/runs/1",
-            &["client.contact".into(), "staff.payroll".into()],
+            &[
+                "client.contact".into(),
+                "client.clinical".into(),
+                "staff.payroll".into(),
+            ],
             &mut hits,
         );
         assert_eq!(payload["data"]["name"], "Real Name");
         assert_eq!(payload["data"]["phone"], "[masked]");
+        assert_eq!(payload["data"]["address"], "[masked]");
         assert!(payload["data"]["grossPaise"].is_null());
         assert!(hits.contains(&("client.contact".into(), "phone".into())));
+        assert!(hits.contains(&("client.contact".into(), "address".into())));
         assert!(hits.contains(&("staff.payroll".into(), "grossPaise".into())));
+        let mut clinical = serde_json::json!({ "medicalHistory": "Sensitive" });
+        mask_value(
+            &mut clinical,
+            "/api/v1/clients/client-1",
+            &["client.clinical".into()],
+            &mut hits,
+        );
+        assert!(clinical["medicalHistory"].is_null());
+        assert!(hits.contains(&("client.clinical".into(), "medicalHistory".into())));
         assert!(masked_export_blocked(
             "/api/v1/staff-payroll/runs/1/export",
             &["staff.payroll".into()]

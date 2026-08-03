@@ -1382,6 +1382,25 @@ button.active {
   white-space: nowrap;
 }
 
+.consumption-badge {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 2px;
+  padding: 2px 6px;
+  overflow: hidden;
+  color: #9a3412;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  border-radius: 999px;
+}
+
 .booking:hover,
 .booking:focus-visible {
   z-index: 45;
@@ -2269,6 +2288,11 @@ button.active {
 .conflict-view-mode td { color: #10254a; }
 .conflict-view-mode tr:last-child td { border-bottom: 0; }
 .view-empty { margin: 12px; color: #60708a; font-size: 13px; }
+
+.phase7-records article { align-items: flex-start; }
+.phase7-records article > div { min-width: 0; }
+.phase7-records select { width: 100%; margin-top: 6px; }
+.phase7-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 
 @media (max-width: 1100px) {
   .status-board-mode { grid-template-columns: repeat(3, minmax(210px, 1fr)); }

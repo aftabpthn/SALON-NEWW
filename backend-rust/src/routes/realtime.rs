@@ -15,6 +15,8 @@ use axum::{
     routing::get,
     Router,
 };
+use chrono::Utc;
+use uuid::Uuid;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -39,6 +41,18 @@ async fn realtime_claims(state: &AppState, headers: &HeaderMap) -> Result<AuthCl
         .map_err(|_| AppError::unauthenticated("invalid or expired realtime access token"))?;
     if claims.token_type != "access" {
         return Err(AppError::unauthenticated("invalid realtime token type"));
+    }
+    if !claims.session_id.is_empty()
+        && !auth_repository::is_session_active(
+            &state.db,
+            &claims.tenant_id,
+            &claims.sub,
+            &claims.session_id,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to validate realtime session"))?
+    {
+        return Err(AppError::unauthenticated("staff session was revoked"));
     }
     if !(is_local_env(&state.settings.app_env)
         && state.settings.enable_dev_session
@@ -151,14 +165,23 @@ async fn send_team_chat_events(
     tenant_id: String,
     branch_id: String,
 ) {
-    while let Ok(event) = receiver.recv().await {
+    loop {
+        let event = match receiver.recv().await {
+            Ok(event) => event,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        };
         if !team_chat_event_visible(&event, &tenant_id, &branch_id) {
             continue;
         }
         let body = serde_json::json!({
-            "type": "team_chat.created",
+            "schemaVersion": 1,
+            "eventId": Uuid::new_v4(),
+            "occurredAt": Utc::now(),
+            "type": event.event_type,
             "messageId": event.message_id,
             "senderUserId": event.sender_user_id,
+            "cacheTags": ["team-chat"],
         });
         if socket.send(Message::Text(body.to_string())).await.is_err() {
             break;
@@ -186,10 +209,14 @@ async fn send_pos_events(
             continue;
         }
         let body = serde_json::json!({
+            "schemaVersion": 1,
+            "eventId": Uuid::new_v4(),
+            "occurredAt": Utc::now(),
             "type": "pos.updated",
-            "entityType": event.entity_type,
-            "entityId": event.entity_id,
-            "action": event.action,
+            "entityType": &event.entity_type,
+            "entityId": &event.entity_id,
+            "action": &event.action,
+            "cacheTags": ["pos", &event.entity_type],
         });
         if socket.send(Message::Text(body.to_string())).await.is_err() {
             break;
@@ -220,6 +247,7 @@ mod tests {
         let event = TeamChatEvent {
             tenant_id: "tenant-a".into(),
             branch_id: "branch-a".into(),
+            event_type: "team_chat.created".into(),
             message_id: "message-a".into(),
             sender_user_id: "user-a".into(),
         };
@@ -236,7 +264,12 @@ async fn send_events(
     branch_id: String,
     client_id: Option<String>,
 ) {
-    while let Ok(event) = receiver.recv().await {
+    loop {
+        let event = match receiver.recv().await {
+            Ok(event) => event,
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        };
         if event.tenant_id != tenant_id || (!branch_id.is_empty() && event.branch_id != branch_id) {
             continue;
         }
@@ -247,9 +280,9 @@ async fn send_events(
             continue;
         }
         let body = if client_id.is_some() {
-            serde_json::json!({"type":"client.timeline.updated","clientId":event.client_id,"entityType":event.entity_type,"entityId":event.entity_id,"action":event.action})
+            serde_json::json!({"schemaVersion":1,"eventId":Uuid::new_v4(),"occurredAt":Utc::now(),"type":"client.timeline.updated","clientId":&event.client_id,"entityType":&event.entity_type,"entityId":&event.entity_id,"action":&event.action,"cacheTags":["clients",&event.client_id]})
         } else {
-            serde_json::json!({"type":"appointment.updated","clientId":event.client_id,"appointmentId":event.entity_id,"action":event.action})
+            serde_json::json!({"schemaVersion":1,"eventId":Uuid::new_v4(),"occurredAt":Utc::now(),"type":"appointment.updated","clientId":&event.client_id,"appointmentId":&event.entity_id,"action":&event.action,"cacheTags":["appointments",&event.entity_id]})
         };
         if socket.send(Message::Text(body.to_string())).await.is_err() {
             break;

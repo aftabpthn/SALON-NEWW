@@ -20,7 +20,7 @@
           }<article><h2>Webhooks</h2><strong>{{ webhooks.length }}</strong></article></section>
         }
         @case ('Integrations') {
-          <section class="panel"><header><h2>Connectors</h2></header><div class="provider-row"><strong>Tally accounting</strong><span>Built in</span><span>Z-report XML export</span><span>Active</span></div>@for (connector of connectors; track connector) {
+          <section class="panel"><header><h2>Connectors</h2></header><div class="provider-row"><strong>Tally / BUSY accounting</strong><span>Built in</span><span>Reconciled Z-report export</span><span>Active</span></div>@for (connector of connectors; track connector) {
           <div class="connector-row"><div><strong>{{ connector.label }}</strong><small>{{ connector.category }}</small></div><span>{{ connector.configured ? connector.authMode : 'Credentials required' }}</span><span><strong>{{ connector.status }}</strong>@if (connector.externalAccountName || connector.externalAccountId) {
           <small>{{ connector.externalAccountName || connector.externalAccountId }}</small>
           }@if (connector.lastError) {
@@ -35,6 +35,8 @@
         <button type="button" [disabled]="busy" (click)="syncConnector(connector)">Sync now</button>
         }@if (connector.status === 'connected' && connector.provider !== 'zapier') {
         <button type="button" [disabled]="busy" (click)="disconnectConnector(connector)">Disconnect</button>
+        }@if (connector.category === 'accounting') {
+        <button type="button" [disabled]="busy" (click)="openAccountingConnector(connector)">Mapping & reconciliation</button>
       }</span></div>
       }@if (connectorJobs.length) {
       <div class="section-label">Recent connector jobs</div>
@@ -63,6 +65,9 @@
   }@if (!loading && !webhooks.length) {
   <div class="empty">No webhook subscriptions yet</div>
 }</section>
+  <section class="panel"><header><h2>Webhook delivery health</h2></header><div class="simple-head"><span>Event</span><span>Delivery</span><span>Attempts</span><span>Status</span><span>Recovery</span></div>@for (row of webhookDeliveries; track row.id) {
+  <div class="simple-row"><strong>{{ row.eventType }}</strong><span><code>{{ row.eventId }}</code><small>{{ row.updatedAt | date:'short' }}</small></span><span>{{ row.attempts }}<small>{{ row.responseStatus || 'No response' }} · {{ row.lastError || 'No error' }}</small></span><span>{{ row.status }}</span><span class="row-actions">@if ((row.status === 'failed' || row.status === 'dead_letter') && canManageApiClients) {<button type="button" [disabled]="busy" (click)="replayWebhook(row)">Replay</button>}</span></div>
+  }@if (!loading && !webhookDeliveries.length) {<div class="empty">No webhook deliveries yet</div>}</section>
 }
 @case ('Imports') {
   <section class="panel migration-panel" aria-label="Data Migration workspace">
@@ -154,7 +159,7 @@
 }
 </main>
 @if (drawer) {
-  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="integration-drawer-title"><header><h2 id="integration-drawer-title">{{ drawer === 'import' ? 'New import' : drawer === 'cutover' ? 'Enterprise cutover' : drawer === 'api-key' ? 'New API key' : drawer === 'webhook' ? 'New webhook' : 'Migration review' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="integration-drawer-title"><header><h2 id="integration-drawer-title">{{ drawer === 'import' ? 'New import' : drawer === 'cutover' ? 'Enterprise cutover' : drawer === 'api-key' ? 'New API key' : drawer === 'webhook' ? 'New webhook' : drawer === 'accounting' ? 'Accounting connector' : 'Migration review' }}</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
   @if (drawer === 'cutover') {
     <div class="drawer-body"><span class="drawer-section-label">Branch cutover contract</span><label>Cutover ID<input maxlength="80" [(ngModel)]="cutoverDraft.id" [disabled]="!!activeCutover" /></label><label>Business timezone<input maxlength="80" [(ngModel)]="cutoverDraft.businessTimezone" /></label><label>Cutover date<as-date-picker [value]="cutoverDraft.cutoverDate" (valueChange)="cutoverDraft.cutoverDate = $event" ariaLabel="Cutover date"></as-date-picker></label><label>Cutover time<input type="time" [(ngModel)]="cutoverDraft.cutoverTime" /></label><label>Historical period end date<as-date-picker [value]="cutoverDraft.historicalPeriodEndDate" (valueChange)="cutoverDraft.historicalPeriodEndDate = $event" ariaLabel="Historical period end date"></as-date-picker></label><label>Historical period end time<input type="time" [(ngModel)]="cutoverDraft.historicalPeriodEndTime" /></label></div>
   }
@@ -337,8 +342,22 @@
   <span class="choice"><input type="checkbox" [checked]="webhookDraft.events.includes(event)" (change)="toggleEvent(event)" />{{ event }}</span>
 }</label></div>
 }
+@if (drawer === 'accounting') {
+  <div class="drawer-body accounting-drawer">
+    <span class="drawer-section-label">{{ selectedAccountingConnector?.label }} reconciliation</span>
+    @if (accountingReconciliation; as row) {
+      <dl class="accounting-summary"><div><dt>Local journals</dt><dd>{{ row.localJournalCount }}</dd></div><div><dt>Synced</dt><dd>{{ row.syncedJournalCount }}</dd></div><div><dt>Pending</dt><dd>{{ row.pendingJournalCount }}</dd></div><div><dt>Failed / uncertain</dt><dd>{{ row.failedJournalCount }} / {{ row.uncertainJournalCount }}</dd></div><div><dt>Local debit / credit</dt><dd>₹{{ row.localDebitPaise / 100 | number:'1.2-2' }} / ₹{{ row.localCreditPaise / 100 | number:'1.2-2' }}</dd></div><div><dt>Status</dt><dd><span class="status-pill" [class.good]="row.reconciled" [class.attention]="!row.reconciled">{{ row.reconciled ? 'Reconciled' : row.balanced ? 'Action required' : 'Unbalanced' }}</span></dd></div></dl>
+    }
+    <span class="drawer-section-label">Account mappings</span>
+    @for (code of accountingAccountCodes; track code) {
+      <section class="account-mapping-row"><strong>{{ code }}</strong><label>External account ID<input autocomplete="off" [(ngModel)]="accountingMappingDraft[code].externalAccountId" [disabled]="!canManageAccounting" /></label><label>External account name<input autocomplete="off" [(ngModel)]="accountingMappingDraft[code].externalAccountName" [disabled]="!canManageAccounting" /></label></section>
+    } @empty {
+      <div class="compact-empty">No journal account mappings required yet</div>
+    }
+  </div>
+}
 @if (drawer !== 'governance') {
-  <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'import' && (!canManageMigrations || !entity || (!csvText && !selectedSourceFileId) || blockingMappingIssues.length > 0))" (click)="drawer === 'import' ? applyImport() : drawer === 'cutover' ? saveCutover() : drawer === 'api-key' ? saveApiKey() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
+  <footer><button type="button" (click)="closeDrawer()">Cancel</button><button class="primary" type="button" [disabled]="busy || (drawer === 'accounting' && !canManageAccounting) || (drawer === 'import' && (!canManageMigrations || !entity || (!csvText && !selectedSourceFileId) || blockingMappingIssues.length > 0))" (click)="drawer === 'import' ? applyImport() : drawer === 'cutover' ? saveCutover() : drawer === 'api-key' ? saveApiKey() : drawer === 'accounting' ? saveAccountingMappings() : saveWebhook()">{{ busy ? 'Saving…' : drawer === 'import' ? (mode === 'dry-run' ? 'Validate' : 'Start import') : 'Save' }}</button></footer>
 }
 @if (drawer === 'governance') {
   <footer><button type="button" [disabled]="busy" (click)="closeDrawer()">Close</button>@if (selectedJob; as job) {

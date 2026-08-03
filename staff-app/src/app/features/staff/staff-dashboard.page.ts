@@ -25,7 +25,7 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
           <small>If retry does not work, ask your salon manager to confirm that this login is linked to an active staff profile.</small>
         </section>
       } @else {
-        @if (!online()) { <section class="sync-banner offline" role="status"><b>Offline</b><span>Live data may be out of date. Supported changes will sync when you reconnect.</span></section> }
+        @if (!online()) { <section class="sync-banner offline" role="status"><b>Offline</b><span>Cached {{ offlineFreshness() }}. Supported changes will sync when you reconnect.</span></section> }
         @if (queuedActions() > 0) { <section class="sync-banner" role="status"><b>{{ queuedActions() }} pending</b><span>Staff action{{ queuedActions() === 1 ? '' : 's' }} waiting to sync.</span></section> }
         @if (refreshing() && data()) { <div staffPageState class="refresh-line" role="status" [loading]="true">Refreshing today’s data</div> }
 
@@ -71,6 +71,10 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly pendingMutation = signal("");
   readonly online = signal(typeof navigator === "undefined" ? true : navigator.onLine);
   readonly queuedActions = signal(0);
+  readonly offlineFreshness = computed(() => {
+    const value = this.staff.offlineSnapshotAt();
+    return value ? new Date(value).toLocaleString() : "snapshot time unavailable";
+  });
   readonly dismissedRecommendation = signal("");
   readonly viewModel = computed(() => {
     const dashboard = this.data();

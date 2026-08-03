@@ -91,6 +91,8 @@ input:focus,select:focus,textarea:focus{outline:0}
   .detail-drawer{top:0;padding:20px;border-radius:0}
   .calendar-slot{grid-template-columns:64px minmax(0,1fr)}
 }
+
+.start-private-card[open]{max-height:340px;overflow:auto}.start-private-card summary{grid-column:1/-1;cursor:pointer;font-size:.75rem;font-weight:800}.start-private-card label{grid-column:1/-1;display:grid;gap:4px;font-size:.68rem;font-weight:700}.start-private-card input,.start-private-card select,.composer-tools input,.composer-tools select{min-height:36px;border:1px solid var(--staff-border);border-radius:8px;background:var(--staff-surface);color:var(--staff-text);padding:6px 9px}.chat-participants{grid-column:1/-1;display:grid;gap:5px;max-height:130px;overflow:auto}.chat-participants label{display:flex;align-items:center;gap:7px}.composer-tools{display:flex;align-items:center;gap:7px;overflow-x:auto}.composer-tools>span{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:.68rem}.chat-message>.link-button{margin-top:7px}.chat-message>small{display:block;margin-top:5px;color:var(--staff-text-secondary)}
 @media(max-width:380px){
   .page{padding-inline:16px}
   .grid.four{grid-template-columns:1fr}

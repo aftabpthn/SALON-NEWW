@@ -1,0 +1,21 @@
+<section class="page">
+  <header class="page-head"><div><p class="eyebrow">Intelligence</p><h1>Staff Copilot</h1></div></header>
+  <section class="panel controls">
+    <label>Analysis<select [(ngModel)]="tool">@for (item of tools(); track item.name) { <option [value]="item.name">{{ item.title }}</option> }</select></label>
+    <label>From<aura-staff-date-picker [value]="from" ariaLabel="Copilot from date" (valueChange)="from=$event" /></label>
+    <label>To<aura-staff-date-picker [value]="to" [min]="from" ariaLabel="Copilot to date" (valueChange)="to=$event" /></label>
+    <label>Language<select [(ngModel)]="language"><option value="en">English</option><option value="hi">Hindi</option></select></label>
+    <label class="question">Question<input [(ngModel)]="question" maxlength="500" placeholder="Optional question" /></label>
+    <button class="button primary" type="button" [disabled]="!tool || loading()" (click)="ask()">{{ loading() ? 'Checking CRM…' : 'Analyze' }}</button>
+  </section>
+  @if (error()) { <section class="notice" role="alert">{{ error() }}</section> }
+  @if (answer(); as value) {
+    <section class="panel answer"><div class="panel-title"><h2>{{ value.conclusion }}</h2><span>{{ value.confidence.level }} confidence</span></div><small>{{ value.scope.label }} · {{ value.period.label }} · Updated {{ value.updatedAt }}</small></section>
+    <section class="metric-grid">@for (metric of value.metrics; track metric.key) { <article><span>{{ metric.label }}</span><strong>{{ metric.displayValue }}</strong></article> } @empty { <section class="notice">No sufficient source evidence.</section> }</section>
+    <section class="grid two">
+      <article class="panel"><h2>Why</h2>@for (reason of value.reasons; track reason) { <p>{{ reason }}</p> }@for (note of value.confidence.notes; track note) { <small>{{ note }}</small> }</article>
+      <article class="panel"><h2>Recommended next steps</h2>@for (action of value.recommendedActions; track action.actionType) { <div class="action"><div><strong>{{ action.label }}</strong><small>{{ action.description }}</small></div>@if (action.crmLink) { <a class="link-button" [routerLink]="action.crmLink">Open</a> }</div> } @empty { <small>No action recommended.</small> }</article>
+    </section>
+    @if (value.notices.length) { <section class="notice">@for (notice of value.notices; track notice) { <p>{{ notice }}</p> }</section> }
+  }
+</section>

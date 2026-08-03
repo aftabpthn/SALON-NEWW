@@ -31,6 +31,7 @@ import {
   JoinWaitlistPayload,
   PurchaseGiftCardPayload,
   PurchasePackagePayload,
+  PurchaseProductPayload,
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
   RedeemLoyaltyPayload,
@@ -106,13 +107,14 @@ export class MarketplaceService {
       30_000,
       "Unable to load business profile",
       async () => {
-        const [business, services, staff, reviews] = await Promise.all([
+        const [business, services, products, staff, reviews] = await Promise.all([
           firstValueFrom(this.api.getPublicBusiness(slug)),
           firstValueFrom(this.api.getPublicBusinessServices(slug)),
+          firstValueFrom(this.api.getPublicBusinessProducts(slug)),
           firstValueFrom(this.api.getPublicBusinessStaff(slug)),
           firstValueFrom(this.api.listBusinessReviews(slug)).catch(() => [])
         ]);
-        return this.normalizeBusiness({ ...business, services, staff, reviews });
+        return this.normalizeBusiness({ ...business, services, products, staff, reviews });
       },
       (profile) => {
       this.selectedBusiness.set(profile);
@@ -455,6 +457,10 @@ export class MarketplaceService {
     return this.run("Unable to buy package", () => firstValueFrom(this.api.buyPackage(payload)));
   }
 
+  async buyProduct(payload: PurchaseProductPayload): Promise<CustomerCommerceCheckout> {
+    return this.run("Unable to buy product", () => firstValueFrom(this.api.buyProduct(payload)));
+  }
+
   async purchaseGiftCard(payload: PurchaseGiftCardPayload): Promise<CustomerCommerceCheckout> {
     return this.run("Unable to purchase gift card", () => firstValueFrom(this.api.purchaseGiftCard(payload)));
   }
@@ -582,6 +588,7 @@ export class MarketplaceService {
           pricePaise: Number(addon.pricePaise || 0)
         }))
       })),
+      products: business.products ?? [],
       staff: business.staff ?? [],
       reviews: business.reviews ?? [],
       policies: business.policies ?? [],

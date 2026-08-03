@@ -178,6 +178,7 @@ pub async fn center_setting(
                 center_role: "branch".to_owned(),
                 default_retail_warehouse_branch_id: None,
                 default_consumable_warehouse_branch_id: None,
+                default_returns_warehouse_branch_id: None,
                 auto_checkout_transfers: false,
                 cannot_raise_transfer: false,
             })
@@ -193,6 +194,7 @@ pub async fn save_center_setting(
     role: &str,
     retail_warehouse: Option<&str>,
     consumable_warehouse: Option<&str>,
+    returns_warehouse: Option<&str>,
     auto_checkout: bool,
     cannot_raise: bool,
 ) -> Result<TransferCenterSettings, AppError> {
@@ -204,7 +206,7 @@ pub async fn save_center_setting(
         .begin()
         .await
         .map_err(|_| AppError::internal("failed to save transfer settings"))?;
-    for candidate in [retail_warehouse, consumable_warehouse]
+    for candidate in [retail_warehouse, consumable_warehouse, returns_warehouse]
         .into_iter()
         .flatten()
     {
@@ -235,6 +237,7 @@ pub async fn save_center_setting(
         role,
         retail_warehouse,
         consumable_warehouse,
+        returns_warehouse,
         auto_checkout,
         cannot_raise,
         actor,
@@ -260,6 +263,17 @@ pub async fn create(
     if source_branch_id == destination_branch_id {
         return Err(AppError::validation(
             "source and destination branches must differ",
+        ));
+    }
+    if center_setting(state, tenant_id, &source_branch_id)
+        .await?
+        .default_returns_warehouse_branch_id
+        .as_deref()
+        == Some(destination_branch_id.as_str())
+        && input.notes.trim().is_empty()
+    {
+        return Err(AppError::validation(
+            "reason or evidence reference is required for a returns-warehouse transfer",
         ));
     }
     let mut tx = state
@@ -697,16 +711,26 @@ pub async fn dispatch_shipment(
         let negative_rule=sqlx::query_scalar::<_,String>("SELECT COALESCE((SELECT negative_stock_rule FROM inventory_policies WHERE tenant_id=$1 AND branch_id=$2),'block')")
             .bind(tenant_id).bind(current_branch_id).fetch_one(&mut *tx).await
             .map_err(|_|AppError::internal("failed to load transfer stock policy"))?;
-        let warning=source.stock_quantity<quantity;
-        if warning && negative_rule!="allow_with_warning" {
+        let warning = source.stock_quantity < quantity;
+        if warning && negative_rule != "allow_with_warning" {
             return Err(AppError::conflict(
                 "source inventory is insufficient for shipment",
             ));
         }
+        let movement_unit_cost_paise = inventory_adjustment_service::outbound_unit_cost(
+            &mut tx,
+            tenant_id,
+            current_branch_id,
+            &source.id,
+            source.batch_tracked,
+            source.unit_cost_paise,
+            quantity,
+        )
+        .await?;
         shipment_cost = checked_add_money(
             shipment_cost,
             i64::from(quantity)
-                .checked_mul(source.unit_cost_paise)
+                .checked_mul(movement_unit_cost_paise)
                 .ok_or_else(|| AppError::validation("shipment value exceeds supported range"))?,
         )?;
         let shipment_line = inventory_transfer_repository::create_shipment_line(
@@ -741,22 +765,46 @@ pub async fn dispatch_shipment(
             &shipment_line.id,
             "transfer_out",
             -quantity,
-            source.unit_cost_paise,
+            movement_unit_cost_paise,
             stock_after,
         )
         .await
         .map_err(|_| AppError::internal("failed to write shipment stock ledger"))?;
-        if requested.retail_quantity>0 {
+        if requested.retail_quantity > 0 {
             inventory_governance_repository::record_automatic_transfer_out(
-                &mut tx,tenant_id,current_branch_id,&source.id,"retail_available",requested.retail_quantity,
-                source.unit_cost_paise,actor,&shipment_line.id,&format!("transfer-out-op:{}:retail",shipment_line.id),warning,
-            ).await.map_err(|_|AppError::internal("failed to write retail transfer checkout history"))?;
+                &mut tx,
+                tenant_id,
+                current_branch_id,
+                &source.id,
+                "retail_available",
+                requested.retail_quantity,
+                movement_unit_cost_paise,
+                actor,
+                &shipment_line.id,
+                &format!("transfer-out-op:{}:retail", shipment_line.id),
+                warning,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to write retail transfer checkout history"))?;
         }
-        if requested.consumable_quantity>0 {
+        if requested.consumable_quantity > 0 {
             inventory_governance_repository::record_automatic_transfer_out(
-                &mut tx,tenant_id,current_branch_id,&source.id,"consumable_available",requested.consumable_quantity,
-                source.unit_cost_paise,actor,&shipment_line.id,&format!("transfer-out-op:{}:consumable",shipment_line.id),warning,
-            ).await.map_err(|_|AppError::internal("failed to write consumable transfer checkout history"))?;
+                &mut tx,
+                tenant_id,
+                current_branch_id,
+                &source.id,
+                "consumable_available",
+                requested.consumable_quantity,
+                movement_unit_cost_paise,
+                actor,
+                &shipment_line.id,
+                &format!("transfer-out-op:{}:consumable", shipment_line.id),
+                warning,
+            )
+            .await
+            .map_err(|_| {
+                AppError::internal("failed to write consumable transfer checkout history")
+            })?;
         }
         inventory_adjustment_service::allocate_fefo_quantity(
             &mut tx,

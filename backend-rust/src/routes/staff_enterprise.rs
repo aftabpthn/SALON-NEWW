@@ -5,9 +5,9 @@ use axum::{
     routing::{get, patch, post},
     Extension, Json, Router,
 };
-use chrono::{FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
@@ -55,6 +55,14 @@ pub fn router() -> Router<AppState> {
         .route("/staff/feedback", get(list_staff_feedback))
         .route("/staff/feedback/:id", patch(resolve_staff_feedback))
         .route(
+            "/staff/surveys",
+            get(list_staff_surveys).post(create_staff_survey),
+        )
+        .route(
+            "/staff/surveys/:id/status",
+            patch(update_staff_survey_status),
+        )
+        .route(
             "/staff/rules",
             get(list_staff_rules_center).post(create_staff_rule_document),
         )
@@ -76,6 +84,11 @@ pub fn router() -> Router<AppState> {
             "/staff-self/feedback",
             get(list_self_feedback).post(create_self_feedback),
         )
+        .route("/staff-self/surveys", get(list_self_surveys))
+        .route(
+            "/staff-self/surveys/:id/responses",
+            post(submit_self_survey_response),
+        )
         .route("/staff-self/offers", get(list_self_offers))
         .route("/staff-self/rules", get(list_self_staff_rules))
         .route("/staff-self/rules/:id/read", post(mark_staff_rule_read))
@@ -88,7 +101,13 @@ pub fn router() -> Router<AppState> {
             get(get_self_offer_creative),
         )
         .route("/staff-self/enterprise-os", get(staff_app_enterprise_os))
+        .route("/staff-self/performance", get(staff_app_performance))
         .route("/staff-self/business", get(staff_app_business))
+        .route("/staff-self/earnings", get(staff_self_earnings))
+        .route(
+            "/staff-self/tip-disputes",
+            post(create_staff_self_tip_dispute),
+        )
         .route(
             "/staff-self/business/product-usage",
             post(record_staff_product_usage),
@@ -109,6 +128,10 @@ pub fn router() -> Router<AppState> {
         .route("/staff/tips", get(list_tips))
         .route("/staff/tips/summary", get(tip_summary))
         .route("/staff/tips/payouts", post(record_tip_payout))
+        .route(
+            "/staff/tips/payouts/:id/reconcile",
+            post(reconcile_tip_payout),
+        )
         .route(
             "/staff/payroll-compliance/rules",
             get(list_rules).post(create_rule),
@@ -208,6 +231,10 @@ pub fn router() -> Router<AppState> {
         )
         .route("/staff/coach/insights", get(coaching_insights))
         .route(
+            "/staff/performance-settings",
+            get(get_performance_settings).put(save_performance_settings),
+        )
+        .route(
             "/staff/coach/goals",
             get(list_coaching_goals).post(create_coaching_goal),
         )
@@ -254,6 +281,26 @@ struct StaffFeedbackResolutionRequest {
     manager_note: String,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffSurveyRequest {
+    title: String,
+    description: Option<String>,
+    questions: Value,
+    starts_at: Option<DateTime<Utc>>,
+    ends_at: Option<DateTime<Utc>>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffSurveyStatusRequest {
+    status: String,
+    version: i32,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StaffSurveyResponseRequest {
+    answers: Value,
+}
+#[derive(Deserialize)]
 struct SelfQuery {
     date: Option<NaiveDate>,
 }
@@ -279,6 +326,27 @@ struct StaffAppBusinessQuery {
     service: Option<String>,
     department: Option<String>,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StaffPerformanceQuery {
+    from: NaiveDate,
+    to: NaiveDate,
+    basis: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PerformanceSettingsRequest {
+    visible_metric_keys: Vec<String>,
+    #[serde(default = "empty_array")]
+    custom_metrics: Value,
+    version: i32,
+}
+
+fn empty_array() -> Value {
+    json!([])
+}
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StaffProductUsageRequest {
@@ -287,6 +355,10 @@ struct StaffProductUsageRequest {
     client_id: String,
     appointment_id: String,
     actual_quantity: i32,
+    #[serde(default)]
+    wasted_quantity: i32,
+    selected_batch_id: Option<String>,
+    waste_reason: Option<String>,
     notes: Option<String>,
     idempotency_key: String,
 }
@@ -302,6 +374,22 @@ struct PeriodQuery {
 struct SummaryQuery {
     period_start: NaiveDate,
     period_end: NaiveDate,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SelfEarningsQuery {
+    period_start: NaiveDate,
+    period_end: NaiveDate,
+    basis: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SelfTipDisputeRequest {
+    sale_id: Option<String>,
+    payout_id: Option<String>,
+    reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -508,6 +596,92 @@ async fn resolve_staff_feedback(
         &claims,
         &branch_id,
         &format!("staff.feedback.{status}"),
+        &id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn list_staff_surveys(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    governance(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let rows = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+      'id',survey.id,'title',survey.title,'description',survey.description,'questions',survey.questions_json,
+      'status',survey.status,'startsAt',survey.starts_at,'endsAt',survey.ends_at,'version',survey.version,
+      'responseCount',(SELECT COUNT(*) FROM staff_survey_responses response WHERE response.survey_id=survey.id),
+      'createdAt',survey.created_at,'updatedAt',survey.updated_at
+    ) ORDER BY survey.created_at DESC),'[]'::JSONB) FROM staff_surveys survey
+    WHERE survey.tenant_id=$1 AND survey.branch_id=$2"#)
+        .bind(&tenant_id).bind(&branch_id).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load staff surveys"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn create_staff_survey(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<StaffSurveyRequest>,
+) -> ApiResult<Value> {
+    governance(&claims, true)?;
+    let title = payload.title.trim();
+    let description = payload.description.as_deref().unwrap_or("").trim();
+    if title.is_empty()
+        || title.chars().count() > 160
+        || description.chars().count() > 2000
+        || payload
+            .ends_at
+            .zip(payload.starts_at)
+            .is_some_and(|(end, start)| end <= start)
+    {
+        return Err(AppError::validation(
+            "survey title, description, or dates are invalid",
+        ));
+    }
+    validate_survey_questions(&payload.questions)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let row = sqlx::query_scalar::<_, Value>(r#"INSERT INTO staff_surveys(
+      id,tenant_id,branch_id,title,description,questions_json,starts_at,ends_at,created_by
+    ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING JSONB_BUILD_OBJECT(
+      'id',id,'title',title,'description',description,'questions',questions_json,'status',status,
+      'startsAt',starts_at,'endsAt',ends_at,'version',version,'responseCount',0,'createdAt',created_at,'updatedAt',updated_at)"#)
+        .bind(&id).bind(&tenant_id).bind(&branch_id).bind(title).bind(description).bind(&payload.questions)
+        .bind(payload.starts_at).bind(payload.ends_at).bind(&claims.sub).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to create staff survey"))?;
+    audit(&state, &claims, &branch_id, "staff.survey.created", &id).await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
+async fn update_staff_survey_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(payload): Json<StaffSurveyStatusRequest>,
+) -> ApiResult<Value> {
+    governance(&claims, true)?;
+    let status = payload.status.trim().to_ascii_lowercase();
+    if !matches!(status.as_str(), "published" | "closed") || payload.version < 1 {
+        return Err(AppError::validation("survey status or version is invalid"));
+    }
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = sqlx::query_scalar::<_, Value>(r#"UPDATE staff_surveys SET status=$4,version=version+1,updated_at=NOW()
+      WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND version=$5
+      RETURNING JSONB_BUILD_OBJECT('id',id,'title',title,'description',description,'questions',questions_json,
+      'status',status,'startsAt',starts_at,'endsAt',ends_at,'version',version,'createdAt',created_at,'updatedAt',updated_at)"#)
+        .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&status).bind(payload.version)
+        .fetch_optional(&state.db).await.map_err(|_| AppError::internal("failed to update staff survey"))?
+        .ok_or_else(|| AppError::conflict("survey changed; reload before updating"))?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        &format!("staff.survey.{status}"),
         &id,
     )
     .await;
@@ -893,6 +1067,83 @@ async fn create_self_feedback(
     Ok(Json(ApiResponse::ok(row)))
 }
 
+async fn list_self_surveys(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_app(
+        &claims,
+        "staff.app.surveys.read",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let rows = sqlx::query_scalar::<_, Value>(r#"SELECT COALESCE(JSONB_AGG(JSONB_BUILD_OBJECT(
+      'id',survey.id,'title',survey.title,'description',survey.description,'questions',survey.questions_json,
+      'startsAt',survey.starts_at,'endsAt',survey.ends_at,'answered',response.id IS NOT NULL,
+      'answers',COALESCE(response.answers_json,'{}'::JSONB),'submittedAt',response.submitted_at
+    ) ORDER BY survey.created_at DESC),'[]'::JSONB)
+    FROM staff_surveys survey LEFT JOIN staff_survey_responses response
+      ON response.survey_id=survey.id AND response.tenant_id=$1 AND response.branch_id=$2 AND response.staff_id=$3
+    WHERE survey.tenant_id=$1 AND survey.branch_id=$2 AND survey.status='published'
+      AND (survey.starts_at IS NULL OR survey.starts_at<=NOW()) AND (survey.ends_at IS NULL OR survey.ends_at>NOW())"#)
+        .bind(&tenant_id).bind(&branch_id).bind(&staff_id).fetch_one(&state.db).await
+        .map_err(|_| AppError::internal("failed to load employee surveys"))?;
+    Ok(Json(ApiResponse::ok(rows)))
+}
+
+async fn submit_self_survey_response(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(survey_id): Path<String>,
+    Json(payload): Json<StaffSurveyResponseRequest>,
+) -> ApiResult<Value> {
+    require_app(
+        &claims,
+        "staff.app.surveys.manage",
+        &["staff.self_manage", "staff_self.write"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let questions = sqlx::query_scalar::<_, Value>(
+        r#"SELECT questions_json FROM staff_surveys
+      WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status='published'
+        AND (starts_at IS NULL OR starts_at<=NOW()) AND (ends_at IS NULL OR ends_at>NOW())"#,
+    )
+    .bind(&survey_id)
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to validate employee survey"))?
+    .ok_or_else(|| AppError::not_found("employee survey is not available"))?;
+    validate_survey_answers(&questions, &payload.answers)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    let row = sqlx::query_scalar::<_, Value>(r#"WITH inserted AS (
+      INSERT INTO staff_survey_responses(id,tenant_id,branch_id,survey_id,staff_id,answers_json)
+      VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,branch_id,survey_id,staff_id) DO NOTHING RETURNING *
+    ) SELECT JSONB_BUILD_OBJECT('id',id,'surveyId',survey_id,'answers',answers_json,'submittedAt',submitted_at) FROM inserted
+      UNION ALL SELECT JSONB_BUILD_OBJECT('id',id,'surveyId',survey_id,'answers',answers_json,'submittedAt',submitted_at)
+      FROM staff_survey_responses WHERE tenant_id=$2 AND branch_id=$3 AND survey_id=$4 AND staff_id=$5 LIMIT 1"#)
+        .bind(&id).bind(&tenant_id).bind(&branch_id).bind(&survey_id).bind(&staff_id).bind(&payload.answers)
+        .fetch_one(&state.db).await.map_err(|_| AppError::internal("failed to submit employee survey"))?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.survey.responded",
+        &survey_id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn staff_app_workspace_preferences(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -1001,6 +1252,88 @@ async fn staff_app_enterprise_os(
     Ok(Json(ApiResponse::ok(os)))
 }
 
+async fn staff_app_performance(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<StaffPerformanceQuery>,
+) -> ApiResult<Value> {
+    require_app(
+        &claims,
+        "staff.app.performance.read",
+        &["staff.analytics.read", "staff.self_manage"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::performance_dashboard(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            query.from,
+            query.to,
+            query.basis.as_deref().unwrap_or("sale_date"),
+            app_allowed(
+                &claims,
+                "staff.app.business.service_amount.read",
+                &[
+                    "read:finance",
+                    "read:sales",
+                    "read:payments",
+                    "read:invoices",
+                ],
+            ),
+            app_allowed(
+                &claims,
+                "staff.app.payroll.read",
+                &["staff.payroll.read", "read:payroll"],
+            ),
+        )
+        .await?,
+    )))
+}
+
+async fn get_performance_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    manager(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        staff_app_service::performance_settings(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn save_performance_settings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(request): Json<PerformanceSettingsRequest>,
+) -> ApiResult<Value> {
+    manager(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let row = staff_app_service::save_performance_settings(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &claims.sub,
+        request.visible_metric_keys,
+        request.custom_metrics,
+        request.version,
+    )
+    .await?;
+    audit(
+        &state,
+        &claims,
+        &branch_id,
+        "staff.performance.settings.updated",
+        &branch_id,
+    )
+    .await;
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn staff_app_business(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
@@ -1067,13 +1400,105 @@ async fn staff_app_business(
     )))
 }
 
+async fn staff_self_earnings(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<SelfEarningsQuery>,
+) -> ApiResult<Value> {
+    require_app(
+        &claims,
+        "staff.app.payroll.read",
+        &["staff.payroll.read", "staff.payroll.manage", "read:payroll"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let basis = query.basis.as_deref().unwrap_or("sale_date").trim();
+    let mut value = staff_enterprise_service::self_earnings_details(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        query.period_start,
+        query.period_end,
+        basis,
+    )
+    .await?;
+    if let Some(object) = value.as_object_mut() {
+        object.insert("periodStart".into(), json!(query.period_start));
+        object.insert("periodEnd".into(), json!(query.period_end));
+        object.insert("basis".into(), json!(basis));
+        object.insert(
+            "visibility".into(),
+            json!({
+                "costs": app_allowed(&claims,"staff.app.payroll.costs.read",&["staff.payroll.costs.read"]),
+                "deductions": app_allowed(&claims,"staff.app.payroll.deductions.read",&["staff.payroll.read","staff.payroll.manage","read:payroll"])
+            }),
+        );
+        object.insert(
+            "indiaPayout".into(),
+            json!({"currency":"INR","supportedMethods":["bank","upi"],"zenotiWallet":"not_applicable"}),
+        );
+    }
+    Ok(Json(ApiResponse::ok(value)))
+}
+
+async fn create_staff_self_tip_dispute(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<SelfTipDisputeRequest>,
+) -> ApiResult<Value> {
+    require_app(
+        &claims,
+        "staff.app.tips.dispute.manage",
+        &["staff.payroll.read", "staff.payroll.manage", "read:payroll"],
+    )?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let staff_id =
+        staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    let row = staff_enterprise_service::create_tip_dispute(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &staff_id,
+        &claims.sub,
+        payload
+            .sale_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty()),
+        payload
+            .payout_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty()),
+        &payload.reason,
+    )
+    .await?;
+    if let Some(id) = row.get("id").and_then(Value::as_str) {
+        audit(&state, &claims, &branch_id, "staff.tip_dispute.created", id).await;
+    }
+    Ok(Json(ApiResponse::ok(row)))
+}
+
 async fn record_staff_product_usage(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Json(payload): Json<StaffProductUsageRequest>,
 ) -> ApiResult<inventory_repository::BackbarUsageRecord> {
-    require_app(&claims, "staff.self_manage", &["staff_self.write"])?;
+    if !auth_service::staff_app_permission_allowed(
+        &claims,
+        "staff.app.service.consumables.manage",
+        &["owner", "admin"],
+        &[],
+    ) {
+        return Err(AppError::forbidden(
+            "Staff App consumables permission is required",
+        ));
+    }
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     let staff_id =
         staff_enterprise_service::self_staff_id(&state.db, &tenant_id, &branch_id, &claims.sub)
@@ -1089,10 +1514,13 @@ async fn record_staff_product_usage(
             client_id: Some(payload.client_id.trim()),
             appointment_id: Some(payload.appointment_id.trim()),
             actual_quantity: payload.actual_quantity,
-            waste_reason: "",
+            wasted_quantity: payload.wasted_quantity,
+            selected_batch_id: payload.selected_batch_id.as_deref(),
+            waste_reason: payload.waste_reason.as_deref().unwrap_or_default(),
             notes: payload.notes.as_deref().unwrap_or_default(),
             actor_user_id: &claims.sub,
             idempotency_key: payload.idempotency_key.trim(),
+            override_authorized: false,
         },
     )
     .await?;
@@ -1182,13 +1610,111 @@ fn app_allowed(c: &AuthClaims, permission: &str, legacy: &[&str]) -> bool {
     auth_service::staff_app_permission_allowed(c, permission, STAFF_APP_ROLES, legacy)
 }
 
+fn validate_survey_questions(value: &Value) -> Result<(), AppError> {
+    let questions = value
+        .as_array()
+        .filter(|items| (1..=30).contains(&items.len()))
+        .ok_or_else(|| AppError::validation("survey requires 1 to 30 questions"))?;
+    let mut ids = Vec::with_capacity(questions.len());
+    for question in questions {
+        let row = question
+            .as_object()
+            .ok_or_else(|| AppError::validation("survey question is invalid"))?;
+        let id = row.get("id").and_then(Value::as_str).unwrap_or("").trim();
+        let prompt = row
+            .get("prompt")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        let kind = row.get("type").and_then(Value::as_str).unwrap_or("");
+        if id.is_empty()
+            || id.chars().count() > 80
+            || ids.contains(&id)
+            || prompt.is_empty()
+            || prompt.chars().count() > 500
+            || !matches!(kind, "text" | "rating" | "single_choice")
+        {
+            return Err(AppError::validation("survey question is invalid"));
+        }
+        if kind == "single_choice" {
+            let options = row
+                .get("options")
+                .and_then(Value::as_array)
+                .filter(|items| (2..=10).contains(&items.len()))
+                .ok_or_else(|| {
+                    AppError::validation("survey choice question requires 2 to 10 options")
+                })?;
+            if options.iter().any(|option| {
+                option.as_str().map_or(true, |text| {
+                    text.trim().is_empty() || text.chars().count() > 200
+                })
+            }) {
+                return Err(AppError::validation("survey choice option is invalid"));
+            }
+        }
+        ids.push(id);
+    }
+    Ok(())
+}
+
+fn validate_survey_answers(questions: &Value, answers: &Value) -> Result<(), AppError> {
+    validate_survey_questions(questions)?;
+    let answers = answers
+        .as_object()
+        .ok_or_else(|| AppError::validation("survey answers are invalid"))?;
+    let question_rows = questions
+        .as_array()
+        .ok_or_else(|| AppError::validation("survey questions are invalid"))?;
+    if answers.len() != question_rows.len() {
+        return Err(AppError::validation("answer every survey question"));
+    }
+    for question in question_rows {
+        let row = question
+            .as_object()
+            .ok_or_else(|| AppError::validation("survey question is invalid"))?;
+        let id = row.get("id").and_then(Value::as_str).unwrap_or("");
+        let answer = answers
+            .get(id)
+            .ok_or_else(|| AppError::validation("answer every survey question"))?;
+        let valid = match row.get("type").and_then(Value::as_str).unwrap_or("") {
+            "text" => answer
+                .as_str()
+                .is_some_and(|value| !value.trim().is_empty() && value.chars().count() <= 2000),
+            "rating" => answer
+                .as_i64()
+                .is_some_and(|value| (1..=5).contains(&value)),
+            "single_choice" => answer.as_str().is_some_and(|value| {
+                row.get("options")
+                    .and_then(Value::as_array)
+                    .is_some_and(|options| {
+                        options.iter().any(|option| option.as_str() == Some(value))
+                    })
+            }),
+            _ => false,
+        };
+        if !valid {
+            return Err(AppError::validation("survey answer is invalid"));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::RULES_LEGACY_PERMISSIONS;
+    use super::{validate_survey_answers, validate_survey_questions, RULES_LEGACY_PERMISSIONS};
+    use serde_json::json;
 
     #[test]
     fn rules_legacy_permissions_do_not_include_granular_task_access() {
         assert!(!RULES_LEGACY_PERMISSIONS.contains(&"staff.app.tasks.read"));
+    }
+
+    #[test]
+    fn survey_schema_and_answers_are_bounded() {
+        let questions = json!([{"id":"q1","prompt":"Rate today","type":"rating"}]);
+        assert!(validate_survey_questions(&questions).is_ok());
+        assert!(validate_survey_answers(&questions, &json!({"q1":5})).is_ok());
+        assert!(validate_survey_answers(&questions, &json!({"q1":6})).is_err());
     }
 }
 
@@ -1475,6 +2001,19 @@ async fn record_tip_payout(
     let id = staff_enterprise_service::record_tip_payout(&s.db, &t, &b, &c.sub, p).await?;
     audit(&s, &c, &b, "staff.tip_payout.recorded", &id).await;
     Ok(Json(ApiResponse::ok(json!({"id":id}))))
+}
+async fn reconcile_tip_payout(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    h: HeaderMap,
+    Path(id): Path<String>,
+    Json(p): Json<staff_enterprise_service::TipPayoutReconcileRequest>,
+) -> ApiResult<Value> {
+    payroll(&c)?;
+    let (t, b) = tenant_branch(&h)?;
+    let row = staff_enterprise_service::reconcile_tip_payout(&s.db, &t, &b, &id, &c.sub, p).await?;
+    audit(&s, &c, &b, "staff.tip_payout.reconciled", &id).await;
+    Ok(Json(ApiResponse::ok(row)))
 }
 async fn list_rules(
     State(s): State<AppState>,

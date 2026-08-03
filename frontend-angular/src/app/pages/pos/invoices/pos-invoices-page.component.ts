@@ -109,6 +109,8 @@ interface InvoiceClientKpi {
 
 interface ReturnLine extends InvoiceLine {
   returnQuantity: number | null;
+  restockQuantity: number | null;
+  discardQuantity: number | null;
 }
 
 @Component({
@@ -137,11 +139,11 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
   returnDrawerOpen = false;
   returnReason = '';
   returnMfaCode = '';
+  returnEvidenceReference = '';
   refundMethod = '';
   refundMethods: string[] = [];
   refundTills: RefundTill[] = [];
   refundTillId = '';
-  restockProducts = false;
   returnIdempotencyKey = '';
   returnLoading = false;
   voidDrawerOpen = false;
@@ -858,10 +860,15 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     this.api.get<any>(`/api/v1/pos/invoices/${this.selected.id}`).subscribe({
       next: (res) => {
         const data = res?.data ?? res;
-        this.refundMethods = Array.from(new Set(this.rows(data?.payments)
+        const originalMethods = Array.from(new Set(this.rows(data?.payments)
           .map((payment) => String(payment.method ?? '').trim().toLowerCase())
           .filter(Boolean)));
-        this.refundMethod = this.refundMethods.length === 1 ? this.refundMethods[0] : '';
+        this.refundMethods = [
+          ...(originalMethods.length > 1 ? ['original_tender'] : []),
+          ...originalMethods,
+          'exchange_credit',
+        ];
+        this.refundMethod = originalMethods.length === 1 ? originalMethods[0] : 'original_tender';
         this.loadRefundTills();
         this.returnLines = this.rows(data?.lines).map((line) => ({
           id: String(line.id ?? ''),
@@ -870,10 +877,12 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
           quantity: this.firstNumber(line, ['quantity']),
           lineTotalPaise: this.firstMoney(line, ['lineTotalPaise', 'line_total_paise']),
           returnQuantity: null,
+          restockQuantity: null,
+          discardQuantity: null,
         })).filter((line) => line.id && line.quantity > 0);
         this.returnReason = '';
         this.returnMfaCode = '';
-        this.restockProducts = false;
+        this.returnEvidenceReference = '';
         this.returnIdempotencyKey = this.newIdempotencyKey();
         this.returnDrawerOpen = true;
         this.returnLoading = false;
@@ -888,11 +897,11 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     this.returnLines = [];
     this.returnReason = '';
     this.returnMfaCode = '';
+    this.returnEvidenceReference = '';
     this.refundMethod = '';
     this.refundMethods = [];
     this.refundTills = [];
     this.refundTillId = '';
-    this.restockProducts = false;
     this.returnIdempotencyKey = '';
   }
 
@@ -909,19 +918,31 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
     const reason = this.returnReason.trim();
     const lines = this.returnLines
       .filter((line) => (Number(line.returnQuantity) || 0) > 0)
-      .map((line) => ({ saleLineId: line.id, quantity: Number(line.returnQuantity) }));
+      .map((line) => ({
+        saleLineId: line.id,
+        quantity: Number(line.returnQuantity),
+        restockQuantity: line.lineType === 'product' ? Number(line.restockQuantity || 0) : 0,
+        discardQuantity: line.lineType === 'product' ? Number(line.discardQuantity || 0) : Number(line.returnQuantity),
+      }));
     if (!reason) { this.error = 'Return reason is required'; return; }
     if (!this.returnMfaCode.trim()) { this.error = 'Authenticator or recovery code is required'; return; }
+    if (!this.returnEvidenceReference.trim()) { this.error = 'Evidence reference is required'; return; }
     if (!lines.length) { this.error = 'Select at least one item to return'; return; }
     if (lines.some((line) => !Number.isInteger(line.quantity) || line.quantity < 1)) { this.error = 'Return quantity must be a whole number'; return; }
     if (this.returnLines.some((line) => (Number(line.returnQuantity) || 0) > line.quantity)) { this.error = 'Return quantity cannot exceed sold quantity'; return; }
+    if (lines.some((line) => !Number.isInteger(line.restockQuantity) || !Number.isInteger(line.discardQuantity)
+      || line.restockQuantity < 0 || line.discardQuantity < 0
+      || line.restockQuantity + line.discardQuantity !== line.quantity)) {
+      this.error = 'Every product return must be fully split between restock and discard'; return;
+    }
 
     this.error = '';
     this.returnLoading = true;
+    const exchangeCredit = this.refundMethod === 'exchange_credit';
     this.api.post<any>(`/api/v1/pos/invoices/${this.selected.id}/refund`, {
       reason,
       idempotencyKey: this.returnIdempotencyKey || this.newIdempotencyKey(),
-      restock: this.restockProducts,
+      evidenceReference: this.returnEvidenceReference.trim(),
       lines,
       mfaCode: this.returnMfaCode.trim(),
       refundMethod: this.refundMethod || null,
@@ -930,7 +951,7 @@ export class PosInvoicesPageComponent implements OnInit, OnDestroy {
       next: () => {
         const selectedId = this.selected?.id;
         this.closeReturnDrawer();
-        this.message = 'Item return recorded';
+        this.message = exchangeCredit ? 'Return recorded and exchange credit issued' : 'Item return recorded';
         this.load(() => {
           const updated = this.invoices.find((invoice) => invoice.id === selectedId);
           if (updated) this.select(updated);

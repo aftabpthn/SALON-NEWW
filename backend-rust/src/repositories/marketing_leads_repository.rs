@@ -24,6 +24,10 @@ pub struct MarketingLeadRecord {
     pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub capture_channel: String,
+    pub external_source_id: String,
+    pub sla_due_at: DateTime<Utc>,
+    pub first_contacted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, sqlx::FromRow, serde::Serialize)]
@@ -137,7 +141,7 @@ pub async fn automation_rules(
     branch_id: &str,
 ) -> Result<Vec<Value>, sqlx::Error> {
     sqlx::query_scalar(r#"SELECT JSONB_BUILD_OBJECT('id',rule.id,'name',rule.name,'trigger',rule.trigger_event,'status',rule.status,'template',rule.action_template,'config',rule.config_json,
-      'performance',JSONB_BUILD_OBJECT('sent',COUNT(outbox.id) FILTER(WHERE outbox.status='sent'),'failed',COUNT(outbox.id) FILTER(WHERE outbox.status='failed'),'blocked',COUNT(outbox.id) FILTER(WHERE outbox.status='blocked'))) FROM whatsapp_automation_rules rule
+      'performance',JSONB_BUILD_OBJECT('sent',COUNT(outbox.id) FILTER(WHERE outbox.status='sent'),'failed',COUNT(outbox.id) FILTER(WHERE outbox.status IN ('failed','dead_letter')),'blocked',COUNT(outbox.id) FILTER(WHERE outbox.status='blocked'))) FROM whatsapp_automation_rules rule
       LEFT JOIN benefit_notification_outbox outbox ON outbox.tenant_id=rule.tenant_id AND outbox.branch_id=rule.branch_id AND (outbox.source_type=rule.trigger_event OR (rule.trigger_event IN ('appointment_confirmation','reschedule_cancellation') AND outbox.source_type='appointment_notification') OR (rule.trigger_event='membership_renewal' AND outbox.source_type IN ('membership_reminder','package_alert')))
       WHERE rule.tenant_id=$1 AND rule.branch_id=$2 AND rule.status<>'archived' GROUP BY rule.id ORDER BY rule.priority,rule.created_at"#)
       .bind(tenant_id).bind(branch_id).fetch_all(db).await
@@ -188,7 +192,7 @@ pub async fn automation_frequency_reached(
       .bind(tenant_id).bind(branch_id).bind(client_id).bind(source_type).bind(days as i32).fetch_one(db).await
 }
 
-const LEAD_COLUMNS: &str = "id,tenant_id,branch_id,client_id,first_name,last_name,phone,email,source,stage,qualification_status,score,owner_user_id,next_follow_up_date,converted_appointment_id,notes,created_by,created_at,updated_at";
+const LEAD_COLUMNS: &str = "id,tenant_id,branch_id,client_id,first_name,last_name,phone,email,source,stage,qualification_status,score,owner_user_id,next_follow_up_date,converted_appointment_id,notes,created_by,created_at,updated_at,capture_channel,external_source_id,sla_due_at,first_contacted_at";
 
 pub async fn campaign_attribution(
     db: &PgPool,
@@ -198,22 +202,24 @@ pub async fn campaign_attribution(
     sqlx::query_scalar(r#"WITH campaign AS (
       SELECT id,title,metadata_json,created_at FROM notifications WHERE tenant_id=$1 AND branch_id=$2 AND notification_type='marketing_campaign'
     ), delivery AS (
-      SELECT payload_json->>'campaignId' campaign_id,COUNT(DISTINCT client_id)::BIGINT audience,COUNT(*) FILTER(WHERE attempts>0)::BIGINT sent,COUNT(*) FILTER(WHERE status='sent')::BIGINT delivered,COUNT(*) FILTER(WHERE status='failed')::BIGINT failed FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND source_type='marketing_campaign' GROUP BY payload_json->>'campaignId'
+      SELECT payload_json->>'campaignId' campaign_id,COUNT(DISTINCT client_id)::BIGINT audience,COUNT(*) FILTER(WHERE attempts>0)::BIGINT sent,COUNT(*) FILTER(WHERE status='sent')::BIGINT delivered,COUNT(*) FILTER(WHERE status IN ('failed','dead_letter'))::BIGINT failed FROM benefit_notification_outbox WHERE tenant_id=$1 AND branch_id=$2 AND source_type='marketing_campaign' GROUP BY payload_json->>'campaignId'
     ), event AS (
       SELECT campaign_id,COUNT(*) FILTER(WHERE event_type='opened')::BIGINT opened,COUNT(*) FILTER(WHERE event_type='clicked')::BIGINT clicked,COUNT(*) FILTER(WHERE event_type='opted_out')::BIGINT opt_outs FROM marketing_campaign_events WHERE tenant_id=$1 AND branch_id=$2 GROUP BY campaign_id
+    ), control_group AS (
+      SELECT campaign_id,COUNT(*)::BIGINT members FROM marketing_campaign_control_members WHERE tenant_id=$1 AND branch_id=$2 GROUP BY campaign_id
     ), booking AS (
-      SELECT SPLIT_PART(source,':',2) campaign_id,COUNT(*)::BIGINT clicks FROM public_booking_sessions WHERE tenant_id=$1 AND branch_id=$2 AND source LIKE 'marketing_campaign:%' GROUP BY SPLIT_PART(source,':',2)
+      SELECT SPLIT_PART(session.source,':',2) campaign_id,COUNT(*)::BIGINT clicks FROM public_booking_sessions session JOIN campaign ON campaign.id=SPLIT_PART(session.source,':',2) WHERE session.tenant_id=$1 AND session.branch_id=$2 AND session.source LIKE 'marketing_campaign:%' AND session.created_at<=campaign.created_at+MAKE_INTERVAL(days=>COALESCE(NULLIF(campaign.metadata_json->>'attributionWindowDays','')::INTEGER,30)) GROUP BY SPLIT_PART(session.source,':',2)
     ), appointment AS (
-      SELECT SPLIT_PART(source,':',2) campaign_id,COUNT(*)::BIGINT bookings,COUNT(*) FILTER(WHERE status IN ('completed','billed','paid'))::BIGINT completed FROM appointments WHERE tenant_id=$1 AND branch_id=$2 AND source LIKE 'marketing_campaign:%' GROUP BY SPLIT_PART(source,':',2)
+      SELECT SPLIT_PART(appointment.source,':',2) campaign_id,COUNT(*)::BIGINT bookings,COUNT(*) FILTER(WHERE appointment.status IN ('completed','billed','paid'))::BIGINT completed FROM appointments appointment JOIN campaign ON campaign.id=SPLIT_PART(appointment.source,':',2) WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.source LIKE 'marketing_campaign:%' AND appointment.created_at<=campaign.created_at+MAKE_INTERVAL(days=>COALESCE(NULLIF(campaign.metadata_json->>'attributionWindowDays','')::INTEGER,30)) GROUP BY SPLIT_PART(appointment.source,':',2)
     ), sale AS (
       SELECT SPLIT_PART(appointment.source,':',2) campaign_id,COALESCE(SUM(pos.paid_paise),0)::BIGINT revenue_paise,COALESCE(SUM(pos.discount_paise),0)::BIGINT discount_cost_paise,COUNT(*) FILTER(WHERE pos.coupon_code<>'' AND pos.coupon_code=offer.code)::BIGINT offer_redemptions
-      FROM appointments appointment JOIN pos_sales pos ON pos.tenant_id=appointment.tenant_id AND pos.branch_id=appointment.branch_id AND pos.source='appointment' AND pos.reference_id=appointment.id AND pos.status NOT IN ('draft','cancelled','voided','refunded') LEFT JOIN campaign ON campaign.id=SPLIT_PART(appointment.source,':',2) LEFT JOIN pos_coupons offer ON offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=campaign.metadata_json->>'offerId' WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.source LIKE 'marketing_campaign:%' GROUP BY SPLIT_PART(appointment.source,':',2)
+      FROM appointments appointment JOIN pos_sales pos ON pos.tenant_id=appointment.tenant_id AND pos.branch_id=appointment.branch_id AND pos.source='appointment' AND pos.reference_id=appointment.id AND pos.status NOT IN ('draft','cancelled','voided','refunded') JOIN campaign ON campaign.id=SPLIT_PART(appointment.source,':',2) LEFT JOIN pos_coupons offer ON offer.tenant_id=$1 AND offer.branch_id=$2 AND offer.id=campaign.metadata_json->>'offerId' WHERE appointment.tenant_id=$1 AND appointment.branch_id=$2 AND appointment.source LIKE 'marketing_campaign:%' AND pos.created_at<=campaign.created_at+MAKE_INTERVAL(days=>COALESCE(NULLIF(campaign.metadata_json->>'attributionWindowDays','')::INTEGER,30)) GROUP BY SPLIT_PART(appointment.source,':',2)
     ), rows AS (
-      SELECT campaign.id,campaign.title,campaign.created_at,campaign.metadata_json->>'audience' audience_name,COALESCE(delivery.audience,0) audience,COALESCE(delivery.sent,0) sent,COALESCE(delivery.delivered,0) delivered,COALESCE(delivery.failed,0) failed,COALESCE(event.opened,0) opened,GREATEST(COALESCE(event.clicked,0),COALESCE(booking.clicks,0)) clicked,COALESCE(appointment.bookings,0) bookings,COALESCE(appointment.completed,0) completed_appointments,COALESCE(sale.revenue_paise,0) revenue_paise,COALESCE(sale.discount_cost_paise,0) discount_cost_paise,COALESCE(sale.revenue_paise,0)-COALESCE(sale.discount_cost_paise,0) net_incremental_revenue_paise,COALESCE(sale.offer_redemptions,0) offer_redemptions,COALESCE(event.opt_outs,0) opt_outs,
+      SELECT campaign.id,campaign.title,campaign.created_at,campaign.metadata_json->>'audience' audience_name,COALESCE(delivery.audience,0) audience,COALESCE(control_group.members,0) control_group_count,COALESCE(NULLIF(campaign.metadata_json->>'attributionWindowDays','')::INTEGER,30) attribution_window_days,COALESCE(delivery.sent,0) sent,COALESCE(delivery.delivered,0) delivered,COALESCE(delivery.failed,0) failed,COALESCE(event.opened,0) opened,GREATEST(COALESCE(event.clicked,0),COALESCE(booking.clicks,0)) clicked,COALESCE(appointment.bookings,0) bookings,COALESCE(appointment.completed,0) completed_appointments,COALESCE(sale.revenue_paise,0) revenue_paise,COALESCE(sale.discount_cost_paise,0) discount_cost_paise,COALESCE(sale.revenue_paise,0)-COALESCE(sale.discount_cost_paise,0) net_incremental_revenue_paise,COALESCE(sale.offer_redemptions,0) offer_redemptions,COALESCE(event.opt_outs,0) opt_outs,
         CASE WHEN COALESCE(delivery.audience,0)=0 THEN 0 ELSE COALESCE(appointment.bookings,0)*10000/delivery.audience END conversion_rate_bps,CASE WHEN COALESCE(delivery.audience,0)=0 THEN 0 ELSE COALESCE(appointment.completed,0)*10000/delivery.audience END reactivation_rate_bps,CASE WHEN COALESCE(sale.discount_cost_paise,0)=0 THEN 0 ELSE (COALESCE(sale.revenue_paise,0)-COALESCE(sale.discount_cost_paise,0))*10000/sale.discount_cost_paise END roi_bps,
         COALESCE((SELECT line.item_name FROM appointments a JOIN pos_sales p ON p.tenant_id=a.tenant_id AND p.branch_id=a.branch_id AND p.source='appointment' AND p.reference_id=a.id JOIN pos_sale_lines line ON line.tenant_id=p.tenant_id AND line.branch_id=p.branch_id AND line.sale_id=p.id AND line.line_type='service' WHERE a.tenant_id=$1 AND a.branch_id=$2 AND SPLIT_PART(a.source,':',2)=campaign.id GROUP BY line.item_name ORDER BY SUM(line.line_total_paise) DESC LIMIT 1),'') best_service,
         COALESCE((SELECT channel FROM marketing_campaign_events e WHERE e.tenant_id=$1 AND e.branch_id=$2 AND e.campaign_id=campaign.id AND e.event_type='clicked' GROUP BY channel ORDER BY COUNT(*) DESC LIMIT 1),(campaign.metadata_json->'channels'->>0),campaign.metadata_json->>'channel','') best_channel,COALESCE(TO_CHAR(NULLIF(campaign.metadata_json->>'scheduledAt','')::TIMESTAMPTZ,'HH24:MI'),'') best_time
-      FROM campaign LEFT JOIN delivery ON delivery.campaign_id=campaign.id LEFT JOIN event ON event.campaign_id=campaign.id LEFT JOIN booking ON booking.campaign_id=campaign.id LEFT JOIN appointment ON appointment.campaign_id=campaign.id LEFT JOIN sale ON sale.campaign_id=campaign.id
+      FROM campaign LEFT JOIN delivery ON delivery.campaign_id=campaign.id LEFT JOIN event ON event.campaign_id=campaign.id LEFT JOIN control_group ON control_group.campaign_id=campaign.id LEFT JOIN booking ON booking.campaign_id=campaign.id LEFT JOIN appointment ON appointment.campaign_id=campaign.id LEFT JOIN sale ON sale.campaign_id=campaign.id
     ) SELECT JSONB_BUILD_OBJECT('campaigns',COALESCE(JSONB_AGG(TO_JSONB(rows) ORDER BY created_at DESC),'[]'::JSONB),'branchPerformance',JSONB_BUILD_ARRAY(JSONB_BUILD_OBJECT('branchId',$2,'audience',COALESCE(SUM(audience),0),'bookings',COALESCE(SUM(bookings),0),'revenuePaise',COALESCE(SUM(revenue_paise),0),'roiBps',CASE WHEN COALESCE(SUM(discount_cost_paise),0)=0 THEN 0 ELSE (SUM(revenue_paise)-SUM(discount_cost_paise))*10000/SUM(discount_cost_paise) END))) FROM rows"#)
       .bind(tenant_id).bind(branch_id).fetch_one(db).await
 }
@@ -400,7 +406,7 @@ pub async fn list(
 ) -> Result<Vec<MarketingLeadRecord>, sqlx::Error> {
     let offset = (page.saturating_sub(1)).saturating_mul(page_size);
     let sql = format!(
-        "SELECT {LEAD_COLUMNS} FROM marketing_leads WHERE tenant_id=$1 AND branch_id=$2 AND ($3='' OR stage=$3) AND ($4='' OR owner_user_id=$4) AND ($5='' OR LOWER(CONCAT_WS(' ',first_name,last_name,phone,email,source)) LIKE '%'||LOWER($5)||'%') ORDER BY CASE WHEN next_follow_up_date IS NULL THEN 1 ELSE 0 END,next_follow_up_date,updated_at DESC LIMIT $6 OFFSET $7"
+        "SELECT {LEAD_COLUMNS} FROM marketing_leads WHERE tenant_id=$1 AND branch_id=$2 AND ($3='' OR stage=$3) AND ($4='' OR owner_user_id=$4) AND ($5='' OR LOWER(CONCAT_WS(' ',first_name,last_name,phone,email,source,capture_channel)) LIKE '%'||LOWER($5)||'%') ORDER BY CASE WHEN stage NOT IN ('converted','lost') AND first_contacted_at IS NULL THEN 0 ELSE 1 END,sla_due_at,CASE WHEN next_follow_up_date IS NULL THEN 1 ELSE 0 END,next_follow_up_date,updated_at DESC LIMIT $6 OFFSET $7"
     );
     sqlx::query_as::<_, MarketingLeadRecord>(&sql)
         .bind(tenant_id)
@@ -490,8 +496,11 @@ pub async fn create(
     next_follow_up_date: Option<NaiveDate>,
     notes: &str,
     client_id: Option<&str>,
+    capture_channel: &str,
+    external_source_id: &str,
+    sla_due_at: DateTime<Utc>,
 ) -> Result<MarketingLeadRecord, sqlx::Error> {
-    let sql = format!("INSERT INTO marketing_leads(tenant_id,branch_id,client_id,first_name,last_name,phone,email,source,stage,qualification_status,score,owner_user_id,next_follow_up_date,notes,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING {LEAD_COLUMNS}");
+    let sql = format!("INSERT INTO marketing_leads(tenant_id,branch_id,client_id,first_name,last_name,phone,email,source,stage,qualification_status,score,owner_user_id,next_follow_up_date,notes,created_by,capture_channel,external_source_id,sla_due_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING {LEAD_COLUMNS}");
     sqlx::query_as::<_, MarketingLeadRecord>(&sql)
         .bind(tenant_id)
         .bind(branch_id)
@@ -508,8 +517,29 @@ pub async fn create(
         .bind(next_follow_up_date)
         .bind(notes)
         .bind(created_by)
+        .bind(capture_channel)
+        .bind(external_source_id)
+        .bind(sla_due_at)
         .fetch_one(db)
         .await
+}
+
+pub async fn matching_client_id(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    phone: &str,
+    email: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT id FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND merged_into_client_id IS NULL AND (($3<>'' AND phone=$3) OR ($4<>'' AND LOWER(email)=LOWER($4))) ORDER BY CASE WHEN $3<>'' AND phone=$3 THEN 0 ELSE 1 END,created_at LIMIT 1",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(phone)
+    .bind(email)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn client_exists(
@@ -520,6 +550,22 @@ pub async fn client_exists(
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM clients WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND active=TRUE)")
         .bind(client_id).bind(tenant_id).bind(branch_id).fetch_one(db).await
+}
+
+pub async fn lead_client_id(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    lead_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT client_id FROM marketing_leads WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND client_id IS NOT NULL",
+    )
+    .bind(lead_id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
 }
 
 pub async fn appointment_exists(
@@ -538,6 +584,22 @@ pub async fn appointment_exists(
     .await
 }
 
+pub async fn appointment_client_id(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    appointment_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT client_id FROM appointments WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND client_id IS NOT NULL",
+    )
+    .bind(appointment_id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn update(
     db: &PgPool,
     tenant_id: &str,
@@ -550,7 +612,7 @@ pub async fn update(
     next_follow_up_date: Option<NaiveDate>,
     notes: Option<&str>,
 ) -> Result<Option<MarketingLeadRecord>, sqlx::Error> {
-    let sql = format!("UPDATE marketing_leads SET stage=COALESCE($4,stage),qualification_status=COALESCE($5,qualification_status),score=COALESCE($6,score),owner_user_id=COALESCE($7,owner_user_id),next_follow_up_date=COALESCE($8,next_follow_up_date),notes=COALESCE($9,notes),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING {LEAD_COLUMNS}");
+    let sql = format!("UPDATE marketing_leads SET stage=COALESCE($4,stage),qualification_status=COALESCE($5,qualification_status),score=COALESCE($6,score),owner_user_id=COALESCE($7,owner_user_id),next_follow_up_date=COALESCE($8,next_follow_up_date),notes=COALESCE($9,notes),first_contacted_at=CASE WHEN COALESCE($4,stage) IN ('contacted','qualified','converted') THEN COALESCE(first_contacted_at,NOW()) ELSE first_contacted_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 RETURNING {LEAD_COLUMNS}");
     sqlx::query_as::<_, MarketingLeadRecord>(&sql)
         .bind(tenant_id)
         .bind(branch_id)
@@ -616,12 +678,12 @@ pub async fn add_activity(
     .fetch_one(&mut *tx)
     .await?;
     if next_follow_up_date.is_some() {
-        sqlx::query("UPDATE marketing_leads SET next_follow_up_date=$4,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-            .bind(tenant_id).bind(branch_id).bind(lead_id).bind(next_follow_up_date)
+        sqlx::query("UPDATE marketing_leads SET next_follow_up_date=$4,first_contacted_at=CASE WHEN $5 IN ('call','message','qualification') THEN COALESCE(first_contacted_at,NOW()) ELSE first_contacted_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant_id).bind(branch_id).bind(lead_id).bind(next_follow_up_date).bind(activity_type)
             .execute(&mut *tx).await?;
     } else {
-        sqlx::query("UPDATE marketing_leads SET updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
-            .bind(tenant_id).bind(branch_id).bind(lead_id).execute(&mut *tx).await?;
+        sqlx::query("UPDATE marketing_leads SET first_contacted_at=CASE WHEN $4 IN ('call','message','qualification') THEN COALESCE(first_contacted_at,NOW()) ELSE first_contacted_at END,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3")
+            .bind(tenant_id).bind(branch_id).bind(lead_id).bind(activity_type).execute(&mut *tx).await?;
     }
     tx.commit().await?;
     Ok(Some(activity))

@@ -1,5 +1,6 @@
 import { Injectable, signal } from "@angular/core";
 import { StaffAppService } from "./staff-app.service";
+import { StaffNativeService } from "./staff-native.service";
 
 type PushState = "checking" | "available" | "enabled" | "blocked" | "unsupported" | "unconfigured";
 
@@ -9,9 +10,14 @@ export class StaffPushService {
   readonly busy = signal(false);
   readonly message = signal("");
 
-  constructor(private readonly staff: StaffAppService) {}
+  constructor(private readonly staff: StaffAppService, private readonly native: StaffNativeService) {}
 
   async refreshStatus(): Promise<void> {
+    if (this.native.isNative()) {
+      const status = await this.native.nativePushStatus();
+      this.state.set(status === "granted" ? "enabled" : status === "denied" ? "blocked" : "available");
+      return;
+    }
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
       this.state.set("unsupported");
       return;
@@ -31,6 +37,12 @@ export class StaffPushService {
     this.busy.set(true);
     this.message.set("");
     try {
+      if (this.native.isNative()) {
+        await this.native.enableNativePush();
+        this.state.set("enabled");
+        this.message.set("Native mobile notifications enabled on this device.");
+        return;
+      }
       const config = await this.staff.mobilePushConfig();
       if (!config.configured || !config.publicKey) {
         this.state.set("unconfigured");

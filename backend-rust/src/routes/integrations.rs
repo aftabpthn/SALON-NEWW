@@ -83,6 +83,18 @@ pub fn router() -> Router<AppState> {
             post(sync_connector),
         )
         .route(
+            "/settings/integrations/connectors/:provider/account-mappings",
+            get(connector_account_mappings),
+        )
+        .route(
+            "/settings/integrations/connectors/:provider/account-mappings/:account_code",
+            put(save_connector_account_mapping),
+        )
+        .route(
+            "/settings/integrations/connectors/:provider/reconciliation",
+            get(connector_reconciliation),
+        )
+        .route(
             "/settings/integrations/connectors/:provider",
             delete(disconnect_connector),
         )
@@ -109,6 +121,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/integrations/webhook-deliveries",
             get(webhook_logs),
+        )
+        .route(
+            "/settings/integrations/webhook-deliveries/:id/replay",
+            post(replay_webhook_delivery),
         )
         .route(
             "/settings/integrations/import-jobs",
@@ -376,7 +392,11 @@ struct DeliveryQuery {
     subscription_id: Option<String>,
 }
 #[derive(Deserialize)]
-struct LimitQuery {
+struct PageQuery {
+    page: Option<i64>,
+    #[serde(rename = "pageSize")]
+    page_size: Option<i64>,
+    // Backward-compatible alias for existing partners.
     limit: Option<i64>,
 }
 
@@ -423,8 +443,10 @@ async fn delivery_providers(State(s): State<AppState>) -> ApiResult<Vec<Value>> 
 }
 async fn list_connectors(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<integration_service::ConnectorView>> {
+    require_security_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::list_connectors(&s.db, &s.settings, &t, &b).await?,
@@ -437,6 +459,7 @@ async fn start_connector(
     Path(provider): Path<String>,
     Json(p): Json<ConnectorStartWrite>,
 ) -> ApiResult<integration_service::ConnectorAuthorize> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let provider = integration_service::ConnectorProvider::parse(&provider)?;
     Ok(Json(ApiResponse::ok(
@@ -482,6 +505,7 @@ async fn sync_connector(
     headers: HeaderMap,
     Path(provider): Path<String>,
 ) -> ApiResult<crate::repositories::integration_repository::ConnectorSyncJob> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let provider = integration_service::ConnectorProvider::parse(&provider)?;
     Ok(Json(ApiResponse::ok(
@@ -494,6 +518,7 @@ async fn disconnect_connector(
     headers: HeaderMap,
     Path(provider): Path<String>,
 ) -> ApiResult<Value> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     let provider = integration_service::ConnectorProvider::parse(&provider)?;
     integration_service::disconnect_connector(&s.db, &t, &b, &c.sub, provider).await?;
@@ -501,11 +526,65 @@ async fn disconnect_connector(
 }
 async fn connector_sync_jobs(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<crate::repositories::integration_repository::ConnectorSyncJob>> {
+    require_security_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::list_connector_sync_jobs(&s.db, &t, &b).await?,
+    )))
+}
+
+async fn connector_account_mappings(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(provider): Path<String>,
+) -> ApiResult<Vec<crate::repositories::integration_repository::ConnectorAccountMapping>> {
+    require_security_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let provider = integration_service::ConnectorProvider::parse(&provider)?;
+    Ok(Json(ApiResponse::ok(
+        integration_service::list_connector_account_mappings(&s.db, &t, &b, provider).await?,
+    )))
+}
+
+async fn save_connector_account_mapping(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((provider, account_code)): Path<(String, String)>,
+    Json(request): Json<integration_service::ConnectorAccountMappingWrite>,
+) -> ApiResult<crate::repositories::integration_repository::ConnectorAccountMapping> {
+    require_security_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let provider = integration_service::ConnectorProvider::parse(&provider)?;
+    Ok(Json(ApiResponse::ok(
+        integration_service::save_connector_account_mapping(
+            &s.db,
+            &t,
+            &b,
+            &c.sub,
+            provider,
+            &account_code,
+            request,
+        )
+        .await?,
+    )))
+}
+
+async fn connector_reconciliation(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(provider): Path<String>,
+) -> ApiResult<Value> {
+    require_security_read(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let provider = integration_service::ConnectorProvider::parse(&provider)?;
+    Ok(Json(ApiResponse::ok(
+        integration_service::connector_reconciliation(&s.db, &t, &b, provider).await?,
     )))
 }
 async fn connector_oauth_callback(
@@ -589,8 +668,10 @@ async fn revoke_api_key(
 }
 async fn list_webhooks(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<Vec<integration_service::WebhookView>> {
+    require_security_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::list_webhooks(&s.db, &t, &b).await?,
@@ -602,6 +683,7 @@ async fn create_webhook(
     headers: HeaderMap,
     Json(p): Json<WebhookWrite>,
 ) -> ApiResult<integration_service::WebhookCreated> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::create_webhook(
@@ -623,6 +705,7 @@ async fn rotate_webhook(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<integration_service::WebhookCreated> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::rotate_webhook_secret(&s.db, &s.settings, &t, &b, &c.sub, &id).await?,
@@ -634,28 +717,44 @@ async fn deactivate_webhook(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     integration_service::deactivate_webhook(&s.db, &t, &b, &c.sub, &id).await?;
     Ok(Json(ApiResponse::ok(json!({"active":false}))))
 }
 async fn test_webhook(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> ApiResult<Value> {
+    require_security_manage(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     integration_service::test_webhook(&s.db, &t, &b, &id).await?;
     Ok(Json(ApiResponse::ok(json!({"queued":true}))))
 }
 async fn webhook_logs(
     State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
     headers: HeaderMap,
     Query(q): Query<DeliveryQuery>,
 ) -> ApiResult<Vec<crate::repositories::integration_repository::WebhookDeliveryLog>> {
+    require_security_read(&c)?;
     let (t, b) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         integration_service::webhook_logs(&s.db, &t, &b, q.subscription_id.as_deref()).await?,
     )))
+}
+async fn replay_webhook_delivery(
+    State(s): State<AppState>,
+    Extension(c): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_security_manage(&c)?;
+    let (t, b) = tenant_branch(&headers)?;
+    integration_service::replay_webhook_delivery(&s.db, &t, &b, &c.sub, &id).await?;
+    Ok(Json(ApiResponse::ok(json!({"queued":true}))))
 }
 async fn list_import_jobs(
     State(s): State<AppState>,
@@ -1799,42 +1898,50 @@ async fn download_import_source_evidence(
 async fn api_clients(
     State(s): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<PageQuery>,
 ) -> ApiResult<Vec<Value>> {
     let credential = authenticate_api_request(&s, &headers, "clients.read").await?;
-    Ok(Json(ApiResponse::ok(
-        integration_service::api_clients(&s.db, &credential, q.limit.unwrap_or(100)).await?,
-    )))
+    let (page, page_size) = public_api_page(&q);
+    let (rows, total) =
+        integration_service::api_clients(&s.db, &credential, page, page_size).await?;
+    Ok(Json(ApiResponse::paged(rows, page, page_size, total)))
 }
 async fn api_appointments(
     State(s): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<PageQuery>,
 ) -> ApiResult<Vec<Value>> {
     let credential = authenticate_api_request(&s, &headers, "appointments.read").await?;
-    Ok(Json(ApiResponse::ok(
-        integration_service::api_appointments(&s.db, &credential, q.limit.unwrap_or(100)).await?,
-    )))
+    let (page, page_size) = public_api_page(&q);
+    let (rows, total) =
+        integration_service::api_appointments(&s.db, &credential, page, page_size).await?;
+    Ok(Json(ApiResponse::paged(rows, page, page_size, total)))
 }
 async fn api_sales(
     State(s): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<PageQuery>,
 ) -> ApiResult<Vec<Value>> {
     let credential = authenticate_api_request(&s, &headers, "sales.read").await?;
-    Ok(Json(ApiResponse::ok(
-        integration_service::api_sales(&s.db, &credential, q.limit.unwrap_or(100)).await?,
-    )))
+    let (page, page_size) = public_api_page(&q);
+    let (rows, total) = integration_service::api_sales(&s.db, &credential, page, page_size).await?;
+    Ok(Json(ApiResponse::paged(rows, page, page_size, total)))
 }
 async fn api_staff(
     State(s): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<LimitQuery>,
+    Query(q): Query<PageQuery>,
 ) -> ApiResult<Vec<Value>> {
     let credential = authenticate_api_request(&s, &headers, "staff.read").await?;
-    Ok(Json(ApiResponse::ok(
-        integration_service::api_staff(&s.db, &credential, q.limit.unwrap_or(100)).await?,
-    )))
+    let (page, page_size) = public_api_page(&q);
+    let (rows, total) = integration_service::api_staff(&s.db, &credential, page, page_size).await?;
+    Ok(Json(ApiResponse::paged(rows, page, page_size, total)))
+}
+fn public_api_page(query: &PageQuery) -> (i64, i64) {
+    (
+        query.page.unwrap_or(1),
+        query.page_size.or(query.limit).unwrap_or(100),
+    )
 }
 async fn authenticate_api_request(
     state: &AppState,
@@ -1864,19 +1971,20 @@ async fn openapi() -> Json<Value> {
     Json(json!({
       "openapi":"3.1.0","info":{"title":"AuraShine CRM API","version":"v1"},
       "servers":[{"url":"/api/v1"}],
-      "components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer","bearerFormat":"JWT"},"apiKey":{"type":"apiKey","in":"header","name":"x-api-key"}},"parameters":{"tenant":{"name":"x-tenant-id","in":"header","required":true,"schema":{"type":"string"}},"branch":{"name":"x-branch-id","in":"header","required":true,"schema":{"type":"string"}}}},
+      "components":{"securitySchemes":{"bearerAuth":{"type":"http","scheme":"bearer","bearerFormat":"JWT"},"apiKey":{"type":"apiKey","in":"header","name":"x-api-key"}},"parameters":{"tenant":{"name":"x-tenant-id","in":"header","required":true,"schema":{"type":"string"}},"branch":{"name":"x-branch-id","in":"header","required":true,"schema":{"type":"string"}},"page":{"name":"page","in":"query","schema":{"type":"integer","minimum":1,"default":1}},"pageSize":{"name":"pageSize","in":"query","schema":{"type":"integer","minimum":1,"maximum":500,"default":100}}}},
       "paths":{
-        "/integrations/v1/clients":{"get":{"security":[{"apiKey":[]}],"summary":"List clients using clients.read scope","parameters":[{"name":"limit","in":"query","schema":{"type":"integer","minimum":1,"maximum":500}}],"responses":{"200":{"description":"Client list"}}}},
-        "/integrations/v1/appointments":{"get":{"security":[{"apiKey":[]}],"summary":"List appointments using appointments.read scope","responses":{"200":{"description":"Appointment list"}}}},
-        "/integrations/v1/sales":{"get":{"security":[{"apiKey":[]}],"summary":"List sales using sales.read scope","responses":{"200":{"description":"Sale list"}}}},
-        "/integrations/v1/staff":{"get":{"security":[{"apiKey":[]}],"summary":"List staff directory using staff.read scope","responses":{"200":{"description":"Staff list"}}}},
+        "/integrations/v1/clients":{"get":{"security":[{"apiKey":[]}],"summary":"List clients using clients.read scope","parameters":[{"$ref":"#/components/parameters/page"},{"$ref":"#/components/parameters/pageSize"}],"responses":{"200":{"description":"Paginated client list"}}}},
+        "/integrations/v1/appointments":{"get":{"security":[{"apiKey":[]}],"summary":"List appointments using appointments.read scope","parameters":[{"$ref":"#/components/parameters/page"},{"$ref":"#/components/parameters/pageSize"}],"responses":{"200":{"description":"Paginated appointment list"}}}},
+        "/integrations/v1/sales":{"get":{"security":[{"apiKey":[]}],"summary":"List sales using sales.read scope","parameters":[{"$ref":"#/components/parameters/page"},{"$ref":"#/components/parameters/pageSize"}],"responses":{"200":{"description":"Paginated sale list"}}}},
+        "/integrations/v1/staff":{"get":{"security":[{"apiKey":[]}],"summary":"List staff directory using staff.read scope","parameters":[{"$ref":"#/components/parameters/page"},{"$ref":"#/components/parameters/pageSize"}],"responses":{"200":{"description":"Paginated staff list"}}}},
         "/settings/integrations/api-keys":{"get":{"security":[{"bearerAuth":[]}],"summary":"List scoped API keys","responses":{"200":{"description":"API key list"}}},"post":{"security":[{"bearerAuth":[]}],"summary":"Create scoped API key","responses":{"200":{"description":"Secret returned once"}}}},
         "/settings/integrations/webhooks":{"get":{"security":[{"bearerAuth":[]}],"summary":"List webhook subscriptions","responses":{"200":{"description":"Webhook list"}}},"post":{"security":[{"bearerAuth":[]}],"summary":"Create signed webhook subscription","responses":{"200":{"description":"Signing secret returned once"}}}},
+        "/settings/integrations/webhook-deliveries/{id}/replay":{"post":{"security":[{"bearerAuth":[]}],"summary":"Replay a failed or dead-letter webhook delivery","responses":{"200":{"description":"Delivery queued for replay"}}}},
         "/settings/integrations/connectors":{"get":{"security":[{"bearerAuth":[]}],"summary":"List accounting and automation connector status","responses":{"200":{"description":"Connector list without secret material"}}}},
         "/settings/integrations/connectors/{provider}/start":{"post":{"security":[{"bearerAuth":[]}],"summary":"Start OAuth 2.0 PKCE connector authorization","responses":{"200":{"description":"Provider authorization URL"}}}},
         "/settings/integrations/connectors/{provider}/sync":{"post":{"security":[{"bearerAuth":[]}],"summary":"Queue a durable connector verification job","responses":{"200":{"description":"Queued sync job"}}}},
         "/settings/integrations/import-aliases":{"get":{"security":[{"bearerAuth":[]}],"summary":"List tenant-approved migration aliases","responses":{"200":{"description":"Scoped alias list"}}},"post":{"security":[{"bearerAuth":[]}],"summary":"Approve a tenant migration alias","responses":{"200":{"description":"Approved alias"}}}},
-        "/pos/z-reports/{date}/export":{"get":{"security":[{"bearerAuth":[]}],"summary":"Export accounting data as JSON, CSV, or Tally XML","parameters":[{"name":"date","in":"path","required":true,"schema":{"type":"string","format":"date"}},{"name":"format","in":"query","schema":{"type":"string","enum":["json","csv","tally"]}}],"responses":{"200":{"description":"Accounting export"}}}}
+        "/pos/z-reports/{date}/export":{"get":{"security":[{"bearerAuth":[]}],"summary":"Export reconciled accounting data","parameters":[{"name":"date","in":"path","required":true,"schema":{"type":"string","format":"date"}},{"name":"format","in":"query","schema":{"type":"string","enum":["json","csv","tally","busy","quickbooks-desktop"]}}],"responses":{"200":{"description":"Accounting export"}}}}
       }
     }))
 }

@@ -29,6 +29,9 @@
           <form (ngSubmit)="openDrawer()">
             <label><span>Opening cash (optional)</span><input type="number" min="0" max="1000000000" step="0.01" [(ngModel)]="openingCash" name="openingCash" placeholder="Amount" /></label>
             <label class="wide"><span>Notes</span><textarea maxlength="1000" [(ngModel)]="openingNotes" name="openingNotes" rows="2"></textarea></label>
+            @if (canApprove) {
+              <label class="check wide"><input type="checkbox" [(ngModel)]="holidayException" name="holidayException" /><span>Manager holiday exception</span></label>
+            }
             <button class="primary" type="submit" [disabled]="busy">Open drawer</button>
           </form>
         }
@@ -67,6 +70,9 @@
                 <label><span>Invoice reference</span><input type="text" maxlength="120" [(ngModel)]="movementReference" name="movementReference" /></label>
               }
               <label class="wide"><span>Notes</span><textarea maxlength="1000" [(ngModel)]="movementNotes" name="movementNotes" rows="2"></textarea></label>
+              @if (movementType === 'cash_out') {
+                <a routerLink="/finance/outgoing-funds">Use categorized petty cash</a>
+              }
               <label><span>MFA code</span><input type="password" [(ngModel)]="actionMfaCode" name="movementMfaCode" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
               <button type="submit" [disabled]="busy">Record movement</button>
             </form>
@@ -121,6 +127,7 @@
         <form (ngSubmit)="createTill()">
           <label><span>Till code</span><input type="text" [(ngModel)]="tillCode" name="tillCode" /></label>
           <label><span>Till name</span><input type="text" [(ngModel)]="tillName" name="tillName" /></label>
+          <label><span>Assigned terminal</span><select [(ngModel)]="tillTerminalId" name="tillTerminalId"><option value="">Unassigned</option>@for (terminal of terminals; track terminal.id) {<option [value]="terminal.id">{{ terminal.terminalName }} · {{ terminal.terminalCode }}</option>}</select></label>
           <label><span>Opening cash</span><input type="number" min="0" step="0.01" [(ngModel)]="tillOpening" name="tillOpening" placeholder="Amount" /></label>
           <label><span>Notes</span><input type="text" [(ngModel)]="tillNotes" name="tillNotes" /></label>
           <button type="submit" [disabled]="busy">Open till</button>
@@ -134,7 +141,7 @@
           <div class="till-list">
             @for (till of tills; track till) {
               <article>
-                <div><strong>{{ till.tillName }} · {{ till.tillCode }}</strong><span>Opening {{ money(till.openingCashPaise) | currency:'INR':'symbol':'1.0-2' }}@if (till.status !== 'open') {
+                <div><strong>{{ till.tillName }} · {{ till.tillCode }}</strong><span>{{ terminalName(till.terminalId) }} · Opening {{ money(till.openingCashPaise) | currency:'INR':'symbol':'1.0-2' }}@if (till.status !== 'open') {
                 · Expected {{ till.expectedCashPaise == null ? 'Restricted' : (money(till.expectedCashPaise) | currency:'INR':'symbol':'1.0-2') }} · Counted {{ money(till.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }} · Variance {{ till.variancePaise == null ? 'Restricted' : (money(till.variancePaise) | currency:'INR':'symbol':'1.0-2') }}
               }</span></div>
               <strong class="status">{{ till.status.replace('_', ' ') }}</strong>
@@ -274,6 +281,9 @@
       <div><dt>Cash in</dt><dd>{{ money(report.cashInPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       <div><dt>Cash out</dt><dd>{{ money(report.cashOutPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       <div><dt>Cash refunds</dt><dd>{{ money(report.cashRefundsPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+      <div><dt>Booking deposits</dt><dd>{{ money(report.bookingDepositPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+      <div><dt>Tips</dt><dd>{{ money(report.tipPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
+      <div><dt>Other fees</dt><dd>{{ money(report.otherFeePaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
       @if (reportCanShowCloseTotals) {
         <div><dt>Expected cash</dt><dd>{{ report.expectedCashPaise == null ? 'Restricted' : (money(report.expectedCashPaise) | currency:'INR':'symbol':'1.0-2') }}</dd></div>
         <div><dt>Counted cash</dt><dd>{{ money(report.countedCashPaise) | currency:'INR':'symbol':'1.0-2' }}</dd></div>
@@ -292,6 +302,9 @@
           <div><span>{{ mode.method.replace('_', ' ') }} · {{ mode.paymentCount }}</span><strong>{{ money(mode.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</strong></div>
         }
       </section>
+    }
+    @if (report.pettyCashCategories.length) {
+      <section class="payment-summary"><h3>Petty cash categories</h3>@for (row of report.pettyCashCategories; track row.category) {<div><span>{{ row.category.replaceAll('_',' ') }}</span><strong>{{ money(row.amountPaise) | currency:'INR':'symbol':'1.0-2' }}</strong></div>}</section>
     }
     } @else {
       <p class="empty section-state">No closing report for this business date</p>

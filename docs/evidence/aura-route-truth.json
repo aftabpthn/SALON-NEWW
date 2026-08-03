@@ -1,0 +1,898 @@
+{
+  "generatedAt": "2026-08-03T08:17:43.864Z",
+  "scanRule": "Exact static Axum route literal in a mounted router; all other README contracts are explicitly future, external, or retired.",
+  "mountedModuleCount": 59,
+  "mountedRouteLiteralCount": 4523,
+  "claims": [
+    {
+      "endpoint": "/api",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/ai-marketing/campaigns/generate",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/captions",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/email-templates",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/festival-campaigns",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/offers/recommend",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/retargeting-workflows",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/segments",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai-marketing/whatsapp-sequences",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/analytics-summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/appointment-booking",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/chatbot",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/churn-prediction",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/follow-up",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/history",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/marketing-caption",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/review-reply",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/service-recommendation",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ai/upsell",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/analytics/latest",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/analytics/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/analytics/snapshots",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/apiKeys",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/appMarketplaceApps",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/appointmentOptimizations",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/booking-portal/appointments/:id/cancel",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/booking-portal/appointments/:id/reschedule",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/booking-portal/confirm",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/booking-portal/context",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/booking-portal/slots",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/customer-360/clients/:id",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/customer-360/clients/:id/snapshot",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/customer-360/clients/:id/timeline",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/customer-360/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/deployment/backup",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/deployment/events",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/deployment/preflight",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/deployment/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/dynamicPricingRules",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/ecosystem/level-coverage",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/cash-drawers/close",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/cash-drawers/open",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/daily-closing",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/expenses",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/invoices/:id/partial-payment",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/refunds",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/staff-payouts",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/finance/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/forecastingModels",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/formResponses",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/franchiseRoyalties",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/franchises",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/fraudAlerts",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/future-features/:id/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/future-features/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/gamificationEvents",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/growthAdvisorTasks",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/imageAnalyses",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/knowledgeBaseArticles",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/kpiMonitors",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/localizationProfiles",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/marketplaceConnections",
+      "state": "external",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/pluginManifests",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/quality/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/quality/seed-demo",
+      "state": "retired",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/quality/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/queueDisplays",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/recommendationEvents",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/reputationReviews",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/saas/context",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/saas/domain-mappings",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/saas/domain-mappings/:id/verify",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/saas/onboarding",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/saas/plans",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/saas/subscription",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/saas/usage",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/activity/:id",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/audit",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/security/backups",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/compliance",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/security/encrypt",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/permission-matrix",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/security/permissions",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/roles",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/security/sessions",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/security/sessions/:id/revoke",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/security/summary",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/bookings",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/online-request",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/qr-check-in",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/queue-prediction",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/recommend-slots",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/summary",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/waitlist",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smart-booking/waitlist/:id/promote",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/smartForms",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/attendance",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/commissions/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/incentives/calculate",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/payroll/export",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/performance",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/runs",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/shifts",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/staff-management/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/analytics/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/feature-toggles",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/overview",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/plans",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/plans/:id",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/tenants/:id/subscription",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/super-admin/tenants/:id/suspension",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/trainingAssignments",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/trainingLessons",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/auth/login",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/auth/logout",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/auth/me",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/auth/refresh",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/health",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/advanced-controls",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/backbar-containers",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/backbar-usage",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/laundry/orders",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/ledger",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/policy",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/reorder-forecasts",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/stock-audits",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/supplier-governance",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/inventory/valuation",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/mobile/context",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/mobile/devices",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/mobile/push-notifications",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/mobile/push-subscriptions",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/pos/offline-checkout",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/pos/offline-checkout/:id",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/purchases/grn",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/purchases/orders",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/realtime",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/realtime/events",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/realtime/queue",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/realtime/queue/:id",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/realtime/staff/status",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/conflicts",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/conflicts/:id/resolve",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/sync",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/mobile/telemetry",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/v1/staff/self/mobile/telemetry",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/versions",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/voiceCallLogs",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/warehouseSnapshots",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/webhooks",
+      "state": "external",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/birthday-wishes",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/booking-confirmation",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/campaign-broadcast",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/handoffs",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/handoffs/:id",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/inbound",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/messages",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/missed-call",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/payment-reminders",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/qualify-lead",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/reminders",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/whatsapp/rules",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/summary",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/whatsapp/threads",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    },
+    {
+      "endpoint": "/api/white-label/branch-branding",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/white-label/domains",
+      "state": "external",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/white-label/profiles",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/white-label/resolve",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/white-label/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/workflows",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/workflows/:id",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/workflows/:id/run",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/workflows/run-due",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/api/workflows/summary",
+      "state": "future",
+      "evidence": "Explicit README contract classification"
+    },
+    {
+      "endpoint": "/health",
+      "state": "mounted",
+      "evidence": "backend-rust/src/routes/mod.rs mounted route literal"
+    }
+  ]
+}

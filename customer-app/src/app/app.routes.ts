@@ -2,6 +2,10 @@ import { Routes } from "@angular/router";
 import { customerAuthGuard } from "./core/auth.guard";
 
 export const routes: Routes = [
+  {
+    path: "kiosk",
+    loadComponent: () => import("./features/kiosk/kiosk.page").then((m) => m.KioskPage)
+  },
   { path: "", redirectTo: "onboarding", pathMatch: "full" },
   {
     path: "onboarding",

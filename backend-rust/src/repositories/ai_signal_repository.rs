@@ -136,6 +136,13 @@ pub async fn briefing_branches(db: &PgPool) -> Result<Vec<BriefingBranch>, sqlx:
              FROM branches branch
             WHERE branch.active=TRUE
               AND EXISTS (
+                SELECT 1 FROM ai_governance_settings governance
+                 WHERE governance.tenant_id=branch.tenant_id::TEXT
+                   AND governance.branch_id=COALESCE(NULLIF(branch.scope_id,''),branch.id::TEXT)
+                   AND governance.enabled=TRUE
+                   AND governance.default_action_owner_user_id<>''
+              )
+              AND EXISTS (
                 SELECT 1 FROM pos_sales sale
                  WHERE sale.tenant_id=branch.tenant_id::TEXT
                    AND sale.branch_id=branch.id::TEXT

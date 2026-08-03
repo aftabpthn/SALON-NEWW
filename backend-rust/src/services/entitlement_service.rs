@@ -57,7 +57,7 @@ async fn load_context(db: &PgPool, tenant_id: &str) -> Result<EntitlementContext
 }
 
 fn ensure_login_context(context: &EntitlementContext) -> Result<(), AppError> {
-    if context.tenant_status != "active" {
+    if !context.tenant_access_allowed {
         return Err(AppError::forbidden("salon access is suspended"));
     }
     match context.subscription_status.as_deref() {
@@ -87,6 +87,20 @@ fn ensure_feature_context(
         ensure_write_context(context)?;
     } else {
         ensure_login_context(context)?;
+    }
+    if let Some(enabled) = context
+        .feature_overrides_json
+        .get(feature_key)
+        .and_then(serde_json::Value::as_bool)
+    {
+        return if enabled {
+            Ok(())
+        } else {
+            Err(
+                AppError::forbidden("tenant feature override disables this capability")
+                    .with_details(json!({"featureKey": feature_key, "override": false})),
+            )
+        };
     }
     if context.subscription_status.is_none() {
         return Ok(());
@@ -146,7 +160,7 @@ fn branch_creation_decision(
     context: &EntitlementContext,
     additional_branches: i64,
 ) -> Result<BranchCreationDecision, AppError> {
-    if context.tenant_status != "active" {
+    if !context.tenant_access_allowed {
         return Err(AppError::forbidden("salon access is suspended"));
     }
     let Some(status) = context.subscription_status.as_deref() else {
@@ -198,9 +212,10 @@ mod tests {
     #[test]
     fn branch_limit_blocks_or_bills_from_plan_price() {
         let mut context = EntitlementContext {
-            tenant_status: "active".into(),
+            tenant_access_allowed: true,
             subscription_status: Some("active".into()),
             features_json: Some(serde_json::json!(["staff.basic"])),
+            feature_overrides_json: serde_json::json!({}),
             included_branches: Some(1),
             overage_branch_paise: Some(0),
             active_branch_count: 1,
@@ -216,9 +231,9 @@ mod tests {
         context.subscription_status = Some("past_due".into());
         assert!(branch_creation_decision(&context, 1).is_err());
         context.subscription_status = Some("active".into());
-        context.tenant_status = "suspended".into();
+        context.tenant_access_allowed = false;
         assert!(branch_creation_decision(&context, 1).is_err());
-        context.tenant_status = "active".into();
+        context.tenant_access_allowed = true;
         context.subscription_status = Some("cancelled".into());
         assert!(branch_creation_decision(&context, 1).is_err());
     }
@@ -226,9 +241,10 @@ mod tests {
     #[test]
     fn staff_security_login_write_and_feature_policies_are_distinct() {
         let mut context = EntitlementContext {
-            tenant_status: "active".into(),
+            tenant_access_allowed: true,
             subscription_status: Some("past_due".into()),
             features_json: Some(serde_json::json!(["staff.basic"])),
+            feature_overrides_json: serde_json::json!({}),
             included_branches: Some(1),
             overage_branch_paise: Some(0),
             active_branch_count: 1,
@@ -238,8 +254,14 @@ mod tests {
         assert!(super::ensure_feature_context(&context, "staff.basic", false).is_ok());
         assert!(super::ensure_feature_context(&context, "staff.payroll", false).is_err());
 
+        context.feature_overrides_json = serde_json::json!({"staff.payroll": true});
+        assert!(super::ensure_feature_context(&context, "staff.payroll", false).is_ok());
+        context.feature_overrides_json = serde_json::json!({"staff.basic": false});
+        assert!(super::ensure_feature_context(&context, "staff.basic", false).is_err());
+
         context.subscription_status = None;
         context.features_json = None;
+        context.feature_overrides_json = serde_json::json!({});
         assert!(super::ensure_feature_context(&context, "staff.payroll", true).is_ok());
     }
 }

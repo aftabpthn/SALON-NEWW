@@ -155,6 +155,13 @@
       <div class="compact-state">Access restricted</div>
     } @else {
       @if (intelligenceError) { <div class="inline-status error">{{ intelligenceError }}</div> }
+      @if (workforce) {
+        <div class="workforce-strip" aria-label="Governed AI workforce status">
+          <span><strong>{{ workforce.agents.length }} governed agents</strong><small>{{ label(workforce.status) }} · {{ workforce.metrics.requestCount30d }} requests in 30 days</small></span>
+          <span><strong>{{ workforce.metrics.openRecommendations }} open recommendations</strong><small>{{ workforce.metrics.recommendationEvidenceGaps }} evidence gaps · {{ workforce.metrics.recommendationOwnerGaps }} owner gaps</small></span>
+          <span><strong>{{ workforce.latestEvaluation?.suiteVersion || 'Evaluation pending' }}</strong><small>@if (workforce.latestEvaluation) { {{ workforce.latestEvaluation.sampleSize }} safe samples · {{ dateTime(workforce.latestEvaluation.createdAt) }} } @else { Non-production safety evidence required }</small></span>
+        </div>
+      }
       <div class="forecast-grid" aria-label="Revenue stock demand and no-show forecasts">
         @for (card of forecastCards; track card.kind) {
           <article>

@@ -9,8 +9,9 @@ use serde_json::Value;
 
 use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
-    repositories::ai_concierge_repository::{
-        self, AiGovernanceRecord, AiMessageRecord, AiSessionRecord,
+    repositories::{
+        ai_concierge_repository::{self, AiGovernanceRecord, AiMessageRecord, AiSessionRecord},
+        communication_repository,
     },
     routes::context::tenant_branch,
     services::{
@@ -26,6 +27,7 @@ use crate::{
         ai_prediction_service::{self, PredictionKind, PredictionRun},
         ai_scope_service::ScopeRequest,
         ai_what_if_service::{self, WhatIf, WhatIfResult},
+        ai_workforce_service::{self, EvaluationRequest, WorkforceSummary},
         auth_service::AuthClaims,
     },
     state::AppState,
@@ -34,6 +36,11 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/ai/governance", get(get_governance).put(save_governance))
+        .route("/ai/workforce", get(get_workforce))
+        .route(
+            "/ai/workforce/evaluations",
+            post(record_workforce_evaluation),
+        )
         .route("/ai/concierge/sessions", post(open_session))
         .route("/ai/concierge/sessions/:id/messages", post(send_message))
         .route("/ai/concierge/sessions/:id/transcript", get(get_transcript))
@@ -49,6 +56,38 @@ pub fn router() -> Router<AppState> {
         .route("/ai/actions/drafts", post(create_action_draft))
         .route("/ai/actions/drafts/:id/confirm", post(confirm_action_draft))
         .route("/ai/actions/drafts/:id/cancel", post(cancel_action_draft))
+}
+
+async fn get_workforce(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<WorkforceSummary> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_workforce_service::summary(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+async fn record_workforce_evaluation(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<EvaluationRequest>,
+) -> ApiResult<ai_concierge_repository::AiWorkforceEvaluationRecord> {
+    require_ai_manage(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_workforce_service::record_evaluation(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
 }
 
 pub fn public_router() -> Router<AppState> {
@@ -212,16 +251,54 @@ async fn call_report(
 ) -> ApiResult<ai_concierge_service::VoiceCallReport> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    Ok(Json(ApiResponse::ok(
-        ai_concierge_service::voice_call_report(
-            &state.db,
-            &tenant_id,
-            &branch_id,
-            query.start_date.as_deref(),
-            query.end_date.as_deref(),
-        )
-        .await?,
-    )))
+    let mut report = ai_concierge_service::voice_call_report(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.start_date.as_deref(),
+        query.end_date.as_deref(),
+    )
+    .await?;
+    let contact_allowed =
+        !claims.denied_permissions.iter().any(|permission| {
+            matches!(permission.as_str(), "clients.read" | "clients.contact.read")
+        }) && (matches!(
+            claims.role.to_ascii_lowercase().as_str(),
+            "owner" | "admin" | "manager" | "frontdesk" | "receptionist"
+        ) || claims.permissions.iter().any(|permission| {
+            matches!(permission.as_str(), "clients.read" | "clients.contact.read")
+        }));
+    if !contact_allowed {
+        for call in &mut report.recent_calls {
+            call.caller_phone = mask_phone(&call.caller_phone);
+            call.salon_phone.clear();
+            call.staff_phone.clear();
+            call.ai_summary.clear();
+        }
+        for opportunity in &mut report.opportunities {
+            opportunity.caller_phone = mask_phone(&opportunity.caller_phone);
+            opportunity.normalized_caller_phone.clear();
+        }
+    }
+    Ok(Json(ApiResponse::ok(report)))
+}
+
+fn mask_phone(value: &str) -> String {
+    let digits = value
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    format!(
+        "****{}",
+        digits
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
+    )
 }
 
 /// Runs a prediction over this branch's history.
@@ -236,6 +313,7 @@ async fn run_prediction(
 ) -> ApiResult<PredictionRun> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     let kind = PredictionKind::from_name(&kind)
         .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
     Ok(Json(ApiResponse::ok(
@@ -260,7 +338,7 @@ async fn get_latest_prediction(
     Path(kind): Path<String>,
 ) -> ApiResult<Option<PredictionRun>> {
     require_ai_read(&claims)?;
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
     let kind = PredictionKind::from_name(&kind)
         .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
     Ok(Json(ApiResponse::ok(
@@ -288,6 +366,7 @@ async fn run_what_if(
 ) -> ApiResult<WhatIfResult> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
         ai_what_if_service::simulate(&state.db, &tenant_id, &branch_id, &claims.role, scenario)
             .await?,
@@ -303,6 +382,7 @@ async fn create_action_draft(
 ) -> ApiResult<ActionDraft> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
         ai_action_service::create_draft(
             &state.db,
@@ -326,6 +406,7 @@ async fn confirm_action_draft(
 ) -> ApiResult<ActionDraft> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
         ai_action_service::confirm_draft(
             &state.db,
@@ -373,6 +454,7 @@ async fn get_briefing(
 ) -> ApiResult<Briefing> {
     require_ai_read(&claims)?;
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     let cadence = Cadence::from_name(&cadence)
         .ok_or_else(|| AppError::not_found("that briefing cadence is not available"))?;
     Ok(Json(ApiResponse::ok(
@@ -400,7 +482,8 @@ async fn compare_branches(
     Path(signal): Path<String>,
 ) -> ApiResult<Vec<BranchComparisonRow>> {
     require_ai_read(&claims)?;
-    let (tenant_id, _) = tenant_branch(&headers)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     let signal = Signal::from_key(&signal)
         .ok_or_else(|| AppError::not_found("that comparison is not available"))?;
     let user =
@@ -443,19 +526,45 @@ async fn voice_webhook(
     {
         return Err(AppError::not_found("voice branch was not found"));
     }
-    let client_id = ai_concierge_repository::resolve_client_by_phone(
-        &state.db,
-        &payload.tenant_id,
-        &payload.branch_id,
-        &payload.from,
-    )
-    .await
-    .map_err(|_| AppError::internal("failed to resolve voice caller"))?;
+    let inbound = !matches!(
+        payload
+            .direction
+            .as_deref()
+            .unwrap_or("inbound")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "outbound" | "outgoing"
+    );
+    let identity = if inbound {
+        communication_repository::resolve_or_create_inbound_identity(
+            &state.db,
+            &payload.tenant_id,
+            &payload.branch_id,
+            "voice",
+            &payload.from,
+        )
+        .await
+        .map_err(|_| AppError::internal("failed to resolve voice caller"))?
+    } else {
+        communication_repository::InboundIdentity {
+            client_id: ai_concierge_repository::resolve_client_by_phone(
+                &state.db,
+                &payload.tenant_id,
+                &payload.branch_id,
+                &payload.from,
+            )
+            .await
+            .map_err(|_| AppError::internal("failed to resolve voice caller"))?,
+            lead_id: None,
+        }
+    };
     let response = ai_concierge_service::record_voice_call_event(
         &state.db,
         &state.settings,
         payload,
-        client_id,
+        identity.client_id,
+        identity.lead_id,
     )
     .await?;
     Ok(Json(ApiResponse::ok(

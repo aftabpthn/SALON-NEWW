@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate, Utc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::PgPool;
@@ -238,6 +238,15 @@ pub async fn run_operations_intelligence_automations(
         .await
         .map_err(internal("queue HR operations escalation"))?;
     let monthly_key = format!("hrms-monthly:{}:{}", p.from, p.to);
+    let health_text = summary["hrHealthScore"]
+        .as_f64()
+        .map(|score| format!("{score:.2}%"))
+        .unwrap_or_else(|| {
+            format!(
+                "insufficient evidence ({}% coverage)",
+                summary["evidenceCoveragePercent"].as_f64().unwrap_or(0.0)
+            )
+        });
     let monthly_queued = repository::queue_operations_intelligence_notification(
         db,
         tenant,
@@ -245,10 +254,7 @@ pub async fn run_operations_intelligence_automations(
         actor,
         "hrms_monthly_owner_summary",
         "Monthly HR operations summary",
-        &format!(
-            "HR health: {:.2}% | Items requiring attention: {attention}",
-            summary["hrHealthScore"].as_f64().unwrap_or(0.0)
-        ),
+        &format!("HR health: {health_text} | Items requiring attention: {attention}"),
         &json!({"idempotencyKey":monthly_key,"dateFrom":p.from,"dateTo":p.to,"summary":summary}),
         &monthly_key,
     )
@@ -261,6 +267,42 @@ pub async fn run_operations_intelligence_automations(
         "transactionalStaffChanges": false,
         "payrollChanges": false
     }))
+}
+
+pub async fn run_scheduled_operations_intelligence(db: &PgPool) -> Result<Value, AppError> {
+    let today = Utc::now().date_naive();
+    let current_month = NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        .ok_or_else(|| AppError::internal("failed to resolve HRMS reporting month"))?;
+    let to = current_month
+        .pred_opt()
+        .ok_or_else(|| AppError::internal("failed to resolve HRMS reporting period"))?;
+    let from = NaiveDate::from_ymd_opt(to.year(), to.month(), 1)
+        .ok_or_else(|| AppError::internal("failed to resolve HRMS reporting period"))?;
+    let scopes = repository::active_hrms_scopes(db)
+        .await
+        .map_err(internal("load active HRMS scopes"))?;
+    let mut completed = 0;
+    let mut failed = 0;
+    for (tenant, branch) in &scopes {
+        match run_operations_intelligence_automations(
+            db,
+            tenant,
+            branch,
+            "system:hrms-monthly-summary",
+            OperationsIntelligenceQuery { from, to },
+        )
+        .await
+        {
+            Ok(_) => completed += 1,
+            Err(error) => {
+                failed += 1;
+                tracing::warn!(tenant_id = tenant, branch_id = branch, error = ?error, "scheduled HRMS operations intelligence failed");
+            }
+        }
+    }
+    Ok(
+        json!({"periodStart":from,"periodEnd":to,"scopeCount":scopes.len(),"completed":completed,"failed":failed}),
+    )
 }
 
 pub async fn create_job_opening(

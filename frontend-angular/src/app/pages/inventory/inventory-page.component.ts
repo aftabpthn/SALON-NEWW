@@ -13,10 +13,10 @@ import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from
 import { ageingRows, AuditDetails, csvContent, nearExpiryRows, supplierPerformanceRows, traceabilityRows, varianceRows } from './inventory-report-model';
 
 type Tab = 'products' | 'batches' | 'ledger' | 'reorder' | 'valuation' | 'reports' | 'suppliers' | 'orders' | 'grn' | 'returns' | 'payables' | 'transfers';
-type ReportView = 'ageing' | 'expiry' | 'traceability' | 'variance' | 'suppliers';
-type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'orderHistory' | 'grn' | 'return' | 'payment' | 'transfer' | null;
+type ReportView = 'stock' | 'ageing' | 'cogs' | 'expiry' | 'traceability' | 'variance' | 'suppliers' | 'catalog';
+type Drawer = 'product' | 'kit' | 'supplier' | 'order' | 'orderHistory' | 'grn' | 'return' | 'quarantine' | 'payment' | 'transfer' | null;
 type Supplier = { id: string; code: string; name: string; gstin: string; contactName: string; phone: string; email: string; address: string; paymentTermsDays: number; active: boolean };
-type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning' };
+type InventoryPolicy = { valuationMethod: 'weighted_average' | 'fifo'; negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning'; purchaseOrderSettings:{ bulkRaiseEnabled:boolean }; labelSettings:{ priceCaption:string; showName:boolean; showPrice:boolean; showSku:boolean; showBatch:boolean; showExpiry:boolean; widthMm:number; heightMm:number; columns:number } };
 type SupplierGovernance = {
   priceLists: Array<{ id:string; supplierId:string; productName:string; unitCostPaise:number; discountBps:number; gstPercent:number; effectiveFrom:string }>;
   terms: Array<{ supplierId:string; inventoryItemId:string; productName?:string; vendorPartNumber:string; purchaseUnit:string; conversionQuantity:number; centerAvailable:boolean; leadTimeDays:number; minimumOrderQuantity:number; packSize:number }>;
@@ -27,26 +27,32 @@ type SupplierGovernance = {
   replacementOptions: Array<{ supplierId:string; inventoryItemId:string; productName:string; replacementSupplierId:string; replacementSupplierName:string; leadTimeDays:number; minimumOrderQuantity:number; packSize:number; unitCostPaise?:number; currentUnitCostPaise?:number; priceDifferencePaise?:number }>;
 };
 type SupplierDraft = Omit<Supplier, 'paymentTermsDays'> & { paymentTermsDays: number | null };
-type Item = { id: string; sku: string; name: string; category: string; subcategory:string; brand: string; productUsage:'retail'|'consumable'|'dual_use'; unit: string; packageUnit: string; unitsPerPackage: number; stockQuantity: number; reorderPoint: number; alertLevel:number; desiredLevel:number; orderLevel:number; safetyStockLevel:number; unitCostPaise: number; hsnCode: string; gstPercent: number; barcode: string; barcodes:string[]; batchTracked: boolean; dualUseStock: boolean; centerAvailable:boolean; active: boolean; createdAt: string; updatedAt?: string };
+type Item = { id: string; sku: string; name: string; category: string; subcategory:string; brand: string; productUsage:'retail'|'consumable'|'dual_use'; unit: string; packageUnit: string; unitsPerPackage: number; stockQuantity: number; reorderPoint: number; alertLevel:number; desiredLevel:number; orderLevel:number; safetyStockLevel:number; unitCostPaise: number; retailPricePaise: number; hsnCode: string; gstPercent: number; barcode: string; barcodes:string[]; batchTracked: boolean; dualUseStock: boolean; centerAvailable:boolean; onlineSaleEnabled:boolean; active: boolean; createdAt: string; updatedAt?: string };
 type InventoryMasterData = { values:Array<{ id:string; kind:string; code:string; label:string; parentCode:string; active:boolean }>; units:Array<{ code:string; label:string; dimension:string; active:boolean }> };
 type KitComponent = { componentInventoryItemId: string; componentName: string; quantity: number };
+type KitOperation = { id:string; kitInventoryItemId:string; operationType:'bundle'|'unbundle'|'receipt_unbundle'; quantity:number; comments:string; actorUserId:string; sourceReceiptId?:string; sourceReceiptLineId?:string; unitCostPaise:number; stockAfterQuantity:number; createdAt:string };
 type Product360 = {
   product: Item; stockInQuantity: number; stockOutQuantity: number; lastMovementAt?: string;
   lastReceiptDate?: string; lastSupplier?: string; recipeCount: number; consumedQuantity: number;
   retailShelfQuantity: number; sealedBackbarQuantity: number; openContainerBalance: number; openContainerUnit?: string;
   kitComponents: KitComponent[];
+  kitAutoUnbundleOnReceive: boolean;
+  kitHistory: KitOperation[];
   branchStocks: Array<{ branchId:string; branchName:string; inventoryItemId:string; stockQuantity:number; reorderPoint:number; unitCostPaise:number; stockValuePaise:number }>;
   expiryTimeline: Array<{ branchId:string; branchName:string; batchNumber:string; expiryDate?:string; receivedDate:string; quantity:number; unitCostPaise:number }>;
   clientUsage: Array<{ clientId:string; clientName:string; quantity:number; visits:number; lastUsedAt:string }>;
   entityLedger: Array<{ id:string; branchId:string; branchName:string; movementType:string; quantityDelta:number; unitCostPaise:number; stockBeforeQuantity:number; stockAfterQuantity:number; recordedStockAfterQuantity?:number; source:string; sourceType:string; sourceId:string; actorUserId?:string; clientId?:string; appointmentId?:string; serviceId?:string; staffId?:string; backbarContainerId?:string; batchAllocations:Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }>; provenanceComplete:boolean; snapshotStatus:'verified'|'reconstructed'|'mismatch'; createdAt:string }>;
   margin: { revenuePaise?:number; costPaise?:number; marginPaise?:number };
+  lifecycleEvents:Array<{ id:string; eventType:string; replacementInventoryItemId?:string; replacementProductName?:string; reason:string; actorUserId:string; createdAt:string }>;
 };
 type Order = { id: string; orderNumber: string; supplierId: string; supplierName: string; status: string; expectedDate?: string; notes: string; shippingPaise: number; handlingPaise: number; totalPaise: number; lineCount: number; createdAt: string };
 type OrderLine = { id: string; inventoryItemId: string; itemName: string; packageUnit: string; stockUnit: string; unitsPerPackage: number; quantity: number; receivedQuantity: number; retailQuantity:number; consumableQuantity:number; retailReceivedQuantity:number; consumableReceivedQuantity:number; unitCostPaise: number; discountBps: number; discountPaise: number; gstPercent: number; totalPaise: number };
 type OrderEvent = { id: string; eventType: string; fromStatus: string; toStatus: string; note: string; actorUserId: string; details: Record<string, unknown>; createdAt: string };
 type Receipt = { id: string; grrNumber: string; supplierName: string; supplierGstin: string; supplierInvoiceNumber: string; supplierInvoiceDate: string; receivedDate: string; challanNumber: string; deliveryReference: string; shippingPaise: number; handlingPaise: number; taxablePaise: number; cgstPaise: number; sgstPaise: number; igstPaise: number; totalPaise: number; createdAt: string };
 type ReceiptLine = { id: string; inventoryItemId: string; packageUnit: string; stockUnit: string; unitsPerPackage: number; stockQuantity: number; quantity: number; retailQuantity:number; consumableQuantity:number; deliveredQuantity: number; orderedQuantity?: number; shortQuantity: number; excessQuantity: number; damagedQuantity: number; rejectedQuantity: number; quarantineStatus: string; varianceReason: string; grossUnitCostPaise: number; unitCostPaise: number; landedCostPaise: number; landedUnitCostPaise: number; stockUnitCostPaise: number; discountBps: number; discountPaise: number; gstPercent: number; totalPaise: number };
-type PurchaseReturn = { id: string; purchaseReceiptId: string; supplierName: string; reason: string; totalPaise: number; createdAt: string };
+type PurchaseReturn = { id: string; purchaseReceiptId: string; supplierName: string; reason: string; returnDate: string; creditNoteNumber: string; creditNoteDate?: string; evidenceReference: string; totalPaise: number; createdAt: string };
+type ReceivingQuarantine = { id:string; purchaseReceiptId:string; inventoryItemId:string; productName:string; supplierName:string; quantity:number; remainingQuantity:number; packageUnit:string; stockUnit:string; quantityBasis:'purchase_unit'|'base_unit'; status:string; reason:string; batchNumber:string; expiryDate?:string; unitCostPaise:number; dispositions:Array<{id:string;action:string;quantity:number;reason:string;evidenceReference:string;creditNoteNumber:string;actorUserId:string;createdAt:string}>; createdAt:string };
+type InventoryAdjustment = { id:string; inventoryItemId:string; itemName:string; businessDate:string; source:string; status:'pending_approval'|'applied'|'rejected'; stockBeforeQuantity:number; requestedStockQuantity:number; quantityDelta:number; valuePaise:number; material:boolean; reason:string; evidenceReference:string; requestedByUserId:string; reviewedByUserId?:string; reviewNote:string; requestedAt:string };
 type Payable = { purchaseReceiptId: string; supplierName: string; supplierInvoiceNumber: string; dueDate?: string; totalPaise: number; returnedPaise: number; paidPaise: number; balancePaise: number };
 type Transfer = { id: string; transferNumber:string; sourceBranchId: string; destinationBranchId: string; mode:string; status: string; notes: string; createdAt:string; dispatchedAt?: string };
 type TransferLine = { id:string; sourceInventoryItemId:string; destinationInventoryItemId:string; productName:string; sku:string; quantity:number; retailQuantity:number; consumableQuantity:number; reservedRetailQuantity:number; reservedConsumableQuantity:number; dispatchedRetailQuantity:number; dispatchedConsumableQuantity:number; receivedRetailQuantity:number; receivedConsumableQuantity:number; damagedQuantity:number; expiredQuantity:number; shortQuantity:number; unitCostPaise:number; transferUnitPricePaise:number; discountBps:number; gstPercent:number };
@@ -54,7 +60,7 @@ type TransferShipmentLine = { id:string; transferLineId:string; dispatchedRetail
 type TransferShipment = { id:string; shipmentNumber:string; status:string; shippingPaise:number; handlingPaise:number; otherChargesPaise:number; autoCheckoutApplied:boolean; dispatchedAt:string; lines:TransferShipmentLine[] };
 type TransferDetails = Transfer & { lines:TransferLine[]; shipments:TransferShipment[]; events:Array<{ id:string; eventType:string; fromStatus:string; toStatus:string; actorUserId:string; note:string; createdAt:string }> };
 type TransferMismatch = { transferId:string; transferNumber:string; shipmentId:string; shipmentNumber:string; sourceBranchId:string; destinationBranchId:string; productName:string; sku:string; dispatchedQuantity:number; receivedQuantity:number; damagedQuantity:number; expiredQuantity:number; shortQuantity:number; varianceReason:string; status:string };
-type TransferSettings = { branchId:string; centerRole:'branch'|'warehouse'|'franchise'; defaultRetailWarehouseBranchId?:string; defaultConsumableWarehouseBranchId?:string; autoCheckoutTransfers:boolean; cannotRaiseTransfer:boolean };
+type TransferSettings = { branchId:string; centerRole:'branch'|'warehouse'|'franchise'; defaultRetailWarehouseBranchId?:string; defaultConsumableWarehouseBranchId?:string; defaultReturnsWarehouseBranchId?:string; autoCheckoutTransfers:boolean; cannotRaiseTransfer:boolean };
 type TransferDraftLine = { sourceInventoryItemId:string; retailQuantity:number|null; consumableQuantity:number|null; transferPriceRupees:number|null; discountPercent:number|null; gstPercent:number|null };
 type TransferOptimization = {
   sourceBranchName: string; destinationBranchName: string; productName: string; suggestedQuantity: number;
@@ -70,7 +76,7 @@ type BarcodeLabel = { productName:string; sku:string; productUsage:string; barco
 type ScanResolution = { event: { inventoryItemId: string | null }; aliasType: string; targetId: string };
 type Batch = { id: string; inventoryItemId: string; productName: string; batchNumber: string; barcode: string; expiryDate?: string; receivedDate: string; quantity: number; unitCostPaise: number };
 type LedgerRow = { id: string; inventoryItemId: string; itemName: string; movementType: string; quantityDelta: number; unitCostPaise: number; valuePaise: number; stockBeforeQuantity: number; stockAfterQuantity: number; recordedStockAfterQuantity?: number; source: string; sourceType: string; sourceId: string; actorUserId?: string; clientId?: string; appointmentId?: string; serviceId?: string; staffId?: string; backbarContainerId?: string; batchAllocations: Array<{ batchId:string; batchNumber:string; expiryDate?:string; quantityDelta:number }>; provenanceComplete: boolean; snapshotStatus: 'verified'|'reconstructed'|'mismatch'; createdAt: string };
-type ReorderRow = { id?: string; productId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; priority: string; reason: string; estimatedValuePaise: number; confidenceBps?: number; status?: string };
+type ReorderRow = { id?: string; productId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; alertLevel: number; desiredLevel: number; orderLevel: number; safetyStockLevel: number; pendingPoQuantity: number; pendingTransferQuantity: number; undeliveredQuantity: number; recommendedQuantity: number; suggestedQuantity: number; minimumOrderQuantity: number; packSize: number; effectiveTargetLevel: number; priority: string; reason: string; estimatedValuePaise: number; confidenceBps?: number; status?: string };
 type ReorderForecast = { run: { id: string; modelVersion: string; createdAt: string }; recommendations: Array<{ id: string; inventoryItemId: string; productName: string; sku: string; currentStock: number; reorderLevel: number; suggestedQuantity: number; unitCostPaise: number; confidenceBps: number; status: string; explanation: Record<string, unknown> }> };
 type ValuationRow = { inventoryItemId: string; productName: string; category: string; stockQuantity: number; unitCostPaise: number; stockValuePaise: number; reorderPoint: number };
 
@@ -99,6 +105,9 @@ export class InventoryPageComponent implements OnInit {
   get canApproveBackdatedGrn() { return this.auth.hasRole('owner', 'superadmin', 'super-admin'); }
   get canManageTransfers() { return this.auth.hasAccess(['owner','admin','manager','inventory_manager'], ['inventory.manage','inventory.write']); }
   get canApproveTransfers() { return this.auth.hasAccess(['owner','admin'], ['inventory.approve']); }
+  get canApproveAdjustments() { return this.auth.hasAccess(['owner','admin'], ['inventory.approve']); }
+  get canViewInventoryCost() { return !this.auth.hasFieldMask('inventory.cost'); }
+  get canExportReports() { return this.auth.hasAccess(['owner', 'admin'], ['reports.export']); }
   readonly tabs: { id: Tab; labelKey: string }[] = [
     { id: 'products', labelKey: 'inventory.products' },
     { id: 'batches', labelKey: 'inventory.batchesExpiry' },
@@ -116,7 +125,7 @@ export class InventoryPageComponent implements OnInit {
   error = '';
   notice = '';
   suppliers: Supplier[] = [];
-  inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block' };
+  inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block', purchaseOrderSettings:{ bulkRaiseEnabled:true }, labelSettings:{ priceCaption:'MRP', showName:true, showPrice:true, showSku:true, showBatch:true, showExpiry:true, widthMm:76, heightMm:32, columns:5 } };
   private readonly inventoryPageSize = 50;
   private reloadRequestId = 0;
   private readonly referenceCacheMs = 30_000;
@@ -138,6 +147,7 @@ export class InventoryPageComponent implements OnInit {
   private lowStockItemsCache: Item[] = [];
   private outOfStockItemsCache: Item[] = [];
   private forecastReorderRows: ReorderRow[] = [];
+  private baselineReorderRows: ReorderRow[] = [];
   private inventoryValueCache = 0;
   private filteredReorderRowsCache: ReorderRow[] = [];
   private reorderValueCache = 0;
@@ -162,8 +172,10 @@ export class InventoryPageComponent implements OnInit {
   supplierPriceDraft = { inventoryItemId: '', unitCostRupees: null as number | null, discountPercent:null as number|null, gstPercent:null as number|null, effectiveFrom: new Date().toISOString().slice(0,10) };
   supplierCommunicationDraft = { channel: 'email', destination: '', subject: '', message: '' };
   items: Item[] = [];
+  selectedProductIds = new Set<string>();
   masterData: InventoryMasterData = { values:[], units:[] };
   orders: Order[] = [];
+  selectedOrderIds = new Set<string>();
   orderHistoryOrder: Order | null = null;
   orderEvents: OrderEvent[] = [];
   orderQuery = '';
@@ -177,6 +189,7 @@ export class InventoryPageComponent implements OnInit {
   receiptQuery = '';
   receiptSupplier = '';
   returns: PurchaseReturn[] = [];
+  quarantines: ReceivingQuarantine[] = [];
   payables: Payable[] = [];
   transfers: Transfer[] = [];
   transferMismatches: TransferMismatch[] = [];
@@ -197,7 +210,7 @@ export class InventoryPageComponent implements OnInit {
   ledgerQuery = '';
   reorderPriority = '';
   valuationAsOf = new Date().toISOString().slice(0, 10);
-  reportView: ReportView = 'ageing';
+  reportView: ReportView = 'stock';
   reportAsOf = new Date().toISOString().slice(0, 10);
   reportExpiryDays = 30;
   reportAudit: AuditDetails | null = null;
@@ -207,12 +220,14 @@ export class InventoryPageComponent implements OnInit {
   reportVariance: ReturnType<typeof varianceRows> = [];
   reportSupplierPerformance: ReturnType<typeof supplierPerformanceRows> = [];
   productDetail: Product360 | null = null;
+  adjustments: InventoryAdjustment[] = [];
   productLoading = false;
   productEditing = false;
   productCreating = false;
   productDraft = this.emptyProduct();
-  stocktakeDraft = { stockQuantity: null as number | null, reason: '' };
-  kitDraft = { components: [] as Array<{ inventoryItemId: string; quantity: number | null }>, quantity: null as number | null };
+  stocktakeDraft = { stockQuantity: null as number | null, reason: '', evidenceReference: '', businessDate: new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Kolkata' }) };
+  kitDraft = { components: [] as Array<{ inventoryItemId: string; quantity: number | null }>, quantity: null as number | null, autoUnbundleOnReceive: false, comments: '', scanCode: '' };
+  kitScanBusy = false;
 
   supplierId = '';
   supplierDraft = this.emptySupplier();
@@ -225,7 +240,9 @@ export class InventoryPageComponent implements OnInit {
   grnScanCode = '';
   grnScanBusy = false;
   private grnScanStarted = false;
-  returnDraft = { receiptId: '', reason: '', lines: [] as EntryLine[] };
+  returnDraft = { receiptId: '', returnDate: '', creditNoteNumber: '', creditNoteDate: '', evidenceReference: '', reason: '', lines: [] as EntryLine[] };
+  selectedQuarantine: ReceivingQuarantine | null = null;
+  quarantineDraft = { action: 'release' as 'release'|'return'|'discard', quantity: null as number|null, reason: '', evidenceReference: '', creditNoteNumber: '' };
   paymentDraft = { receiptId: '', amountRupees: null as number | null, method: 'bank', reference: '' };
   transferDraft = { mode:'push', sourceBranchId:'', destinationBranchId: '', notes: '', lines: [this.emptyTransferLine()] };
   transferShipmentDraft = { shippingRupees:null as number|null, handlingRupees:null as number|null, otherChargesRupees:null as number|null, lines:[] as Array<{ transferLineId:string; productName:string; retailQuantity:number|null; consumableQuantity:number|null; maxRetail:number; maxConsumable:number }> };
@@ -237,6 +254,10 @@ export class InventoryPageComponent implements OnInit {
     const data = this.route.snapshot.data;
     this.standaloneOrders = this.route.snapshot.routeConfig?.path === 'purchase-orders';
     this.tab = data['inventoryTab'] ?? this.tab; this.pageTitle = data['inventoryTitle'] ?? '';
+    const requestedTab = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
+    if (!this.standaloneOrders && requestedTab && this.tabs.some((item) => item.id === requestedTab)) this.tab = requestedTab;
+    const requestedReport = this.route.snapshot.queryParamMap.get('report') as ReportView | null;
+    if (requestedReport && ['ageing', 'expiry', 'traceability', 'variance', 'suppliers'].includes(requestedReport)) this.reportView = requestedReport;
     await this.reload();
     if (data['inventoryDrawer'] === 'grn') await this.openGrn();
   }
@@ -271,10 +292,10 @@ export class InventoryPageComponent implements OnInit {
 
   private async loadReferences(tab: Tab, requestId: number) {
     const requests = [] as Promise<unknown>[];
-    if (['products','reorder','valuation','suppliers','orders','grn','transfers'].includes(tab)) {
+    if (['products','reorder','valuation','reports','suppliers','orders','grn','transfers'].includes(tab)) {
       requests.push(this.loadInventoryRows(tab, requestId));
     }
-    if (tab === 'products' || tab === 'reorder' || tab === 'valuation') {
+    if (['products','reorder','valuation','reports','grn','orders'].includes(tab)) {
       requests.push(this.getCached<InventoryPolicy>('inventory:policy', () => this.get<InventoryPolicy>('/inventory/policy')).then((policy) => {
         if (this.isCurrentLoad(requestId)) {
           this.inventoryPolicy = policy;
@@ -292,14 +313,18 @@ export class InventoryPageComponent implements OnInit {
   }
   private async loadInventoryRows(tab: Tab, requestId: number) {
     const requestIdSnapshot = requestId;
+    const pageSize = tab === 'reports' ? 200 : this.inventoryPageSize;
     const params = new URLSearchParams({
       page: '1',
-      pageSize: String(this.inventoryPageSize),
+      pageSize: String(pageSize),
       withCount: 'false',
     });
     const query = tab === 'products' ? this.productQuery.trim() : '';
     if (query) params.set('q', query);
     const rows = await this.get<Item[]>(`/inventory?` + params.toString());
+    if (tab === 'reports') {
+      for (let page=2, batch=rows; batch.length === pageSize; page++) { params.set('page',String(page)); batch=await this.get<Item[]>(`/inventory?${params}`); rows.push(...batch); }
+    }
     if (this.isCurrentLoad(requestIdSnapshot)) {
       this.items = rows;
       this.rebuildItemLookup();
@@ -361,8 +386,9 @@ export class InventoryPageComponent implements OnInit {
   }
   selectTab(tab: Tab) { if (this.tab === tab) return; this.tab = tab; this.pageTitle = ''; this.closeDrawer(); void this.reload(); }
   closeDrawer() { if (!this.saving) { this.drawer = null; this.productEditing = false; this.productCreating = false; } }
-  money(paise: number) { return this.language.formatCurrency((paise || 0) / 100); }
+  money(paise: number | null | undefined) { return this.canViewInventoryCost ? this.language.formatCurrency((paise || 0) / 100) : 'Restricted'; }
   date(value?: string) { return value ? this.language.formatDate(new Date(value.slice(0, 10) + 'T00:00:00')) : '-'; }
+  dateTime(value?: string) { return value ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '-'; }
   code(value?: string) { const text = (value || '').trim(); return text && text !== '\u00e2\u20ac\u201d' && text !== '\u2014' ? text : '-'; }
   itemName(id: string) { return this.itemById.get(id)?.name ?? id; }
   remaining(line: OrderLine) { return Math.max(line.quantity - line.receivedQuantity, 0); }
@@ -416,6 +442,10 @@ export class InventoryPageComponent implements OnInit {
   get filteredOrders() { return this.filteredOrdersCache; }
   get orderStatuses() { return this.orderStatusesCache; }
   get orderOpenValue() { return this.orderOpenValueCache; }
+  get hasCurrentReportRows() {
+    return ({ stock:this.items, ageing: this.reportAgeing, cogs:this.cogsRows, expiry: this.reportNearExpiry, traceability: this.reportTraceability, variance: this.reportVariance, suppliers: this.reportSupplierPerformance, catalog:this.items })[this.reportView].length > 0;
+  }
+  get cogsRows() { return this.ledgerRows.filter(row => ['sale','consumption','backbar_consumption','kit_component_out'].includes(row.movementType) && row.quantityDelta < 0); }
   orderCount(status: string) { return this.orderStatusCounts.get(status) ?? 0; }
   orderStatusLabel(status:string) { return ({ approved:'Raised', partially_received:'Partial delivery', received:'Fully delivered', pending_approval:'Pending approval' } as Record<string,string>)[status] ?? status.replaceAll('_',' '); }
   selectOrderStage(stage: Exclude<PurchaseOrderStage, ''>) { this.orderStage = stage; this.orderStatus = ''; this.recomputeOrderViews(); }
@@ -473,28 +503,32 @@ export class InventoryPageComponent implements OnInit {
         }
       }
       if (tab === 'grn') {
-        const [receipts, suppliers, orders, priceUpdates] = await Promise.all([
+        const [receipts, suppliers, orders, priceUpdates, quarantines] = await Promise.all([
           this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
           this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
           this.getCached<Order[]>('inventory.orders', () => this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')),
           this.get<PriceUpdateRequest[]>('/purchases/price-update-requests?status=pending'),
+          this.get<ReceivingQuarantine[]>('/purchases/quarantine'),
         ]);
         if (this.isCurrentLoad(requestId)) {
           this.receipts = receipts;
           this.suppliers = suppliers;
           this.orders = orders;
           this.priceUpdateRequests = priceUpdates;
+          this.quarantines = quarantines;
           this.recomputeReceiptViews();
           this.recomputeOrderViews();
         }
       }
       if (tab === 'returns') {
-        const [rows, receipts] = await Promise.all([
+        const [rows, receipts, quarantines] = await Promise.all([
           this.getCached<PurchaseReturn[]>('inventory.returns', () => this.get<PurchaseReturn[]>('/purchases/returns?page=1&pageSize=50&withCount=false')),
           this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+          this.get<ReceivingQuarantine[]>('/purchases/quarantine'),
         ]);
         if (this.isCurrentLoad(requestId)) {
           this.returns = rows;
+          this.quarantines = quarantines;
           this.receipts = receipts;
           this.recomputeReceiptViews();
         }
@@ -564,9 +598,13 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async loadReorder(requestId: number = this.reloadRequestId) {
-    const forecast = await this.get<ReorderForecast | null>('/inventory/reorder-forecasts');
+    const [forecast, baseline] = await Promise.all([
+      this.get<ReorderForecast | null>('/inventory/reorder-forecasts'),
+      this.get<ReorderRow[]>('/inventory/reorder-suggestions'),
+    ]);
     if (!this.isCurrentLoad(requestId)) return;
     this.reorderRun = forecast?.run ?? null;
+    this.baselineReorderRows = baseline.map((row) => ({ ...row, minimumOrderQuantity:row.orderLevel, packSize:1, effectiveTargetLevel:row.desiredLevel }));
     this.forecastReorderRows = forecast?.recommendations.map((row) => ({
       id: row.id,
       productId: row.inventoryItemId,
@@ -574,9 +612,20 @@ export class InventoryPageComponent implements OnInit {
       sku: row.sku,
       currentStock: row.currentStock,
       reorderLevel: row.reorderLevel,
+      alertLevel: Number(row.explanation['alertLevel'] || 0),
+      desiredLevel: Number(row.explanation['desiredLevel'] || row.reorderLevel),
+      orderLevel: Number(row.explanation['orderLevel'] || 0),
+      safetyStockLevel: Number(row.explanation['safetyStockLevel'] || 0),
+      pendingPoQuantity: Number(row.explanation['pendingPoQuantity'] || 0),
+      pendingTransferQuantity: Number(row.explanation['pendingTransferQuantity'] || 0),
+      undeliveredQuantity: Number(row.explanation['undeliveredQuantity'] || 0),
+      recommendedQuantity: Number(row.explanation['recommendedQuantity'] || 0),
       suggestedQuantity: row.suggestedQuantity,
+      minimumOrderQuantity: Number(row.explanation['minimumOrderQuantity'] || 1),
+      packSize: Number(row.explanation['packSize'] || 1),
+      effectiveTargetLevel: Number(row.explanation['effectiveTargetLevel'] || row.explanation['desiredLevel'] || row.reorderLevel),
       priority: row.currentStock <= 0 ? 'critical' : row.confidenceBps >= 7500 ? 'high' : 'medium',
-      reason: `${row.explanation['forecastBasis'] === 'reorder_level' ? 'Reorder level fallback' : 'AI forecast'} · ${Math.round(row.confidenceBps / 100)}% confidence`,
+      reason: `${row.explanation['forecastBasis'] === 'desired_level' ? 'Desired-level baseline' : 'Seasonal service forecast'} · ${Math.round(row.confidenceBps / 100)}% confidence`,
       estimatedValuePaise: row.suggestedQuantity * row.unitCostPaise,
       confidenceBps: row.confidenceBps,
       status: row.status
@@ -689,15 +738,23 @@ export class InventoryPageComponent implements OnInit {
   }
 
   exportInventoryReport() {
+    if (this.reportView === 'cogs' && !this.canViewInventoryCost) { this.error='Product cost visibility permission is required'; return; }
     const exports: Record<ReportView, { headers: string[]; rows: (string | number)[][] }> = {
+      stock: this.canViewInventoryCost ? { headers:['Product','SKU','Category','Stock','Unit cost','Stock value','Reorder level'], rows:this.items.map(row => [row.name,row.sku,row.category,row.stockQuantity,row.unitCostPaise/100,row.stockQuantity*row.unitCostPaise/100,row.reorderPoint]) } : { headers:['Product','SKU','Category','Stock','Reorder level'], rows:this.items.map(row => [row.name,row.sku,row.category,row.stockQuantity,row.reorderPoint]) },
       ageing: { headers: ['Product', 'Batch', 'Received', 'Quantity', 'Age days', 'Age bucket', 'Stock value'], rows: this.reportAgeing.map((row) => [row.productName, row.batchNumber, this.date(row.receivedDate), row.quantity, row.ageDays, row.ageBucket, row.stockValuePaise / 100]) },
+      cogs: { headers:['Date','Product','Movement','Quantity','Unit cost','COGS','Source'], rows:this.cogsRows.map(row => [this.date(row.createdAt),row.itemName,row.movementType,Math.abs(row.quantityDelta),row.unitCostPaise/100,Math.abs(row.valuePaise)/100,row.source]) },
       expiry: { headers: ['Product', 'Batch', 'Expiry', 'Days remaining', 'Quantity', 'Risk value'], rows: this.reportNearExpiry.map((row) => [row.productName, row.batchNumber, this.date(row.expiryDate), row.daysRemaining, row.quantity, row.riskValuePaise / 100]) },
       traceability: { headers: ['Date', 'Product', 'Batch', 'Movement', 'Quantity', 'Source type', 'Source ID', 'Expiry'], rows: this.reportTraceability.map((row) => [this.date(row.createdAt), row.productName, row.batchNumber, row.movementType, row.quantityDelta, row.sourceType, row.sourceId, this.date(row.expiryDate)]) },
       variance: { headers: ['Product', 'SKU', 'Expected', 'Counted', 'Variance', 'Reason', 'Posted'], rows: this.reportVariance.map((row) => [row.itemName, row.sku, row.expectedQuantity ?? '', row.approvedQuantity ?? '', row.varianceQuantity ?? '', row.varianceReason, this.date(row.postedAt)]) },
       suppliers: { headers: ['Supplier', 'Purchase orders', 'Received orders', 'On-time %', 'Fill %', 'Returns', 'Returned quantity', 'Returned value', 'Expiry risk value'], rows: this.reportSupplierPerformance.map((row) => [row.supplierName, row.purchaseOrders, row.receivedOrders, row.onTimeRateBps == null ? '' : row.onTimeRateBps / 100, row.fillRateBps == null ? '' : row.fillRateBps / 100, row.returnCount, row.returnedQuantity, row.returnedValuePaise / 100, row.expiryRiskValuePaise / 100]) },
+      catalog: { headers:['Product','SKU','Category','Subcategory','Brand','Usage','Unit','Package unit','Units/package','Barcode','HSN/SAC','GST %','Retail price','Active'], rows:this.items.map(row => [row.name,row.sku,row.category,row.subcategory,row.brand,row.productUsage,row.unit,row.packageUnit,row.unitsPerPackage,row.barcode,row.hsnCode,row.gstPercent,row.retailPricePaise/100,row.active ? 'Yes':'No']) },
     };
     const report = exports[this.reportView];
     this.downloadCsv(`inventory-${this.reportView}-${this.reportAsOf}.csv`, report.headers, report.rows);
+  }
+
+  printInventoryReport() {
+    if (this.canExportReports && this.hasCurrentReportRows) window.print();
   }
 
   async createOrderFromSuggestion(row: ReorderRow) {
@@ -718,6 +775,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   private downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+    if (!this.canExportReports) { this.error = 'Report export permission is required'; return; }
     const csv = csvContent(headers, rows);
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
@@ -726,7 +784,7 @@ export class InventoryPageComponent implements OnInit {
   async openProduct(row: Item) { await this.openProductById(row.id); }
   async openProductById(id: string) {
     this.drawer = 'product'; this.productEditing = false; this.productCreating = false; this.clearFeedback();
-    this.stocktakeDraft = { stockQuantity: null, reason: '' };
+    this.stocktakeDraft = { stockQuantity: null, reason: '', evidenceReference: '', businessDate: new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Kolkata' }) };
     await this.loadProduct(id);
   }
 
@@ -741,16 +799,16 @@ export class InventoryPageComponent implements OnInit {
     this.productDraft = {
       sku: product.sku, name: product.name, category: product.category, subcategory:product.subcategory, brand: product.brand, productUsage:product.productUsage, unit: product.unit,
       packageUnit: product.packageUnit, unitsPerPackage: product.unitsPerPackage,
-      reorderPoint: product.reorderPoint, alertLevel:product.alertLevel, desiredLevel:product.desiredLevel, orderLevel:product.orderLevel, safetyStockLevel:product.safetyStockLevel, packageCostRupees: this.packageCostPaise(product) / 100,
+      reorderPoint: product.reorderPoint, alertLevel:product.alertLevel, desiredLevel:product.desiredLevel, orderLevel:product.orderLevel, safetyStockLevel:product.safetyStockLevel, packageCostRupees: this.canViewInventoryCost ? this.packageCostPaise(product) / 100 : null, retailPriceRupees: product.retailPricePaise / 100,
       hsnCode: product.hsnCode, gstPercent: product.gstPercent, barcodesText:(product.barcodes?.length ? product.barcodes : [product.barcode]).filter(Boolean).join(', '),
-      batchTracked: product.batchTracked, centerAvailable:product.centerAvailable, active: product.active,
+      batchTracked: product.batchTracked, centerAvailable:product.centerAvailable, onlineSaleEnabled:product.onlineSaleEnabled, active: product.active,
     };
     this.productEditing = true; this.clearFeedback();
   }
 
   async saveProduct() {
     const product = this.productDetail?.product;
-    if ((!product && !this.productCreating) || !this.productDraft.name.trim() || !this.productDraft.unit || !this.productDraft.packageUnit || !Number.isInteger(Number(this.productDraft.unitsPerPackage)) || Number(this.productDraft.unitsPerPackage) <= 0 || Number(this.productDraft.reorderPoint) < 0 || Number(this.productDraft.packageCostRupees) < 0 || Number(this.productDraft.gstPercent) < 0 || Number(this.productDraft.gstPercent) > 100) {
+    if ((!product && !this.productCreating) || !this.productDraft.name.trim() || !this.productDraft.unit || !this.productDraft.packageUnit || !Number.isInteger(Number(this.productDraft.unitsPerPackage)) || Number(this.productDraft.unitsPerPackage) <= 0 || Number(this.productDraft.reorderPoint) < 0 || Number(this.productDraft.retailPriceRupees) < 0 || (this.canViewInventoryCost && Number(this.productDraft.packageCostRupees) < 0) || Number(this.productDraft.gstPercent) < 0 || Number(this.productDraft.gstPercent) > 100) {
       this.error = this.language.text('inventory.message.1436482d07'); return;
     }
     this.saving = true; this.clearFeedback();
@@ -760,10 +818,11 @@ export class InventoryPageComponent implements OnInit {
         name: this.titleCase(this.productDraft.name), category: this.titleCase(this.productDraft.category), subcategory:this.titleCase(this.productDraft.subcategory), brand: this.titleCase(this.productDraft.brand), productUsage:this.productDraft.productUsage,
         unit: this.productDraft.unit, packageUnit: this.productDraft.packageUnit,
         unitsPerPackage: Number(this.productDraft.unitsPerPackage), reorderPoint: Number(this.productDraft.reorderPoint), alertLevel:Number(this.productDraft.alertLevel), desiredLevel:Number(this.productDraft.desiredLevel), orderLevel:Number(this.productDraft.orderLevel), safetyStockLevel:Number(this.productDraft.safetyStockLevel),
-        unitCostPaise: this.draftBaseCostPaise(),
+        ...(this.canViewInventoryCost ? { unitCostPaise: this.draftBaseCostPaise() } : {}),
+        retailPricePaise: this.toPaise(this.productDraft.retailPriceRupees),
         hsnCode: this.productDraft.hsnCode.trim(), gstPercent: Number(this.productDraft.gstPercent),
         barcodes: this.productDraft.barcodesText.split(',').map(value => value.trim().toUpperCase()).filter(Boolean), batchTracked: this.productDraft.batchTracked,
-        dualUseStock: this.productDraft.productUsage === 'dual_use', centerAvailable:this.productDraft.centerAvailable, active: this.productDraft.active,
+        dualUseStock: this.productDraft.productUsage === 'dual_use', centerAvailable:this.productDraft.centerAvailable, onlineSaleEnabled:this.productDraft.productUsage === 'consumable' ? false : this.productDraft.onlineSaleEnabled, active: this.productDraft.active,
       };
       const response = product
         ? await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, payload))
@@ -776,8 +835,44 @@ export class InventoryPageComponent implements OnInit {
     finally { this.saving = false; }
   }
 
+  toggleProductSelection(id:string, selected:boolean) { selected ? this.selectedProductIds.add(id) : this.selectedProductIds.delete(id); }
+  toggleOrderSelection(id:string, selected:boolean) { selected ? this.selectedOrderIds.add(id) : this.selectedOrderIds.delete(id); }
+
+  async bulkUpdateProducts(centerAvailable:boolean) {
+    const ids = [...this.selectedProductIds];
+    if (!ids.length || !confirm(`${centerAvailable ? 'Enable' : 'Disable'} ${ids.length} selected products at this center?`)) return;
+    await this.mutate(this.api.patch('/inventory/bulk', { ids, centerAvailable }), 'Products updated', false);
+    this.selectedProductIds.clear();
+  }
+
+  async cloneProduct() {
+    const product = this.productDetail?.product; if (!product) return;
+    const sku = prompt('New product SKU', `${product.sku}-COPY`)?.trim(); if (!sku) return;
+    const name = prompt('New product name', `${product.name} Copy`)?.trim(); if (!name) return;
+    this.saving = true; this.clearFeedback();
+    try { const response = await firstValueFrom(this.api.post<ApiEnvelope<Item>>(`/inventory/${product.id}/clone`, { sku, name })); await this.reload(); if (response.data) await this.loadProduct(response.data.id); this.notice='Product cloned'; }
+    catch (error) { this.error=this.message(error,'Product could not be cloned'); } finally { this.saving=false; }
+  }
+
+  async changeProductLifecycle(action:'discontinue'|'reactivate') {
+    const product=this.productDetail?.product; if (!product) return;
+    const reason=prompt(`${action === 'discontinue' ? 'Discontinuation' : 'Reactivation'} reason`)?.trim(); if (!reason) return;
+    let replacementInventoryItemId:string|null=null;
+    if (action === 'discontinue') { replacementInventoryItemId=prompt('Replacement product ID (optional)')?.trim() || null; }
+    await this.mutate(this.api.post(`/inventory/${product.id}/${action}`, { reason, replacementInventoryItemId }), `Product ${action === 'discontinue' ? 'discontinued' : 'reactivated'}`, false);
+    await this.loadProduct(product.id);
+  }
+
+  async bulkRaiseOrders() {
+    const ids=[...this.selectedOrderIds];
+    if (!ids.length || !confirm(`Raise ${ids.length} selected draft purchase orders?`)) return;
+    await this.mutate(this.api.post('/purchases/orders/bulk-raise', { ids, note:'' }), 'Purchase orders raised', false);
+    this.selectedOrderIds.clear();
+  }
+
   async openKit(row: Item) {
     this.clearFeedback();
+    if (row.productUsage === 'dual_use' || row.batchTracked) { this.error = 'A kit must be a non-batch retail or consumable product'; return; }
     await this.loadProduct(row.id);
     if (!this.productDetail) return;
     this.kitDraft = {
@@ -785,6 +880,9 @@ export class InventoryPageComponent implements OnInit {
         ? this.productDetail.kitComponents.map((component) => ({ inventoryItemId: component.componentInventoryItemId, quantity: component.quantity }))
         : [{ inventoryItemId: '', quantity: null }],
       quantity: null,
+      autoUnbundleOnReceive: this.productDetail.kitAutoUnbundleOnReceive,
+      comments: '',
+      scanCode: '',
     };
     this.drawer = 'kit';
   }
@@ -797,10 +895,10 @@ export class InventoryPageComponent implements OnInit {
     const components = this.kitDraft.components
       .filter((row) => row.inventoryItemId && Number(row.quantity) > 0)
       .map((row) => ({ inventoryItemId: row.inventoryItemId, quantity: Number(row.quantity) }));
-    if (!kit || !components.length) { this.error = this.language.text('inventory.message.8de312b32f'); return; }
+    if (!kit || !components.length || components.length !== this.kitDraft.components.length || new Set(components.map((row) => row.inventoryItemId)).size !== components.length) { this.error = this.language.text('inventory.message.8de312b32f'); return; }
     this.saving = true; this.clearFeedback();
     try {
-      await firstValueFrom(this.api.put(`/inventory/${kit.id}/kit`, { components }));
+      await firstValueFrom(this.api.put(`/inventory/${kit.id}/kit`, { components, autoUnbundleOnReceive: this.kitDraft.autoUnbundleOnReceive }));
       await this.loadProduct(kit.id);
       this.notice = this.language.text('inventory.message.80419f63f0');
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.8d5c3750bc')); }
@@ -813,22 +911,27 @@ export class InventoryPageComponent implements OnInit {
     if (!kit || !Number.isInteger(quantity) || quantity <= 0) { this.error = this.language.text('inventory.message.b4ffc8fa18'); return; }
     this.saving = true; this.clearFeedback();
     try {
-      await firstValueFrom(this.api.post(`/inventory/${kit.id}/assemble`, { quantity, idempotencyKey: crypto.randomUUID() }));
-      await this.reload(); await this.loadProduct(kit.id); this.kitDraft.quantity = null;
+      await firstValueFrom(this.api.post(`/inventory/${kit.id}/assemble`, { quantity, comments: this.kitDraft.comments.trim(), idempotencyKey: crypto.randomUUID() }));
+      await this.reload(); await this.loadProduct(kit.id); this.kitDraft.quantity = null; this.kitDraft.comments = '';
       this.notice = this.language.text('inventory.message.ded0325efb');
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.a9c2be662d')); }
     finally { this.saving = false; }
   }
 
   printBarcode(row: Item) {
-    const code = (row.barcode || row.sku).trim().toUpperCase();
-    if (!code || [...code].some((char) => !CODE39[char])) { this.error = this.language.text('inventory.message.e2383ff060'); return; }
-    const popup = window.open('', '_blank', 'width=520,height=420');
-    if (!popup) { this.error = this.language.text('inventory.message.d37af2b6c8'); return; }
-    popup.document.write('<!doctype html><title>Product label</title><style>body{margin:0;font:14px Arial}main{width:76mm;padding:5mm;text-align:center}h1{font-size:18px;margin:0 0 4mm}svg{width:100%;height:24mm}p{margin:2mm 0;font-weight:700}@media print{main{padding:2mm}}</style><main><h1></h1><div></div><p></p></main>');
-    popup.document.querySelector('h1')!.textContent = row.name;
-    popup.document.querySelector('div')!.innerHTML = this.code39Svg(code);
-    popup.document.querySelector('p')!.textContent = code;
+    this.printProductLabels([row]);
+  }
+
+  bulkPrintLabels() { const rows=this.items.filter(row => this.selectedProductIds.has(row.id)); if (!rows.length) return; this.printProductLabels(rows); }
+
+  private printProductLabels(rows:Item[]) {
+    const settings=this.inventoryPolicy.labelSettings;
+    const codes=rows.map(row => ({ row, code:(row.barcode || row.sku).trim().toUpperCase() }));
+    if (codes.some(({code}) => !code || [...code].some(char => !CODE39[char]))) { this.error=this.language.text('inventory.message.e2383ff060'); return; }
+    const popup=window.open('','_blank','width=980,height=720'); if (!popup) { this.error=this.language.text('inventory.message.d37af2b6c8'); return; }
+    popup.document.write(`<!doctype html><title>Product labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(${settings.columns},${settings.widthMm}mm);gap:2mm;padding:5mm}.label{width:${settings.widthMm}mm;height:${settings.heightMm}mm;border:1px solid #ddd;padding:2mm;text-align:center;box-sizing:border-box;break-inside:avoid;overflow:hidden}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:16mm}@media print{main{padding:0}.label{border:0}}</style><main></main>`);
+    const main=popup.document.querySelector('main')!;
+    for (const {row,code} of codes) { const label=popup.document.createElement('section'); label.className='label'; if (settings.showName) { const name=popup.document.createElement('strong'); name.textContent=row.name; label.append(name); } const barcode=popup.document.createElement('div'); barcode.innerHTML=this.code39Svg(code); label.append(barcode); const details=popup.document.createElement('small'); details.textContent=[settings.showSku ? row.sku : '', settings.showPrice ? `${settings.priceCaption} ${this.money(row.retailPricePaise)}` : ''].filter(Boolean).join(' · '); label.append(details); main.append(label); }
     popup.document.close(); popup.focus(); popup.print();
   }
 
@@ -838,17 +941,24 @@ export class InventoryPageComponent implements OnInit {
     const product = this.productDetail?.product;
     const stockQuantity = Number(this.stocktakeDraft.stockQuantity);
     const reason = this.stocktakeDraft.reason.trim();
-    if (!product || this.stocktakeDraft.stockQuantity === null || !Number.isInteger(stockQuantity) || (stockQuantity < 0 && this.inventoryPolicy.negativeStockRule === 'block') || !reason) {
+    const evidenceReference = this.stocktakeDraft.evidenceReference.trim();
+    if (!product || this.stocktakeDraft.stockQuantity === null || !Number.isInteger(stockQuantity) || (stockQuantity < 0 && this.inventoryPolicy.negativeStockRule === 'block') || !reason || (stockQuantity >= 0 && (!evidenceReference || !this.stocktakeDraft.businessDate))) {
       this.error = this.language.text('inventory.message.fa79c19033'); return;
     }
     this.saving = true; this.clearFeedback();
     try {
       if (stockQuantity < 0) {
         await firstValueFrom(this.api.post('/inventory/negative-stock-requests', { inventoryItemId: product.id, requestedStockQuantity: stockQuantity, reason }));
-        this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = this.language.text('inventory.message.bd80357f01');
+        this.stocktakeDraft = { stockQuantity: null, reason: '', evidenceReference: '', businessDate: new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Kolkata' }) }; this.notice = this.language.text('inventory.message.bd80357f01');
       } else {
-        await firstValueFrom(this.api.patch<ApiEnvelope<Item>>(`/inventory/${product.id}`, { stockQuantity, adjustmentReason: reason, idempotencyKey: crypto.randomUUID() }));
-        await this.reload(); await this.loadProduct(product.id); this.stocktakeDraft = { stockQuantity: null, reason: '' }; this.notice = this.language.text('inventory.message.460f70de67');
+        const response = await firstValueFrom(this.api.post<ApiEnvelope<InventoryAdjustment>>('/inventory/adjustments', {
+          inventoryItemId: product.id, requestedStockQuantity: stockQuantity,
+          businessDate: this.stocktakeDraft.businessDate, reason, evidenceReference,
+          idempotencyKey: crypto.randomUUID(),
+        }));
+        await this.reload(); await this.loadProduct(product.id);
+        this.stocktakeDraft = { stockQuantity: null, reason: '', evidenceReference: '', businessDate: new Date().toLocaleDateString('en-CA', { timeZone:'Asia/Kolkata' }) };
+        this.notice = response.data?.status === 'pending_approval' ? 'Material adjustment sent for approval' : this.language.text('inventory.message.460f70de67');
       }
     } catch (error) { this.error = this.message(error, this.language.text('inventory.message.63c7a3b242')); }
     finally { this.saving = false; }
@@ -864,12 +974,14 @@ export class InventoryPageComponent implements OnInit {
   }
 
   openOrder() {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     this.orderDraft = { supplierId: '', expectedDate: '', notes: '', shippingRupees: null, handlingRupees: null, lines: [this.emptyLine()] };
     this.orderOptimizations = []; this.orderOptimizerSignature = ''; this.orderOptimizerAcknowledged = '';
     this.drawer = 'order'; this.clearFeedback();
   }
 
   async openGrn(order?: Order) {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     this.clearFeedback();
     this.grnScanCode = ''; this.grnScanStarted = false;
     this.grnDraft = { supplierId: order?.supplierId ?? '', purchaseOrderId: order?.id ?? '', invoiceNumber: '', invoiceDate: '', receivedDate: '', dueDate: '', challanNumber: '', deliveryReference: '', shippingRupees: order ? order.shippingPaise / 100 : null, handlingRupees: order ? order.handlingPaise / 100 : null, backdatedOperationalApproval: false, acceptExcess:false, lines: [this.emptyLine()] };
@@ -884,7 +996,8 @@ export class InventoryPageComponent implements OnInit {
 
   async openReturn(receipt?: Receipt) {
     const selected = receipt ?? this.receipts[0];
-    this.returnDraft = { receiptId: selected?.id ?? '', reason: '', lines: [] };
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    this.returnDraft = { receiptId: selected?.id ?? '', returnDate: today, creditNoteNumber: '', creditNoteDate: today, evidenceReference: '', reason: '', lines: [] };
     this.drawer = 'return'; this.clearFeedback();
     if (selected) await this.loadReturnLines();
   }
@@ -908,6 +1021,53 @@ export class InventoryPageComponent implements OnInit {
     this.drawer = 'transfer'; this.clearFeedback();
   }
 
+  async reviewAdjustment(row: InventoryAdjustment, decision: 'approve'|'reject') {
+    const reviewNote = window.prompt(decision === 'reject' ? 'Rejection reason' : 'Approval note (optional)', '') ?? '';
+    if (decision === 'reject' && !reviewNote.trim()) return;
+    this.saving = true; this.clearFeedback();
+    try {
+      await firstValueFrom(this.api.post(`/inventory/adjustments/${row.id}/review`, { decision, reviewNote: reviewNote.trim(), idempotencyKey: crypto.randomUUID() }));
+      await this.reload(); await this.loadProduct(row.inventoryItemId); this.notice = decision === 'approve' ? 'Adjustment approved' : 'Adjustment rejected';
+    } catch (error) { this.error = this.message(error, 'Adjustment review failed'); }
+    finally { this.saving = false; }
+  }
+
+  async unbundleKit() {
+    const kit = this.productDetail?.product;
+    const quantity = Number(this.kitDraft.quantity);
+    if (!kit || !Number.isInteger(quantity) || quantity <= 0 || quantity > kit.stockQuantity) { this.error = 'Enter an available positive whole kit quantity'; return; }
+    this.saving = true; this.clearFeedback();
+    try {
+      await firstValueFrom(this.api.post(`/inventory/${kit.id}/unbundle`, { quantity, comments: this.kitDraft.comments.trim(), idempotencyKey: crypto.randomUUID() }));
+      await this.reload(); await this.loadProduct(kit.id); this.kitDraft.quantity = null; this.kitDraft.comments = '';
+      this.notice = 'Kit unbundled';
+    } catch (error) { this.error = this.message(error, 'Could not unbundle kit'); }
+    finally { this.saving = false; }
+  }
+
+  kitComponentOptions(kit: Item) {
+    return this.activeCenterItems.filter((item) => item.id !== kit.id && (item.productUsage === kit.productUsage || item.productUsage === 'dual_use'));
+  }
+
+  async scanKitBarcode() {
+    const kit = this.productDetail?.product;
+    const code = this.kitDraft.scanCode.trim();
+    if (!kit || !code || this.kitScanBusy) return;
+    this.kitScanBusy = true; this.clearFeedback();
+    try {
+      const response = await firstValueFrom(this.api.post<ApiEnvelope<ScanResolution>>('/inventory/scanner-events', { deviceId: this.scannerDeviceId(), workflow: 'kit', code, clientEventId: crypto.randomUUID(), capturedAt: new Date().toISOString() }));
+      const itemId = response.data?.event.inventoryItemId;
+      const item = this.activeCenterItems.find((row) => row.id === itemId);
+      if (!item) throw new Error('Barcode is not mapped to an active product at this center');
+      if (item.id === kit.id) this.notice = 'Kit barcode matched';
+      else if (!this.kitComponentOptions(kit).some((row) => row.id === item.id)) throw new Error('Scanned product type does not match this kit');
+      else if (this.kitDraft.components.some((row) => row.inventoryItemId === item.id)) this.notice = `${item.name} is already in the kit`;
+      else { const empty = this.kitDraft.components.find((row) => !row.inventoryItemId); if (empty) { empty.inventoryItemId = item.id; empty.quantity = 1; } else this.kitDraft.components.push({ inventoryItemId: item.id, quantity: 1 }); this.notice = `${item.name} added`; }
+      this.kitDraft.scanCode = '';
+    } catch (error) { this.error = this.message(error, 'Could not match kit barcode'); }
+    finally { this.kitScanBusy = false; }
+  }
+
   addTransferLine() { this.transferDraft.lines.push(this.emptyTransferLine()); }
   removeTransferLine(index: number) { if (this.transferDraft.lines.length > 1) this.transferDraft.lines.splice(index, 1); }
   syncTransferLine(line: TransferDraftLine) {
@@ -928,6 +1088,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async importOrderCsv(event:Event) {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     const input = event.target as HTMLInputElement; const file = input.files?.[0]; input.value = '';
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.csv') || file.size > 3 * 1024 * 1024) { this.error = 'Select a CSV file up to 3 MB'; return; }
@@ -942,6 +1103,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async reviewPriceUpdate(row:PriceUpdateRequest, approve:boolean) {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     const note = approve ? '' : prompt(`Reason for rejecting the master price update for ${row.productName}`)?.trim();
     if (!approve && !note) return;
     if (approve && !confirm(`Approve master price update for ${row.productName}?`)) return;
@@ -959,14 +1121,17 @@ export class InventoryPageComponent implements OnInit {
       if (rows.some(row => [...row.barcode.toUpperCase()].some(char => !CODE39[char]))) throw new Error('A received barcode is not Code 39 compatible');
       const popup = window.open('', '_blank', 'width=980,height=720');
       if (!popup) throw new Error('Allow pop-ups to print barcode labels');
-      popup.document.write('<!doctype html><title>GRN barcode labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(5,1fr);gap:2mm;padding:5mm}.label{height:32mm;border:1px solid #ddd;padding:2mm;text-align:center;break-inside:avoid}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:17mm}@media print{main{padding:0}.label{border:0}}</style><main></main>');
+      const settings=this.inventoryPolicy.labelSettings;
+      popup.document.write(`<!doctype html><title>GRN barcode labels</title><style>body{margin:0;font:11px Arial}main{display:grid;grid-template-columns:repeat(${settings.columns},${settings.widthMm}mm);gap:2mm;padding:5mm}.label{width:${settings.widthMm}mm;height:${settings.heightMm}mm;border:1px solid #ddd;padding:2mm;text-align:center;box-sizing:border-box;break-inside:avoid;overflow:hidden}.label strong,.label small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.label svg{width:100%;height:16mm}@media print{main{padding:0}.label{border:0}}</style><main></main>`);
       const main = popup.document.querySelector('main')!;
       for (const row of rows) for (let index=0; index<row.retailQuantity+row.consumableQuantity+row.freeQuantity; index++) {
         const label = popup.document.createElement('section'); label.className='label';
         const name = popup.document.createElement('strong'); name.textContent=row.productName;
         const barcode = popup.document.createElement('div'); barcode.innerHTML=this.code39Svg(row.barcode.toUpperCase());
         const code = popup.document.createElement('small'); code.textContent=`${row.barcode}${row.batchNumber ? ` · ${row.batchNumber}` : ''}`;
-        label.append(name,barcode,code); main.append(label);
+        if (settings.showName) label.append(name); label.append(barcode);
+        code.textContent=[settings.showSku ? row.sku : row.barcode, settings.showBatch && row.batchNumber ? row.batchNumber : '', settings.showExpiry && row.expiryDate ? this.date(row.expiryDate) : ''].filter(Boolean).join(' · ');
+        label.append(code); main.append(label);
       }
       popup.document.close(); popup.focus(); popup.print();
     } catch (error) { this.error = this.message(error, 'Barcode labels could not be printed'); }
@@ -1060,17 +1225,7 @@ export class InventoryPageComponent implements OnInit {
 
   private rebuildReorderRows() {
     const forecastProductIds = new Set(this.forecastReorderRows.map((row) => row.productId));
-    const thresholdRows = this.items
-      .filter((item) => item.active && item.stockQuantity < item.reorderPoint && !forecastProductIds.has(item.id))
-      .map((item): ReorderRow => ({
-        productId: item.id, productName: item.name, sku: item.sku,
-        currentStock: item.stockQuantity, reorderLevel: item.reorderPoint,
-        suggestedQuantity: item.reorderPoint - item.stockQuantity,
-        priority: item.stockQuantity <= 0 ? 'critical' : 'high',
-        reason: `${item.stockQuantity <= 0 ? 'Out of stock' : 'Below reorder'} · supplier selection required`,
-        estimatedValuePaise: (item.reorderPoint - item.stockQuantity) * item.unitCostPaise,
-      }));
-    this.reorderRows = [...this.forecastReorderRows, ...thresholdRows];
+    this.reorderRows = [...this.forecastReorderRows, ...this.baselineReorderRows.filter((row) => !forecastProductIds.has(row.productId))];
     this.recomputeReorderViews();
   }
 
@@ -1229,6 +1384,7 @@ export class InventoryPageComponent implements OnInit {
     }
   }
   async saveSupplierPrice() {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     if (!this.supplierId || !this.supplierPriceDraft.inventoryItemId || this.supplierPriceDraft.unitCostRupees === null) return;
     this.saving = true; this.clearFeedback();
     try {
@@ -1257,6 +1413,7 @@ export class InventoryPageComponent implements OnInit {
     }
   }
   async saveOrder() {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     for (const line of this.orderDraft.lines) this.syncLineQuantities(line, false);
     const lines = this.validLines(this.orderDraft.lines, false);
     if (!this.orderDraft.supplierId || !lines.length) { this.error = this.language.text('inventory.message.67fac0e7a7'); return; }
@@ -1297,6 +1454,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async saveGrn() {
+    if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
     for (const line of this.grnDraft.lines) this.syncLineQuantities(line, true);
     const supplier = this.suppliers.find((row) => row.id === this.grnDraft.supplierId);
     const lines = this.validLines(this.grnDraft.lines, true);
@@ -1306,8 +1464,42 @@ export class InventoryPageComponent implements OnInit {
 
   async saveReturn() {
     const lines = this.returnDraft.lines.filter((line) => Number(line.quantity) > 0).map((line) => ({ purchaseReceiptLineId: line.sourceLineId, quantity: Number(line.quantity) }));
-    if (!this.returnDraft.receiptId || !this.returnDraft.reason.trim() || !lines.length) { this.error = this.language.text('inventory.message.b558c2701e'); return; }
-    await this.mutate(this.api.post('/purchases/returns', { purchaseReceiptId: this.returnDraft.receiptId, reason: this.returnDraft.reason.trim(), idempotencyKey: crypto.randomUUID(), lines }), 'Purchase return posted');
+    if (!this.returnDraft.receiptId || !this.returnDraft.returnDate || !this.returnDraft.creditNoteDate
+      || !this.returnDraft.creditNoteNumber.trim() || !this.returnDraft.evidenceReference.trim()
+      || !this.returnDraft.reason.trim() || !lines.length) { this.error = 'Receipt, dates, credit note, evidence, reason and return lines are required'; return; }
+    await this.mutate(this.api.post('/purchases/returns', {
+      purchaseReceiptId: this.returnDraft.receiptId,
+      returnDate: this.returnDraft.returnDate,
+      creditNoteNumber: this.returnDraft.creditNoteNumber.trim(),
+      creditNoteDate: this.returnDraft.creditNoteDate,
+      evidenceReference: this.returnDraft.evidenceReference.trim(),
+      reason: this.returnDraft.reason.trim(), idempotencyKey: crypto.randomUUID(), lines,
+    }), 'Purchase return posted');
+  }
+
+  openQuarantineDisposition(row: ReceivingQuarantine) {
+    if (row.remainingQuantity <= 0) return;
+    this.selectedQuarantine = row;
+    this.quarantineDraft = { action: 'release', quantity: null, reason: '', evidenceReference: '', creditNoteNumber: '' };
+    this.drawer = 'quarantine';
+  }
+
+  async saveQuarantine() {
+    const row = this.selectedQuarantine;
+    const quantity = Number(this.quarantineDraft.quantity);
+    if (!row || !Number.isInteger(quantity) || quantity <= 0 || quantity > row.remainingQuantity
+      || !this.quarantineDraft.reason.trim() || !this.quarantineDraft.evidenceReference.trim()
+      || (this.quarantineDraft.action === 'return' && !this.quarantineDraft.creditNoteNumber.trim())) {
+      this.error = 'Valid quantity, reason and evidence are required; vendor return also needs a credit note'; return;
+    }
+    await this.mutate(this.api.post(`/purchases/quarantine/${row.id}/dispositions`, {
+      action: this.quarantineDraft.action,
+      quantity,
+      reason: this.quarantineDraft.reason.trim(),
+      evidenceReference: this.quarantineDraft.evidenceReference.trim(),
+      creditNoteNumber: this.quarantineDraft.creditNoteNumber.trim() || null,
+      idempotencyKey: crypto.randomUUID(),
+    }), 'Quarantine disposition posted');
   }
 
   async savePayment() {
@@ -1415,6 +1607,12 @@ export class InventoryPageComponent implements OnInit {
     await this.mutate(this.api.put('/inventory/transfer-settings', this.transferSettings), 'Transfer settings saved', false);
   }
 
+  useReturnsWarehouse() {
+    const branchId = this.transferSettings.defaultReturnsWarehouseBranchId?.trim();
+    if (!branchId) { this.error = 'Configure a returns warehouse first'; return; }
+    this.transferDraft.mode = 'push'; this.transferDraft.destinationBranchId = branchId;
+  }
+
   private async loadTransfer(id:string) {
     this.clearFeedback();
     try { return await this.get<TransferDetails>(`/inventory/transfers/${id}`); }
@@ -1450,7 +1648,12 @@ export class InventoryPageComponent implements OnInit {
   private async get<T>(path: string) { const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
   private async loadProduct(id: string) {
     this.productLoading = true; this.productDetail = null;
-    try { this.productDetail = await this.get<Product360>(`/inventory/${id}/360`); }
+    try {
+      [this.productDetail, this.adjustments] = await Promise.all([
+        this.get<Product360>(`/inventory/${id}/360`),
+        this.get<InventoryAdjustment[]>(`/inventory/adjustments?inventoryItemId=${encodeURIComponent(id)}`),
+      ]);
+    }
     catch (error) { this.error = this.message(error, this.language.text('inventory.message.401335ec5e')); }
     finally { this.productLoading = false; }
   }
@@ -1468,7 +1671,7 @@ export class InventoryPageComponent implements OnInit {
     }
     return `<svg viewBox="0 0 ${x} 70" role="img" aria-label="Barcode ${code}" xmlns="http://www.w3.org/2000/svg">${bars.join('')}</svg>`;
   }
-  private emptyProduct() { return { sku: '', name: '', category: '', subcategory:'', brand: '', productUsage:'retail' as Item['productUsage'], unit: '', packageUnit: '', unitsPerPackage: 1, reorderPoint: null as number | null, alertLevel:null as number|null, desiredLevel:null as number|null, orderLevel:null as number|null, safetyStockLevel:null as number|null, packageCostRupees: null as number | null, hsnCode: '', gstPercent: null as number | null, barcodesText:'', batchTracked: false, centerAvailable:true, active: true }; }
+  private emptyProduct() { return { sku: '', name: '', category: '', subcategory:'', brand: '', productUsage:'retail' as Item['productUsage'], unit: '', packageUnit: '', unitsPerPackage: 1, reorderPoint: null as number | null, alertLevel:null as number|null, desiredLevel:null as number|null, orderLevel:null as number|null, safetyStockLevel:null as number|null, packageCostRupees: null as number | null, retailPriceRupees: null as number | null, hsnCode: '', gstPercent: null as number | null, barcodesText:'', batchTracked: false, centerAvailable:true, onlineSaleEnabled:false, active: true }; }
   private toPaise(value: number | null) { return Math.round(Number(value || 0) * 100); }
   private emptyLine(): EntryLine { return { inventoryItemId: '', quantity: null, retailQuantity:null, consumableQuantity:null, unitCostRupees: null, discountPercent: null, gstPercent: null, damagedQuantity: null, rejectedQuantity: null, varianceReason: '', batchNumber: '', batchBarcode: '', expiryDate: '', requestMasterPriceUpdate:false }; }
   private emptyTransferLine(): TransferDraftLine { return { sourceInventoryItemId:'', retailQuantity:null, consumableQuantity:null, transferPriceRupees:null, discountPercent:null, gstPercent:null }; }

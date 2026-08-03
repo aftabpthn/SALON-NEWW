@@ -22,6 +22,7 @@ use crate::{
         ai_copilot_governance::{self, AlertScanResult, DecideActionRequest, ProposeActionRequest},
         ai_scope_service::{self, AnswerEnvelope, ScopeRequest},
         ai_scoped_copilot_tools::{self, ToolRequest},
+        ai_workforce_service,
         auth_service::AuthClaims,
     },
     state::AppState,
@@ -153,7 +154,8 @@ async fn scan_alerts(
     headers: HeaderMap,
     Json(payload): Json<ScanRequest>,
 ) -> ApiResult<AlertScanResult> {
-    let (tenant_id, _) = tenant_branch(&headers)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
         ai_copilot_governance::scan_alerts(
             &state.db,
@@ -225,7 +227,8 @@ async fn propose_action(
     headers: HeaderMap,
     Json(payload): Json<ProposeActionRequest>,
 ) -> ApiResult<AiCopilotApprovalRecord> {
-    let (tenant_id, _) = tenant_branch(&headers)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_workforce_service::require_enabled_and_consume(&state.db, &tenant_id, &branch_id).await?;
     Ok(Json(ApiResponse::ok(
         ai_copilot_governance::propose_action(&state.db, &tenant_id, &claims, &payload).await?,
     )))

@@ -156,6 +156,21 @@ h2 {
   font: inherit;
 }
 
+.form-grid fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-width: min(100%, 280px);
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #c9d5e5;
+  border-radius: 8px;
+}
+
+.form-grid fieldset legend { padding: 0 4px; color: var(--set-muted); font-size: 12px; font-weight: 700; }
+.form-grid fieldset label { display: flex; align-items: center; min-width: 0; color: var(--set-ink); }
+.form-grid fieldset input[type='checkbox'] { width: 16px; height: 16px; min-height: 0; padding: 0; }
+
 .primary {
   border-color: var(--set-green);
   background: var(--set-green);
@@ -188,6 +203,34 @@ h2 {
   display: grid;
   gap: 12px;
 }
+
+.organization-columns,
+.hours-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.hours-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.hours-grid > div,
+.compact-record-list > :is(button, span) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--set-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.hours-grid input[type='time'] { min-width: 0; }
+.compact-record-list { display: grid; gap: 6px; }
+.compact-record-list > :is(button, span) { justify-content: space-between; text-align: left; }
+.compact-record-list small { color: var(--set-muted); }
 
 .role-layout {
   display: grid;
@@ -704,3 +747,5 @@ h3 {
     min-height: 44px;
   }
 }
+
+.kiosk-activation{display:flex;align-items:center;gap:14px;margin-top:12px;padding:12px;border:1px solid var(--set-border);border-radius:10px;background:var(--set-soft)}.kiosk-activation strong{font-size:22px;letter-spacing:.12em}.kiosk-device-head{display:flex;align-items:center;gap:10px}.kiosk-device-head input{font-weight:700}.kiosk-device-head span{margin-left:auto;white-space:nowrap;color:var(--set-green);font-weight:700}.kiosk-device-head .is-revoked{color:var(--set-red)}.kiosk-device footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}

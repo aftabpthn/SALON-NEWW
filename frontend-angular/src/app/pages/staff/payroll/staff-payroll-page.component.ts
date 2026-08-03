@@ -178,6 +178,9 @@ export class StaffPayrollPageComponent implements OnInit {
   setupCreateAdjustment = false;
   setupAdjustmentKind: 'fine' | 'allowance' | 'deduction' = 'deduction';
   cycle = 'monthly';
+  periodStart = '';
+  periodEnd = '';
+  cycleReason = '';
   salaryMode: SalaryMode = 'preview';
   month = new Date().getMonth() + 1;
   year = new Date().getFullYear();
@@ -254,8 +257,11 @@ export class StaffPayrollPageComponent implements OnInit {
   private existingPeriodSalaryRows: Record<string, unknown>[] = [];
 
   constructor() {
-    const currentYear = new Date().getFullYear();
+    const now = new Date();
+    const currentYear = now.getFullYear();
     this.years = Array.from({ length: 7 }, (_, index) => currentYear - 3 + index);
+    this.periodStart = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    this.periodEnd = `${currentYear}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(currentYear, now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
   }
 
   async ngOnInit() {
@@ -343,7 +349,11 @@ export class StaffPayrollPageComponent implements OnInit {
   get generationLocked() {
     return Boolean(this.staffId && this.existingPeriodRun && ['finalized', 'partially_paid', 'paid'].includes(this.existingPeriodRun.status));
   }
-  get runActionDisabled() { return this.loading || (this.salaryMode === 'generate' && this.generationLocked); }
+  get runActionDisabled() {
+    return this.loading
+      || (this.salaryMode === 'generate' && this.generationLocked)
+      || (this.cycle !== 'monthly' && (!this.staffId || !this.periodStart || !this.periodEnd || (this.salaryMode === 'generate' && this.cycleReason.trim().length < 3)));
+  }
   get primaryActionLabel() {
     if (this.action === 'run' || this.action === 'regenerate') return 'Running...';
     if (this.salaryMode === 'history') return 'Load list';
@@ -435,7 +445,9 @@ export class StaffPayrollPageComponent implements OnInit {
   async runPayroll() {
     await this.perform('run', async () => {
       const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollRunDetail>>('/staff-payroll/runs', {
-        cycle: this.cycle, year: this.year, month: this.month, staffId: this.staffId || null,
+        cycle: this.cycle, year: this.cycle === 'monthly' ? this.year : null, month: this.cycle === 'monthly' ? this.month : null,
+        periodStart: this.cycle === 'monthly' ? null : this.periodStart, periodEnd: this.cycle === 'monthly' ? null : this.periodEnd,
+        staffId: this.staffId || null, reason: this.cycle === 'monthly' ? null : this.cycleReason.trim(),
       }));
       this.applyDetail(this.unwrap(result, 'Unable to run payroll'));
       await this.loadHistory();
@@ -481,7 +493,9 @@ export class StaffPayrollPageComponent implements OnInit {
     if (!this.canConfirmRegenerate) return;
     await this.perform('regenerate', async () => {
       const result = await firstValueFrom(this.api.post<ApiEnvelope<PayrollRunDetail>>('/staff-payroll/runs', {
-        cycle: this.cycle, year: this.year, month: this.month, staffId: this.staffId, reason: this.regenerateReason.trim(),
+        cycle: this.cycle, year: this.cycle === 'monthly' ? this.year : null, month: this.cycle === 'monthly' ? this.month : null,
+        periodStart: this.cycle === 'monthly' ? null : this.periodStart, periodEnd: this.cycle === 'monthly' ? null : this.periodEnd,
+        staffId: this.staffId, reason: this.regenerateReason.trim(),
       }));
       this.applyDetail(this.unwrap(result, 'Unable to regenerate selected staff'));
       await this.loadHistory();
@@ -886,12 +900,22 @@ export class StaffPayrollPageComponent implements OnInit {
 
   private async loadPeriod() {
     const prefix = `${this.year}-${String(this.month).padStart(2, '0')}-`;
-    const existing = this.periodRuns.find((run) => run.periodStart.startsWith(prefix));
+    const existing = this.periodRuns.find((run) => run.cycle === this.cycle && (this.cycle === 'monthly'
+      ? run.periodStart.startsWith(prefix)
+      : run.periodStart === this.periodStart && run.periodEnd === this.periodEnd));
     this.closeRegenerateDialog();
     this.existingPeriodRun = existing || null;
     this.runBranchId = this.auth.branchId || '';
     this.existingPeriodItems = [];
     this.existingPeriodSalaryRows = [];
+    if (this.cycle !== 'monthly' && !this.staffId) {
+      this.run = null;
+      this.items = [];
+      this.salaryRows = [];
+      this.events = [];
+      this.error = 'Select one employee for off-cycle or final-settlement payroll';
+      return;
+    }
     if (existing) {
       try {
         const detail = await this.fetchRunDetail(existing.id);
@@ -960,7 +984,9 @@ export class StaffPayrollPageComponent implements OnInit {
   }
 
   private periodParams() {
-    const params = new URLSearchParams({ cycle: this.cycle, year: String(this.year), month: String(this.month) });
+    const params = this.cycle === 'monthly'
+      ? new URLSearchParams({ cycle: this.cycle, year: String(this.year), month: String(this.month) })
+      : new URLSearchParams({ cycle: this.cycle, periodStart: this.periodStart, periodEnd: this.periodEnd });
     if (this.staffId) params.set('staffId', this.staffId);
     return params.toString();
   }

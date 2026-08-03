@@ -11,7 +11,7 @@ import { DatePickerComponent } from '../../../shared/date-picker/date-picker.com
 
 type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'master-data' | 'operations';
 type NegativeStockRequest = { id:string; productName:string; requestedStockQuantity:number; reason:string; status:string; requestedBy:string; requestedAt:string };
-type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning'; autoCheckoutRetailSales:boolean; autoCheckoutServiceConsumption:boolean; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; countValueVarianceThresholdPaise?: number; reorderHistoryDays: number; reorderCoverageDays: number; partialDeliveryPolicy: 'allow' | 'block'; financialLockDate: string; editLockDays: number; masterEditLock: boolean; excessReceivingPolicy:'block'|'permission_required'; priceDifferencePrompt:boolean; priceDifferenceThresholdBps:number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string> };
+type InventoryPolicy = { negativeStockRule: 'block' | 'approval_required' | 'allow_with_warning'; autoCheckoutRetailSales:boolean; autoCheckoutServiceConsumption:boolean; valuationMethod: 'weighted_average' | 'fifo'; expiryWindowDays: number; countVarianceThresholdBps: number; countValueVarianceThresholdPaise?: number; allowZeroUnauditedAudit:boolean; reorderHistoryDays: number; reorderCoverageDays: number; partialDeliveryPolicy: 'allow' | 'block'; financialLockDate: string; editLockDays: number; masterEditLock: boolean; excessReceivingPolicy:'block'|'permission_required'; priceDifferencePrompt:boolean; priceDifferenceThresholdBps:number; transferBaseTransportCostPaise: number | null; transferCostPerKmPaise: number | null; transferHandlingCostPerUnitPaise: number | null; transferDelayCostPerUnitDayPaise: number | null; transferExpectedDays: number | null; approvalMatrix: Record<string, string>; stockActionMatrix:Record<'receipt'|'transfer'|'adjustment'|'audit'|'consumption'|'returns'|'kit',boolean>; purchaseOrderSettings:{ numberPrefix:string; approvalRequired:boolean; approvalThresholdPaise:number; bulkRaiseEnabled:boolean; supplierElectronicDelivery:boolean }; labelSettings:{ priceCaption:string; showName:boolean; showPrice:boolean; showSku:boolean; showBatch:boolean; showExpiry:boolean; widthMm:number; heightMm:number; columns:number; terms:Record<string,string> } };
 type MasterValue = { id:string; kind:'category'|'subcategory'|'brand'|'adjustment_reason'|'action_label'; code:string; label:string; parentCode:string; active:boolean };
 type InventoryMasterData = { values:MasterValue[]; units:Array<{ code:string; label:string; dimension:string; active:boolean }> };
 type OperationsHealth = {
@@ -61,13 +61,14 @@ export class AdvancedControlsPageComponent implements OnInit {
     { id: 'master-data', label: 'Master Data' },
     { id: 'operations', label: 'Operations' },
   ];
+  readonly stockActions:Array<keyof InventoryPolicy['stockActionMatrix']> = ['receipt','transfer','adjustment','audit','consumption','returns','kit'];
   activeTab: Tab = 'exceptions';
   severity = 'all';
   allBranches = true;
   loading = true;
   error = '';
   controls: AdvancedControls = this.emptyControls();
-  policy: InventoryPolicy = { negativeStockRule: 'block', autoCheckoutRetailSales:true, autoCheckoutServiceConsumption:true, valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, countValueVarianceThresholdPaise: 10_000, reorderHistoryDays: 60, reorderCoverageDays: 30, partialDeliveryPolicy:'allow', financialLockDate:'', editLockDays:90, masterEditLock:false, excessReceivingPolicy:'permission_required', priceDifferencePrompt:true, priceDifferenceThresholdBps:0, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' } };
+  policy: InventoryPolicy = { negativeStockRule: 'block', autoCheckoutRetailSales:true, autoCheckoutServiceConsumption:true, valuationMethod: 'weighted_average', expiryWindowDays: 30, countVarianceThresholdBps: 500, countValueVarianceThresholdPaise: 10_000, allowZeroUnauditedAudit:false, reorderHistoryDays: 60, reorderCoverageDays: 30, partialDeliveryPolicy:'allow', financialLockDate:'', editLockDays:90, masterEditLock:false, excessReceivingPolicy:'permission_required', priceDifferencePrompt:true, priceDifferenceThresholdBps:0, transferBaseTransportCostPaise: null, transferCostPerKmPaise: null, transferHandlingCostPerUnitPaise: null, transferDelayCostPerUnitDayPaise: null, transferExpectedDays: null, approvalMatrix: { negativeStock: 'owner', stockCount: 'inventory_manager', backbarOverride: 'owner' }, stockActionMatrix:{ receipt:true, transfer:true, adjustment:true, audit:true, consumption:true, returns:true, kit:true }, purchaseOrderSettings:{ numberPrefix:'PO', approvalRequired:true, approvalThresholdPaise:0, bulkRaiseEnabled:true, supplierElectronicDelivery:false }, labelSettings:{ priceCaption:'MRP', showName:true, showPrice:true, showSku:true, showBatch:true, showExpiry:true, widthMm:76, heightMm:32, columns:5, terms:{ product:'Product', retail:'Retail', consumable:'Consumable', stock:'Stock' } } };
   masterData: InventoryMasterData = { values:[], units:[] };
   masterDraft = { kind:'category' as MasterValue['kind'], code:'', label:'', parentCode:'', active:true };
   countValueVarianceThresholdRupees: number | null = 100;
@@ -108,6 +109,10 @@ export class AdvancedControlsPageComponent implements OnInit {
     return this.auth.hasRole('owner', 'admin', 'manager') || this.auth.hasPermission('inventory.manage');
   }
 
+  get canExportReports() {
+    return this.auth.hasAccess(['owner', 'admin'], ['reports.export']);
+  }
+
   async reload() {
     this.loading = true;
     this.error = '';
@@ -142,7 +147,7 @@ export class AdvancedControlsPageComponent implements OnInit {
       firstValueFrom(this.api.get<ApiEnvelope<OperationsHealth>>('/inventory/operations-health')),
       firstValueFrom(this.api.get<ApiEnvelope<AutonomousOperations>>('/inventory/autonomous-operations')),
     ]);
-    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = { ...policy.value.data, financialLockDate:policy.value.data.financialLockDate || '' }; this.supportsCountValueVarianceThreshold = Number.isSafeInteger(this.policy.countValueVarianceThresholdPaise); this.syncTransferCostInputs(); }
+    if (policy.status === 'fulfilled' && policy.value.data) { this.policy = { ...policy.value.data, allowZeroUnauditedAudit:policy.value.data.allowZeroUnauditedAudit ?? false, financialLockDate:policy.value.data.financialLockDate || '' }; this.supportsCountValueVarianceThreshold = Number.isSafeInteger(this.policy.countValueVarianceThresholdPaise); this.syncTransferCostInputs(); }
     if (negativeRequests.status === 'fulfilled' && negativeRequests.value.data) this.negativeStockRequests = negativeRequests.value.data;
     if (operations.status === 'fulfilled' && operations.value.data) this.operations = operations.value.data;
     if (autonomous.status === 'fulfilled' && autonomous.value.data) {
@@ -290,6 +295,7 @@ export class AdvancedControlsPageComponent implements OnInit {
     return '/inventory';
   }
   exportEvidence() {
+    if (!this.canExportReports) { this.error = 'Report export permission is required'; return; }
     const rows = [
       ['Severity', 'Control', 'Exception', 'Value Paise', 'Evidence', 'Owner', 'Status'].map((value) => this.language.textValue(value)),
       ...this.filteredExceptions.map((row) => [row.severity, row.control, row.title, row.valuePaise, row.evidence, row.owner, row.status]),

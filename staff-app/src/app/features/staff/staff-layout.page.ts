@@ -1,7 +1,8 @@
 import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { DatePipe } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
-import { StaffAppService, StaffEnterpriseOs, StaffWorkspacePreferences } from "../../core/staff-app.service";
+import { STAFF_OFFLINE_CAPABILITIES, StaffAppReleasePolicy, StaffAppService, StaffEnterpriseOs, StaffOfflineAction, StaffWorkspacePreferences } from "../../core/staff-app.service";
 import { StaffPushService } from "../../core/staff-push.service";
 import { resolveStaffIdentity } from "./staff-role-label";
 
@@ -10,11 +11,11 @@ type StaffRecentItem = { label: string; path: string };
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [DatePipe, FormsModule, RouterLink, RouterLinkActive, RouterOutlet],
   template: `
     <section class="staff-app-shell" [class.staff-compact]="preferences().interface.compactMode">
       <button type="button" class="drawer-backdrop" [class.open]="menuOpen()" (click)="closeMenu()" aria-label="Close menu"></button>
-      <aside class="staff-sidebar" [class.open]="menuOpen()" [attr.role]="menuOpen() ? 'dialog' : null" [attr.aria-modal]="menuOpen() ? 'true' : null" [attr.aria-label]="menuOpen() ? 'Staff navigation' : null" [attr.inert]="notificationsOpen() || commandOpen() ? '' : null" tabindex="-1" #menuDialog (keydown)="menuOpen() && trapFocus($event, menuDialog)">
+      <aside class="staff-sidebar" [class.open]="menuOpen()" [attr.role]="menuOpen() ? 'dialog' : null" [attr.aria-modal]="menuOpen() ? 'true' : null" [attr.aria-label]="menuOpen() ? 'Staff navigation' : null" [attr.inert]="notificationsOpen() || offlineOpen() || commandOpen() ? '' : null" tabindex="-1" #menuDialog (keydown)="menuOpen() && trapFocus($event, menuDialog)">
         <button type="button" class="drawer-close" (click)="closeMenu()" aria-label="Close menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6 6.4 5z"></path></svg></button>
         <a class="user-card" routerLink="/staff/profile" (click)="closeMenu()" aria-label="Open my profile">
           <b>{{ initials() }}</b>
@@ -31,7 +32,7 @@ type StaffRecentItem = { label: string; path: string };
         <button type="button" class="nav-logout" (click)="logout()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5V3zm5.6 4.4L14.2 8.8l2.2 2.2H9v2h7.4l-2.2 2.2 1.4 1.4 4.6-4.6-4.6-4.6z"></path></svg><span>Logout</span></button>
       </aside>
 
-       <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
+       <div class="staff-main-shell" [attr.inert]="menuOpen() || notificationsOpen() || offlineOpen() || commandOpen() ? '' : null">
         <header class="staff-topbar">
            <button type="button" class="menu-button" (click)="openMenu()" aria-label="Open menu" [attr.aria-expanded]="menuOpen()" #menuButton><span></span><span></span><span></span></button>
            <a class="staff-identity" routerLink="/staff/profile" [attr.aria-label]="'Open my profile — ' + identitySubtitle()"><b class="profile-avatar">{{ initials() }}</b><div><span>{{ greetingLabel() }}</span><strong>{{ staff.user()?.name || 'Aura Staff' }}</strong><small [title]="identitySubtitle()" [attr.aria-label]="identitySubtitle()">{{ identitySubtitle() }}</small></div></a>
@@ -45,7 +46,7 @@ type StaffRecentItem = { label: string; path: string };
               @if (unreadCount() > 0) { <span class="bell-badge">{{ unreadCount() }}</span> }
              </button> }
             <span class="net-status network-status" [class.offline]="!online()" aria-live="polite">{{ online() ? 'Online' : 'Offline' }}</span>
-            @if (offlinePending()) { <span class="queue-status">{{ offlinePending() }} queued</span> }
+            @if (offlinePending()) { <button type="button" class="queue-status" (click)="openOffline()">{{ offlinePending() }} queued</button> }
           </div>
         </header>
          <main class="staff-content">
@@ -53,7 +54,7 @@ type StaffRecentItem = { label: string; path: string };
         </main>
       </div>
 
-       <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || commandOpen() ? '' : null">
+       <nav class="mobile-bottom-nav" aria-label="Primary staff navigation" [attr.inert]="menuOpen() || notificationsOpen() || offlineOpen() || commandOpen() ? '' : null">
          <a routerLink="/staff/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Dashboard')"></path></svg><span>Home</span></a>
          @if (staff.hasPermission('staff.app.appointments.read')) { <a routerLink="/staff/appointments" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Appointments')"></path></svg><span>Appointments</span></a> }
          @if (staff.hasPermission('staff.app.tasks.read')) { <a routerLink="/staff/tasks" routerLinkActive="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="iconFor('Tasks')"></path></svg><span>Tasks</span></a> }
@@ -100,7 +101,51 @@ type StaffRecentItem = { label: string; path: string };
         </aside>
       }
 
+      @if (offlineOpen()) {
+        <button type="button" class="drawer-backdrop open" (click)="closeOffline()" aria-label="Close offline actions"></button>
+        <aside class="notification-drawer open offline-drawer" role="dialog" aria-modal="true" aria-labelledby="staff-offline-title">
+          <div class="drawer-title"><strong id="staff-offline-title">Offline actions</strong><button type="button" (click)="closeOffline()">Close</button></div>
+          <div class="notice-list">
+            @for (action of offlineActions(); track action.queueId) {
+              <article>
+                <strong>{{ offlineActionLabel(action.path) }}</strong>
+                <small>{{ action.state }} · {{ action.queuedAt | date:'dd/MM/yyyy HH:mm' }}</small>
+                @if (action.lastError) { <span>{{ action.lastError }}</span> }
+                <div class="row-actions"><button type="button" (click)="retryOffline(action.queueId)">Retry</button><button type="button" (click)="discardOffline(action.queueId)">Discard</button></div>
+              </article>
+            } @empty { <p>No queued actions.</p> }
+          </div>
+          <div class="offline-matrix">
+            @for (capability of offlineCapabilities; track capability.feature) {
+              <article><strong>{{ capability.feature }}</strong><span>{{ capability.classification }}</span><small>{{ capability.reason }}</small></article>
+            }
+          </div>
+        </aside>
+      }
+
       @if (toastMessage()) { <section class="staff-toast" role="status">{{ toastMessage() }}</section> }
+      @if (releasePolicy()?.blocked) {
+        <section class="command-backdrop" role="dialog" aria-modal="true" aria-labelledby="staff-update-title">
+          <div class="command-palette pin-unlock">
+            <strong id="staff-update-title">Update required</strong>
+            <p>Version {{ releasePolicy()?.minimumVersion }} or newer is required to continue.</p>
+            <div class="pin-actions">
+              @if (releasePolicy()?.updateUrl) { <a class="button primary" [href]="releasePolicy()?.updateUrl" target="_blank" rel="noopener">Update app</a> }
+              <button class="button" type="button" (click)="logout()">Logout</button>
+            </div>
+          </div>
+        </section>
+      }
+      @if (pinLocked() && !releasePolicy()?.blocked) {
+        <section class="command-backdrop" aria-live="polite">
+          <form class="command-palette pin-unlock" (ngSubmit)="unlockWithPin()">
+            <div class="command-head"><strong>Staff App locked</strong><span>Inactive session</span></div>
+            <label><span>Device PIN</span><input [(ngModel)]="unlockPin" name="unlockPin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" autofocus /></label>
+            @if (unlockError()) { <p role="alert">{{ unlockError() }}</p> }
+            <div class="pin-actions"><button class="button primary" type="submit" [disabled]="unlocking() || unlockPin.length < 4">{{ unlocking() ? 'Unlocking...' : 'Unlock' }}</button><button class="button" type="button" (click)="logout()">Logout</button></div>
+          </form>
+        </section>
+      }
     </section>
   `,
   styles: [`
@@ -156,7 +201,7 @@ type StaffRecentItem = { label: string; path: string };
     .bell-button:not(.has-unread) .bell-badge { background: var(--staff-disabled); color: var(--staff-text-inverse) !important; }
     .net-status, .queue-status { padding: 7px 10px; border-radius: 999px; background: var(--staff-success-surface); color: var(--staff-success-text) !important; }
     .net-status.offline { background: var(--staff-error-surface); color: var(--staff-error-text) !important; }
-    .queue-status { background: var(--staff-primary-light); color: var(--staff-primary-hover) !important; }
+    .queue-status { border:1px solid var(--staff-border-accent);background: var(--staff-primary-light); color: var(--staff-primary-hover) !important; font:inherit;cursor:pointer; }
     .staff-content { min-width: 0; overflow: auto; padding: 24px; background: var(--staff-background); }
     .staff-policy-hint { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--staff-border-accent); border-radius: 12px; background: var(--staff-primary-light); color: var(--staff-primary-hover); font-size: .8rem; font-weight: 650; }
     .staff-app-shell.staff-compact .staff-content { padding: 12px; }
@@ -194,6 +239,12 @@ type StaffRecentItem = { label: string; path: string };
     .notice-list small { margin-top: 4px; color: var(--staff-text-secondary); font-weight: 600; }
     .notice-list span { margin-top: 6px; color: var(--staff-primary-hover); font-size: .76rem; font-weight: 750; text-transform: capitalize; }
     .notice-list button { min-height:44px;margin-top:8px;border:1px solid var(--staff-border-accent);border-radius:14px;background:var(--staff-surface);color:var(--staff-primary-hover);font-weight:750;padding:7px 10px; }
+    .notice-list .row-actions { display:flex;gap:8px; }
+    .offline-matrix { display:grid;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--staff-border); }
+    .offline-matrix article { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:10px;border:1px solid var(--staff-border);border-radius:14px;background:var(--staff-surface-secondary); }
+    .offline-matrix strong { color:var(--staff-text);font-size:.78rem; }
+    .offline-matrix span { color:var(--staff-primary-hover);font-size:.7rem;font-weight:800; }
+    .offline-matrix small { grid-column:1/-1;color:var(--staff-text-secondary);font-size:.68rem;line-height:1.4; }
      .staff-toast { position: fixed; left: 50%; bottom: 18px; z-index: 80; transform: translateX(-50%); max-width: min(420px, calc(100vw - 24px)); padding: 11px 14px; border-radius: 16px; background: var(--staff-text); color: var(--staff-text-inverse); font-weight: 750; box-shadow: var(--staff-shadow-elevated); animation: shell-toast-enter var(--staff-motion-fast) var(--staff-motion-ease) both; }
      .command-backdrop { animation: shell-fade-in var(--staff-motion-fast) var(--staff-motion-ease) both; }
      .command-palette { animation: shell-dialog-enter var(--staff-motion-standard) var(--staff-motion-ease) both; overscroll-behavior: contain; }
@@ -259,6 +310,11 @@ type StaffRecentItem = { label: string; path: string };
       }
      @media (prefers-reduced-motion: reduce) { .notification-drawer, .command-backdrop, .command-palette, .staff-toast { animation: none; } }
      .staff-app-shell { grid-template-columns: 232px minmax(0, 1fr); font-size: 14px; }
+     .pin-unlock { width:min(420px,calc(100vw - 24px));padding:16px; }
+     .pin-unlock label { display:grid;gap:6px;color:var(--staff-text-secondary);font-weight:700; }
+     .pin-unlock input { min-height:44px;padding:0 12px;border:1px solid var(--staff-border);border-radius:12px; }
+     .pin-unlock p { color:var(--staff-error-text); }
+     .pin-actions { display:flex;gap:8px;margin-top:12px; }
      .staff-sidebar { padding: 8px; }
      .user-card { grid-template-columns: 34px 1fr; gap: 9px; padding: 7px; }
      .user-card b { width:34px; height:34px; }
@@ -391,17 +447,25 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   readonly menuOpen = signal(false);
   readonly commandOpen = signal(false);
   readonly notificationsOpen = signal(false);
+  readonly offlineOpen = signal(false);
   readonly online = signal(typeof navigator === "undefined" ? true : navigator.onLine);
   readonly realtimeConnected = signal(false);
   readonly offlinePending = signal(0);
+  readonly offlineActions = signal<StaffOfflineAction[]>([]);
+  readonly offlineCapabilities = STAFF_OFFLINE_CAPABILITIES;
   readonly toastMessage = signal("");
+  readonly pinLocked = signal(false);
+  readonly releasePolicy = signal<StaffAppReleasePolicy | null>(null);
+  readonly unlocking = signal(false);
+  readonly unlockError = signal("");
+  unlockPin = "";
   readonly os = signal<StaffEnterpriseOs | null>(null);
   readonly preferences = signal<StaffWorkspacePreferences>({
     workspace: { workspaceName: "Aura Shine Staff Portal" },
     localization: { timezone: "Asia/Kolkata", locale: "en-IN" },
     dateTime: { dateFormat: "DD/MM/YYYY", timeFormat: "12h", businessDayStartHour: 0, weekStartsOn: "Monday" },
     interface: { compactMode: false },
-    defaults: { staffHints: true }
+    defaults: { staffHints: true, calendarSyncEnabled: false }
   });
   readonly recent = signal<StaffRecentItem[]>(this.readRecent());
   readonly query = signal("");
@@ -410,6 +474,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   private reconnectTimer = 0;
   private posReconnectTimer = 0;
   private toastTimer = 0;
+  private inactivityTimer = 0;
+  private lockGraceTimer = 0;
   private socket: WebSocket | null = null;
   private posSocket: WebSocket | null = null;
 
@@ -424,6 +490,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "staff.app.roster.read" },
     { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "staff.app.calendar.read" },
     { label: "Performance", path: "/staff/performance", iconPath: "M3 17h3v4H3v-4zm5-6h3v10H8V11zm5 3h3v7h-3v-7zm5-9h3v16h-3V5z", group: "Intelligence", permission: "staff.app.performance.read" },
+    { label: "Copilot", path: "/staff/copilot", iconPath: "M12 2a7 7 0 0 0-4 12.7V18h8v-3.3A7 7 0 0 0 12 2zm-3 18h6v2H9v-2z", group: "Intelligence", anyPermissions: ["staff.app.performance.read","staff.app.roster.read","staff.app.tasks.read"] },
     { label: "Leaderboard", path: "/staff/leaderboard", iconPath: "M7 21h10v-2H7v2zM5 3h14v4a7 7 0 0 1-6 6.9V17h-2v-3.1A7 7 0 0 1 5 7V3zm2 2v2a5 5 0 0 0 10 0V5H7z", group: "Intelligence", permission: "staff.app.leaderboard.read" },
     { label: "Reports", path: "/staff/reports", iconPath: "M5 3h11l3 3v15H5V3zm10 1.5V7h2.5L15 4.5zM8 11h8v2H8v-2zm0 4h8v2H8v-2z", group: "Intelligence", permission: "staff.app.reports.read" },
     { label: "Chat", path: "/staff/chat", iconPath: "M4 4h16v12H7l-3 3V4zm4 5h8V7H8v2zm0 4h6v-2H8v2z", group: "Comms", permission: "staff.app.chat.read" },
@@ -458,9 +525,10 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     void this.connectRealtime();
     void this.connectPosRealtime();
     void this.push.refreshStatus();
+    this.recordActivity();
     this.pollTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && !this.realtimeConnected()) void this.loadShellData();
-    }, 60000);
+      if (document.visibilityState === "visible") void this.pollFallback();
+    }, 30000);
   }
 
   ngOnDestroy() {
@@ -468,6 +536,8 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     window.clearTimeout(this.reconnectTimer);
     window.clearTimeout(this.posReconnectTimer);
     window.clearTimeout(this.toastTimer);
+    window.clearTimeout(this.inactivityTimer);
+    window.clearTimeout(this.lockGraceTimer);
     this.socket?.close();
     this.posSocket?.close();
     this.setOverlayLock(false);
@@ -475,8 +545,11 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
 
   @HostListener("window:online") onOnline() { this.online.set(true); void this.flushOfflineQueue(); void this.connectRealtime(); void this.connectPosRealtime(); }
   @HostListener("window:offline") onOffline() { this.online.set(false); this.realtimeConnected.set(false); }
+  @HostListener("window:aura:app-resume") onAppResume() { void this.pollFallback(); void this.flushOfflineQueue(); void this.connectRealtime(); void this.connectPosRealtime(); }
   @HostListener("window:keydown", ["$event"])
   onKeydown(event: KeyboardEvent) {
+    this.recordActivity();
+    if (this.pinLocked()) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
       this.openCommand();
@@ -485,8 +558,10 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       this.closeCommand();
       this.closeMenu();
       this.closeNotifications();
+      this.closeOffline();
     }
   }
+  @HostListener("window:pointerdown") onPointerActivity() { this.recordActivity(); }
 
   @HostListener("window:touchstart", ["$event"])
   onTouchStart(event: TouchEvent) {
@@ -600,6 +675,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   openMenu() {
     this.closeCommand(false);
     this.closeNotifications(false);
+    this.closeOffline();
     this.menuOpen.set(true);
     this.setOverlayLock(true);
     window.setTimeout(() => this.menuDialog?.nativeElement.querySelector<HTMLElement>(".drawer-close")?.focus(), 0);
@@ -642,6 +718,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   openCommand() {
     this.closeMenu(false);
     this.closeNotifications(false);
+    this.closeOffline();
     this.commandOpen.set(true);
     this.setOverlayLock(true);
     window.setTimeout(() => this.commandInput?.nativeElement.focus(), 0);
@@ -683,8 +760,62 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     await this.router.navigateByUrl("/staff/login");
   }
 
+  async openOffline() {
+    this.closeMenu(false);
+    this.closeCommand(false);
+    this.closeOffline();
+    this.closeNotifications(false);
+    this.offlineActions.set(await this.staff.offlineActions());
+    this.offlineOpen.set(true);
+    this.setOverlayLock(true);
+  }
+
+  closeOffline() {
+    this.offlineOpen.set(false);
+    this.syncOverlayLock();
+  }
+
+  offlineActionLabel(path: string): string {
+    if (path.includes("notifications")) return "Notification status";
+    if (path.includes("tasks")) return "Task status";
+    if (path.includes("staff-leave")) return "Leave request";
+    if (path.includes("break-")) return "Attendance break";
+    return "Staff action";
+  }
+
+  async retryOffline(queueId: string) {
+    await this.staff.retryOfflineAction(queueId);
+    await this.flushOfflineQueue();
+    this.offlineActions.set(await this.staff.offlineActions());
+  }
+
+  async discardOffline(queueId: string) {
+    await this.staff.discardOfflineAction(queueId);
+    this.offlineActions.set(await this.staff.offlineActions());
+    this.offlinePending.set(this.staff.offlineQueueSize());
+    if (!this.offlinePending()) this.closeOffline();
+  }
+
+  async unlockWithPin() {
+    if (this.unlocking() || !/^\d{4,8}$/.test(this.unlockPin)) return;
+    this.unlocking.set(true);
+    this.unlockError.set("");
+    try {
+      await this.staff.verifyDevicePin(this.unlockPin);
+      this.unlockPin = "";
+      this.pinLocked.set(false);
+      window.clearTimeout(this.lockGraceTimer);
+      this.recordActivity();
+    } catch { this.unlockError.set(this.staff.error() || "Invalid device PIN."); }
+    finally { this.unlocking.set(false); }
+  }
+
   private async loadShellData() {
     try {
+      const releasePolicy = await this.staff.releasePolicy().catch(() => null);
+      this.releasePolicy.set(releasePolicy);
+      if (releasePolicy?.blocked) return;
+      await this.staff.refreshSecurityContext().catch(() => null);
       const [os, preferences] = await Promise.all([
         this.staff.enterpriseOs({}, false),
         this.staff.workspacePreferences().catch(() => this.preferences())
@@ -695,9 +826,44 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       document.documentElement.lang = preferences.localization.locale.split("-")[0] || "en";
       document.title = `${preferences.workspace.workspaceName} | Staff`;
       this.offlinePending.set(this.staff.offlineQueueSize());
+      this.recordActivity();
     } catch {
       this.os.set(null);
+      if (!this.staff.isAuthenticated()) {
+        this.socket?.close();
+        this.posSocket?.close();
+        await this.router.navigateByUrl("/staff/login");
+      }
     }
+  }
+
+  private async pollFallback() {
+    if (!this.online()) return;
+    await this.loadShellData();
+    if (!this.staff.isAuthenticated()) return;
+    this.staff.invalidateCachedReads();
+    window.dispatchEvent(new CustomEvent("aura:notifications-updated"));
+    window.dispatchEvent(new CustomEvent("aura:schedule-updated"));
+    window.dispatchEvent(new CustomEvent("aura:queue-updated"));
+    if (!this.realtimeConnected()) window.dispatchEvent(new CustomEvent("aura:appointments-updated"));
+  }
+
+  private recordActivity() {
+    if (this.pinLocked() || !this.staff.isAuthenticated()) return;
+    window.clearTimeout(this.inactivityTimer);
+    const minutes = Math.max(1, this.staff.securityContext()?.inactivityMinutes || 15);
+    this.inactivityTimer = window.setTimeout(() => void this.handleInactivity(), minutes * 60_000);
+  }
+
+  private async handleInactivity() {
+    if (this.staff.securityContext()?.pinConfigured) {
+      this.pinLocked.set(true);
+      this.unlockPin = "";
+      this.unlockError.set("");
+      this.lockGraceTimer = window.setTimeout(() => void this.logout(), 60_000);
+      return;
+    }
+    await this.logout();
   }
 
   private async connectRealtime() {
@@ -779,15 +945,20 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
       this.staff.invalidateCachedReads();
       window.dispatchEvent(new CustomEvent("aura:appointments-updated"));
     }
-    if (frame.type.startsWith("staff-self.") || ["appointment.updated", "dashboard.updated", "booking.updated", "queue.updated"].includes(frame.type)) {
+    if (["notification.instant", "notification.updated"].includes(frame.type)) window.dispatchEvent(new CustomEvent("aura:notifications-updated"));
+    if (["schedule.updated", "staff.schedule.updated"].includes(frame.type)) window.dispatchEvent(new CustomEvent("aura:schedule-updated"));
+    if (["queue.created", "queue.updated"].includes(frame.type)) window.dispatchEvent(new CustomEvent("aura:queue-updated"));
+    if (frame.type === "session.revoked") { void this.staff.logout().finally(() => this.router.navigateByUrl("/staff/login")); return; }
+    if (frame.type.startsWith("staff-self.") || ["appointment.updated", "dashboard.updated", "booking.updated", "queue.created", "queue.updated", "notification.instant", "notification.updated", "schedule.updated", "staff.schedule.updated"].includes(frame.type)) {
       void this.loadShellData();
     }
   }
 
   private async flushOfflineQueue() {
     this.offlinePending.set(this.staff.offlineQueueSize());
-    const flushed = await this.staff.flushOfflineActions();
+    const flushed = await this.staff.flushOfflineActions().catch(() => 0);
     this.offlinePending.set(this.staff.offlineQueueSize());
+    if (this.offlineOpen()) this.offlineActions.set(await this.staff.offlineActions());
     if (flushed) {
       this.showToast(`${flushed} queued staff action${flushed === 1 ? "" : "s"} synced.`);
       window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
@@ -812,7 +983,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
   }
 
   private syncOverlayLock() {
-    this.setOverlayLock(this.menuOpen() || this.commandOpen() || this.notificationsOpen());
+    this.setOverlayLock(this.menuOpen() || this.commandOpen() || this.notificationsOpen() || this.offlineOpen());
   }
 
   private setOverlayLock(locked: boolean) {

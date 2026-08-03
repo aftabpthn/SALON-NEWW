@@ -216,13 +216,14 @@ pub async fn list_shift_swaps(
     tenant_id: &str,
     branch_id: &str,
     status: &str,
+    staff_id: &str,
 ) -> Result<Vec<ShiftSwapRecord>, AppError> {
     let status = optional_enum(
         status,
         &["pending", "approved", "rejected", "cancelled"],
         "swap status",
     )?;
-    repository::list_shift_swaps(db, tenant_id, branch_id, &status)
+    repository::list_shift_swaps(db, tenant_id, branch_id, &status, staff_id.trim())
         .await
         .map_err(internal("load shift swaps"))
 }
@@ -232,6 +233,7 @@ pub async fn create_shift_swap(
     tenant_id: &str,
     branch_id: &str,
     actor_user_id: &str,
+    source_staff_id: &str,
     request: ShiftSwapRequest,
 ) -> Result<ShiftSwapRecord, AppError> {
     let schedule_id = required(&request.schedule_id, 160, "schedule")?;
@@ -245,6 +247,7 @@ pub async fn create_shift_swap(
         &to_staff_id,
         &reason,
         actor_user_id,
+        source_staff_id,
     )
     .await
     .map_err(write_error(
@@ -252,6 +255,36 @@ pub async fn create_shift_swap(
         "create shift swap",
     ))?
     .ok_or_else(|| AppError::validation("schedule or target employee is invalid"))
+}
+
+pub async fn decide_shift_swap_target(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    target_staff_id: &str,
+    actor_user_id: &str,
+    request: DecisionRequest,
+) -> Result<ShiftSwapRecord, AppError> {
+    let decision = required_enum(&request.decision, &["accepted", "rejected"], "decision")?;
+    let note = optional(request.note.as_deref(), 1000, "decision note")?;
+    if decision == "rejected" && note.is_empty() {
+        return Err(AppError::validation("rejection note is required"));
+    }
+    repository::decide_shift_swap_target(
+        db,
+        tenant_id,
+        branch_id,
+        id.trim(),
+        target_staff_id,
+        &decision,
+        &note,
+        actor_user_id,
+        positive_version(request.version)?,
+    )
+    .await
+    .map_err(internal("decide target shift swap"))?
+    .ok_or_else(stale)
 }
 
 pub async fn decide_shift_swap(

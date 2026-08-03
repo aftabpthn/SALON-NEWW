@@ -36,6 +36,11 @@ pub struct SecurityPolicy {
     pub audit_retention_days: i64,
     pub audit_page_size: i64,
     pub session_revocation_enabled: bool,
+    pub staff_app_inactivity_minutes: i64,
+    pub staff_app_geofence_mode: String,
+    pub staff_app_geofence_radius_meters: i64,
+    pub staff_app_geofence_exempt_roles: Vec<String>,
+    pub staff_contact_verification_required: bool,
 }
 
 impl Default for SecurityPolicy {
@@ -44,6 +49,11 @@ impl Default for SecurityPolicy {
             audit_retention_days: 90,
             audit_page_size: 100,
             session_revocation_enabled: true,
+            staff_app_inactivity_minutes: 15,
+            staff_app_geofence_mode: "full_access".into(),
+            staff_app_geofence_radius_meters: 200,
+            staff_app_geofence_exempt_roles: Vec::new(),
+            staff_contact_verification_required: false,
         }
     }
 }
@@ -83,11 +93,12 @@ pub struct ComplianceEvidenceExport {
     pub tenant_id: String,
     pub branch_id: String,
     pub exported_by: String,
-    pub frameworks: [&'static str; 2],
+    pub frameworks: [&'static str; 6],
     pub controls: ComplianceSummary,
     pub counts: security_repository::ComplianceEvidenceCounts,
     pub security: security_repository::SecurityCounts,
     pub audit_chain: AuditChainStatus,
+    pub governance: Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -1130,6 +1141,491 @@ pub async fn resolve_privacy_request(
     Ok(request)
 }
 
+pub async fn data_governance_snapshot(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Value, AppError> {
+    security_repository::data_governance_snapshot(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load data governance"))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_retention_policy(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    record_class: &str,
+    retention_days: i32,
+    disposition: &str,
+    legal_basis: &str,
+    owner_user_id: &str,
+    version: Option<i32>,
+) -> Result<Value, AppError> {
+    let record_class = safe_identifier(record_class, 2, 80, "recordClass")?;
+    if !(1..=36500).contains(&retention_days) {
+        return Err(AppError::validation(
+            "retentionDays must be between 1 and 36500",
+        ));
+    }
+    let disposition = disposition.trim().to_ascii_lowercase();
+    if !matches!(disposition.as_str(), "delete" | "anonymize" | "review") {
+        return Err(AppError::validation("disposition is invalid"));
+    }
+    let legal_basis = clean_text(legal_basis, 500, true, "legalBasis")?;
+    let owner_user_id = clean_text(owner_user_id, 120, true, "ownerUserId")?;
+    let row = security_repository::save_retention_policy(
+        db,
+        tenant_id,
+        branch_id,
+        &record_class,
+        retention_days,
+        &disposition,
+        &legal_basis,
+        &owner_user_id,
+        actor_id,
+        version,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save retention policy"))?
+    .ok_or_else(|| AppError::conflict("owner user or policy version is invalid"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.retention_policy.saved",
+        json!({"recordClass":record_class,"ownerUserId":owner_user_id}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn create_legal_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    subject_type: &str,
+    subject_id: &str,
+    reason: &str,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<Value, AppError> {
+    let subject_type = safe_identifier(subject_type, 2, 40, "subjectType")?;
+    if !matches!(
+        subject_type.as_str(),
+        "client" | "staff" | "user" | "tenant"
+    ) {
+        return Err(AppError::validation("subjectType is invalid"));
+    }
+    let subject_id = clean_text(subject_id, 120, true, "subjectId")?;
+    let reason = clean_text(reason, 500, true, "reason")?;
+    if expires_at.is_some_and(|value| value <= chrono::Utc::now()) {
+        return Err(AppError::validation("expiresAt must be in the future"));
+    }
+    let row = security_repository::create_legal_hold(
+        db,
+        tenant_id,
+        branch_id,
+        &subject_type,
+        &subject_id,
+        &reason,
+        expires_at,
+        actor_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to create legal hold"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.legal_hold.created",
+        json!({"holdId":row["id"],"subjectType":subject_type,"subjectId":subject_id}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn release_legal_hold(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    hold_id: &str,
+) -> Result<Value, AppError> {
+    let hold_id = clean_text(hold_id, 120, true, "holdId")?;
+    let row = security_repository::release_legal_hold(db, tenant_id, branch_id, &hold_id, actor_id)
+        .await
+        .map_err(|_| AppError::internal("failed to release legal hold"))?
+        .ok_or_else(|| AppError::not_found("active legal hold was not found"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.legal_hold.released",
+        json!({"holdId":hold_id}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn request_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    subject_id: &str,
+    row_limit: i32,
+    reason: &str,
+) -> Result<Value, AppError> {
+    let subject_id = clean_text(subject_id, 120, false, "subjectId")?;
+    if !(1..=10000).contains(&row_limit) {
+        return Err(AppError::validation("rowLimit must be between 1 and 10000"));
+    }
+    let reason = clean_text(reason, 500, true, "reason")?;
+    if !subject_id.is_empty() {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM clients WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)",
+        )
+        .bind(tenant_id)
+        .bind(branch_id)
+        .bind(&subject_id)
+        .fetch_one(db)
+        .await
+        .map_err(|_| AppError::internal("failed to validate export subject"))?;
+        if !exists {
+            return Err(AppError::not_found("client was not found"));
+        }
+    }
+    let row = security_repository::create_pii_export(
+        db,
+        tenant_id,
+        branch_id,
+        &subject_id,
+        row_limit,
+        &reason,
+        actor_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to request PII export"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.pii_export.requested",
+        json!({"exportId":row["id"],"subjectId":subject_id,"rowLimit":row_limit,"reason":reason}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn decide_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    export_id: &str,
+    decision: &str,
+    note: &str,
+) -> Result<Value, AppError> {
+    let export_id = clean_text(export_id, 120, true, "exportId")?;
+    let decision = decision.trim().to_ascii_lowercase();
+    if !matches!(decision.as_str(), "approved" | "rejected") {
+        return Err(AppError::validation(
+            "decision must be approved or rejected",
+        ));
+    }
+    let note = clean_text(note, 500, decision == "rejected", "approvalNote")?;
+    let token = (decision == "approved").then(|| crate::services::sso_service::random_token(32));
+    let token_hash = token
+        .as_deref()
+        .map(crate::services::sso_service::token_hash)
+        .unwrap_or_default();
+    let expires_at = token
+        .as_ref()
+        .map(|_| chrono::Utc::now() + chrono::Duration::minutes(15));
+    let mut row = security_repository::decide_pii_export(
+        db,
+        tenant_id,
+        branch_id,
+        &export_id,
+        actor_id,
+        &decision,
+        &note,
+        &token_hash,
+        expires_at,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to decide PII export"))?
+    .ok_or_else(|| {
+        AppError::conflict("pending export was not found or maker-checker approval failed")
+    })?;
+    if let Some(token) = token {
+        row["downloadToken"] = Value::String(token);
+    }
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.pii_export.decided",
+        json!({"exportId":export_id,"decision":decision,"note":note}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn download_pii_export(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    export_id: &str,
+    token: &str,
+) -> Result<Value, AppError> {
+    let export_id = clean_text(export_id, 120, true, "exportId")?;
+    let token = clean_text(token, 200, true, "downloadToken")?;
+    let hash = crate::services::sso_service::token_hash(&token);
+    let row = security_repository::download_pii_export(
+        db, tenant_id, branch_id, &export_id, &hash, actor_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to download PII export"))?
+    .ok_or_else(|| AppError::forbidden("download token is invalid, expired, or already used"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.pii_export.downloaded",
+        json!({"exportId":export_id}),
+    )
+    .await?;
+    Ok(row)
+}
+
+pub async fn approve_privacy_deletion(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    request_id: &str,
+) -> Result<PrivacyRequestRecord, AppError> {
+    let request = security_repository::approve_privacy_deletion(
+        db, tenant_id, branch_id, request_id, actor_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to approve privacy deletion"))?
+    .ok_or_else(|| {
+        AppError::conflict("pending deletion was not found or maker-checker approval failed")
+    })?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.privacy_deletion.approved",
+        json!({"requestId":request.id,"subjectId":request.subject_id}),
+    )
+    .await?;
+    Ok(request)
+}
+
+pub async fn execute_privacy_deletion(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    request_id: &str,
+) -> Result<Value, AppError> {
+    match security_repository::execute_client_deletion(
+        db, tenant_id, branch_id, request_id, actor_id,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to execute privacy deletion"))?
+    {
+        security_repository::PrivacyDeletionOutcome::Completed(summary) => {
+            record_audit(
+                db,
+                tenant_id,
+                branch_id,
+                actor_id,
+                "security.privacy_deletion.completed",
+                json!({"requestId":request_id,"summary":summary}),
+            )
+            .await?;
+            Ok(summary)
+        }
+        security_repository::PrivacyDeletionOutcome::LegalHold => {
+            record_audit(
+                db,
+                tenant_id,
+                branch_id,
+                actor_id,
+                "security.privacy_deletion.blocked",
+                json!({"requestId":request_id,"reason":"active_legal_hold"}),
+            )
+            .await?;
+            Err(AppError::conflict("active legal hold blocks deletion"))
+        }
+        security_repository::PrivacyDeletionOutcome::NotFound => Err(AppError::not_found(
+            "approved deletion request or client was not found",
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_compliance_evidence(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    framework: &str,
+    control_key: &str,
+    title: &str,
+    owner_user_id: &str,
+    status: &str,
+    evidence_reference: &str,
+    independent_assessor: &str,
+    valid_until: Option<&str>,
+    notes: &str,
+    version: Option<i32>,
+) -> Result<Value, AppError> {
+    let framework = safe_identifier(framework, 2, 20, "framework")?;
+    if !matches!(
+        framework.as_str(),
+        "soc1" | "soc2" | "iso27001" | "gdpr" | "hipaa" | "pci"
+    ) {
+        return Err(AppError::validation("framework is invalid"));
+    }
+    let control_key = safe_identifier(control_key, 2, 80, "controlKey")?;
+    let title = clean_text(title, 200, true, "title")?;
+    let owner_user_id = clean_text(owner_user_id, 120, true, "ownerUserId")?;
+    let status = safe_identifier(status, 2, 30, "status")?;
+    if !matches!(
+        status.as_str(),
+        "planned" | "in_progress" | "ready" | "verified" | "not_applicable"
+    ) {
+        return Err(AppError::validation("status is invalid"));
+    }
+    let evidence_reference = clean_text(evidence_reference, 500, false, "evidenceReference")?;
+    let independent_assessor = clean_text(independent_assessor, 200, false, "independentAssessor")?;
+    let valid_until = valid_until
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| {
+            chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d")
+                .map(|d| d.format("%Y-%m-%d").to_string())
+                .map_err(|_| AppError::validation("validUntil must be YYYY-MM-DD"))
+        })
+        .transpose()?;
+    let notes = clean_text(notes, 2000, false, "notes")?;
+    let row = security_repository::save_compliance_evidence(
+        db,
+        tenant_id,
+        branch_id,
+        &framework,
+        &control_key,
+        &title,
+        &owner_user_id,
+        &status,
+        &evidence_reference,
+        &independent_assessor,
+        valid_until.as_deref(),
+        &notes,
+        actor_id,
+        version,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save compliance evidence"))?
+    .ok_or_else(|| AppError::conflict("owner user or evidence version is invalid"))?;
+    record_audit(db,tenant_id,branch_id,actor_id,"security.compliance_evidence.saved",json!({"framework":framework,"controlKey":control_key,"ownerUserId":owner_user_id,"status":status})).await?;
+    Ok(row)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn save_pen_test_finding(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    actor_id: &str,
+    finding_id: Option<&str>,
+    title: &str,
+    severity: &str,
+    status: &str,
+    owner_user_id: &str,
+    remediation_note: &str,
+    risk_acceptance_reason: &str,
+    risk_acceptance_expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    version: Option<i32>,
+) -> Result<Value, AppError> {
+    let title = clean_text(title, 240, true, "title")?;
+    let severity = safe_identifier(severity, 2, 20, "severity")?;
+    if !matches!(
+        severity.as_str(),
+        "critical" | "high" | "medium" | "low" | "info"
+    ) {
+        return Err(AppError::validation("severity is invalid"));
+    }
+    let status = safe_identifier(status, 2, 30, "status")?;
+    if !matches!(status.as_str(), "open" | "resolved" | "risk_accepted") {
+        return Err(AppError::validation("status is invalid"));
+    }
+    let owner_user_id = clean_text(owner_user_id, 120, true, "ownerUserId")?;
+    let remediation_note = clean_text(
+        remediation_note,
+        2000,
+        status == "resolved",
+        "remediationNote",
+    )?;
+    let risk_acceptance_reason = clean_text(
+        risk_acceptance_reason,
+        1000,
+        status == "risk_accepted",
+        "riskAcceptanceReason",
+    )?;
+    if status == "risk_accepted"
+        && risk_acceptance_expires_at.map_or(true, |value| value <= chrono::Utc::now())
+    {
+        return Err(AppError::validation(
+            "future riskAcceptanceExpiresAt is required",
+        ));
+    }
+    let row = security_repository::save_pen_test_finding(
+        db,
+        tenant_id,
+        branch_id,
+        finding_id,
+        &title,
+        &severity,
+        &status,
+        &owner_user_id,
+        &remediation_note,
+        &risk_acceptance_reason,
+        risk_acceptance_expires_at,
+        actor_id,
+        version,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save pen-test finding"))?
+    .ok_or_else(|| AppError::conflict("owner user or finding version is invalid"))?;
+    record_audit(
+        db,
+        tenant_id,
+        branch_id,
+        actor_id,
+        "security.pen_test_finding.saved",
+        json!({"findingId":row["id"],"status":status,"ownerUserId":owner_user_id}),
+    )
+    .await?;
+    Ok(row)
+}
+
 pub async fn list_disclosure_reports(
     db: &PgPool,
     tenant_id: &str,
@@ -1511,6 +2007,7 @@ pub async fn export_compliance_evidence(
         .await
         .map_err(|_| AppError::internal("failed to load security evidence"))?;
     let audit_chain = verify_audit_chain(db, tenant_id).await?;
+    let governance = data_governance_snapshot(db, tenant_id, branch_id).await?;
     let bundle_id = evidence_bundle_id(
         tenant_id,
         branch_id,
@@ -1523,11 +2020,12 @@ pub async fn export_compliance_evidence(
         tenant_id: tenant_id.to_string(),
         branch_id: branch_id.to_string(),
         exported_by: actor_id.to_string(),
-        frameworks: ["SOC2", "ISO27001"],
+        frameworks: ["SOC1", "SOC2", "ISO27001", "GDPR", "HIPAA", "PCI"],
         controls: compliance(),
         counts,
         security,
         audit_chain,
+        governance,
     };
     record_audit(
         db,
@@ -2258,6 +2756,33 @@ fn validate_policy(policy: &SecurityPolicy) -> Result<(), AppError> {
     if !(10..=250).contains(&policy.audit_page_size) {
         return Err(AppError::validation(
             "auditPageSize must be between 10 and 250",
+        ));
+    }
+    if !(1..=480).contains(&policy.staff_app_inactivity_minutes) {
+        return Err(AppError::validation(
+            "staffAppInactivityMinutes must be between 1 and 480",
+        ));
+    }
+    if !matches!(
+        policy.staff_app_geofence_mode.as_str(),
+        "full_access" | "read_only" | "blocked"
+    ) {
+        return Err(AppError::validation("invalid staffAppGeofenceMode"));
+    }
+    if !(25..=5000).contains(&policy.staff_app_geofence_radius_meters) {
+        return Err(AppError::validation(
+            "staffAppGeofenceRadiusMeters must be between 25 and 5000",
+        ));
+    }
+    if policy.staff_app_geofence_exempt_roles.len() > 50
+        || policy.staff_app_geofence_exempt_roles.iter().any(|role| {
+            role.trim().is_empty()
+                || role.chars().count() > 80
+                || role.chars().any(char::is_control)
+        })
+    {
+        return Err(AppError::validation(
+            "staffAppGeofenceExemptRoles is invalid",
         ));
     }
     Ok(())

@@ -364,10 +364,11 @@
       </header>
       <div class="return-drawer-body">
         <label class="return-reason"><span>Reason</span><input [(ngModel)]="returnReason" name="returnReason" maxlength="500" placeholder="Reason for return" /></label>
+        <label class="return-reason"><span>Evidence reference</span><input [(ngModel)]="returnEvidenceReference" name="returnEvidenceReference" maxlength="500" placeholder="Photo, receipt, ticket or document reference" /></label>
         <label class="return-reason"><span>MFA code</span><input [(ngModel)]="returnMfaCode" name="returnMfaCode" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" /></label>
         @if (refundMethods.length > 1) {
           <label class="return-reason"><span>Refund method</span><select [(ngModel)]="refundMethod" name="refundMethod"><option value="" disabled>Select method</option>@for (method of refundMethods; track method) {
-          <option [value]="method">{{ method.replace('_', ' ') }}</option>
+          <option [value]="method">{{ method === 'exchange_credit' ? 'Exchange credit' : method === 'original_tender' ? 'Original tenders (automatic split)' : method.replace('_', ' ') }}</option>
         }</select></label>
       }
       @if (refundMethod === 'cash' && refundTills.length) {
@@ -379,14 +380,18 @@
       @for (line of returnLines; track line) {
         <article class="return-line">
           <div class="return-line-copy"><strong>{{ line.itemName || 'Invoice item' }}</strong><span>{{ line.lineType || 'item' }} · Sold {{ line.quantity }}</span></div>
-          <div class="return-line-input"><label><span>Return qty</span><input [(ngModel)]="line.returnQuantity" [name]="'returnQty-' + line.id" type="number" inputmode="numeric" min="1" [max]="line.quantity" step="1" placeholder="0" /></label><strong>{{ money(returnLineAmount(line)) }}</strong></div>
+          <div class="return-line-input"><label><span>Return qty</span><input [(ngModel)]="line.returnQuantity" [name]="'returnQty-' + line.id" type="number" inputmode="numeric" min="1" [max]="line.quantity" step="1" placeholder="0" /></label>
+          @if (line.lineType === 'product') {
+            <label><span>Restock</span><input [(ngModel)]="line.restockQuantity" [name]="'restockQty-' + line.id" type="number" inputmode="numeric" min="0" [max]="line.returnQuantity || line.quantity" step="1" placeholder="0" /></label>
+            <label><span>Discard</span><input [(ngModel)]="line.discardQuantity" [name]="'discardQty-' + line.id" type="number" inputmode="numeric" min="0" [max]="line.returnQuantity || line.quantity" step="1" placeholder="0" /></label>
+          }
+          <strong>{{ money(returnLineAmount(line)) }}</strong></div>
         </article>
       }
       @if (!returnLines.length) {
         <p class="empty">No returnable items on this invoice</p>
       }
     </section>
-    <label class="restock-choice"><input [(ngModel)]="restockProducts" name="restockProducts" type="checkbox" /><span>Restock returned products</span></label>
   </div>
   <footer class="return-drawer-footer">
     <div><span>{{ selectedReturnCount() }} item line{{ selectedReturnCount() === 1 ? '' : 's' }}</span><strong>{{ money(selectedReturnAmount()) }}</strong></div>

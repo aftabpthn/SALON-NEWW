@@ -83,7 +83,18 @@ pub struct TipPayoutRequest {
     pub period_start: NaiveDate,
     pub period_end: NaiveDate,
     pub payout_reference: String,
+    pub payout_method: Option<String>,
+    pub provider_reference: Option<String>,
+    pub status: Option<String>,
     pub sale_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TipPayoutReconcileRequest {
+    pub expected_status: String,
+    pub status: String,
+    pub provider_reference: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -788,6 +799,58 @@ pub async fn tip_summary(
         .map_err(internal("load tip summary"))
 }
 
+pub async fn self_earnings_details(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff: &str,
+    from: NaiveDate,
+    to: NaiveDate,
+    basis: &str,
+) -> Result<Value, AppError> {
+    if to < from || (to - from).num_days() > 366 {
+        return Err(AppError::validation(
+            "earnings period must contain at most 367 days",
+        ));
+    }
+    if !matches!(basis, "sale_date" | "close_date") {
+        return Err(AppError::validation(
+            "earnings basis must be sale_date or close_date",
+        ));
+    }
+    repository::self_earnings_details(db, tenant, branch, staff, from, to, basis)
+        .await
+        .map_err(internal("load staff earnings"))
+}
+
+pub async fn create_tip_dispute(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    staff: &str,
+    actor: &str,
+    sale_id: Option<&str>,
+    payout_id: Option<&str>,
+    reason: &str,
+) -> Result<Value, AppError> {
+    let reason = reason.trim();
+    if !(10..=1000).contains(&reason.chars().count()) || (sale_id.is_none() && payout_id.is_none())
+    {
+        return Err(AppError::validation(
+            "tip dispute needs a sale or payout and a 10-1000 character reason",
+        ));
+    }
+    repository::create_tip_dispute(db, tenant, branch, staff, actor, sale_id, payout_id, reason)
+        .await
+        .map_err(|error| {
+            if matches!(error, sqlx::Error::RowNotFound) {
+                AppError::not_found("tip or payout was not found")
+            } else {
+                internal("create tip dispute")(error)
+            }
+        })
+}
+
 pub async fn record_tip_payout(
     db: &PgPool,
     t: &str,
@@ -800,6 +863,29 @@ pub async fn record_tip_payout(
             "tip payout period or sales are invalid",
         ));
     }
+    let payout_method = r
+        .payout_method
+        .as_deref()
+        .unwrap_or("other")
+        .trim()
+        .to_ascii_lowercase();
+    let status = r
+        .status
+        .as_deref()
+        .unwrap_or("paid")
+        .trim()
+        .to_ascii_lowercase();
+    let provider_reference = r.provider_reference.as_deref().unwrap_or("").trim();
+    if !matches!(payout_method.as_str(), "cash" | "bank" | "upi" | "other")
+        || !matches!(status.as_str(), "pending" | "processing" | "paid")
+        || matches!(payout_method.as_str(), "bank" | "upi")
+            && status == "paid"
+            && provider_reference.is_empty()
+    {
+        return Err(AppError::validation(
+            "tip payout method, status or provider reference is invalid",
+        ));
+    }
     repository::record_tip_payout(
         db,
         t,
@@ -808,6 +894,9 @@ pub async fn record_tip_payout(
         r.period_start,
         r.period_end,
         &required(&r.payout_reference, 160, "payout reference")?,
+        &payout_method,
+        &status,
+        provider_reference,
         actor,
         &r.sale_ids,
     )
@@ -817,6 +906,44 @@ pub async fn record_tip_payout(
             AppError::conflict("one or more tips are invalid or already paid")
         } else {
             db_write("payout reference already exists", "record tip payout")(e)
+        }
+    })
+}
+
+pub async fn reconcile_tip_payout(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    id: &str,
+    actor: &str,
+    request: TipPayoutReconcileRequest,
+) -> Result<Value, AppError> {
+    let expected = request.expected_status.trim().to_ascii_lowercase();
+    let status = request.status.trim().to_ascii_lowercase();
+    let provider_reference = request.provider_reference.as_deref().unwrap_or("").trim();
+    if !matches!(
+        status.as_str(),
+        "processing" | "paid" | "failed" | "reversed"
+    ) || status == "paid" && provider_reference.is_empty()
+    {
+        return Err(AppError::validation("tip payout reconciliation is invalid"));
+    }
+    repository::reconcile_tip_payout(
+        db,
+        tenant,
+        branch,
+        id,
+        &expected,
+        &status,
+        provider_reference,
+        actor,
+    )
+    .await
+    .map_err(|error| {
+        if matches!(error, sqlx::Error::RowNotFound) {
+            AppError::conflict("tip payout status changed or transition is invalid")
+        } else {
+            internal("reconcile tip payout")(error)
         }
     })
 }
@@ -2120,6 +2247,8 @@ pub async fn assign_training(
         b,
         actor,
         StaffTaskRequest {
+            client_id: None,
+            appointment_id: None,
             staff_id: Some(request.staff_id),
             title: request.title,
             description: request.description,
@@ -2292,10 +2421,29 @@ pub async fn create_staff_rule_document(
     actor: &str,
     request: StaffRuleDocumentRequest,
 ) -> Result<StaffRuleDocumentRecord, AppError> {
-    let document_type = required_enum(&request.document_type, &["rule", "sop"], "document type")?;
+    let document_type = required_enum(
+        &request.document_type,
+        &[
+            "rule",
+            "sop",
+            "policy",
+            "course",
+            "document",
+            "announcement",
+        ],
+        "document type",
+    )?;
     let category = required_enum(
         &request.category,
-        &["service", "hygiene", "attendance", "behavior", "safety"],
+        &[
+            "service",
+            "hygiene",
+            "attendance",
+            "behavior",
+            "safety",
+            "company",
+            "training",
+        ],
         "rule category",
     )?;
     let title = required(&request.title, 180, "title")?;

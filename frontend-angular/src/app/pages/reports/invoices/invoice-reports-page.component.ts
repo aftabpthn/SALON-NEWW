@@ -82,6 +82,8 @@ paymentModeRows: PaymentModeReportRow[] = [];
   reminderLoading = false;
   message = '';
   error = '';
+  /** Filter option lists whose last load failed, so an empty dropdown is not read as "no records". */
+  private readonly optionFailures = new Set<string>();
 
   constructor(private readonly api: ApiService, private readonly route: ActivatedRoute) {}
 
@@ -248,11 +250,22 @@ paymentModeRows: PaymentModeReportRow[] = [];
   percent(bps: number): string { return `${(Number(bps || 0) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`; }
 
   private loadOptions(): void {
-    this.api.get<any>('/api/clients').subscribe({ next: (res) => this.clients = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })) });
-    this.api.get<any>('/api/staff').subscribe({ next: (res) => this.staff = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })) });
-    this.api.get<any>('/api/services?pageSize=500').subscribe({ next: (res) => this.services = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })) });
-    this.api.get<any>('/api/v1/products?pageSize=500').subscribe({ next: (res) => this.products = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })) });
-    this.api.get<any>('/api/pos/payment-methods').subscribe({ next: (res) => this.modes = this.list(res).map((item) => ({ code: String(item.code ?? item.id), name: String(item.name ?? item.label) })) });
+    this.readOptions('/api/clients', 'clients', (res) => this.clients = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })));
+    this.readOptions('/api/staff', 'staff', (res) => this.staff = this.list(res).map((item) => ({ id: String(item.id), name: this.name(item) })));
+    this.readOptions('/api/services?pageSize=500', 'services', (res) => this.services = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })));
+    this.readOptions('/api/v1/inventory?pageSize=200', 'products', (res) => this.products = this.list(res).map((item) => ({ id: String(item.id), name: String(item.name) })));
+    this.readOptions('/api/pos/payment-methods', 'payment modes', (res) => this.modes = this.list(res).map((item) => ({ code: String(item.code ?? item.id), name: String(item.name ?? item.label) })));
+  }
+
+  private readOptions(path: string, label: string, assign: (res: any) => void): void {
+    this.api.get<any>(path).subscribe({
+      next: (res) => { this.optionFailures.delete(label); assign(res); },
+      error: () => { this.optionFailures.add(label); },
+    });
+  }
+
+  optionsError(): string {
+    return this.optionFailures.size ? `Unable to load ${[...this.optionFailures].join(', ')}` : '';
   }
 
   private emptyFilters() { return { clientId: '', staffId: '', serviceId: '', productId: '', paymentMethod: '', status: '', recovery: '', ageingDays: null as number | null, ageingBucket: '', transactionType: '', collectionTiming: '', followUp: false, dateFrom: '', dateTo: '', q: '' }; }

@@ -72,12 +72,34 @@ async fn main() -> Result<()> {
         .context("Redis ping timed out")?
         .context("Redis ping check failed")?;
     let state = AppState::new(settings.clone(), db, redis);
-
     // Every worker below runs on whichever replica wins its advisory lock for
     // that cycle. Before this, all of them ran in all replicas at once, so a
     // service scaled to eight tasks did eight copies of the same scan.
     // `worker::spawn` names each lock, so the names must stay stable across
     // releases.
+
+    worker::spawn(
+        &state,
+        "staff_attendance_notifications",
+        Duration::from_secs(60),
+        |state| async move {
+            if services::staff_attendance_service::schedule_forgot_clock_out_reminders(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure(
+                    "staff_attendance_notifications",
+                    "forgot_clock_out_reminders",
+                );
+            }
+            if services::staff_notification_service::process_automation(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("staff_attendance_notifications", "notification_automation");
+            }
+        },
+    );
 
     worker::spawn(
         &state,
@@ -145,6 +167,29 @@ async fn main() -> Result<()> {
                 .is_err()
             {
                 worker::note_failure("ai_transcript_retention", "purge_transcripts");
+            }
+            if repositories::communication_repository::redact_expired_content(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "redact_communications");
+            }
+        },
+    );
+
+    worker::spawn(
+        &state,
+        "staff_hrms_operations_intelligence",
+        Duration::from_secs(21_600),
+        |state| async move {
+            if services::staff_hrms_service::run_scheduled_operations_intelligence(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure(
+                    "staff_hrms_operations_intelligence",
+                    "run_scheduled_operations",
+                );
             }
         },
     );

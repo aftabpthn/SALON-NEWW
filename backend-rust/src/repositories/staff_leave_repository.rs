@@ -1,6 +1,6 @@
-use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, Utc};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::{FromRow, PgConnection, PgPool};
 
 #[derive(Debug, Serialize, FromRow)]
@@ -14,6 +14,8 @@ pub struct LeaveRequestRecord {
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
     pub days: i32,
+    pub requested_days: f64,
+    pub day_parts: Value,
     pub reason: String,
     pub status: String,
     pub requested_by: String,
@@ -32,10 +34,34 @@ pub struct LeaveBalanceRecord {
     pub staff_name: String,
     pub employee_code: Option<String>,
     pub leave_type: String,
-    pub annual_days: i32,
-    pub used_days: i32,
-    pub pending_days: i32,
-    pub remaining_days: i32,
+    pub annual_days: f64,
+    pub used_days: f64,
+    pub pending_days: f64,
+    pub remaining_days: f64,
+    pub allow_negative: bool,
+    pub negative_limit_days: f64,
+    pub balance_cap_days: Option<f64>,
+    pub carry_forward_days: f64,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaveAccrualEventRecord {
+    pub id: String,
+    pub leave_type: String,
+    pub effective_date: NaiveDate,
+    pub days: f64,
+    pub event_type: String,
+    pub notes: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LeaveDayInput {
+    pub leave_date: NaiveDate,
+    pub start_time: Option<NaiveTime>,
+    pub end_time: Option<NaiveTime>,
+    pub day_fraction: f64,
 }
 
 #[derive(Debug)]
@@ -45,6 +71,8 @@ pub struct NewLeaveRequest {
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
     pub days: i32,
+    pub requested_days: f64,
+    pub day_parts: Vec<LeaveDayInput>,
     pub reason: String,
     pub requested_by: String,
 }
@@ -71,6 +99,7 @@ struct LeaveRequestState {
     start_date: NaiveDate,
     end_date: NaiveDate,
     days: i32,
+    requested_days: f64,
     status: String,
     version: i32,
     requested_by: String,
@@ -89,7 +118,9 @@ pub async fn list_requests(
         r#"
         SELECT r.id,r.staff_id,
                TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS staff_name,
-               s.employee_code,r.leave_type,r.start_date,r.end_date,r.days,r.reason,r.status,
+               s.employee_code,r.leave_type,r.start_date,r.end_date,r.days,r.requested_days::DOUBLE PRECISION AS requested_days,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object('date',part.leave_date,'startTime',part.start_time,'endTime',part.end_time,'dayFraction',part.day_fraction) ORDER BY part.leave_date) FROM staff_leave_request_days part WHERE part.request_id=r.id),'[]'::jsonb) AS day_parts,
+               r.reason,r.status,
                r.requested_by,r.reviewed_by,r.reviewed_at,r.review_note,r.version,r.created_at,r.updated_at
         FROM staff_leave_requests r
         JOIN staff s ON s.tenant_id=r.tenant_id AND s.branch_id=r.branch_id AND s.id=r.staff_id
@@ -121,7 +152,9 @@ pub async fn get_request(
         r#"
         SELECT r.id,r.staff_id,
                TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS staff_name,
-               s.employee_code,r.leave_type,r.start_date,r.end_date,r.days,r.reason,r.status,
+               s.employee_code,r.leave_type,r.start_date,r.end_date,r.days,r.requested_days::DOUBLE PRECISION AS requested_days,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object('date',part.leave_date,'startTime',part.start_time,'endTime',part.end_time,'dayFraction',part.day_fraction) ORDER BY part.leave_date) FROM staff_leave_request_days part WHERE part.request_id=r.id),'[]'::jsonb) AS day_parts,
+               r.reason,r.status,
                r.requested_by,r.reviewed_by,r.reviewed_at,r.review_note,r.version,r.created_at,r.updated_at
         FROM staff_leave_requests r
         JOIN staff s ON s.tenant_id=r.tenant_id AND s.branch_id=r.branch_id AND s.id=r.staff_id
@@ -178,8 +211,8 @@ pub async fn create_request(
     let id = sqlx::query_scalar::<_, String>(
         r#"
         INSERT INTO staff_leave_requests(
-          tenant_id,branch_id,staff_id,leave_type,start_date,end_date,days,reason,requested_by
-        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          tenant_id,branch_id,staff_id,leave_type,start_date,end_date,days,requested_days,reason,requested_by
+        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING id
         "#,
     )
@@ -190,10 +223,16 @@ pub async fn create_request(
     .bind(input.start_date)
     .bind(input.end_date)
     .bind(input.days)
+    .bind(input.requested_days)
     .bind(&input.reason)
     .bind(&input.requested_by)
     .fetch_one(&mut *tx)
     .await?;
+    for part in &input.day_parts {
+        sqlx::query("INSERT INTO staff_leave_request_days(tenant_id,branch_id,request_id,staff_id,leave_date,start_time,end_time,day_fraction) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(tenant_id).bind(branch_id).bind(&id).bind(&input.staff_id).bind(part.leave_date)
+            .bind(part.start_time).bind(part.end_time).bind(part.day_fraction).execute(&mut *tx).await?;
+    }
     notify_leave_managers(
         &mut tx,
         tenant_id,
@@ -225,7 +264,7 @@ pub async fn decide_request(
 ) -> Result<DecisionOutcome, sqlx::Error> {
     let mut tx = db.begin().await?;
     let request = sqlx::query_as::<_, LeaveRequestState>(
-        "SELECT staff_id,leave_type,start_date,end_date,days,status,version,requested_by FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
+        "SELECT staff_id,leave_type,start_date,end_date,days,requested_days::DOUBLE PRECISION AS requested_days,status,version,requested_by FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 FOR UPDATE",
     )
     .bind(tenant_id).bind(branch_id).bind(request_id).fetch_optional(&mut *tx).await?;
     let Some(request) = request else {
@@ -243,22 +282,36 @@ pub async fn decide_request(
         .await?;
 
     if decision == "approved" && request.leave_type != "unpaid" {
-        let allowance = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT MAX(annual_days) FROM staff_leave_policies WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND leave_type=$4 AND active=true",
-        )
-        .bind(tenant_id).bind(branch_id).bind(&request.staff_id).bind(&request.leave_type)
-        .fetch_one(&mut *tx).await?;
-        let Some(allowance) = allowance else {
+        let policy = sqlx::query_as::<_, (i64, f64, bool, f64, Option<f64>)>(r#"
+          WITH identity AS (SELECT user_id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)
+          SELECT COUNT(*)::BIGINT,
+                 COALESCE(MAX(policy.annual_days+policy.carry_forward_days),0)::DOUBLE PRECISION,
+                 COALESCE(BOOL_OR(policy.allow_negative),FALSE),
+                 COALESCE(MAX(policy.negative_limit_days),0)::DOUBLE PRECISION,
+                 MIN(policy.balance_cap_days)::DOUBLE PRECISION
+          FROM staff_leave_policies policy
+          JOIN staff employee ON employee.tenant_id=policy.tenant_id AND employee.branch_id=policy.branch_id AND employee.id=policy.staff_id
+          CROSS JOIN identity
+          WHERE policy.tenant_id=$1 AND policy.leave_type=$4 AND policy.active=TRUE
+            AND (employee.id=$3 OR (identity.user_id IS NOT NULL AND employee.user_id=identity.user_id))"#)
+        .bind(tenant_id).bind(branch_id).bind(&request.staff_id).bind(&request.leave_type).fetch_one(&mut *tx).await?;
+        if policy.0 == 0 {
             return Ok(DecisionOutcome::PolicyMissing);
-        };
+        }
         let year_start = NaiveDate::from_ymd_opt(request.start_date.year(), 1, 1).unwrap();
         let year_end = NaiveDate::from_ymd_opt(request.start_date.year(), 12, 31).unwrap();
-        let used = sqlx::query_scalar::<_, i64>(
-            "SELECT COALESCE(SUM(days),0) FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND staff_id=$3 AND leave_type=$4 AND status='approved' AND start_date >= $5 AND end_date <= $6",
-        )
+        let used = sqlx::query_scalar::<_, f64>(r#"
+            WITH identity AS (SELECT user_id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)
+            SELECT COALESCE(SUM(requested_days),0)::DOUBLE PRECISION FROM staff_leave_requests request
+            JOIN staff employee ON employee.tenant_id=request.tenant_id AND employee.branch_id=request.branch_id AND employee.id=request.staff_id
+            CROSS JOIN identity WHERE request.tenant_id=$1 AND request.leave_type=$4 AND request.status='approved'
+              AND request.start_date >= $5 AND request.end_date <= $6
+              AND (employee.id=$3 OR (identity.user_id IS NOT NULL AND employee.user_id=identity.user_id))"#)
         .bind(tenant_id).bind(branch_id).bind(&request.staff_id).bind(&request.leave_type)
         .bind(year_start).bind(year_end).fetch_one(&mut *tx).await?;
-        if used + i64::from(request.days) > i64::from(allowance) {
+        let entitlement = policy.4.map(|cap| cap.min(policy.1)).unwrap_or(policy.1);
+        let allowed = entitlement + if policy.2 { policy.3 } else { 0.0 };
+        if used + request.requested_days > allowed {
             return Ok(DecisionOutcome::InsufficientBalance);
         }
     }
@@ -285,22 +338,26 @@ pub async fn decide_request(
             _ => "leave",
         };
         let schedule_note = format!("Approved {} leave", request.leave_type);
+        sqlx::query(r#"INSERT INTO staff_leave_schedule_backups(request_id,tenant_id,branch_id,staff_id,schedule_date,existed,shift1_start,shift1_end,shift2_start,shift2_end,status,notes,room_id,role_id,job_title)
+          SELECT $1,$2,$3,$4,part.leave_date,schedule.id IS NOT NULL,schedule.shift1_start,schedule.shift1_end,schedule.shift2_start,schedule.shift2_end,schedule.status,schedule.notes,schedule.room_id,schedule.role_id,schedule.job_title
+          FROM staff_leave_request_days part LEFT JOIN staff_schedules schedule ON schedule.tenant_id=$2 AND schedule.branch_id=$3 AND schedule.staff_id=$4 AND schedule.schedule_date=part.leave_date
+          WHERE part.request_id=$1 AND part.start_time IS NULL ON CONFLICT(request_id,schedule_date) DO NOTHING"#)
+          .bind(request_id).bind(tenant_id).bind(branch_id).bind(&request.staff_id).execute(&mut *tx).await?;
         sqlx::query(
             r#"
-            INSERT INTO staff_schedules(tenant_id,branch_id,staff_id,schedule_date,status,notes)
-            SELECT $1,$2,$3,day::DATE,$6,$7
-            FROM GENERATE_SERIES($4::DATE,$5::DATE,INTERVAL '1 day') day
+            INSERT INTO staff_schedules(tenant_id,branch_id,staff_id,schedule_date,status,notes,leave_request_id)
+            SELECT $1,$2,$3,part.leave_date,$4,$5,$6
+            FROM staff_leave_request_days part WHERE part.request_id=$6 AND part.start_time IS NULL
             ON CONFLICT (tenant_id,branch_id,staff_id,schedule_date)
-            DO UPDATE SET status=EXCLUDED.status,notes=EXCLUDED.notes,updated_at=NOW()
+            DO UPDATE SET status=EXCLUDED.status,notes=EXCLUDED.notes,leave_request_id=EXCLUDED.leave_request_id,version=staff_schedules.version+1,updated_at=NOW()
             "#,
         )
         .bind(tenant_id)
         .bind(branch_id)
         .bind(&request.staff_id)
-        .bind(request.start_date)
-        .bind(request.end_date)
         .bind(schedule_status)
         .bind(schedule_note)
+        .bind(request_id)
         .execute(&mut *tx)
         .await?;
     }
@@ -350,6 +407,44 @@ pub async fn withdraw_request(
     } else {
         DecisionOutcome::NotFound
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn cancel_request(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    request_id: &str,
+    staff_id: &str,
+    actor_user_id: &str,
+    expected_version: i32,
+    reason: &str,
+    today: NaiveDate,
+) -> Result<DecisionOutcome, sqlx::Error> {
+    let mut tx = db.begin().await?;
+    let updated = sqlx::query("UPDATE staff_leave_requests SET status='cancelled',cancelled_by=$5,cancelled_at=NOW(),cancellation_reason=$7,version=version+1,updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND staff_id=$4 AND status='approved' AND version=$6 AND end_date>=$8")
+        .bind(tenant_id).bind(branch_id).bind(request_id).bind(staff_id).bind(actor_user_id).bind(expected_version).bind(reason).bind(today).execute(&mut *tx).await?;
+    if updated.rows_affected() == 0 {
+        let exists=sqlx::query_scalar::<_,bool>("SELECT EXISTS(SELECT 1 FROM staff_leave_requests WHERE tenant_id=$1 AND branch_id=$2 AND id=$3 AND staff_id=$4)")
+            .bind(tenant_id).bind(branch_id).bind(request_id).bind(staff_id).fetch_one(&mut *tx).await?;
+        tx.rollback().await?;
+        return Ok(if exists {
+            DecisionOutcome::Conflict
+        } else {
+            DecisionOutcome::NotFound
+        });
+    }
+    sqlx::query(r#"UPDATE staff_schedules schedule SET shift1_start=backup.shift1_start,shift1_end=backup.shift1_end,shift2_start=backup.shift2_start,shift2_end=backup.shift2_end,status=backup.status,notes=backup.notes,room_id=backup.room_id,role_id=backup.role_id,job_title=backup.job_title,leave_request_id=NULL,version=schedule.version+1,updated_at=NOW()
+      FROM staff_leave_schedule_backups backup WHERE backup.request_id=$1 AND backup.existed=TRUE AND backup.schedule_date>=$2
+        AND schedule.tenant_id=backup.tenant_id AND schedule.branch_id=backup.branch_id AND schedule.staff_id=backup.staff_id
+        AND schedule.schedule_date=backup.schedule_date AND schedule.leave_request_id=$1"#)
+        .bind(request_id).bind(today).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM staff_schedules WHERE leave_request_id=$1 AND schedule_date>=$2 AND EXISTS(SELECT 1 FROM staff_leave_schedule_backups backup WHERE backup.request_id=$1 AND backup.schedule_date=staff_schedules.schedule_date AND backup.existed=FALSE)")
+        .bind(request_id).bind(today).execute(&mut *tx).await?;
+    sqlx::query("UPDATE notifications SET is_read=TRUE,metadata_json=jsonb_set(metadata_json,'{status}','\"cancelled\"'::jsonb,TRUE),updated_at=NOW() WHERE tenant_id=$1 AND branch_id=$2 AND resource_type='staff_leave_request' AND resource_id=$3")
+        .bind(tenant_id).bind(branch_id).bind(request_id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(DecisionOutcome::Updated)
 }
 
 async fn notify_leave_managers(
@@ -423,32 +518,60 @@ pub async fn balances(
 ) -> Result<Vec<LeaveBalanceRecord>, sqlx::Error> {
     sqlx::query_as(
         r#"
-        WITH policy AS (
-          SELECT s.id AS staff_id,
-                 TRIM(CONCAT_WS(' ',s.first_name,NULLIF(s.last_name,''))) AS staff_name,
-                 s.employee_code,p.leave_type,MAX(p.annual_days)::INTEGER AS annual_days
-          FROM staff s
-          JOIN staff_leave_policies p
-            ON p.tenant_id=s.tenant_id AND p.branch_id=s.branch_id AND p.staff_id=s.id AND p.active=true
-          WHERE s.tenant_id=$1 AND s.branch_id=$2 AND s.active=true AND ($5='' OR s.id=$5)
-          GROUP BY s.id,s.first_name,s.last_name,s.employee_code,p.leave_type
-        ), usage AS (
-          SELECT staff_id,leave_type,
-                 COALESCE(SUM(days) FILTER (WHERE status='approved'),0)::INTEGER AS used_days,
-                 COALESCE(SUM(days) FILTER (WHERE status='pending'),0)::INTEGER AS pending_days
-          FROM staff_leave_requests
-          WHERE tenant_id=$1 AND branch_id=$2 AND start_date >= $3 AND end_date <= $4
-          GROUP BY staff_id,leave_type
+        WITH local_staff AS (
+          SELECT id,user_id,TRIM(CONCAT_WS(' ',first_name,NULLIF(last_name,''))) AS staff_name,employee_code
+          FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND active=TRUE AND ($5='' OR id=$5)
         )
-        SELECT p.staff_id,p.staff_name,p.employee_code,p.leave_type,p.annual_days,
-               COALESCE(u.used_days,0)::INTEGER AS used_days,
-               COALESCE(u.pending_days,0)::INTEGER AS pending_days,
-               GREATEST(p.annual_days-COALESCE(u.used_days,0),0)::INTEGER AS remaining_days
-        FROM policy p
-        LEFT JOIN usage u ON u.staff_id=p.staff_id AND u.leave_type=p.leave_type
-        ORDER BY p.staff_name,p.leave_type
+        SELECT employee.id AS staff_id,employee.staff_name,employee.employee_code,policy.leave_type,
+               LEAST(policy.annual_days,COALESCE(policy.balance_cap_days,policy.annual_days))::DOUBLE PRECISION AS annual_days,
+               COALESCE(usage.used_days,0)::DOUBLE PRECISION AS used_days,
+               COALESCE(usage.pending_days,0)::DOUBLE PRECISION AS pending_days,
+               GREATEST(LEAST(policy.annual_days,COALESCE(policy.balance_cap_days,policy.annual_days))-COALESCE(usage.used_days,0),
+                 CASE WHEN policy.allow_negative THEN -policy.negative_limit_days ELSE 0 END)::DOUBLE PRECISION AS remaining_days,
+               policy.allow_negative,policy.negative_limit_days::DOUBLE PRECISION,
+               policy.balance_cap_days::DOUBLE PRECISION,policy.carry_forward_days::DOUBLE PRECISION
+        FROM local_staff employee
+        JOIN LATERAL (
+          SELECT source.leave_type,
+                 MAX(source.annual_days+source.carry_forward_days)::NUMERIC AS annual_days,
+                 BOOL_OR(source.allow_negative) AS allow_negative,
+                 MAX(source.negative_limit_days)::NUMERIC AS negative_limit_days,
+                 MIN(source.balance_cap_days)::NUMERIC AS balance_cap_days,
+                 MAX(source.carry_forward_days)::NUMERIC AS carry_forward_days
+          FROM staff_leave_policies source
+          JOIN staff owner ON owner.tenant_id=source.tenant_id AND owner.branch_id=source.branch_id AND owner.id=source.staff_id
+          WHERE source.tenant_id=$1 AND source.active=TRUE
+            AND (owner.id=employee.id OR (employee.user_id IS NOT NULL AND owner.user_id=employee.user_id))
+          GROUP BY source.leave_type
+        ) policy ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(SUM(request.requested_days) FILTER(WHERE request.status='approved'),0)::NUMERIC AS used_days,
+                 COALESCE(SUM(request.requested_days) FILTER(WHERE request.status='pending'),0)::NUMERIC AS pending_days
+          FROM staff_leave_requests request
+          JOIN staff requester ON requester.tenant_id=request.tenant_id AND requester.branch_id=request.branch_id AND requester.id=request.staff_id
+          WHERE request.tenant_id=$1 AND request.leave_type=policy.leave_type AND request.start_date >= $3 AND request.end_date <= $4
+            AND (requester.id=employee.id OR (employee.user_id IS NOT NULL AND requester.user_id=employee.user_id))
+        ) usage ON TRUE
+        ORDER BY employee.staff_name,policy.leave_type
         "#,
     )
     .bind(tenant_id).bind(branch_id).bind(year_start).bind(year_end).bind(staff_id)
     .fetch_all(db).await
+}
+
+pub async fn accrual_history(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    staff_id: &str,
+    year_start: NaiveDate,
+    year_end: NaiveDate,
+) -> Result<Vec<LeaveAccrualEventRecord>, sqlx::Error> {
+    sqlx::query_as(r#"WITH identity AS (SELECT user_id FROM staff WHERE tenant_id=$1 AND branch_id=$2 AND id=$3)
+      SELECT event.id,event.leave_type,event.effective_date,event.days::DOUBLE PRECISION,event.event_type,event.notes,event.created_at
+      FROM staff_leave_accrual_events event JOIN staff employee ON employee.tenant_id=event.tenant_id AND employee.branch_id=event.branch_id AND employee.id=event.staff_id
+      CROSS JOIN identity WHERE event.tenant_id=$1 AND event.effective_date BETWEEN $4 AND $5
+        AND (employee.id=$3 OR (identity.user_id IS NOT NULL AND employee.user_id=identity.user_id))
+      ORDER BY event.effective_date DESC,event.created_at DESC,event.id DESC LIMIT 500"#)
+      .bind(tenant_id).bind(branch_id).bind(staff_id).bind(year_start).bind(year_end).fetch_all(db).await
 }

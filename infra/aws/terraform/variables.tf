@@ -135,6 +135,26 @@ variable "openai_model" {
   default = "gpt-5.4-mini"
 }
 
+variable "staff_app_minimum_version" {
+  type    = string
+  default = "0.1.0"
+}
+
+variable "staff_app_latest_version" {
+  type    = string
+  default = "0.1.0"
+}
+
+variable "staff_app_update_url" {
+  type    = string
+  default = ""
+}
+
+variable "staff_app_force_update_enabled" {
+  type    = bool
+  default = false
+}
+
 variable "extra_cors_allowed_origins" {
   description = "Additional exact HTTPS origins besides the generated CloudFront URL."
   type        = list(string)

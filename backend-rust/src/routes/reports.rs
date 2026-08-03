@@ -9,7 +9,7 @@ use axum::{
 };
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::{
     config::is_local_env,
@@ -1126,6 +1126,9 @@ pub struct CashDrawerEodReport {
     pub cash_refunds_paise: i64,
     pub cash_in_paise: i64,
     pub cash_out_paise: i64,
+    pub booking_deposit_paise: i64,
+    pub tip_paise: i64,
+    pub other_fee_paise: i64,
     pub expected_cash_paise: Option<i64>,
     pub counted_cash_paise: Option<i64>,
     pub variance_paise: Option<i64>,
@@ -1134,6 +1137,7 @@ pub struct CashDrawerEodReport {
     pub bank_deposit_paise: i64,
     pub pending_deposit_paise: i64,
     pub reconciliation_exceptions: i64,
+    pub petty_cash_categories: Vec<Value>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -1388,6 +1392,134 @@ async fn report_catalog(State(_state): State<AppState>) -> ApiResult<Vec<ReportC
             description: "Product sales, returns, purchases, transfers and current stock.",
             icon: "inventory",
             path: "/reports/products/movements",
+        },
+        ReportCatalogItem {
+            id: "inventory-current-stock",
+            title: "Current Inventory",
+            category: "Inventory",
+            description: "Current on-hand stock, cost, status and reorder levels.",
+            icon: "inventory",
+            path: "/inventory?tab=products",
+        },
+        ReportCatalogItem {
+            id: "inventory-ledger",
+            title: "Inventory Stock Ledger",
+            category: "Inventory",
+            description: "Immutable product movements with source, cost and batch evidence.",
+            icon: "inventory",
+            path: "/inventory?tab=ledger",
+        },
+        ReportCatalogItem {
+            id: "inventory-consumption",
+            title: "Inventory Consumption",
+            category: "Inventory",
+            description: "Projected and actual usage by product, service, staff and client.",
+            icon: "inventory",
+            path: "/inventory/backbar-consumption",
+        },
+        ReportCatalogItem {
+            id: "inventory-valuation",
+            title: "Inventory Valuation",
+            category: "Inventory",
+            description: "Weighted-average or FIFO on-hand valuation and cost exceptions.",
+            icon: "inventory",
+            path: "/inventory?tab=valuation",
+        },
+        ReportCatalogItem {
+            id: "inventory-ageing",
+            title: "Inventory Ageing",
+            category: "Inventory",
+            description: "Active batch age, quantity, value and ageing bucket.",
+            icon: "inventory",
+            path: "/inventory?tab=reports&report=ageing",
+        },
+        ReportCatalogItem {
+            id: "inventory-near-expiry",
+            title: "Near-expiry Inventory",
+            category: "Inventory",
+            description: "Expired and near-expiry batches with quantity and risk value.",
+            icon: "inventory",
+            path: "/inventory?tab=reports&report=expiry",
+        },
+        ReportCatalogItem {
+            id: "inventory-batch-traceability",
+            title: "Batch Traceability",
+            category: "Inventory",
+            description: "Batch-linked receipts, consumption, transfers, returns and adjustments.",
+            icon: "inventory",
+            path: "/inventory?tab=reports&report=traceability",
+        },
+        ReportCatalogItem {
+            id: "inventory-audit-deviation",
+            title: "Inventory Audit Deviation",
+            category: "Inventory",
+            description: "Expected, counted and approved stock variances with reasons.",
+            icon: "inventory",
+            path: "/inventory?tab=reports&report=variance",
+        },
+        ReportCatalogItem {
+            id: "inventory-supplier-performance",
+            title: "Inventory Supplier Performance",
+            category: "Inventory",
+            description: "Purchase, delivery, fill-rate, return and expiry-risk evidence.",
+            icon: "inventory",
+            path: "/inventory?tab=reports&report=suppliers",
+        },
+        ReportCatalogItem {
+            id: "inventory-purchases",
+            title: "Inventory Purchase History",
+            category: "Inventory",
+            description: "Purchase orders, receiving history, landed cost and supplier bills.",
+            icon: "inventory",
+            path: "/inventory?tab=orders",
+        },
+        ReportCatalogItem {
+            id: "inventory-transfers",
+            title: "Inventory Transfer History",
+            category: "Inventory",
+            description: "Branch transfers, shipments, receipts, returns and mismatches.",
+            icon: "inventory",
+            path: "/inventory?tab=transfers",
+        },
+        ReportCatalogItem {
+            id: "inventory-returns",
+            title: "Inventory Returns and Discards",
+            category: "Inventory",
+            description: "Purchase returns, quarantine release, restock and discard evidence.",
+            icon: "inventory",
+            path: "/inventory?tab=returns",
+        },
+        ReportCatalogItem {
+            id: "inventory-low-stock",
+            title: "Low-stock Inventory",
+            category: "Inventory",
+            description: "Low-stock alerts, suggested quantity, priority and forecast value.",
+            icon: "inventory",
+            path: "/inventory?tab=reorder",
+        },
+        ReportCatalogItem {
+            id: "inventory-controls",
+            title: "Inventory Exceptions",
+            category: "Inventory",
+            description: "Negative stock, dead stock, expiry, adjustments and control exceptions.",
+            icon: "inventory",
+            path: "/inventory/advanced-controls",
+        },
+        ReportCatalogItem {
+            id: "inventory-product-360",
+            title: "Inventory Product 360",
+            category: "Inventory",
+            description: "Product stock buckets, branches, batches, clients, kits and full ledger.",
+            icon: "inventory",
+            path: "/inventory?tab=products",
+        },
+        ReportCatalogItem {
+            id: "inventory-gl-reconciliation",
+            title: "Inventory versus GL",
+            category: "Inventory",
+            description: "Inventory valuation matched to the Inventory Asset general ledger.",
+            icon: "balance",
+            path: "/inventory/gl-reconciliation",
         },
         ReportCatalogItem {
             id: "payment-modes",
@@ -3756,6 +3888,16 @@ async fn report_cash_drawer_eod(
     let reconciliation_exceptions = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*)::BIGINT FROM pos_provider_reconciliation_runs WHERE tenant_id=$1 AND branch_id=$2 AND settlement_date=$3 AND status='review_required'",
     ).bind(&tenant_id).bind(&branch_id).bind(business_date).fetch_one(&state.db).await.unwrap_or(0);
+    let sale_components = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT COALESCE(SUM(tip_paise),0)::BIGINT,COALESCE(SUM(other_fee_paise),0)::BIGINT FROM pos_sales WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 AND status NOT IN ('draft','voided','cancelled')",
+    ).bind(&tenant_id).bind(&branch_id).bind(business_date).fetch_one(&state.db).await.unwrap_or((0,0));
+    let booking_deposit = sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(movement.amount_paise),0)::BIGINT FROM cash_drawer_movements movement JOIN cash_drawer_sessions session ON session.id=movement.drawer_session_id AND session.tenant_id=movement.tenant_id AND session.branch_id=movement.branch_id WHERE movement.tenant_id=$1 AND movement.branch_id=$2 AND session.business_date=$3 AND movement.reference_type='booking_advance'",
+    ).bind(&tenant_id).bind(&branch_id).bind(business_date).fetch_one(&state.db).await.unwrap_or(0);
+    let petty_cash_categories = sqlx::query_as::<_, (String, i64)>(
+        "SELECT line.category_key,COALESCE(SUM(line.amount_paise),0)::BIGINT FROM outgoing_fund_vouchers voucher JOIN outgoing_fund_lines line ON line.tenant_id=voucher.tenant_id AND line.branch_id=voucher.branch_id AND line.voucher_id=voucher.id WHERE voucher.tenant_id=$1 AND voucher.branch_id=$2 AND voucher.business_date=$3 AND voucher.payment_account_code='CASH_ON_HAND' AND voucher.status='approved' GROUP BY line.category_key ORDER BY line.category_key",
+    ).bind(&tenant_id).bind(&branch_id).bind(business_date).fetch_all(&state.db).await.unwrap_or_default()
+      .into_iter().map(|(category,amount)| json!({"category":category,"amountPaise":amount})).collect();
     let (opening, counted, variance, status) =
         session.unwrap_or((0, None, None, "not_opened".to_string()));
     let cash_out = movement.1.saturating_add(approved_outgoing);
@@ -3768,6 +3910,9 @@ async fn report_cash_drawer_eod(
         cash_refunds_paise: movement.2,
         cash_in_paise: movement.0,
         cash_out_paise: cash_out,
+        booking_deposit_paise: booking_deposit,
+        tip_paise: sale_components.0,
+        other_fee_paise: sale_components.1,
         expected_cash_paise: reveal_expected.then_some(expected),
         counted_cash_paise: counted,
         variance_paise: reveal_expected
@@ -3778,6 +3923,7 @@ async fn report_cash_drawer_eod(
         bank_deposit_paise: deposits.0,
         pending_deposit_paise: deposits.1,
         reconciliation_exceptions,
+        petty_cash_categories,
     })))
 }
 

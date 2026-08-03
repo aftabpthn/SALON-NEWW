@@ -18,6 +18,10 @@ pub struct ShiftSwapRecord {
     pub reason: String,
     pub status: String,
     pub requested_by: String,
+    pub target_decision: String,
+    pub target_decision_note: String,
+    pub target_decided_by: Option<String>,
+    pub target_decided_at: Option<DateTime<Utc>>,
     pub decided_by: Option<String>,
     pub decision_note: String,
     pub decided_at: Option<DateTime<Utc>>,
@@ -227,7 +231,8 @@ const SWAP_COLUMNS: &str = r#"
   swap.id,swap.schedule_id,schedule.schedule_date,schedule.shift1_start,schedule.shift1_end,
   swap.from_staff_id,TRIM(CONCAT_WS(' ',source.first_name,NULLIF(source.last_name,''))) AS from_staff_name,
   swap.to_staff_id,TRIM(CONCAT_WS(' ',target.first_name,NULLIF(target.last_name,''))) AS to_staff_name,
-  swap.reason,swap.status,swap.requested_by,swap.decided_by,swap.decision_note,swap.decided_at,
+  swap.reason,swap.status,swap.requested_by,swap.target_decision,swap.target_decision_note,
+  swap.target_decided_by,swap.target_decided_at,swap.decided_by,swap.decision_note,swap.decided_at,
   swap.version,swap.created_at
 "#;
 
@@ -236,18 +241,21 @@ pub async fn list_shift_swaps(
     tenant_id: &str,
     branch_id: &str,
     status: &str,
+    staff_id: &str,
 ) -> Result<Vec<ShiftSwapRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
         "SELECT {SWAP_COLUMNS} FROM staff_shift_swap_requests swap
-         JOIN staff_schedules schedule ON schedule.id=swap.schedule_id
-         JOIN staff source ON source.id=swap.from_staff_id
-         JOIN staff target ON target.id=swap.to_staff_id
+         JOIN staff_schedules schedule ON schedule.id=swap.schedule_id AND schedule.tenant_id=swap.tenant_id AND schedule.branch_id=swap.branch_id
+         JOIN staff source ON source.id=swap.from_staff_id AND source.tenant_id=swap.tenant_id AND source.branch_id=swap.branch_id
+         JOIN staff target ON target.id=swap.to_staff_id AND target.tenant_id=swap.tenant_id AND target.branch_id=swap.branch_id
          WHERE swap.tenant_id=$1 AND swap.branch_id=$2 AND ($3='' OR swap.status=$3)
+           AND ($4='' OR swap.from_staff_id=$4 OR swap.to_staff_id=$4)
          ORDER BY swap.created_at DESC"
     ))
     .bind(tenant_id)
     .bind(branch_id)
     .bind(status)
+    .bind(staff_id)
     .fetch_all(db)
     .await
 }
@@ -260,6 +268,7 @@ pub async fn create_shift_swap(
     to_staff_id: &str,
     reason: &str,
     actor_user_id: &str,
+    source_staff_id: &str,
 ) -> Result<Option<ShiftSwapRecord>, sqlx::Error> {
     let id = sqlx::query_scalar::<_, String>(
         r#"
@@ -270,6 +279,7 @@ pub async fn create_shift_swap(
         FROM staff_schedules schedule
         JOIN staff target ON target.tenant_id=$1 AND target.branch_id=$2 AND target.id=$4 AND target.active=TRUE
         WHERE schedule.tenant_id=$1 AND schedule.branch_id=$2 AND schedule.id=$3
+          AND ($7='' OR schedule.staff_id=$7)
           AND schedule.staff_id<>target.id
         RETURNING id
         "#,
@@ -280,6 +290,7 @@ pub async fn create_shift_swap(
     .bind(to_staff_id)
     .bind(reason)
     .bind(actor_user_id)
+    .bind(source_staff_id)
     .fetch_optional(db)
     .await?;
     match id {
@@ -302,9 +313,9 @@ pub async fn decide_shift_swap(
     let swap = sqlx::query_as::<_, (String, String, NaiveDate)>(
         r#"SELECT swap.schedule_id,swap.to_staff_id,schedule.schedule_date
            FROM staff_shift_swap_requests swap
-           JOIN staff_schedules schedule ON schedule.id=swap.schedule_id
+           JOIN staff_schedules schedule ON schedule.id=swap.schedule_id AND schedule.tenant_id=swap.tenant_id AND schedule.branch_id=swap.branch_id
            WHERE swap.tenant_id=$1 AND swap.branch_id=$2 AND swap.id=$3
-             AND swap.status='pending' AND swap.version=$4 FOR UPDATE"#,
+             AND swap.status='pending' AND swap.target_decision='accepted' AND swap.version=$4 FOR UPDATE"#,
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -351,6 +362,44 @@ pub async fn decide_shift_swap(
     get_shift_swap(db, tenant_id, branch_id, id).await
 }
 
+pub async fn decide_shift_swap_target(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    id: &str,
+    target_staff_id: &str,
+    decision: &str,
+    note: &str,
+    actor_user_id: &str,
+    version: i32,
+) -> Result<Option<ShiftSwapRecord>, sqlx::Error> {
+    let changed = sqlx::query(
+        r#"UPDATE staff_shift_swap_requests
+           SET target_decision=$1,target_decision_note=$2,target_decided_by=$3,target_decided_at=NOW(),
+               status=CASE WHEN $1='rejected' THEN 'rejected' ELSE status END,
+               decision_note=CASE WHEN $1='rejected' THEN $2 ELSE decision_note END,
+               decided_by=CASE WHEN $1='rejected' THEN $3 ELSE decided_by END,
+               decided_at=CASE WHEN $1='rejected' THEN NOW() ELSE decided_at END,
+               version=version+1,updated_at=NOW()
+           WHERE tenant_id=$4 AND branch_id=$5 AND id=$6 AND to_staff_id=$7
+             AND status='pending' AND target_decision='pending' AND version=$8"#,
+    )
+    .bind(decision)
+    .bind(note)
+    .bind(actor_user_id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(id)
+    .bind(target_staff_id)
+    .bind(version)
+    .execute(db)
+    .await?;
+    if changed.rows_affected() == 0 {
+        return Ok(None);
+    }
+    get_shift_swap(db, tenant_id, branch_id, id).await
+}
+
 async fn get_shift_swap(
     db: &PgPool,
     tenant_id: &str,
@@ -359,9 +408,9 @@ async fn get_shift_swap(
 ) -> Result<Option<ShiftSwapRecord>, sqlx::Error> {
     sqlx::query_as(&format!(
         "SELECT {SWAP_COLUMNS} FROM staff_shift_swap_requests swap
-         JOIN staff_schedules schedule ON schedule.id=swap.schedule_id
-         JOIN staff source ON source.id=swap.from_staff_id
-         JOIN staff target ON target.id=swap.to_staff_id
+         JOIN staff_schedules schedule ON schedule.id=swap.schedule_id AND schedule.tenant_id=swap.tenant_id AND schedule.branch_id=swap.branch_id
+         JOIN staff source ON source.id=swap.from_staff_id AND source.tenant_id=swap.tenant_id AND source.branch_id=swap.branch_id
+         JOIN staff target ON target.id=swap.to_staff_id AND target.tenant_id=swap.tenant_id AND target.branch_id=swap.branch_id
          WHERE swap.tenant_id=$1 AND swap.branch_id=$2 AND swap.id=$3"
     ))
     .bind(tenant_id)
