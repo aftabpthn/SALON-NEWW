@@ -4,6 +4,7 @@ import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { realtimeService } from "./realtime.service.js";
 import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./access-control.service.js";
 import { assertActiveStaffAppRole } from "./staff-app-role-policy.service.js";
+import { cachedStaffDashboard } from "./staff-dashboard-cache.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -487,7 +488,7 @@ export class StaffLoginService {
   }
 
   enterpriseOs(query = {}, access) {
-    const dashboard = this.staffDashboard(query, access);
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a));
     const staffId = dashboard.staff.id;
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const date = String(query.date || dashboard.range.date || istBusinessDate()).slice(0, 10);
@@ -614,7 +615,7 @@ export class StaffLoginService {
   }
 
   clients(query = {}, access) {
-    const dashboard = this.staffDashboard({}, access);
+    const dashboard = cachedStaffDashboard({}, access, (q, a) => this.staffDashboard(q, a));
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const columns = columnsFor("clients");
     const q = String(query.q || query.search || "").trim().toLowerCase();
@@ -645,7 +646,7 @@ export class StaffLoginService {
 
   client360(clientId, query = {}, access) {
     ensureStaffSelfAppSchema();
-    const dashboard = this.staffDashboard(query, access);
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a));
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const client = this.clientRecord(access.tenantId, branchId, clientId);
     if (!client) throw notFound("Client record not found");
