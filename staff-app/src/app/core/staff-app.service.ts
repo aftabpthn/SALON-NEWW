@@ -1415,8 +1415,7 @@ export class StaffAppService {
   }
 
   async dashboard(params: Record<string, string> = {}): Promise<StaffDashboard> {
-    const offlineKey = this.offlineDashboardCacheKey(params);
-    if (!this.isOnline()) return this.cachedOfflineSnapshot<StaffDashboard>(offlineKey, "No encrypted offline dashboard is available.");
+    if (!this.isOnline()) return this.cachedOfflineSnapshot<StaffDashboard>(this.offlineDashboardCacheKey(params), "No encrypted offline dashboard is available.");
     return this.cachedRead(
       `dashboard:${stableQueryKey(params)}`,
       10_000,
@@ -1431,10 +1430,11 @@ export class StaffAppService {
             }));
             return this.normalizeDashboard(this.unwrap(response));
           });
-          await this.writeOfflineSnapshot(offlineKey, value);
+          const offlineKey = this.scopedOfflineDashboardCacheKey(params);
+          if (offlineKey) await this.writeOfflineSnapshot(offlineKey, value);
           return value;
         } catch (error) {
-          if (error instanceof HttpErrorResponse && error.status === 0) return this.cachedOfflineSnapshot<StaffDashboard>(offlineKey, "No encrypted offline dashboard is available.");
+          if (error instanceof HttpErrorResponse && error.status === 0) return this.cachedOfflineSnapshot<StaffDashboard>(this.offlineDashboardCacheKey(params), "No encrypted offline dashboard is available.");
           const message = this.errorMessage(error, "Unable to load staff dashboard.");
           this.error.set(message);
           throw error;
@@ -3125,8 +3125,14 @@ export class StaffAppService {
   }
 
   private offlineDashboardCacheKey(params: Record<string, string>): string {
+    const key = this.scopedOfflineDashboardCacheKey(params);
+    if (!key) throw new Error("An authenticated staff session is required for offline access.");
+    return key;
+  }
+
+  private scopedOfflineDashboardCacheKey(params: Record<string, string>): string | null {
     const user = this.user();
-    if (!user?.id || !user.branchId || !this.tenantIdValue) throw new Error("An authenticated staff session is required for offline access.");
+    if (!user?.id || !user.branchId || !this.tenantIdValue) return null;
     return `dashboard:${this.tenantIdValue}:${user.branchId}:${user.id}:${stableQueryKey(params)}`;
   }
 
