@@ -421,6 +421,18 @@ export function createApp() {
       mobile: "/api/v1"
     });
   });
+  app.get("/api/deployment/runtime", (_req, res) => {
+    const clientDist = resolveClientDist();
+    res.json({
+      ok: true,
+      commit: "2026-08-03-spa-fallback-1",
+      cwd: process.cwd(),
+      clientDist,
+      clientIndexFound: Boolean(clientDist),
+      auraClientDistSet: Boolean(process.env.AURA_CLIENT_DIST),
+      nodeEnv: process.env.NODE_ENV || ""
+    });
+  });
   app.use("/api/v1", mobileApiContext);
   app.get("/health", (_req, res) => {
     res.json(healthPayload("root"));
