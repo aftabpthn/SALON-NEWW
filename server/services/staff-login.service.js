@@ -1259,18 +1259,26 @@ export class StaffLoginService {
     return [...ids].filter(Boolean);
   }
 
-  enrichAppointments(rows, tenantId = "", branchId = "") {
-    if (!tenantId) throw badRequest("tenantId is required to enrich appointments");
+  appointmentEnrichment(tenantId = "", branchId = "") {
     const clientColumns = columnsFor("clients");
     const clientSelect = ["id", "name", clientColumns.includes("phone") ? "phone" : "'' AS phone"];
     clientSelect.push(clientColumns.includes("mobile") ? "mobile" : "'' AS mobile");
     const clientBranchFilter = branchId && clientColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
     const clientRows = db.prepare(`SELECT ${clientSelect.join(", ")} FROM clients WHERE tenantId = @tenantId${clientBranchFilter}`).all({ tenantId, branchId });
-    const clients = new Map(clientRows.map((row) => [row.id, row]));
     const serviceColumns = columnsFor("services");
     const serviceBranchFilter = branchId && serviceColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
     const serviceRows = db.prepare(`SELECT id, name, durationMinutes, price FROM services WHERE tenantId = @tenantId${serviceBranchFilter}`).all({ tenantId, branchId });
-    const services = new Map(serviceRows.map((row) => [row.id, row]));
+    return {
+      clients: new Map(clientRows.map((row) => [row.id, row])),
+      services: new Map(serviceRows.map((row) => [row.id, row]))
+    };
+  }
+
+  enrichAppointments(rows, tenantId = "", branchId = "", enrichment = null) {
+    if (!tenantId) throw badRequest("tenantId is required to enrich appointments");
+    const data = enrichment || this.appointmentEnrichment(tenantId, branchId);
+    const clients = data.clients;
+    const services = data.services;
     return rows.map((row) => {
       const serviceIds = parseServiceIds(row.serviceIds);
       const serviceRows = serviceIds.map((serviceId) => services.get(serviceId)).filter(Boolean);

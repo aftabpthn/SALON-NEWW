@@ -16,13 +16,13 @@ function keyOf(query = {}, access = {}) {
   return `${scope}|${hash}`;
 }
 
-export function cachedStaffDashboard(query, access, compute) {
+export function cachedStaffRead(query, access, compute, ttlMs = TTL_MS) {
   const key = keyOf(query, access);
   const now = Date.now();
   const hit = cache.get(key);
   if (hit && now < hit.expiresAt) return hit.value;
   const value = compute(query, access);
-  cache.set(key, { value, expiresAt: now + TTL_MS });
+  cache.set(key, { value, expiresAt: now + ttlMs });
   if (cache.size > MAX_ENTRIES) {
     const entries = [...cache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
     for (let index = 0; index < entries.length - Math.floor(MAX_ENTRIES / 2); index += 1) {
@@ -30,6 +30,17 @@ export function cachedStaffDashboard(query, access, compute) {
     }
   }
   return value;
+}
+
+export function cachedStaffDashboard(query, access, compute) {
+  return cachedStaffRead(query, access, compute, TTL_MS);
+}
+
+export function applyCachedResponseHeaders(res, value, ttlSeconds) {
+  if (!res || typeof res.set !== "function") return;
+  const etag = createHash("sha1").update(JSON.stringify(value ?? {})).digest("hex");
+  res.set("Cache-Control", `private, max-age=${ttlSeconds}`);
+  res.set("ETag", `"${etag}"`);
 }
 
 export function invalidateStaffDashboardCache(access) {

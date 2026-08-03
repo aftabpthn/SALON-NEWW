@@ -1211,7 +1211,7 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     reset ? this.loading.set(true) : this.loadingMore.set(true);
     this.message.set("");
     try {
-      const data = await this.staff.business(this.query(page));
+      const data = await this.staff.business(this.query(page), reset);
       if (generation !== this.loadGeneration) return;
       if (reset || !current) {
         this.business.set(data);

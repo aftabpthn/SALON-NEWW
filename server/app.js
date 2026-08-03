@@ -21,6 +21,7 @@ import { ensureAppointmentActivitySchema } from "./services/appointment-activity
 import { ensureEnterpriseSchedulerSchema } from "./services/enterprise-scheduler-schema.service.js";
 import { ensureClientMasterSchema } from "./services/client-master-schema.service.js";
 import { ensureStaffOsSchema } from "./services/staff-os-schema.service.js";
+import { ensureStaffPerformanceSchema } from "./services/staff-performance-schema.service.js";
 import { ensureStaffAppRolePolicySchema } from "./services/staff-app-role-policy.service.js";
 import { ensureAttendanceVerificationSchema } from "./services/attendance-verification-schema.service.js";
 import { ensureStatutoryComplianceSchema } from "./services/compliance/compliance-schema.service.js";
@@ -284,6 +285,7 @@ export function createApp() {
   ensureEnterpriseSchedulerSchema();
   ensureClientMasterSchema();
   ensureStaffOsSchema();
+  ensureStaffPerformanceSchema();
   ensureStaffAppRolePolicySchema();
   ensureAttendanceVerificationSchema();
   ensureStatutoryComplianceSchema();

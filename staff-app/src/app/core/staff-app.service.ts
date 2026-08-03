@@ -646,9 +646,11 @@ export class StaffAppService {
     return this.cachedGet<StaffWorkspacePreferences>(key, 30_000, () => this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences"));
   }
 
-  async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
+  async business(input: string | StaffBusinessQuery, fresh = false): Promise<StaffBusiness> {
     const query = typeof input === "string" ? { date: input } : input;
-    return this.get<StaffBusiness>("/staff-self/business", this.stringQuery(query));
+    const key = `business:${JSON.stringify(query)}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffBusiness>(key, 15_000, () => this.get<StaffBusiness>("/staff-self/business", this.stringQuery(query)));
   }
 
   async businessInvoice(invoiceId: string): Promise<StaffBusinessInvoiceDetail> {
@@ -734,8 +736,10 @@ export class StaffAppService {
     return this.post(`/team-chat/conversations/${encodeURIComponent(conversationId)}/receipts`, { messageIds, status });
   }
 
-  async today(date = staffBusinessDate()): Promise<StaffToday> {
-    return this.get<StaffToday>("/staff-os/mobile/today", { date });
+  async today(date = staffBusinessDate(), fresh = false): Promise<StaffToday> {
+    const key = `today:${date}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffToday>(key, 10_000, () => this.get<StaffToday>("/staff-os/mobile/today", { date }));
   }
 
   async attendanceHistory(days = 30): Promise<StaffAttendance[]> {
@@ -752,8 +756,10 @@ export class StaffAppService {
     return this.get<StaffAttendance[]>("/staff-os/attendance", { from, to, limit: "500" });
   }
 
-  async overtimeSummary(): Promise<StaffOvertimeSummary> {
-    return this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { asOf: staffBusinessDate() });
+  async overtimeSummary(fresh = false): Promise<StaffOvertimeSummary> {
+    const key = `overtime:${staffBusinessDate()}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffOvertimeSummary>(key, 10_000, () => this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { asOf: staffBusinessDate() }));
   }
 
   async payroll(): Promise<StaffPayrollItem[]> {
@@ -768,8 +774,10 @@ export class StaffAppService {
     return this.get<StaffLeave[]>("/staff-os/leaves", { limit: "6" });
   }
 
-  async leaveBalances(): Promise<StaffLeaveBalance[]> {
-    return this.get<StaffLeaveBalance[]>("/staff-os/leave-balances");
+  async leaveBalances(fresh = false): Promise<StaffLeaveBalance[]> {
+    const key = "leave-balances";
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffLeaveBalance[]>(key, 60_000, () => this.get<StaffLeaveBalance[]>("/staff-os/leave-balances"));
   }
 
   async clockIn(): Promise<MutationResult<StaffAttendance>> {

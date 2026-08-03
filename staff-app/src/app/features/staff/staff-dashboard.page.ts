@@ -102,7 +102,8 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   private loadGeneration = 0;
   private loadInFlight = false;
   private loadQueued = false;
-  private readonly attendanceUpdated = () => void this.load();
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly attendanceUpdated = () => this.scheduleReload();
 
   constructor(readonly staff: StaffAppService, private readonly router: Router) {}
 
@@ -113,28 +114,36 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     void this.load();
   }
 
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); }
-  @HostListener("window:online") onOnline() { this.online.set(true); this.queuedActions.set(this.staff.offlineQueueSize()); void this.load(); }
+  ngOnDestroy() {
+    window.removeEventListener("aura:attendance-updated", this.attendanceUpdated);
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+  }
+  @HostListener("window:online") onOnline() { this.online.set(true); this.queuedActions.set(this.staff.offlineQueueSize()); this.scheduleReload(); }
   @HostListener("window:offline") onOffline() { this.online.set(false); }
 
-  async load() {
+  private scheduleReload() {
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => { this.reloadTimer = null; void this.load(true); }, 800);
+  }
+
+  async load(fresh = false) {
     if (this.loadInFlight) {
       this.loadQueued = true;
       return;
     }
     this.loadInFlight = true;
     try {
-      await this.performLoad();
+      await this.performLoad(fresh);
     } finally {
       this.loadInFlight = false;
       if (this.loadQueued) {
         this.loadQueued = false;
-        void this.load();
+        void this.load(fresh);
       }
     }
   }
 
-  private async performLoad() {
+  private async performLoad(fresh = false) {
     const generation = ++this.loadGeneration;
     const hasData = !!this.data();
     this.initialLoading.set(!hasData);
@@ -160,14 +169,14 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     const canReadStaff = this.staff.hasPermission("read:staff");
     const canUseAttendance = this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"]);
     const modules: Array<{ name: DashboardModule; request: Promise<unknown> }> = [
-      { name: "enterprise", request: this.staff.enterpriseOs() },
-      { name: "preferences", request: this.staff.workspacePreferences() }
+      { name: "enterprise", request: this.staff.enterpriseOs({}, fresh) },
+      { name: "preferences", request: this.staff.workspacePreferences(fresh) }
     ];
     if (canUseAttendance) modules.push(
-      { name: "today", request: this.staff.today() },
-      { name: "overtime", request: this.staff.overtimeSummary() }
+      { name: "today", request: this.staff.today(undefined, fresh) },
+      { name: "overtime", request: this.staff.overtimeSummary(fresh) }
     );
-    if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances() });
+    if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances(fresh) });
     const results = await Promise.allSettled(modules.map((module) => module.request));
     if (generation !== this.loadGeneration) return;
     const errors: string[] = [];
@@ -229,7 +238,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
           this.today.set({ ...curToday, attendance: list });
         }
       }
-      this.actionMessage.set(completedMessage); await this.load();
+      this.actionMessage.set(completedMessage); await this.load(true);
     } catch {
       this.actionFailed.set(true); this.actionMessage.set(this.staff.error() || "Unable to save this change. Please try again.");
     } finally { this.pendingMutation.set(""); }

@@ -134,21 +134,25 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || this.attendance().find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   readonly todayShift = computed(() => this.today()?.schedules[0] || null);
-  private readonly attendanceUpdated = () => void this.load();
+  private readonly attendanceUpdated = () => {
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => { this.reloadTimer = null; void this.load(true); }, 800);
+  };
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
   private loadGeneration = 0;
   private historyGeneration = 0;
   private minuteTimer: ReturnType<typeof setInterval> | null = null;
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); this.minuteTimer = setInterval(() => this.currentTime.set(Date.now()), 60_000); void this.load(); }
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); if (this.minuteTimer) clearInterval(this.minuteTimer); this.loadGeneration += 1; this.historyGeneration += 1; }
-  async load() {
+  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); if (this.reloadTimer !== null) clearTimeout(this.reloadTimer); if (this.minuteTimer) clearInterval(this.minuteTimer); this.loadGeneration += 1; this.historyGeneration += 1; }
+  async load(fresh = false) {
     const generation = ++this.loadGeneration;
     const historyGeneration = ++this.historyGeneration;
     this.loading.set(true);
     try {
       const date = businessDate();
       const monthStart = `${date.slice(0, 7)}-01`;
-      const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
+      const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(undefined, fresh), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
       if (generation !== this.loadGeneration) return;
       this.today.set(today);
       if (historyGeneration === this.historyGeneration) this.attendance.set(attendance);
@@ -203,7 +207,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
         }
       }
       this.message.set(completedMessage);
-      await this.load();
+      await this.load(true);
       window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     } catch {
       this.localError.set(this.staff.error() || `Unable to ${action.replace(/-/g, " ")}.`);
