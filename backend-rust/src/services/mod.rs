@@ -73,6 +73,7 @@ pub mod sms_center_service;
 pub mod sso_service;
 pub mod staff_advance_service;
 pub mod staff_advanced_service;
+pub mod staff_ai_scribe_service;
 pub mod staff_ai_service;
 pub mod staff_app_service;
 pub mod staff_attendance_service;

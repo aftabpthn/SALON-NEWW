@@ -1143,6 +1143,18 @@ fn route_access(path: &str, method: &Method) -> Option<RouteAccess> {
             access(PAYROLL_ROLES, &["staff.payroll.manage"])
         });
     }
+    // AI Scribe handles clinical notes taken during a treatment, so reading a
+    // draft is a narrower authority than recording or approving one.
+    if path_starts_with(path, "/staff-scribe") {
+        return Some(if is_read_method(method) {
+            access(
+                STAFF_SELF_WRITE_ROLES,
+                &["staff.app.scribe.read", "staff.app.scribe.manage"],
+            )
+        } else {
+            access(STAFF_SELF_WRITE_ROLES, &["staff.app.scribe.manage"])
+        });
+    }
     if path_starts_with(path, "/staff-attendance") {
         let self_action = matches!(
             path,

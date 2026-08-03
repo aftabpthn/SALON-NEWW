@@ -168,6 +168,15 @@ async fn main() -> Result<()> {
             {
                 worker::note_failure("ai_transcript_retention", "purge_transcripts");
             }
+            // Scribe transcripts expire on their own per-session window rather
+            // than the concierge retention policy, but they are the same class
+            // of content and belong on the same cycle.
+            if services::staff_ai_scribe_service::purge_expired_transcripts(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "purge_scribe_transcripts");
+            }
             if repositories::communication_repository::redact_expired_content(&state.db)
                 .await
                 .is_err()

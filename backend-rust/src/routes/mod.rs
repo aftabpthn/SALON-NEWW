@@ -71,6 +71,7 @@ pub mod staff_leave;
 pub mod staff_operations;
 pub mod staff_payroll;
 pub mod staff_schedule;
+pub mod staff_scribe;
 pub mod stock_audit;
 pub mod wallets;
 pub mod whatsapp;
@@ -122,6 +123,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(staff_operations::router())
         .merge(staff_payroll::router())
         .merge(staff_schedule::router())
+        .merge(staff_scribe::router())
         .merge(services::router())
         .merge(wallets::router())
         .merge(appointment_activity::router())

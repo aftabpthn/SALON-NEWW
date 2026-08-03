@@ -679,6 +679,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff App",
     },
     PermissionDefinition {
+        code: "staff.app.scribe.read",
+        label: "Show AI Scribe drafts",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.scribe.manage",
+        label: "Record and approve AI Scribe drafts",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "staff.app.settings.read",
         label: "Show Staff App settings",
         group: "Staff App",
