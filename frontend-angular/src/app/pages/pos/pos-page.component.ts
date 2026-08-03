@@ -325,7 +325,7 @@ export class PosPageComponent implements OnInit, OnDestroy {
   get membershipSalesVisible(): boolean { return this.membershipSettingsLoaded && this.membershipSettings.membershipCatalog.membershipSalesEnabled && this.membershipSettings.membershipCatalog.visibleInPos; }
   get posMemberships(): any[] { return this.memberships.filter((plan) => this.membershipPlanAllowed(plan)); }
   get giftCardPaymentPaise(): number { return this.toPaise(this.num(this.paymentInputs['gift_card'])); }
-  get manualDiscountRequiresReason(): boolean { return this.manualBillDiscountPaise > 0 || this.roundOffDiscountPaise > 0 || this.saleLines.some((line) => this.manualLineDiscountPaise(line) > 0); }
+  get manualDiscountRequiresReason(): boolean { return this.manualBillDiscountPaise > 0 || this.roundOffDiscountPaise > 0 || this.saleLines.some((line) => line.discountSource !== 'membership' && this.manualLineDiscountPaise(line) > 0); }
   get selectedAppointmentGroupSize(): number {
     const appointment = this.appointments.find((item) => String(item.id) === String(this.reference));
     if (!appointment) return 0;

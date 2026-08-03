@@ -240,6 +240,10 @@ test('POS client cards show the real membership activation state', () => {
   assert.match(checkout, /res\?\.data\?\.kpi \?\? res\?\.data \?\? res\?\.kpi \?\? res/);
 });
 
+test('automatic membership discounts do not require a manual discount reason', () => {
+  assert.match(checkout, /line\.discountSource !== 'membership' && this\.manualLineDiscountPaise\(line\) > 0/);
+});
+
 test('final invoice without collection requires confirmation and stays unpaid', () => {
   assert.match(checkout, /if \(this\.paidNowPaise === 0\)/);
   assert.match(checkout, /window\.confirm\('No payment collected\. Save invoice as unpaid\?'\)/);
