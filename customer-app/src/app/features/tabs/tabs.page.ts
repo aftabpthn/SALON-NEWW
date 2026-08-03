@@ -127,7 +127,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         <a routerLink="/tabs/profile" routerLinkActive="active">Profile</a>
       </div>
       <div class="nav-actions" aria-label="Customer quick actions">
-        <a class="location-chip" routerLink="/tabs/search" [queryParams]="{ nearMe: true, map: true, filter: 'nearest', sort: 'distance' }">
+        <a class="location-chip" routerLink="/search" [queryParams]="{ nearMe: true, map: true, filter: 'nearest', sort: 'distance' }">
           <ion-icon name="location-outline"></ion-icon>
           {{ locationLabel() }}
         </a>

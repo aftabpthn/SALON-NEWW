@@ -5,6 +5,8 @@ const DEFAULT_TIMEZONE = "Asia/Kolkata";
 const DEFAULT_OPEN = "10:00";
 const DEFAULT_CLOSE = "20:00";
 const IST_OFFSET = "+05:30";
+const MARKETPLACE_LIST_CACHE_TTL_MS = 30_000;
+const marketplaceListCache = new Map();
 const WEEKDAYS = [
   ["monday", "Monday"],
   ["tuesday", "Tuesday"],
@@ -535,9 +537,19 @@ function availabilityDay({ date, service, staff, appointments }) {
   };
 }
 
+function cachedBusinessList(params = {}) {
+  const key = JSON.stringify(params);
+  const cached = marketplaceListCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (marketplaceListCache.size > 100) marketplaceListCache.clear();
+  const data = filterAndSortBusinesses(activeBusinessRows(params), params);
+  marketplaceListCache.set(key, { expiresAt: Date.now() + MARKETPLACE_LIST_CACHE_TTL_MS, data });
+  return data;
+}
+
 export const customerMarketplaceService = {
   listBusinesses(params = {}) {
-    return filterAndSortBusinesses(activeBusinessRows(params), params);
+    return cachedBusinessList(params);
   },
 
   business(slug) {

@@ -78,7 +78,10 @@ import { MarketplaceService } from "../core/marketplace.service";
   styles: [`
     .business-card {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-columns: 112px minmax(0, 1fr);
+      grid-template-rows: auto;
+      align-items: stretch;
+      min-height: 132px;
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -105,8 +108,26 @@ import { MarketplaceService } from "../core/marketplace.service";
     .cover {
       position: relative;
       overflow: hidden;
-      aspect-ratio: var(--card-image-ratio);
+      width: 112px;
+      height: 100%;
+      min-height: 132px;
+      aspect-ratio: auto;
       background: var(--surface-soft);
+    }
+
+    .business-card.variant-rail,
+    .business-card.variant-mini-rail {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .business-card.variant-rail .cover,
+    .business-card.variant-mini-rail .cover {
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      aspect-ratio: var(--card-image-ratio);
     }
 
     .cover::after {
@@ -115,6 +136,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       content: "";
       background: linear-gradient(180deg, rgba(16, 24, 40, 0.02), rgba(16, 24, 40, 0.28));
       pointer-events: none;
+    }
+
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .cover::after,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .rating-pill,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .cover-actions,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .topline {
+      display: none;
     }
 
     .business-card.variant-personal {
@@ -211,6 +240,8 @@ import { MarketplaceService } from "../core/marketplace.service";
     .content {
       display: grid;
       gap: 8px;
+      align-content: center;
+      min-width: 0;
       padding: 16px;
     }
 
@@ -266,9 +297,9 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     h3 {
-      margin: 4px 0 0;
+      margin: 0;
       color: var(--text);
-      font-size: 1.22rem;
+      font-size: 1.02rem;
       font-weight: 900;
       letter-spacing: -0.035em;
       line-height: 1.1;
@@ -315,11 +346,11 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .service-row {
-      margin-top: 6px;
-      padding: 12px;
-      border-radius: 18px;
-      border: 1px solid rgba(99, 102, 241, 0.14);
-      background: rgba(255, 255, 255, 0.94);
+      margin-top: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
     }
 
     .service-row span {
@@ -335,7 +366,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .footer-row {
-      padding-top: 6px;
+      padding-top: 0;
     }
 
     ion-button {

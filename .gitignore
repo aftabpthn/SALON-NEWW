@@ -42,5 +42,6 @@ Thumbs.db
 .codex-runtime/
 outputs/
 happy-hours-control-tower-*.zip
+*.rar
 staff-app/apk-output/
 staff-app/mobile-attendance-feature-20260721/

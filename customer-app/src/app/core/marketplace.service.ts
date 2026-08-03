@@ -63,6 +63,8 @@ export class MarketplaceService {
   readonly salonModeContext = this.salonModeContextStore.asReadonly();
   private favoritesLoaded = false;
   private savedSalonsLoaded = false;
+  private businessesRequestCounter = 0;
+  private publicBusinessesLoadedAt = 0;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {
     try {
@@ -123,15 +125,24 @@ export class MarketplaceService {
 
   async loadPublicBusinesses(params: SearchBusinessesParams = {}): Promise<Business[]> {
     return this.run("Unable to load businesses", async () => {
+      const isDefault = Object.keys(params).length === 0;
+      if (isDefault && this.publicBusinessesLoadedAt > Date.now() - 5 * 60_000 && this.businesses().length) {
+        return this.businesses();
+      }
+      const requestId = ++this.businessesRequestCounter;
       const rows = (await firstValueFrom(this.api.listPublicBusinesses(params))).map((business) => this.normalizeBusiness(business));
+      if (requestId !== this.businessesRequestCounter) return this.businesses();
       this.businesses.set(rows);
+      if (isDefault) this.publicBusinessesLoadedAt = Date.now();
       return rows;
     });
   }
 
   async searchBusinesses(params: SearchBusinessesParams = {}): Promise<Business[]> {
     return this.run("Search service is unavailable. Please try again.", async () => {
+      const requestId = ++this.businessesRequestCounter;
       const rows = (await firstValueFrom(this.api.searchPublicBusinesses(params))).map((business) => this.normalizeBusiness(business));
+      if (requestId !== this.businessesRequestCounter) return this.businesses();
       this.businesses.set(rows);
       return rows;
     });

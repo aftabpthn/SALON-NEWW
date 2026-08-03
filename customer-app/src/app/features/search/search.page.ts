@@ -1240,9 +1240,70 @@ interface ProfessionalResult {
         background: var(--primary-soft);
       }
 
-      .premium-result-row,
       .result-meta {
         display: none;
+      }
+
+      .premium-result-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: -2px 0 4px;
+        padding: 8px 10px;
+        border: 1px solid rgba(226, 232, 240, 0.92);
+        border-radius: 14px;
+        background: #FFFFFF;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+      }
+
+      .premium-result-row > div {
+        min-width: 0;
+        display: grid;
+        gap: 1px;
+      }
+
+      .premium-result-row strong {
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 900;
+        line-height: 1.2;
+      }
+
+      .premium-result-row span {
+        color: var(--muted);
+        font-size: 0.71rem;
+        font-weight: 750;
+        line-height: 1.3;
+      }
+
+      .premium-result-row span button {
+        min-height: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--primary);
+        font: inherit;
+        font-weight: 900;
+      }
+
+      .premium-map-switch {
+        flex: 0 0 auto;
+        min-height: 32px;
+        padding: 0 10px;
+        border: 1px solid rgba(99, 102, 241, 0.18);
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-size: 0.72rem;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .premium-map-switch ion-icon {
+        font-size: 0.92rem;
       }
 
       .results {
@@ -2584,6 +2645,8 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private panStart: { x: number; y: number; center: { lat: number; lng: number } } | null = null;
   private routeSubscription?: Subscription;
   private visualViewportListener?: () => void;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchSequence = 0;
   readonly keyboardOpen = signal(false);
   readonly inputFocused = signal(false);
   readonly mapCenter = signal<{ lat: number; lng: number }>(this.defaultCenter);
@@ -2829,6 +2892,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   ngOnDestroy() {
     this.routeSubscription?.unsubscribe();
+    if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.visualViewportListener && typeof window !== "undefined" && window.visualViewport) {
       window.visualViewport.removeEventListener("resize", this.visualViewportListener);
       window.visualViewport.removeEventListener("scroll", this.visualViewportListener);
@@ -2880,7 +2944,12 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   setQuery(value: string) {
     this.query.set(value);
-    void this.executeSearch();
+    this.scheduleSearch();
+  }
+
+  private scheduleSearch() {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => void this.executeSearch(), 300);
   }
 
   setMode(value: SearchMode) {
@@ -3089,6 +3158,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   async executeSearch() {
+    const sequence = ++this.searchSequence;
     const query = this.query().trim();
     const filters = this.activeFilters();
     const shouldSortByDistance = this.hasUsableLocation() && !!query && this.sort() === "recommended";
@@ -3107,6 +3177,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       staffGender: filters.includes("female") ? "female" : filters.includes("male") ? "male" : undefined,
       sort: this.apiSort(shouldSortByDistance)
     }).then((rows) => {
+      if (sequence !== this.searchSequence) return;
       if (!this.selectedBusiness() || !rows.some((business) => business.id === this.selectedBusiness()?.id)) {
         this.selectedBusiness.set(rows[0] ?? null);
       }
