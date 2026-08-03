@@ -282,7 +282,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .edit-profile-page .hero-card,
     .edit-profile-page .editor-card {
-      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
     }
 
     .edit-profile-page .hero-card *,
@@ -296,7 +296,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         transform: none;
         filter: none;
         animation-play-state: running;
-        box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
+        box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
       }
 
       .edit-profile-page .hero-card:hover ion-icon,
@@ -508,7 +508,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       background:
         linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
       box-shadow:
-        0 14px 32px rgba(16, 24, 40, 0.09),
+        0 14px 32px rgba(28, 28, 28, 0.09),
         inset 0 1px 0 rgba(255, 255, 255, 0.84);
       --background: transparent;
       --padding-start: 16px;
@@ -550,7 +550,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .delete-input-row:focus-within {
       border-color: rgba(99, 102, 241, 0.58);
       box-shadow:
-        0 14px 30px rgba(16, 24, 40, 0.1),
+        0 14px 30px rgba(28, 28, 28, 0.1),
         0 0 0 4px rgba(99, 102, 241, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }

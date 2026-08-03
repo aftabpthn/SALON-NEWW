@@ -249,7 +249,7 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       height: 32px;
       border-radius: 10px;
       border: 1px solid rgba(99, 102, 241, 0.2);
-      background: rgba(255, 255, 255, 0.7);
+      background: var(--glass);
       color: var(--text);
       display: grid;
       place-items: center;

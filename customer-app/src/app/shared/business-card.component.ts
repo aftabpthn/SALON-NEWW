@@ -85,8 +85,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: #FFFFFF;
-      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.05);
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(28, 28, 28, 0.05);
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
     }
@@ -102,7 +102,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .business-card.highlighted {
       border-color: rgba(99, 102, 241, 0.62);
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.16), 0 0 36px rgba(99, 102, 241, 0.14);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.16), 0 0 36px rgba(99, 102, 241, 0.14);
     }
 
     .cover {
@@ -134,7 +134,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       position: absolute;
       inset: 0;
       content: "";
-      background: linear-gradient(180deg, rgba(16, 24, 40, 0.02), rgba(16, 24, 40, 0.28));
+      background: linear-gradient(180deg, rgba(28, 28, 28, 0.02), rgba(28, 28, 28, 0.28));
       pointer-events: none;
     }
 
@@ -147,12 +147,12 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .business-card.variant-personal {
-      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.05);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.05);
     }
 
     .business-card.variant-discovery {
       border-color: rgba(99, 102, 241, 0.2);
-      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.11);
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.11);
     }
 
     .cover-fallback {
@@ -172,7 +172,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       display: grid;
       place-items: center;
       border-radius: 12px;
-      background: #ffffff;
+      background: var(--surface);
       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.14);
       color: #6366F1;
       font-size: 1rem;
@@ -194,7 +194,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       top: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
     }
 
     .cover-actions {
@@ -218,8 +218,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.88);
-      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
+      background: var(--glass);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
       backdrop-filter: none;
     }
 
@@ -234,7 +234,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       bottom: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 6px 16px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
     }
 
     .content {
@@ -781,7 +781,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         width: 100%;
         min-width: 0;
         border-radius: 18px;
-        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
+        box-shadow: 0 8px 22px rgba(28, 28, 28, 0.08);
       }
 
       .business-card.variant-discovery .cover {

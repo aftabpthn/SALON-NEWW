@@ -167,20 +167,20 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .notif-menu summary { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 0; color: #06172b; background: transparent; cursor: pointer; list-style: none; box-shadow: none; }
     .notif-menu summary::-webkit-details-marker { display: none; }
     .notif-menu ion-icon { font-size: 1.18rem; filter: drop-shadow(0.7px 0 0 #06172b); }
-    .notif-menu-panel { position: absolute; z-index: 10; top: calc(100% + 8px); right: 0; width: 170px; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: #FFFFFF; box-shadow: 0 18px 40px rgba(16, 24, 40, 0.14); }
-    .notif-menu-panel button { width: 100%; min-height: 42px; padding: 0 14px; border: 0; border-bottom: 1px solid var(--border); color: var(--brand-950); background: #FFFFFF; font-size: 0.8rem; font-weight: 850; text-align: left; }
+    .notif-menu-panel { position: absolute; z-index: 10; top: calc(100% + 8px); right: 0; width: 170px; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); box-shadow: 0 18px 40px rgba(28, 28, 28, 0.14); }
+    .notif-menu-panel button { width: 100%; min-height: 42px; padding: 0 14px; border: 0; border-bottom: 1px solid var(--border); color: var(--brand-950); background: var(--surface); font-size: 0.8rem; font-weight: 850; text-align: left; }
     .notif-menu-panel button:last-child { border-bottom: 0; }
     .notif-menu-panel button:disabled { color: var(--muted); opacity: 0.55; }
 
     .inbox-actions { display: grid; gap: 10px; }
     .pill-row { display: flex; flex-wrap: wrap; gap: 7px; }
-    .pill { min-height: 34px; padding: 0 15px; border: 1px solid rgba(99, 102, 241, 0.18); border-radius: 999px; color: var(--muted); background: #FFFFFF; font-size: 0.74rem; font-weight: 850; cursor: pointer; }
+    .pill { min-height: 34px; padding: 0 15px; border: 1px solid rgba(99, 102, 241, 0.18); border-radius: 999px; color: var(--muted); background: var(--surface); font-size: 0.74rem; font-weight: 850; cursor: pointer; }
     .pill.active { color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary)); border-color: transparent; }
     .button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .button-row ion-button { min-height: 40px; margin: 0; font-size: 0.76rem; --border-radius: 999px; }
 
     .wallet-content-grid { display: grid; gap: 16px; align-items: start; min-width: 0; }
-    .wallet-activity, .wallet-guide, .wallet-state { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: #FFFFFF; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.08); }
+    .wallet-activity, .wallet-guide, .wallet-state { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 14px 36px rgba(28, 28, 28, 0.08); }
     .wallet-activity { overflow: hidden; }
     .wallet-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: clamp(18px, 3vw, 26px); border-bottom: 1px solid var(--border); }
     .wallet-section-heading p, .wallet-section-heading h2 { margin: 0; }
@@ -188,13 +188,13 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .wallet-transactions { display: grid; }
     .wallet-transaction { min-width: 0; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 17px clamp(16px, 3vw, 26px); cursor: pointer; }
     .wallet-transaction + .wallet-transaction { border-top: 1px solid rgba(203, 213, 225, 0.74); }
-    .wallet-transaction.unread { background: linear-gradient(145deg, rgba(255,255,255,0.98), rgba(231,240,248,0.9)); }
+    .wallet-transaction.unread { background: linear-gradient(145deg, var(--surface-elevated), var(--surface-soft)); }
     .transaction-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; color: #087443; background: #E8F8F0; font-size: 1.12rem; }
     .transaction-copy { min-width: 0; display: grid; gap: 3px; }
     .transaction-copy strong { color: var(--text); font-size: 0.9rem; font-weight: 850; line-height: 1.25; overflow-wrap: anywhere; }
     .transaction-copy span, .transaction-copy small { color: var(--muted); font-size: 0.73rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
 
-    .read-button { min-height: 36px; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 999px; color: var(--primary); background: rgba(255, 255, 255, 0.94); font-weight: 900; flex: 0 0 auto; }
+    .read-button { min-height: 36px; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 999px; color: var(--primary); background: var(--glass); font-weight: 900; flex: 0 0 auto; }
 
     .wallet-empty, .wallet-state { display: grid; justify-items: center; padding: clamp(32px, 7vw, 68px) clamp(20px, 5vw, 40px); text-align: center; }
     .wallet-empty { padding: clamp(28px, 6vw, 54px) clamp(18px, 4vw, 30px); }
@@ -207,7 +207,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .wallet-error .wallet-state-icon { color: #B42318; background: #FEECE9; }
 
     .wallet-loading { display: grid; gap: 16px; }
-    .wallet-skeleton { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: #FFFFFF; box-shadow: 0 14px 36px rgba(16, 24, 40, 0.08); }
+    .wallet-skeleton { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 14px 36px rgba(28, 28, 28, 0.08); }
     .skeleton-block { background: #EBEBEC; animation: wallet-skeleton 1.4s ease-in-out infinite; }
     .skeleton-balance { min-height: 180px; border-radius: clamp(18px, 4vw, 26px); }
     .skeleton-transactions { display: grid; gap: 14px; }

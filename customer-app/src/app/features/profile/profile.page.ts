@@ -324,10 +324,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.38), transparent 34%),
         linear-gradient(135deg, var(--brand-600) 0%, var(--primary) 48%, var(--brand-900) 100%);
       box-shadow:
-        0 28px 56px rgba(16, 24, 40, 0.22),
+        0 28px 56px rgba(28, 28, 28, 0.22),
         0 10px 22px rgba(99, 102, 241, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.58),
-        inset 0 -18px 34px rgba(16, 24, 40, 0.16);
+        inset 0 -18px 34px rgba(28, 28, 28, 0.16);
       transform: perspective(1100px) translate3d(0, 0, 0);
       transform-style: preserve-3d;
       backface-visibility: hidden;
@@ -344,7 +344,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       content: "";
       pointer-events: none;
       background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(16, 24, 40, 0.14)),
+        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(28, 28, 28, 0.14)),
         radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.3), transparent 20%);
       transform: translateZ(18px);
     }
@@ -389,7 +389,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     .pass-card ion-icon {
       flex: 0 0 auto;
       font-size: 2.4rem;
-      filter: drop-shadow(0 10px 16px rgba(16, 24, 40, 0.24));
+      filter: drop-shadow(0 10px 16px rgba(28, 28, 28, 0.24));
       transform: translateZ(42px);
     }
 
@@ -397,10 +397,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       .pass-card:hover {
         transform: perspective(1100px) translate3d(0, -8px, 26px) rotateX(1.4deg) rotateY(-1.8deg) scale(1.01);
         box-shadow:
-          0 38px 82px rgba(16, 24, 40, 0.25),
+          0 38px 82px rgba(28, 28, 28, 0.25),
           0 16px 34px rgba(99, 102, 241, 0.24),
           inset 0 1px 0 rgba(255, 255, 255, 0.72),
-          inset 0 -20px 38px rgba(16, 24, 40, 0.16);
+          inset 0 -20px 38px rgba(28, 28, 28, 0.16);
         filter: saturate(1.06) brightness(1.03);
         animation-play-state: paused;
       }
@@ -583,12 +583,12 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
     }
 
     .menu-item.disabled {
-      color: rgba(16, 42, 67, 0.58);
-      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      background: var(--glass);
     }
 
     .menu-item.disabled ion-icon {
-      color: rgba(99, 102, 241, 0.58);
+      color: var(--muted);
     }
 
     .menu-item small {

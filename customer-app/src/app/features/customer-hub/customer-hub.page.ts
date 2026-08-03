@@ -2288,7 +2288,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: clamp(22px, 4vw, 32px);
       color: #FFFFFF;
       background: var(--brand-900);
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.2);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.2);
     }
 
     .wallet-balance-card::after {
@@ -2396,7 +2396,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .wallet-action-primary {
       color: var(--brand-950);
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .wallet-action-secondary {
@@ -2420,8 +2420,8 @@ const hubConfigs: Record<string, HubConfig> = {
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: #FFFFFF;
-      box-shadow: 0 14px 36px rgba(16, 24, 40, 0.08);
+      background: var(--surface);
+      box-shadow: 0 14px 36px rgba(28, 28, 28, 0.08);
     }
 
     .wallet-activity {
@@ -2817,7 +2817,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: var(--radius-lg);
       color: #FFFFFF;
       background: linear-gradient(145deg, var(--brand-900), var(--brand-800));
-      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.15);
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.15);
     }
 
     .support-heading .hero-icon { width: 52px; height: 52px; border-radius: 18px; font-size: 1.4rem; }
@@ -2850,7 +2850,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: var(--radius-md);
       color: #FFFFFF;
       background: var(--brand-900);
-      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.14);
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.14);
     }
     .support-booking-card > div { padding: 15px 16px 12px; }
     .support-booking-card h2 { margin: 9px 0 3px; color: #FFFFFF; font-size: 1.25rem; letter-spacing: -0.035em; overflow-wrap: anywhere; }
@@ -2859,7 +2859,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-booking-card dl div { min-width: 0; padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
     .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 800; }
     .support-booking-card dd { margin: 3px 0 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 750; overflow-wrap: anywhere; }
-    .support-booking-card .status-pill { color: var(--brand-900); background: #FFFFFF; text-transform: capitalize; }
+    .support-booking-card .status-pill { color: var(--text); background: var(--surface); text-transform: capitalize; }
     .support-booking-card .status-pill.closed { color: var(--muted); background: var(--surface-soft); }
     .support-form { display: grid; gap: 15px; }
     .field-group { min-width: 0; display: grid; gap: 7px; }
@@ -2924,7 +2924,7 @@ const hubConfigs: Record<string, HubConfig> = {
         flex: 0 0 40px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: #FFFFFF;
+        background: var(--surface);
       }
 
       .wallet-header-link span {

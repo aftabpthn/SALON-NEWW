@@ -356,7 +356,7 @@ interface ConsultationChatMessage {
       grid-template-rows: auto auto minmax(0, 1fr);
       min-height: calc(100dvh - 60px);
       color: var(--text);
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .chat-bot-header {
@@ -369,7 +369,7 @@ interface ConsultationChatMessage {
       align-items: center;
       padding: 10px 16px 8px;
       border-bottom: 1px solid rgba(99, 102, 241, 0.12);
-      background: rgba(255, 255, 255, 0.97);
+      background: var(--glass-strong);
       backdrop-filter: blur(16px);
     }
 
@@ -494,7 +494,7 @@ interface ConsultationChatMessage {
       min-width: 0;
       overflow: hidden;
       border-bottom: 1px solid rgba(99, 102, 241, 0.1);
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .goal-scroll-shell::after {
@@ -532,7 +532,7 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 999px;
       color: var(--brand-800);
-      background: #FFFFFF;
+      background: var(--surface);
       font-size: 0.8rem;
       font-weight: 800;
       white-space: nowrap;
@@ -631,8 +631,8 @@ interface ConsultationChatMessage {
       padding: 16px;
       border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
-      background: #FFFFFF;
-      box-shadow: 0 10px 28px rgba(16, 24, 40, 0.06);
+      background: var(--surface);
+      box-shadow: 0 10px 28px rgba(28, 28, 28, 0.06);
     }
 
     .answer-copy,
@@ -650,7 +650,7 @@ interface ConsultationChatMessage {
       margin-inline: 16px;
       padding: 10px 0 14px;
       border-block: 1px solid rgba(99, 102, 241, 0.12);
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .composer-label {
@@ -836,7 +836,7 @@ interface ConsultationChatMessage {
       border-radius: 10px;
       outline: none;
       color: var(--text);
-      background: #FFFFFF;
+      background: var(--surface);
       font: inherit;
       font-size: 0.82rem;
     }
@@ -862,7 +862,7 @@ interface ConsultationChatMessage {
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .photo-strip img {
@@ -878,8 +878,8 @@ interface ConsultationChatMessage {
       padding: 4px;
       border-radius: 50%;
       color: var(--brand-950);
-      background: #FFFFFF;
-      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.18);
+      background: var(--surface);
+      box-shadow: 0 2px 8px rgba(28, 28, 28, 0.18);
     }
 
     .inline-notice,
@@ -1132,7 +1132,7 @@ interface ConsultationChatMessage {
         overflow: hidden;
         border: 1px solid rgba(99, 102, 241, 0.12);
         border-radius: 20px;
-        box-shadow: 0 18px 48px rgba(16, 24, 40, 0.09);
+        box-shadow: 0 18px 48px rgba(28, 28, 28, 0.09);
       }
 
       .conversation-scroll {

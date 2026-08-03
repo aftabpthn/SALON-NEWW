@@ -77,7 +77,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
-      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
     }
 
     .salon-header {
@@ -135,7 +135,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       height: 36px;
       border-radius: 12px;
       border: 1px solid rgba(99, 102, 241, 0.24);
-      background: rgba(255, 255, 255, 0.7);
+      background: var(--glass);
       color: var(--text);
       display: grid;
       place-items: center;
@@ -157,7 +157,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 14px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.72);
+      background: var(--glass);
       font-size: 0.84rem;
       font-weight: 900;
       text-decoration: none;

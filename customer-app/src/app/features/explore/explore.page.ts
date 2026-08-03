@@ -189,7 +189,7 @@ import { Business } from "../../core/api.types";
       border: 1px solid var(--border);
       border-radius: 22px;
       background: var(--surface);
-      box-shadow: 0 12px 30px rgba(16, 24, 40, 0.08);
+      box-shadow: 0 12px 30px rgba(28, 28, 28, 0.08);
     }
 
     .explore-search-bar {
@@ -379,7 +379,7 @@ import { Business } from "../../core/api.types";
         radial-gradient(circle at 90% 8%, rgba(255, 255, 255, 0.15), transparent 34%),
         linear-gradient(145deg, var(--brand-800), var(--primary));
       text-decoration: none;
-      box-shadow: 0 16px 34px rgba(16, 24, 40, 0.14);
+      box-shadow: 0 16px 34px rgba(28, 28, 28, 0.14);
     }
 
     .feature-primary > span {
@@ -553,7 +553,7 @@ import { Business } from "../../core/api.types";
     }
 
     @media (hover: hover) and (pointer: fine) {
-      .explore-search-bar:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 28px rgba(16, 24, 40, 0.09); }
+      .explore-search-bar:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 28px rgba(28, 28, 28, 0.09); }
       .chip:hover { border-color: rgba(99, 102, 241, 0.4); background: var(--primary-soft); }
       .category-card:hover { border-color: rgba(99, 102, 241, 0.4); }
     }

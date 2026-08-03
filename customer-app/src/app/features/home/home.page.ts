@@ -385,7 +385,7 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.3);
       border-radius: 999px;
       color: var(--primary);
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
       font-weight: 900;
       white-space: nowrap;
     }
@@ -404,8 +404,8 @@ interface ConsultationChatMessage {
       overflow: visible;
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
-      background: #FFFFFF;
-      box-shadow: 0 12px 34px rgba(16, 24, 40, 0.06);
+      background: var(--surface);
+      box-shadow: 0 12px 34px rgba(28, 28, 28, 0.06);
     }
 
     .location-notice {
@@ -438,7 +438,7 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 28px;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
-      box-shadow: 0 28px 60px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      box-shadow: 0 28px 60px rgba(28, 28, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     }
 
     .consultation-topline,
@@ -514,7 +514,7 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.34);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.72);
+      background: var(--glass);
       font-weight: 900;
       white-space: nowrap;
     }
@@ -544,7 +544,7 @@ interface ConsultationChatMessage {
       padding: 10px 12px;
       border-radius: 16px 16px 16px 6px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.78);
+      background: var(--glass);
       border: 1px solid rgba(99, 102, 241, 0.22);
     }
 
@@ -582,7 +582,7 @@ interface ConsultationChatMessage {
       border-radius: 18px;
       padding: 13px 14px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.84);
+      background: var(--glass);
       font: inherit;
       line-height: 1.45;
       resize: vertical;
@@ -629,7 +629,7 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 18px;
       padding: 0;
-      background: #fff;
+      background: var(--surface);
       cursor: pointer;
     }
 
@@ -647,7 +647,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       padding: 3px;
       color: #fff;
-      background: rgba(16, 24, 40, 0.78);
+      background: rgba(28, 28, 28, 0.78);
       font-size: 0.62rem;
       font-weight: 900;
       text-align: center;
@@ -768,8 +768,8 @@ interface ConsultationChatMessage {
       padding: 10px;
       border: 1px solid var(--border);
       border-radius: 30px;
-      background: rgba(255, 255, 255, 0.86);
-      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+      background: var(--glass);
+      box-shadow: 0 8px 24px rgba(28, 28, 28, 0.06);
     }
 
     .home-search-wrap {
@@ -795,11 +795,11 @@ interface ConsultationChatMessage {
       border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
       color: var(--primary);
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
       font-size: 0.88rem;
       font-weight: 900;
       white-space: nowrap;
-      box-shadow: 0 10px 22px rgba(16, 24, 40, 0.08);
+      box-shadow: 0 10px 22px rgba(28, 28, 28, 0.08);
     }
 
     .home-control-button.map {
@@ -823,8 +823,8 @@ interface ConsultationChatMessage {
       padding: 8px;
       border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 20px;
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.14);
+      background: var(--glass-strong);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.14);
       backdrop-filter: blur(18px);
     }
 
@@ -887,7 +887,7 @@ interface ConsultationChatMessage {
         radial-gradient(circle at 10% 10%, rgba(99, 102, 241, 0.14), transparent 34%),
         linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9)),
         var(--surface);
-      box-shadow: 0 24px 58px rgba(16, 24, 40, 0.12);
+      box-shadow: 0 24px 58px rgba(28, 28, 28, 0.12);
     }
 
     .welcome-card h2,
@@ -937,7 +937,7 @@ interface ConsultationChatMessage {
       border-radius: 18px;
       color: var(--text);
       background: linear-gradient(145deg, #ffffff, var(--primary-soft));
-      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.08);
+      box-shadow: 0 12px 28px rgba(28, 28, 28, 0.08);
       text-decoration: none;
     }
 
@@ -984,7 +984,7 @@ interface ConsultationChatMessage {
       border-radius: var(--radius-md);
       color: inherit;
       background: linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 252, 0.94));
-      box-shadow: 0 18px 42px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
       text-decoration: none;
     }
 
@@ -1055,7 +1055,7 @@ interface ConsultationChatMessage {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: inherit;
-      background: #FFFFFF;
+      background: var(--surface);
       text-align: left;
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
@@ -1338,8 +1338,8 @@ interface ConsultationChatMessage {
         gap: 10px;
         padding: 12px;
         border-radius: 22px;
-        background: rgba(255, 255, 255, 0.9);
-        box-shadow: 0 12px 28px rgba(16, 24, 40, 0.08);
+        background: var(--glass);
+        box-shadow: 0 12px 28px rgba(28, 28, 28, 0.08);
       }
 
       .home-search-wrap ion-searchbar {
@@ -1478,7 +1478,7 @@ interface ConsultationChatMessage {
         margin-inline: 0;
         padding: 0;
         border-radius: 16px;
-        box-shadow: 0 7px 18px rgba(16, 24, 40, 0.08);
+        box-shadow: 0 7px 18px rgba(28, 28, 28, 0.08);
       }
       .home-page .home-search-wrap {
         position: relative;
@@ -1493,7 +1493,7 @@ interface ConsultationChatMessage {
         padding: 0;
         padding-right: 0;
         --padding-end: 112px;
-        --background: #ffffff;
+        --background: var(--surface);
         --border-radius: 13px;
         --box-shadow: none;
         --icon-color: #6B7C8E;
@@ -1510,7 +1510,7 @@ interface ConsultationChatMessage {
         gap: 0;
         padding: 0;
         border-radius: 22px;
-        background: #ffffff;
+        background: var(--surface);
         transform: translateY(-50%);
       }
       .home-page .home-control-button {
@@ -1640,7 +1640,7 @@ interface ConsultationChatMessage {
       border-radius: 26px;
       color: #fff;
       background: linear-gradient(145deg, var(--brand-800), var(--primary));
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.22);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.22);
     }
 
     .appointment-date {
@@ -1682,7 +1682,7 @@ interface ConsultationChatMessage {
       padding: 0 12px;
       border-radius: 999px;
       color: var(--brand-800);
-      background: #fff;
+      background: var(--surface);
       font-size: 0.78rem;
       font-weight: 950;
       text-decoration: none;
@@ -1708,7 +1708,7 @@ interface ConsultationChatMessage {
       color: var(--text);
       background: var(--surface);
       text-decoration: none;
-      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.06);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.06);
     }
 
     .account-shortcuts ion-icon { grid-row: span 2; color: var(--primary); font-size: 1.2rem; }
@@ -1742,7 +1742,7 @@ interface ConsultationChatMessage {
       border-radius: 18px;
       color: var(--text);
       background: var(--surface);
-      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.07);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.07);
       text-decoration: none;
     }
     .favourite-mini-card img,
@@ -1813,7 +1813,7 @@ interface ConsultationChatMessage {
       }
       .dashboard-hero .eyebrow,
       .dashboard-hero .page-title { display: none; }
-      .dashboard-hero .search-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 4px; border-radius: 18px; box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06); }
+      .dashboard-hero .search-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 4px; border-radius: 18px; box-shadow: 0 6px 18px rgba(28, 28, 28, 0.06); }
       .dashboard-hero .search-panel ion-button { width: 44px; min-width: 44px; height: 44px; font-size: 0; --padding-start: 0; --padding-end: 0; }
       .next-appointment {
         grid-template-columns: 54px minmax(0, 1fr) auto;
@@ -1822,9 +1822,9 @@ interface ConsultationChatMessage {
         padding: 12px;
         border-radius: 20px;
         color: var(--text);
-        background: #FFFFFF;
+        background: var(--surface);
         border-color: var(--border);
-        box-shadow: 0 8px 22px rgba(16, 24, 40, 0.06);
+        box-shadow: 0 8px 22px rgba(28, 28, 28, 0.06);
       }
       .next-appointment > a { grid-column: auto; justify-self: end; min-width: 60px; margin: 0; padding-inline: 10px; }
       .appointment-date { width: 54px; min-width: 54px; height: 58px; border-radius: 15px; color: var(--primary); background: var(--primary-soft); }

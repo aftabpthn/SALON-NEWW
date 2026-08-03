@@ -216,13 +216,13 @@ interface HelpItem {
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md);
       background: var(--surface);
-      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.07);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.07);
       transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
     }
 
     .search-field:focus-within {
       border-color: var(--focus);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16), 0 8px 22px rgba(16, 24, 40, 0.08);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16), 0 8px 22px rgba(28, 28, 28, 0.08);
     }
 
     .search-field ion-icon {
@@ -396,7 +396,7 @@ interface HelpItem {
       color: #FFFFFF;
       border-color: var(--brand-900);
       background: var(--brand-900);
-      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.16);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.16);
     }
 
     .category-button ion-icon {

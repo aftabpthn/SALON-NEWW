@@ -260,7 +260,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: 14px;
       background: var(--surface);
-      box-shadow: 0 4px 14px rgba(16, 24, 40, 0.04);
+      box-shadow: 0 4px 14px rgba(28, 28, 28, 0.04);
       transition: border-color 200ms ease, box-shadow 200ms ease, transform 180ms ease;
     }
 
@@ -475,7 +475,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: 18px;
       background: var(--surface);
-      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.05);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.05);
     }
 
     .state-card h2 {
@@ -566,7 +566,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .wishlist-card:hover {
         border-color: var(--border-strong);
-        box-shadow: 0 12px 28px rgba(16, 24, 40, 0.09);
+        box-shadow: 0 12px 28px rgba(28, 28, 28, 0.09);
       }
 
       .wishlist-card:hover .salon-image img {

@@ -551,7 +551,7 @@ import { Subscription } from "rxjs";
       background: #D1FAE5;
       font-size: 0.72rem;
       font-weight: 950;
-      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.12);
+      box-shadow: 0 8px 18px rgba(28, 28, 28, 0.12);
     }
 
     .hero-open-pill.closed {
@@ -674,7 +674,7 @@ import { Subscription } from "rxjs";
       padding: 12px;
       border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
-      background: rgba(255, 255, 255, 0.76);
+      background: var(--glass);
     }
 
     .primary-salon-strip div {
@@ -713,7 +713,7 @@ import { Subscription } from "rxjs";
     .primary-salon-action.secondary {
       color: var(--primary);
       border: 1px solid rgba(99, 102, 241, 0.22);
-      background: #FFFFFF;
+      background: var(--surface);
     }
 
     .trust-row {
@@ -881,8 +881,8 @@ import { Subscription } from "rxjs";
       border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 18px;
       color: var(--text);
-      background: #FFFFFF;
-      box-shadow: 0 8px 22px rgba(16, 24, 40, 0.07);
+      background: var(--surface);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.07);
       text-align: left;
       cursor: pointer;
     }
@@ -923,7 +923,7 @@ import { Subscription } from "rxjs";
       border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 999px;
       color: var(--brand-800);
-      background: #FFFFFF;
+      background: var(--surface);
       font-size: 0.78rem;
       font-weight: 850;
     }
@@ -942,7 +942,7 @@ import { Subscription } from "rxjs";
       border-radius: 12px;
       outline: none;
       color: var(--text);
-      background: #FFFFFF;
+      background: var(--surface);
       font: inherit;
       font-size: 0.84rem;
       line-height: 1.35;
@@ -965,7 +965,7 @@ import { Subscription } from "rxjs";
       align-items: center;
       justify-items: center;
       padding: 16px;
-      background: rgba(16, 24, 40, 0.42);
+      background: rgba(28, 28, 28, 0.42);
       backdrop-filter: blur(8px);
     }
 
@@ -979,8 +979,8 @@ import { Subscription } from "rxjs";
       overflow: auto;
       padding: 24px 18px 18px;
       border-radius: 26px;
-      background: #FFFFFF;
-      box-shadow: 0 24px 70px rgba(16, 24, 40, 0.28);
+      background: var(--surface);
+      box-shadow: 0 24px 70px rgba(28, 28, 28, 0.28);
     }
 
     .service-popup-close {
@@ -1033,10 +1033,10 @@ import { Subscription } from "rxjs";
       width: 106px;
       height: 92px;
       border-radius: 20px;
-      background-color: #EEF2FF;
+      background-color: var(--primary-soft, #EEF2FF);
       background-position: center;
       background-size: cover;
-      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 12px 28px rgba(28, 28, 28, 0.1);
     }
 
     .service-popup-section {
@@ -1136,11 +1136,11 @@ import { Subscription } from "rxjs";
       height: 92px;
       display: block;
       border-radius: 18px;
-      background-color: #EEF2FF;
+      background-color: var(--primary-soft, #EEF2FF);
       background-position: center;
       background-size: cover;
       background-repeat: no-repeat;
-      box-shadow: 0 12px 28px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 12px 28px rgba(28, 28, 28, 0.1);
       visibility: visible;
       opacity: 1;
     }
@@ -1157,11 +1157,11 @@ import { Subscription } from "rxjs";
       border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 12px;
       color: var(--primary);
-      background: #FFFFFF;
+      background: var(--surface);
       font-size: 0.86rem;
       font-weight: 950;
       cursor: pointer;
-      box-shadow: 0 10px 20px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 10px 20px rgba(28, 28, 28, 0.1);
       visibility: visible;
       opacity: 1;
       z-index: 2;
@@ -1671,8 +1671,8 @@ import { Subscription } from "rxjs";
       border: 1px solid var(--border);
       border-radius: 15px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 7px 18px rgba(16, 24, 40, 0.07);
+      background: var(--glass);
+      box-shadow: 0 7px 18px rgba(28, 28, 28, 0.07);
       text-decoration: none;
       scroll-snap-align: start;
     }

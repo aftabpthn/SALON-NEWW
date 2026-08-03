@@ -166,7 +166,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       padding: 9px 6px;
       border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
-      background: rgba(255, 255, 255, 0.58);
+      background: var(--glass);
     }
 
     .feature-grid strong,

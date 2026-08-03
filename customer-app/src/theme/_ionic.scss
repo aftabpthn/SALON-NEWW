@@ -1,13 +1,13 @@
 ion-toolbar {
-  --background: rgba(255, 255, 255, 0.9);
+  --background: var(--customer-glass, rgba(255, 255, 255, 0.9));
   --color: var(--color-text-primary);
   --border-color: var(--color-border-default);
 }
 
 ion-searchbar {
-  --background: rgba(255, 255, 255, 0.92);
+  --background: var(--customer-surface, rgba(255, 255, 255, 0.92));
   --border-radius: 22px;
-  --box-shadow: 0 16px 36px rgba(16, 24, 40, 0.1);
+  --box-shadow: 0 16px 36px rgba(28, 28, 28, 0.1);
   --color: var(--color-text-primary);
   --placeholder-color: var(--color-text-muted);
 }

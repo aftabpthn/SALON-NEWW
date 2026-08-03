@@ -263,8 +263,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       min-height: 58px;
       padding: 8px 14px;
       border-bottom: 1px solid rgba(99, 102, 241, 0.18);
-      background: rgba(255, 255, 255, 0.97);
-      box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+      background: var(--glass-strong);
+      box-shadow: 0 8px 24px rgba(28, 28, 28, 0.08);
       backdrop-filter: blur(18px);
     }
 
@@ -296,7 +296,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       align-items: center;
       gap: 5px;
       color: var(--primary);
-      background: #ffffff;
+      background: var(--surface);
       font-size: 0.78rem;
       font-weight: 800;
       cursor: pointer;
@@ -401,11 +401,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     ion-tab-bar {
-      --background: rgba(255, 255, 255, 0.96);
+      --background: var(--glass);
       --border: 1px solid rgba(99, 102, 241, 0.18);
       min-height: calc(62px + env(safe-area-inset-bottom));
       padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-      box-shadow: 0 -12px 32px rgba(16, 24, 40, 0.12);
+      box-shadow: 0 -12px 32px rgba(28, 28, 28, 0.12);
       backdrop-filter: blur(18px);
     }
 
@@ -478,7 +478,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .mobile-brand strong {
-      color: #1d1307;
+      color: var(--text);
       font-size: 0.92rem;
       line-height: 1.1;
     }
@@ -505,8 +505,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(17, 24, 39, 0.1);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+      background: var(--glass);
+      box-shadow: 0 8px 18px rgba(28, 28, 28, 0.08);
     }
 
     .mobile-menu-backdrop {
@@ -532,10 +532,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       overflow: auto;
-      background:
-        radial-gradient(circle at top right, rgba(255,255,255,0.52), transparent 22%),
-        linear-gradient(180deg, rgba(255,255,255,0.99), rgba(241,245,249,0.96));
-      box-shadow: 0 24px 54px rgba(16, 24, 40, 0.14);
+      background: var(--glass-strong);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.14);
     }
 
     .menu-sheet-head {
@@ -555,7 +553,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .menu-sheet-head h2 {
       margin: 0;
-      color: #1d1307;
+      color: var(--text);
       font-size: 1.15rem;
       letter-spacing: -0.03em;
     }
@@ -567,7 +565,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--brand-800);
-      background: rgba(255,255,255,0.86);
+      background: var(--glass);
       font-weight: 900;
       text-decoration: none;
     }
@@ -590,7 +588,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 12px;
       border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 16px;
-      background: rgba(255,255,255,0.76);
+      background: var(--glass);
     }
 
     .menu-insight-strip span {
@@ -602,7 +600,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .menu-insight-strip strong {
-      color: #1d1307;
+      color: var(--text);
       font-size: 0.9rem;
       line-height: 1.1;
     }
@@ -613,8 +611,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 12px;
       border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
-      background: radial-gradient(circle at 0 0, rgba(255,255,255,0.7), transparent 38%), rgba(255,255,255,0.86);
-      box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+      background: var(--glass);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.08);
     }
 
     .menu-avatar {
@@ -639,7 +637,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .menu-profile-card strong,
     .menu-profile-card small,
     .menu-profile-card a {
-      color: #1d1307;
+      color: var(--text);
     }
 
     .menu-profile-card small {
@@ -658,8 +656,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 0 12px;
       border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
-      color: #1d1307;
-      background: rgba(255,255,255,0.8);
+      color: var(--text);
+      background: var(--glass);
       text-decoration: none;
       font-weight: 900;
     }
@@ -674,7 +672,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 10px;
       min-height: 48px;
       border-bottom: 1px solid rgba(99, 102, 241, 0.12);
-      color: #3a2713;
+      color: var(--text);
       text-decoration: none;
       font-weight: 850;
     }
@@ -701,7 +699,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 24px;
       border: 1px solid rgba(17, 24, 39, 0.16);
       border-radius: 24px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       box-shadow: var(--shadow-card);
       backdrop-filter: blur(18px);
       animation: aura-gate-panel 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -764,7 +762,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         border: 1px solid rgba(17, 24, 39, 0.14);
         border-radius: 999px;
         background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.84));
-        box-shadow: 0 18px 42px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        box-shadow: 0 18px 42px rgba(28, 28, 28, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
         backdrop-filter: blur(24px);
         transform: translateX(-50%);
         animation: aura-web-nav-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -832,7 +830,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
       .nav-links a:hover {
         color: var(--text);
-        background: #ffffff;
+        background: var(--surface);
         transform: translateY(-1px);
       }
 
@@ -851,7 +849,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         min-height: 44px;
         border: 1px solid var(--border);
         color: var(--text);
-        background: rgba(255, 255, 255, 0.72);
+        background: var(--glass);
         text-decoration: none;
         transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast), box-shadow var(--motion-fast);
       }
@@ -887,14 +885,14 @@ import { MarketplaceService } from "../../core/marketplace.service";
       .icon-link:hover {
         border-color: rgba(99, 102, 241, 0.32);
         color: var(--primary);
-        background: #ffffff;
+        background: var(--surface);
         transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(16, 24, 40, 0.09);
+        box-shadow: 0 12px 24px rgba(28, 28, 28, 0.09);
       }
 
       .brand:hover .brand-mark {
         transform: rotate(-3deg) scale(1.04);
-        box-shadow: 0 14px 30px rgba(16, 24, 40, 0.14);
+        box-shadow: 0 14px 30px rgba(28, 28, 28, 0.14);
       }
     }
 

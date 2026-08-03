@@ -286,7 +286,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       background:
         radial-gradient(circle at top left, rgba(99, 102, 241, 0.14), transparent 32%),
         radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 34%),
-        linear-gradient(180deg, #FFFFFF, #FFFFFF 58%, #F4F4F2);
+        linear-gradient(180deg, var(--surface), var(--surface) 58%, var(--surface-soft));
     }
 
     .auth-card {
@@ -297,9 +297,9 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96) 44%, rgba(231, 240, 248, 0.9)),
-        #FFFFFF;
-      box-shadow: 0 30px 80px rgba(16, 24, 40, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        linear-gradient(145deg, var(--glass-strong), var(--surface) 44%, var(--surface-soft)),
+        var(--surface);
+      box-shadow: 0 30px 80px rgba(28, 28, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.35);
     }
 
     .brand-mark {
@@ -311,7 +311,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       border-radius: 20px;
       color: var(--primary);
       background: rgba(99, 102, 241, 0.12);
-      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 18px 34px rgba(16, 24, 40, 0.1);
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 18px 34px rgba(28, 28, 28, 0.1);
       font-size: 1.55rem;
     }
 
@@ -395,7 +395,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
     }
 
     ion-item {
@@ -429,7 +429,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.88);
+      background: var(--glass);
       font: inherit;
       font-weight: 800;
       outline: none;
@@ -451,7 +451,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       --border-radius: 999px;
       --color: var(--text);
       --color-activated: var(--text);
-      --background: rgba(255, 255, 255, 0.94);
+      --background: var(--glass);
       --background-activated: var(--primary-soft);
       --background-hover: var(--surface-soft);
       min-height: 50px;
@@ -544,10 +544,10 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       --border-style: solid;
       --color: var(--primary);
       --color-activated: var(--primary);
-      --background: rgba(255, 255, 255, 0.94);
+      --background: var(--glass);
       --background-hover: var(--primary-soft);
       --background-activated: rgba(99, 102, 241, 0.16);
-      --box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+      --box-shadow: 0 8px 18px rgba(28, 28, 28, 0.08);
       font-size: 0.82rem;
       font-weight: 900;
       letter-spacing: 0;
@@ -715,7 +715,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       padding: 0;
       border: 1px solid rgba(126, 110, 85, 0.28);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       color: var(--text);
       font-size: 1.24rem;
       font-weight: 900;
@@ -781,7 +781,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
           radial-gradient(circle at top center, rgba(255, 255, 255, 0.82), transparent 24%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94)),
           #FFF9EC;
-        box-shadow: 0 22px 56px rgba(16, 24, 40, 0.12), inset 0 1px 0 rgba(255,255,255,0.9);
+        box-shadow: 0 22px 56px rgba(28, 28, 28, 0.12), inset 0 1px 0 rgba(255,255,255,0.35);
       }
 
       .brand-mark {
@@ -790,7 +790,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         margin-bottom: 0;
         border-radius: 18px;
         background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255, 244, 215, 0.96));
-        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 14px 26px rgba(16, 24, 40, 0.09);
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 14px 26px rgba(28, 28, 28, 0.09);
       }
 
       h1 {
@@ -834,12 +834,12 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         border: 1px solid rgba(99, 102, 241, 0.18);
         border-radius: 22px;
         background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,250,239,0.78));
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
       }
 
       ion-list {
         border-radius: 18px;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
       }
 
       ion-item {
@@ -860,7 +860,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
       .dark-continue-button {
         min-height: 52px;
-        --box-shadow: 0 16px 30px rgba(16, 24, 40, 0.14);
+        --box-shadow: 0 16px 30px rgba(28, 28, 28, 0.14);
       }
 
       .social-stack {
@@ -874,10 +874,10 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       }
 
       .social-stack .choice-button {
-        --background: rgba(255, 255, 255, 0.96);
+        --background: var(--glass);
         --border-radius: 18px;
         --border-color: rgba(126, 110, 85, 0.22);
-        --box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+        --box-shadow: 0 10px 24px rgba(28, 28, 28, 0.08);
       }
 
       .social-stack .guest-button {
@@ -920,6 +920,19 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         max-height: min(82dvh, 620px);
         overflow-y: auto;
         border-radius: 26px;
+      }
+    }
+    @media (prefers-color-scheme: dark) {
+      .auth-shell {
+        background:
+          radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.2), transparent 34%),
+          linear-gradient(180deg, #121212 0%, #161618 100%);
+      }
+      .auth-card {
+        background:
+          linear-gradient(145deg, rgba(30, 30, 33, 0.97), rgba(38, 38, 41, 0.96)),
+          #1C1C1E;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
     }
   `]

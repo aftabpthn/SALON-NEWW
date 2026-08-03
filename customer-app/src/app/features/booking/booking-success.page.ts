@@ -117,7 +117,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 14px;
       border: 1px solid var(--border);
       border-radius: 20px;
-      background: rgba(255, 255, 255, 0.72);
+      background: var(--glass);
     }
 
     .appointment-primary {
@@ -196,7 +196,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: 14px;
       color: var(--primary);
-      background: rgba(255, 255, 255, 0.58);
+      background: var(--glass);
       font: inherit;
       font-size: 0.84rem;
       font-weight: 900;

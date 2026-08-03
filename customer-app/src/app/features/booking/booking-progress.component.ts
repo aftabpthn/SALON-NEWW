@@ -52,7 +52,7 @@ const BOOKING_PROGRESS_STEPS: BookingProgressStep[] = [
     .booking-progress-step { min-width: 0; min-height: 58px; display: grid; justify-items: center; align-content: center; gap: 5px; padding: 8px 6px; border: 1px solid var(--border); border-radius: 16px; color: var(--muted); background: var(--surface); font: inherit; font-weight: 900; text-align: center; }
     .booking-progress-step.completed { color: var(--primary); border-color: rgba(99, 102, 241, 0.28); background: var(--primary-soft); }
     .booking-progress-step.current { color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 12px 24px rgba(99, 102, 241, 0.18); }
-    .booking-progress-step.inactive { cursor: default; opacity: 1; background: #FFFFFF; }
+    .booking-progress-step.inactive { cursor: default; opacity: 1; background: var(--surface); }
     .booking-progress-step:disabled { pointer-events: none; }
     .progress-marker { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: rgba(102, 112, 133, 0.12); font-size: 0.76rem; line-height: 1; }
     .completed .progress-marker, .current .progress-marker { background: rgba(255, 255, 255, 0.2); }

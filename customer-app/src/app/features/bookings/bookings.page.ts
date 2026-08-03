@@ -243,7 +243,7 @@ type WaitlistDialog = {
     }
 
     ion-segment {
-      --background: rgba(255, 255, 255, 0.86);
+      --background: var(--glass);
       margin-bottom: 18px;
       border: 1px solid var(--border);
       border-radius: 999px;
@@ -441,14 +441,14 @@ type WaitlistDialog = {
       padding: 20px;
       border: 1px solid rgba(180, 35, 24, 0.16);
       border-radius: 24px;
-      background: #FFFFFF;
-      box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+      background: var(--surface);
+      box-shadow: 0 24px 60px rgba(28, 28, 28, 0.22);
     }
     .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
     .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
     .cancel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .cancel-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
-    .cancel-actions .neutral-action { border: 1px solid var(--border); color: var(--text); background: #FFFFFF; }
+    .cancel-actions .neutral-action { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
     .cancel-actions .destructive-action { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
     .waitlist-sheet {
@@ -462,7 +462,7 @@ type WaitlistDialog = {
       background:
         linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98) 48%, rgba(231, 240, 248, 0.92)),
         #FFFFFF;
-      box-shadow: 0 28px 70px rgba(16, 24, 40, 0.2);
+      box-shadow: 0 28px 70px rgba(28, 28, 28, 0.2);
     }
 
     .sheet-head {
@@ -505,7 +505,7 @@ type WaitlistDialog = {
       padding: 14px;
       border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 20px;
-      background: rgba(255, 255, 255, 0.72);
+      background: var(--glass);
     }
 
     .waitlist-summary ion-icon {
@@ -545,7 +545,7 @@ type WaitlistDialog = {
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.88);
+      background: var(--glass);
       font: inherit;
       font-weight: 800;
       outline: none;
@@ -614,7 +614,7 @@ type WaitlistDialog = {
       border: 1px solid var(--border);
       border-radius: 999px;
       color: var(--text);
-      background: #ffffff;
+      background: var(--surface);
       font-size: 1.55rem;
       line-height: 1;
     }
@@ -637,7 +637,7 @@ type WaitlistDialog = {
       gap: 10px;
       padding: 14px 18px;
       border-top: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
     }
 
     @media (hover: hover) and (pointer: fine) {

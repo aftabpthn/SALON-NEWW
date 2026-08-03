@@ -236,7 +236,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       border-radius: var(--radius-md);
       color: #FFFFFF;
       background: var(--brand-900);
-      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.15);
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.15);
     }
     .download-booking {
       position: absolute;
@@ -438,7 +438,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       margin-top: -4px;
       border-block: 1px solid var(--border);
       color: var(--text);
-      background: rgba(255, 255, 255, 0.58);
+      background: var(--glass);
     }
     .policy-strip summary {
       display: grid;
@@ -484,7 +484,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       display: grid;
       align-items: end;
       padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-      background: rgba(16, 24, 40, 0.34);
+      background: rgba(28, 28, 28, 0.34);
     }
     .cancel-sheet {
       width: min(100%, 520px);
@@ -494,14 +494,14 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       padding: 20px;
       border: 1px solid rgba(180, 35, 24, 0.16);
       border-radius: 24px;
-      background: #FFFFFF;
-      box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+      background: var(--surface);
+      box-shadow: 0 24px 60px rgba(28, 28, 28, 0.22);
     }
     .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
     .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
     .cancel-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .cancel-sheet-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
-    .neutral-action { border: 1px solid var(--border); color: var(--text); background: #FFFFFF; }
+    .neutral-action { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
     .destructive-confirm { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
     @media (min-width: 480px) {

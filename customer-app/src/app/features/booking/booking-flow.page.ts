@@ -413,7 +413,7 @@ type BookingFlowItem = {
     .service-choice { grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-height: 76px; gap: 12px; padding: 12px; transition: none; }
     .service-choice-copy { min-width: 0; display: grid; gap: 4px; }
     .service-choice-side { display: grid; justify-items: end; gap: 8px; color: inherit; }
-    .choice-action { min-width: 72px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.24); border-radius: 999px; color: var(--primary); background: #FFFFFF; font-size: 0.8rem; font-weight: 950; }
+    .choice-action { min-width: 72px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.24); border-radius: 999px; color: var(--primary); background: var(--surface); font-size: 0.8rem; font-weight: 950; }
     .service-choice.selected .choice-action { color: #FFFFFF; border-color: transparent; background: var(--primary); }
     .service-choice.selected, .staff-choice.selected { border-color: rgba(99, 102, 241, 0.48); background: var(--primary-soft); box-shadow: 0 12px 24px rgba(99, 102, 241, 0.12); }
     .service-choice h3 { margin: 0 0 4px; font-size: 1.06rem; letter-spacing: -0.035em; line-height: 1.15; }
@@ -426,7 +426,7 @@ type BookingFlowItem = {
     .any-avatar { display: grid; place-items: center; color: #FFFFFF; background: var(--primary); font-size: 1.35rem; }
     .staff-choice strong { display: block; line-height: 1.15; }
     .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.25; }
-    .staff-choice em { min-width: 68px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 999px; color: var(--primary); background: #FFFFFF; font-size: 0.78rem; font-weight: 900; text-align: center; }
+    .staff-choice em { min-width: 68px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 12px; border-radius: 999px; color: var(--primary); background: var(--surface); font-size: 0.78rem; font-weight: 900; text-align: center; }
     .staff-choice.selected em { color: #FFFFFF; background: var(--primary); }
     .check-slots-button { justify-self: end; min-height: 40px; padding: 0 13px; border: 1px solid rgba(99, 102, 241, 0.32); border-radius: 999px; color: var(--primary); background: var(--surface); font-size: 0.8rem; font-weight: 900; white-space: nowrap; }
     .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
@@ -436,7 +436,7 @@ type BookingFlowItem = {
     .service-schedule-head h3 { margin: 0 0 3px; font-size: 1rem; letter-spacing: -0.025em; }
     .service-schedule-head small { color: var(--muted); font-weight: 850; }
     .service-schedule-head > span { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-weight: 950; }
-    .schedule-context-card { position: sticky; top: 0; z-index: 16; display: grid; gap: 4px; align-items: center; margin-bottom: 12px; padding: 12px 14px; border-color: rgba(99, 102, 241, 0.24); background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(14px); }
+    .schedule-context-card { position: sticky; top: 0; z-index: 16; display: grid; gap: 4px; align-items: center; margin-bottom: 12px; padding: 12px 14px; border-color: rgba(99, 102, 241, 0.24); background: var(--glass); backdrop-filter: blur(14px); }
     .schedule-context-count span { color: var(--primary); font-size: 0.76rem; font-weight: 900; line-height: 1.2; }
     .schedule-context-copy { min-width: 0; display: grid; gap: 3px; }
     .schedule-context-copy strong, .schedule-context-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -490,7 +490,7 @@ type BookingFlowItem = {
     .booking-flow-skeleton { min-height: 320px; display: grid; align-content: start; gap: 14px; }
     .skeleton-slot-group { min-height: 158px; }
     .slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .slot { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border-color: var(--border); color: var(--text); background: #FFFFFF; font-size: 0.9rem; line-height: 1; transition: none; }
+    .slot { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border-color: var(--border); color: var(--text); background: var(--surface); font-size: 0.9rem; line-height: 1; transition: none; }
     .slot:not(:disabled):not(.selected):hover, .slot:not(:disabled):not(.selected):focus-visible { border-color: rgba(99, 102, 241, 0.42); }
     .slot.skeleton-slot { min-height: 45px; border-color: transparent; background: linear-gradient(90deg, rgba(232, 232, 232, 0.92), rgba(244, 244, 242, 0.98), rgba(232, 232, 232, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; pointer-events: none; }
     .slot.selected { position: relative; color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22); text-decoration: none; opacity: 1; }

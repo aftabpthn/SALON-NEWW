@@ -150,8 +150,8 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: 22px;
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 14px 34px rgba(16, 24, 40, 0.08);
+      background: var(--glass);
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.08);
     }
     .identity-avatar {
       width: 56px;
@@ -170,8 +170,8 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       gap: 0;
       border: 1px solid var(--border);
       border-radius: 24px;
-      background: #ffffff;
-      box-shadow: 0 16px 38px rgba(16, 24, 40, 0.08);
+      background: var(--surface);
+      box-shadow: 0 16px 38px rgba(28, 28, 28, 0.08);
     }
     .settings-section-heading {
       padding: 18px 18px 14px;

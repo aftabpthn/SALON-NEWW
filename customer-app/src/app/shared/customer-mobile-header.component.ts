@@ -25,7 +25,7 @@ import { IonBackButton, IonButtons, IonHeader, IonTitle, IonToolbar } from "@ion
       --min-height: 56px;
       --padding-start: 4px;
       --padding-end: 12px;
-      --background: rgba(255, 255, 255, 0.96);
+      --background: var(--glass);
       --border-width: 0;
       color: var(--text, #1C1C1C);
     }
