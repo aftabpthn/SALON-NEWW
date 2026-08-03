@@ -27,7 +27,7 @@ export function notFoundHandler(req, res, next) {
   if (req.method === "GET" && !req.originalUrl.startsWith("/api") && !req.originalUrl.includes(".")) {
     const indexPath = getClientIndexPath(req);
     if (indexPath) {
-      res.sendFile(indexPath);
+      res.sendFile(indexPath, { dotfiles: "allow" });
       return;
     }
     res.redirect(302, "/");

@@ -341,7 +341,7 @@ export function createApp() {
     app.use(express.static(clientDist));
     app.get(/^(?!\/api).*/, (_req, res) => {
       const indexPath = join(clientDist, "index.html");
-      res.sendFile(indexPath);
+      res.sendFile(indexPath, { dotfiles: "allow" });
     });
   }
 
@@ -861,7 +861,7 @@ export function createApp() {
       res.redirect(302, "/");
       return;
     }
-    res.sendFile(join(clientDist, "index.html"), (error) => {
+    res.sendFile(join(clientDist, "index.html"), { dotfiles: "allow" }, (error) => {
       if (error) next(error);
     });
   });
