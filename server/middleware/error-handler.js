@@ -30,6 +30,8 @@ export function notFoundHandler(req, res, next) {
       res.sendFile(indexPath);
       return;
     }
+    res.redirect(302, "/");
+    return;
   }
 
   const error = new Error(`Route not found: ${req.method} ${req.originalUrl}`);
