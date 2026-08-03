@@ -150,21 +150,6 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     this.refreshing.set(hasData);
     this.blockingError.set("");
     if (!hasData) this.optionalErrors.set([]);
-    try {
-      const dashboard = await this.staff.dashboard();
-      if (generation !== this.loadGeneration) return;
-      this.data.set(dashboard);
-    } catch (error) {
-      if (generation !== this.loadGeneration) return;
-      const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
-      if (!hasData || this.isStaffRecordError(message) || this.isSessionError(message)) this.blockingError.set(this.friendlyBlockingError(message));
-      else { this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]); this.refreshWarning.set(true); }
-      this.initialLoading.set(false);
-      this.refreshing.set(false);
-      return;
-    } finally {
-      if (generation === this.loadGeneration && !this.data()) { this.initialLoading.set(false); this.refreshing.set(false); }
-    }
 
     const canReadStaff = this.staff.hasPermission("read:staff");
     const canUseAttendance = this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "read:staff", "write:staff"]);
@@ -177,10 +162,34 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       { name: "overtime", request: this.staff.overtimeSummary(fresh) }
     );
     if (canReadStaff) modules.push({ name: "leave", request: this.staff.leaveBalances(fresh) });
-    const results = await Promise.allSettled(modules.map((module) => module.request));
+
+    const dashboardRequest = this.staff.dashboard();
+
+    const [dashboardResult, ...moduleResults] = await Promise.allSettled([
+      dashboardRequest,
+      ...modules.map((m) => m.request)
+    ]);
+
     if (generation !== this.loadGeneration) return;
+
+    if (dashboardResult.status === "fulfilled") {
+      this.data.set(dashboardResult.value);
+    } else {
+      const error = dashboardResult.reason;
+      const message = this.staff.error() || (error instanceof Error ? error.message : "Unable to load your staff workspace.");
+      if (!hasData || this.isStaffRecordError(message) || this.isSessionError(message)) {
+        this.blockingError.set(this.friendlyBlockingError(message));
+      } else {
+        this.optionalErrors.set(["Today’s core summary could not refresh; the last successful data remains visible."]);
+        this.refreshWarning.set(true);
+      }
+      this.initialLoading.set(false);
+      this.refreshing.set(false);
+      return;
+    }
+
     const errors: string[] = [];
-    results.forEach((result, index) => {
+    moduleResults.forEach((result, index) => {
       const name = modules[index].name;
       if (result.status === "rejected") { errors.push(this.moduleError(name)); return; }
       if (name === "enterprise") this.os.set(result.value as StaffEnterpriseOs);
@@ -189,6 +198,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       if (name === "leave") this.leaveBalances.set(result.value as StaffLeaveBalance[]);
       if (name === "preferences") this.preferences.set(result.value as StaffWorkspacePreferences);
     });
+
     this.optionalErrors.set(errors);
     this.refreshWarning.set(hasData && errors.length > 0);
     this.queuedActions.set(this.staff.offlineQueueSize());
