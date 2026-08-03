@@ -48,6 +48,15 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
             [pendingAction]="pendingMutation()"
             (actionSelected)="runAction($event)"
           />
+        } @else if (!blockingError()) {
+          <section class="dashboard-blocking-state" role="alert">
+            <span class="state-mark" aria-hidden="true">!</span>
+            <p class="eyebrow">Staff workspace</p>
+            <h1>Loading dashboard items…</h1>
+            <div class="row-actions">
+              <button type="button" class="link-button primary-action" [disabled]="refreshing()" (click)="load()">{{ refreshing() ? 'Refreshing…' : 'Retry' }}</button>
+            </div>
+          </section>
         }
       }
     </section>
@@ -75,10 +84,20 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
   readonly viewModel = computed(() => {
     const dashboard = this.data();
     if (!dashboard) return null;
-    return buildStaffDashboardViewModel({
-      user: this.staff.user(), dashboard, enterprise: this.os(), today: this.today(), overtime: this.overtime(), leaveBalances: this.leaveBalances(),
-      hasPermission: (permission) => this.staff.hasPermission(permission)
-    });
+    try {
+      return buildStaffDashboardViewModel({
+        user: this.staff.user(),
+        dashboard,
+        enterprise: this.os(),
+        today: this.today(),
+        overtime: this.overtime(),
+        leaveBalances: this.leaveBalances() || [],
+        hasPermission: (permission) => this.staff.hasPermission(permission)
+      });
+    } catch (error) {
+      console.error("Failed to build staff dashboard view model:", error);
+      return null;
+    }
   });
   readonly recommendationIdentity = computed(() => {
     const hero = this.viewModel()?.hero;

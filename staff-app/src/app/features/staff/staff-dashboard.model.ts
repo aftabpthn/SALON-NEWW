@@ -214,7 +214,7 @@ function alerts(input: ActionContext): DashboardAlert[] {
 function work(input: ActionContext): DashboardWork {
   const active = input.activeAppointment;
   if (active) {
-    const timer = input.enterprise?.serviceTimers.find((item) => item.appointmentId === active.id);
+    const timer = (input.enterprise?.serviceTimers || []).find((item) => item.appointmentId === active.id);
     const overrun = timer ? Math.max(0, timer.elapsedMinutes - timer.totalMinutes) : 0;
     return {
       mode: "active", tone: overrun ? "amber" : "sage", eyebrow: "Current service", title: "Assigned appointment",
@@ -227,7 +227,7 @@ function work(input: ActionContext): DashboardWork {
   const next = input.nextAppointment;
   if (next) {
     const status = String(next.status || "").trim().toLowerCase();
-    const timeline = input.enterprise?.timeline.find((item) => item.id === next.id);
+    const timeline = (input.enterprise?.timeline || []).find((item) => item.id === next.id);
     const waiting = ["arrived", "checked-in", "checked in", "queued"].includes(status);
     const delayed = timeline?.state === "late";
     const mode: DashboardWork["mode"] = waiting ? "waiting" : delayed ? "delayed" : "upcoming";
@@ -351,9 +351,9 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const ctx = context(input);
   const activeAlerts = alerts(ctx);
   const dashboardTools = orderedTools(input).slice(0, 6).map((item) => {
-    if (item.id === "leave") return { ...item, hint: `${input.leaveBalances.reduce((sum, balance) => sum + Number(balance.balance || 0), 0)} days available` };
-    if (item.id === "reports") return { ...item, hint: `${input.dashboard.summary.completedAppointments} completed today` };
-    if (item.id === "calendar" && input.overtime) return { ...item, hint: `${durationLabel(input.overtime.weekMinutes)} overtime this week` };
+    if (item.id === "leave") return { ...item, hint: `${(input.leaveBalances || []).reduce((sum, balance) => sum + Number(balance?.balance || 0), 0)} days available` };
+    if (item.id === "reports") return { ...item, hint: `${input.dashboard?.summary?.completedAppointments || 0} completed today` };
+    if (item.id === "calendar" && input.overtime) return { ...item, hint: `${durationLabel(input.overtime?.weekMinutes || 0)} overtime this week` };
     return item;
   });
   const heroModel = hero(ctx, activeAlerts);
@@ -370,27 +370,28 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     })
     .filter((action) => !heroModel.actions.some((heroAction) => heroAction.primary && sameAction(action, heroAction)));
   const overview: DashboardMetric[] = [
-    { label: "Appointments", value: String(input.dashboard.summary.todayAppointments), hint: input.dashboard.summary.todayAppointments ? "Assigned today" : "No bookings", route: "/staff/appointments" }
+    { label: "Appointments", value: String(input.dashboard?.summary?.todayAppointments || 0), hint: input.dashboard?.summary?.todayAppointments ? "Assigned today" : "No bookings", route: "/staff/appointments" }
   ];
   if (input.hasPermission("read:staff")) overview.push(
-    { label: "Completed", value: String(input.dashboard.summary.completedAppointments), hint: input.dashboard.summary.completedAppointments ? "Services finished" : "No services finished", route: "/staff/reports" },
+    { label: "Completed", value: String(input.dashboard?.summary?.completedAppointments || 0), hint: input.dashboard?.summary?.completedAppointments ? "Services finished" : "No services finished", route: "/staff/reports" },
     { label: "Open tasks", value: String(ctx.openTaskCount), hint: ctx.openTaskCount ? "Needs follow-up" : "All clear", route: "/staff/tasks" }
   );
   if (input.enterprise && input.hasPermission("read:appointments")) {
-    const unread = input.enterprise.notifications.filter((note) => String(note.status || "unread") !== "read").length;
+    const unread = (input.enterprise.notifications || []).filter((note) => String(note?.status || "unread") !== "read").length;
     overview.push({ label: "Alerts", value: String(activeAlerts.length), hint: activeAlerts.length ? `${unread || activeAlerts.length} to review` : "No alerts", route: "/staff/notifications" });
   }
   const orderedOverview = orderByIds(overview, roleProfile(input).overview, (metric) => metric.label);
   const performance: DashboardMetric[] = [];
-  if (input.hasPermission("read:staff") && input.enterprise) {
+  if (input.hasPermission("read:staff") && input.enterprise?.performance) {
+    const perf = input.enterprise.performance;
     performance.push(
-      { label: "Productivity", value: `${input.enterprise.performance.productivityScore}/100`, hint: "Current score", progress: input.enterprise.performance.productivityScore, progressLabel: `Productivity ${input.enterprise.performance.productivityScore} out of 100`, explanation: "Productivity uses the average connected daily score; completed services provide the fallback when daily records are unavailable." },
-      { label: "Services", value: String(input.enterprise.performance.completedServices || input.dashboard.summary.completedAppointments), hint: "Completed" },
-      { label: "Utilization", value: `${input.enterprise.performance.avgUtilization || 0}%`, hint: "Average utilization", progress: input.enterprise.performance.avgUtilization || 0, progressLabel: `Utilization ${input.enterprise.performance.avgUtilization || 0} percent` }
+      { label: "Productivity", value: `${perf.productivityScore || 0}/100`, hint: "Current score", progress: perf.productivityScore || 0, progressLabel: `Productivity ${perf.productivityScore || 0} out of 100`, explanation: "Productivity uses the average connected daily score; completed services provide the fallback when daily records are unavailable." },
+      { label: "Services", value: String(perf.completedServices || input.dashboard?.summary?.completedAppointments || 0), hint: "Completed" },
+      { label: "Utilization", value: `${perf.avgUtilization || 0}%`, hint: "Average utilization", progress: perf.avgUtilization || 0, progressLabel: `Utilization ${perf.avgUtilization || 0} percent` }
     );
   }
   if (FINANCIAL_PERMISSIONS.some(input.hasPermission)) {
-    const value = input.dashboard.summary.revenue;
+    const value = input.dashboard?.summary?.revenue;
     if (Number.isSafeInteger(value) && value >= 0) performance.push({ label: "Revenue", value: formatPaiseInr(value), hint: "Today’s sales", route: "/staff/business" });
   }
   const performanceOrder = ["Revenue", "Productivity", "Services", ...roleProfile(input).performance];
