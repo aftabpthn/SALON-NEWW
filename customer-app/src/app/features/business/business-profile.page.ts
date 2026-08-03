@@ -555,9 +555,9 @@ import { Subscription } from "rxjs";
     }
 
     .hero-open-pill.closed {
-      color: #991B1B;
+      color: #EF4444;
       border-color: rgba(248, 113, 113, 0.36);
-      background: #FEE2E2;
+      background: var(--error-soft);
     }
 
     .hero-business-name {

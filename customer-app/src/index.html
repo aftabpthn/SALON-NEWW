@@ -10,6 +10,15 @@
     <meta name="theme-color" content="#1C1C1C" />
     <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
+    <script>
+      // Restore the user's chosen theme before the app paints (no flash).
+      try {
+        var auraTheme = localStorage.getItem("aura-theme");
+        if (auraTheme === "light" || auraTheme === "dark") {
+          document.documentElement.setAttribute("data-theme", auraTheme);
+        }
+      } catch (e) {}
+    </script>
     <script src="assets/customer-firebase-config.js"></script>
   </head>
   <body>

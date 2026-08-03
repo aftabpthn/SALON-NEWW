@@ -475,7 +475,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .error-text {
       color: #EF4444;
-      background: #fff1f2;
+      background: var(--error-soft);
       border: 1px solid rgba(239, 68, 68, 0.16);
     }
 
@@ -506,10 +506,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 18px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94));
+        linear-gradient(145deg, var(--glass-strong), var(--surface-soft));
       box-shadow:
         0 14px 32px rgba(28, 28, 28, 0.09),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
       --background: transparent;
       --padding-start: 16px;
       --inner-padding-end: 16px;

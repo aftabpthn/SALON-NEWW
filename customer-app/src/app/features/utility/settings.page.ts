@@ -3,7 +3,7 @@ import { FormsModule } from "@angular/forms";
 import { Router } from "@angular/router";
 import { IonBackButton, IonButton, IonContent, IonIcon, IonToggle } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { fingerPrintOutline, phonePortraitOutline, trashOutline } from "ionicons/icons";
+import { contrastOutline, fingerPrintOutline, moonOutline, phonePortraitOutline, sunnyOutline, trashOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { AuthService } from "../../core/auth.service";
 import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../core/api.types";
@@ -56,6 +56,25 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
         @if (auth.error()) {
           <p class="error-text">{{ auth.error() }}</p>
         }
+
+        <section class="settings-card" aria-labelledby="appearance-settings-title">
+          <div class="settings-section-heading">
+            <p>Appearance</p>
+            <h2 id="appearance-settings-title">Choose your look</h2>
+          </div>
+          <div class="theme-switch-row" role="radiogroup" aria-label="App theme">
+            <button type="button" class="theme-option" [class.active]="themeMode === 'system'" role="radio" [attr.aria-checked]="themeMode === 'system'" (click)="setTheme('system')">
+              <ion-icon name="contrast-outline"></ion-icon><span>System</span>
+            </button>
+            <button type="button" class="theme-option" [class.active]="themeMode === 'light'" role="radio" [attr.aria-checked]="themeMode === 'light'" (click)="setTheme('light')">
+              <ion-icon name="sunny-outline"></ion-icon><span>Light</span>
+            </button>
+            <button type="button" class="theme-option" [class.active]="themeMode === 'dark'" role="radio" [attr.aria-checked]="themeMode === 'dark'" (click)="setTheme('dark')">
+              <ion-icon name="moon-outline"></ion-icon><span>Dark</span>
+            </button>
+          </div>
+          <p class="theme-hint">System follows your device setting. Light and Dark override it for this app only.</p>
+        </section>
 
         <section class="settings-card" aria-labelledby="security-settings-title">
           <div class="settings-section-heading device-heading">
@@ -192,7 +211,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       justify-content: space-between;
       gap: 18px;
       padding: 16px 18px;
-      border-top: 1px solid rgba(203, 213, 225, 0.74);
+      border-top: 1px solid var(--border);
     }
     .settings-list .setting-row:first-child { border-top: 0; }
     .security-row { border-top: 0; }
@@ -217,7 +236,47 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     }
     .device-row {
       padding: 14px 18px;
-      border-top: 1px solid rgba(203, 213, 225, 0.74);
+      border-top: 1px solid var(--border);
+    }
+    .theme-switch-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 16px 18px 0;
+    }
+    .theme-option {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 74px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 900;
+      cursor: pointer;
+      transition: border-color var(--motion-fast), background var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
+    }
+    .theme-option ion-icon { font-size: 1.35rem; }
+    .theme-option:hover { border-color: rgba(99, 102, 241, 0.4); }
+    .theme-option:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .theme-option.active {
+      color: #FFFFFF;
+      border-color: var(--primary);
+      background: linear-gradient(135deg, var(--primary), var(--primary-2));
+      box-shadow: 0 10px 22px rgba(99, 102, 241, 0.22);
+    }
+    .theme-hint {
+      margin: 0;
+      padding: 10px 18px 18px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 750;
+      line-height: 1.45;
     }
     .device-row div { min-width: 0; flex: 1; }
     .settings-card > ion-button {
@@ -232,7 +291,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     }
     .empty-state { color: var(--muted); background: var(--surface-soft); }
     .notice-text { color: var(--primary); background: var(--primary-soft); border: 1px solid rgba(99, 102, 241, 0.22); }
-    .error-text { color: #EF4444; background: #fff1f2; border: 1px solid rgba(225, 29, 72, 0.16); }
+    .error-text { color: #EF4444; background: var(--error-soft); border: 1px solid rgba(225, 29, 72, 0.16); }
     .settings-card .empty-state { margin: 14px 18px 0; }
     strong, span { display: block; }
     strong { margin-bottom: 5px; color: var(--brand-950); font-weight: 900; }
@@ -255,9 +314,16 @@ export class SettingsPage implements OnInit {
   };
   devices: CustomerDeviceSession[] = [];
   message = "";
+  themeMode: "system" | "light" | "dark" = "system";
 
   constructor(readonly marketplace: MarketplaceService, readonly auth: AuthService, private readonly router: Router) {
-    addIcons({ fingerPrintOutline, phonePortraitOutline, trashOutline });
+    addIcons({ contrastOutline, fingerPrintOutline, moonOutline, phonePortraitOutline, sunnyOutline, trashOutline });
+    try {
+      const saved = localStorage.getItem("aura-theme");
+      if (saved === "light" || saved === "dark") this.themeMode = saved;
+    } catch {
+      this.themeMode = "system";
+    }
   }
 
   backHref(): string {
@@ -278,6 +344,21 @@ export class SettingsPage implements OnInit {
 
   save() {
     void this.marketplace.updateCustomer({ notificationPreferences: this.preferences }).catch(() => undefined);
+  }
+
+  setTheme(mode: "system" | "light" | "dark") {
+    this.themeMode = mode;
+    try {
+      if (mode === "system") {
+        localStorage.removeItem("aura-theme");
+        document.documentElement.removeAttribute("data-theme");
+      } else {
+        localStorage.setItem("aura-theme", mode);
+        document.documentElement.setAttribute("data-theme", mode);
+      }
+    } catch {
+      // storage unavailable — theme still applies for this session
+    }
   }
 
   async toggleBiometric(event: CustomEvent) {

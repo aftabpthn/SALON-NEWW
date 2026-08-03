@@ -434,7 +434,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .explore-tab.tab-selected ion-icon {
-      color: var(--brand-800);
+      color: var(--primary-2);
       transform: scale(1.08);
     }
 
@@ -564,7 +564,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 0 12px;
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
-      color: var(--brand-800);
+      color: var(--primary-2);
       background: var(--glass);
       font-weight: 900;
       text-decoration: none;
@@ -734,7 +734,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border: 1px solid rgba(225, 29, 72, 0.16);
       border-radius: 16px;
       color: #EF4444;
-      background: #fff1f2;
+      background: var(--error-soft);
     }
 
     @media (min-width: 1024px) {

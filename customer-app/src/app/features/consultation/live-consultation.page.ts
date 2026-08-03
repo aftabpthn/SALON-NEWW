@@ -895,8 +895,8 @@ interface ConsultationChatMessage {
     }
 
     .error-text.inline-notice {
-      color: #991B1B;
-      background: #FEF2F2;
+      color: #EF4444;
+      background: var(--error-soft);
     }
 
     .consult-summary-grid,

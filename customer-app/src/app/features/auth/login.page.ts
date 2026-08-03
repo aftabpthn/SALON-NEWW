@@ -764,10 +764,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         align-items: stretch;
         place-items: stretch;
         padding: max(8px, var(--safe-top)) 8px max(10px, var(--safe-bottom));
-        background:
-          radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.18), transparent 34%),
-          radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.45), transparent 20%),
-          linear-gradient(180deg, #FFF9EC 0%, #F7E8CB 100%);
+        background: var(--auth-mobile-bg);
       }
 
       .auth-card {
@@ -777,11 +774,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         padding: 16px;
         border-radius: 26px;
         border-color: rgba(99, 102, 241, 0.3);
-        background:
-          radial-gradient(circle at top center, rgba(255, 255, 255, 0.82), transparent 24%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.94)),
-          #FFF9EC;
-        box-shadow: 0 22px 56px rgba(28, 28, 28, 0.12), inset 0 1px 0 rgba(255,255,255,0.35);
+        background: var(--auth-mobile-card);
+        box-shadow: var(--auth-mobile-card-shadow);
       }
 
       .brand-mark {
@@ -920,19 +914,6 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         max-height: min(82dvh, 620px);
         overflow-y: auto;
         border-radius: 26px;
-      }
-    }
-    @media (prefers-color-scheme: dark) {
-      .auth-shell {
-        background:
-          radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.2), transparent 34%),
-          linear-gradient(180deg, #121212 0%, #161618 100%);
-      }
-      .auth-card {
-        background:
-          linear-gradient(145deg, rgba(30, 30, 33, 0.97), rgba(38, 38, 41, 0.96)),
-          #1C1C1E;
-        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
     }
   `]

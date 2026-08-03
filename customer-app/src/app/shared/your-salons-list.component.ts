@@ -161,13 +161,14 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       border-radius: 12px;
       display: grid;
       place-items: center;
-      color: #FFFFFF;
-      background: linear-gradient(135deg, #f0f4f8, #dde6ee);
+      color: var(--text);
+      background: linear-gradient(135deg, var(--surface-soft), var(--surface-elevated));
       font-size: 0.82rem;
       font-weight: 1000;
     }
 
     .salon-initials.primary-badge {
+      color: #FFFFFF;
       background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 

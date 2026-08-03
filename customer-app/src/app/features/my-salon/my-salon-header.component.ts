@@ -100,9 +100,9 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
       gap: 5px;
       min-height: 34px;
       padding: 0 10px;
-      border: 1px solid rgba(159, 18, 57, 0.2);
+      border: 1px solid var(--ms-exit-border, rgba(159, 18, 57, 0.2));
       border-radius: 999px;
-      color: #9F1239;
+      color: var(--ms-exit, #9F1239);
       background: var(--glass);
       font-size: 0.76rem;
       font-weight: 950;
@@ -118,9 +118,6 @@ import { chevronBackOutline, exitOutline } from "ionicons/icons";
     .header-back:active, .header-brand:active, .header-action:active { transform: scale(0.98); }
     @media (prefers-reduced-motion: reduce) {
       .header-back, .header-brand, .header-action { transition: none; }
-    }
-    @media (prefers-color-scheme: dark) {
-      .header-action { border-color: rgba(253, 164, 175, 0.3); color: #FDA4AF; }
     }
     @media (max-width: 430px) {
       .header-copy strong { max-width: 150px; }
