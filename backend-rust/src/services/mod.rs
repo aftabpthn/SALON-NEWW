@@ -44,6 +44,7 @@ pub mod language_settings_service;
 pub mod laundry_service;
 pub mod live_consultation_service;
 pub mod marketing_advisor_service;
+pub mod marketing_lead_scoring_service;
 pub mod membership_auto_renew_service;
 pub mod membership_service;
 pub mod migration_adapter_service;

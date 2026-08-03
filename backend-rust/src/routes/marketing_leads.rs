@@ -16,7 +16,10 @@ use crate::{
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::marketing_leads_repository as repo,
     routes::context::tenant_branch,
-    services::{auth_service::AuthClaims, marketing_advisor_service, security_service},
+    services::{
+        auth_service::AuthClaims, marketing_advisor_service, marketing_lead_scoring_service,
+        security_service,
+    },
     state::AppState,
 };
 
@@ -25,6 +28,12 @@ pub fn router() -> Router<AppState> {
         .route("/marketing/leads", get(list).post(create))
         .route("/marketing/leads/owners", get(owners))
         .route("/marketing/leads/advice", get(lead_advice))
+        .route("/marketing/leads/score/refresh", post(refresh_lead_scores))
+        .route("/marketing/leads/:id/score", get(lead_score))
+        .route(
+            "/marketing/leads/:id/score/mode",
+            patch(set_lead_score_mode),
+        )
         .route("/marketing/win-back", get(win_back))
         .route("/marketing/win-back/results", get(win_back_results))
         .route("/marketing/attribution", get(marketing_attribution))
@@ -1294,6 +1303,73 @@ async fn lead_advice(
         .await
         .map_err(|_| AppError::internal("failed to load lead advice"))?;
     Ok(Json(ApiResponse::ok(advice)))
+}
+
+/// Why a lead scores what it does, and what the policy would score it today.
+///
+/// Read-only: it recomputes for display without touching the stored value, so
+/// a manager can compare a manual score against the policy before switching the
+/// lead over.
+async fn lead_score(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Value> {
+    require_permission(&claims, false)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let explanation =
+        marketing_lead_scoring_service::explain(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(explanation)))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LeadScoreModeRequest {
+    automatic: bool,
+}
+
+/// Opts one lead into or out of automatic scoring.
+async fn set_lead_score_mode(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<LeadScoreModeRequest>,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    marketing_lead_scoring_service::set_score_source(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        &id,
+        input.automatic,
+    )
+    .await?;
+    if input.automatic {
+        marketing_lead_scoring_service::rescore_branch(&state.db, &tenant_id, &branch_id).await?;
+    }
+    let explanation =
+        marketing_lead_scoring_service::explain(&state.db, &tenant_id, &branch_id, &id).await?;
+    Ok(Json(ApiResponse::ok(explanation)))
+}
+
+/// Rescores the branch now instead of waiting for the hourly worker, for use
+/// after a bulk import or a run of conversions.
+async fn refresh_lead_scores(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    require_permission(&claims, true)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let updated =
+        marketing_lead_scoring_service::rescore_branch(&state.db, &tenant_id, &branch_id).await?;
+    Ok(Json(ApiResponse::ok(json!({
+        "rescored": updated,
+        "modelVersion": marketing_lead_scoring_service::MODEL_VERSION,
+    }))))
 }
 
 async fn create(

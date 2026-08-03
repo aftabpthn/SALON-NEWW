@@ -464,6 +464,24 @@ async fn main() -> Result<()> {
         },
     );
 
+    // Lead scores decay with silence and shift as the branch's own conversion
+    // history grows, so they are recomputed on a cycle rather than only on
+    // write. The query only picks up branches whose scores are over an hour
+    // old, so a quiet tenant costs one indexed lookup.
+    worker::spawn(
+        &state,
+        "marketing_lead_scoring",
+        Duration::from_secs(900),
+        |state| async move {
+            if services::marketing_lead_scoring_service::process_due(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("marketing_lead_scoring", "process_due");
+            }
+        },
+    );
+
     worker::spawn(
         &state,
         "profit_action_queue",
