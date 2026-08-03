@@ -86612,7 +86612,7 @@
   "linkedSubregisters": {
     "inventory": {
       "path": "docs/INVENTORY_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "794165cb909fb0dc80a67596096df1203f3c4e81508e7c0c61fa44365e288778",
+      "sha256": "766132fcd98474d4d035399cbab83f56376062b0eca29016c1f7a9ae5f7157c5",
       "currentRows": 64,
       "currentCounts": {
         "Complete": 63,
@@ -86661,7 +86661,7 @@
     },
     "staffApp": {
       "path": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "274584f49279103599533fc4a75d6d558feb6bb7afd23cf9fe6ace8f4c39adf2",
+      "sha256": "52ab7b79f322feae5d31d4c0227f6f341e65674d9a0540a0b9793a976148eda1",
       "rowCount": 149
     }
   },
@@ -86672,5 +86672,5 @@
     "productOwnerSignoff": "APPROVED_BY_USER_INSTRUCTION_2026-08-02",
     "phase1Authorization": "APPROVED"
   },
-  "registerHash": "7beaf9488a070dff050b0816d1bbb9d872ef2a7a2fe7041a0161e696de0afd1a"
+  "registerHash": "39c8acb6a32a6c98120c564f895d23855bf5cc8a6160d650dce9e320eb181f22"
 }

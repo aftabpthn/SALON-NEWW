@@ -38,6 +38,14 @@ jobs:
           cache-dependency-path: staff-app/package-lock.json
       - name: Verify Staff parity certification ledger
         run: node scripts/verify-staff-parity-certification.mjs
+      # The master register stores SHA-256s of its sub-registers and a derived
+      # scan of mounted route literals. Editing a sub-register or adding a route
+      # without re-running --reconcile-links silently invalidates the register,
+      # which is exactly how it drifted out of date before.
+      - name: Verify Zenoti master parity register
+        run: node scripts/verify-zenoti-master-parity.mjs
+      - name: Verify release baseline
+        run: node scripts/verify-release-baseline.mjs
       - name: Verify staff RBAC and route parity
         working-directory: backend-rust
         run: cargo test --test staff_control_center_api_parity -- --nocapture
