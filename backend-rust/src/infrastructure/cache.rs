@@ -28,16 +28,12 @@ pub async fn rate_limit_allows(
     ttl_seconds: i64,
 ) -> Result<bool> {
     let mut connection = client.get_multiplexed_async_connection().await?;
-    let count: i64 = redis::cmd("INCR")
+    let count: i64 = redis::cmd("EVAL")
+        .arg("local count=redis.call('INCR',KEYS[1]); if count==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]); end; return count")
+        .arg(1)
         .arg(key)
+        .arg(ttl_seconds)
         .query_async(&mut connection)
         .await?;
-    if count == 1 {
-        let _: () = redis::cmd("EXPIRE")
-            .arg(key)
-            .arg(ttl_seconds)
-            .query_async(&mut connection)
-            .await?;
-    }
     Ok(count <= max_attempts)
 }

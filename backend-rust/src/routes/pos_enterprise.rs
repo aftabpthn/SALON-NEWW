@@ -712,7 +712,11 @@ async fn export_z_report(
         "tally" => tally_xml(&accounting_lines)?,
         "busy" => busy_csv(&accounting_lines)?,
         "quickbooks-desktop" => quickbooks_iif(&accounting_lines)?,
-        _ => return Err(AppError::validation("format must be json, csv, tally, busy, or quickbooks-desktop")),
+        _ => {
+            return Err(AppError::validation(
+                "format must be json, csv, tally, busy, or quickbooks-desktop",
+            ))
+        }
     };
     Ok(Json(ApiResponse::ok(
         json!({"businessDate":date,"version":row.version,"format":format,"sha256":row.sha256,"journalLineCount":accounting_lines.len(),"content":content}),
@@ -1278,7 +1282,9 @@ fn validate_accounting_export_lines(
     lines: &[pos_enterprise_repository::DailyAccountingExportLine],
 ) -> Result<(), AppError> {
     if lines.is_empty() {
-        return Err(AppError::conflict("no posted accounting journals exist for this date"));
+        return Err(AppError::conflict(
+            "no posted accounting journals exist for this date",
+        ));
     }
     let mut journals = std::collections::HashMap::<&str, (i64, i64)>::new();
     for line in lines {
@@ -1329,7 +1335,12 @@ fn tsv_field(value: &str) -> String {
 mod accounting_export_tests {
     use super::*;
 
-    fn line(journal: &str, account: &str, debit_paise: i64, credit_paise: i64) -> pos_enterprise_repository::DailyAccountingExportLine {
+    fn line(
+        journal: &str,
+        account: &str,
+        debit_paise: i64,
+        credit_paise: i64,
+    ) -> pos_enterprise_repository::DailyAccountingExportLine {
         pos_enterprise_repository::DailyAccountingExportLine {
             journal_entry_id: journal.into(),
             business_date: NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(),
@@ -1344,12 +1355,18 @@ mod accounting_export_tests {
 
     #[test]
     fn accounting_exports_require_each_journal_to_balance() {
-        let balanced = vec![line("j1", "CASH", 10_050, 0), line("j1", "SALES", 0, 10_050)];
+        let balanced = vec![
+            line("j1", "CASH", 10_050, 0),
+            line("j1", "SALES", 0, 10_050),
+        ];
         assert!(tally_xml(&balanced).unwrap().contains("100.50"));
         assert!(busy_csv(&balanced).unwrap().contains("100.50"));
         assert!(quickbooks_iif(&balanced).unwrap().contains("-100.50"));
 
-        let cross_balanced = vec![line("j1", "CASH", 10_000, 0), line("j2", "SALES", 0, 10_000)];
+        let cross_balanced = vec![
+            line("j1", "CASH", 10_000, 0),
+            line("j2", "SALES", 0, 10_000),
+        ];
         assert!(validate_accounting_export_lines(&cross_balanced).is_err());
     }
 }
