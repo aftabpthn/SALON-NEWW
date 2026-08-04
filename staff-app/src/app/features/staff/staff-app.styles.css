@@ -432,4 +432,49 @@ input:not(:disabled):active,select:not(:disabled):active,textarea:not(:disabled)
   transform: translateY(-1px);
 }
 
+/* Complete, bulletproof scrollbar suppression for Android WebView, iOS WebKit, Ionic Shadow DOM, and Desktop */
+*,
+*::before,
+*::after,
+html,
+body,
+ion-app,
+ion-content,
+ion-content::part(scroll),
+.inner-scroll,
+.page,
+.chat-shell,
+.chat-sidebar,
+.chat-message-viewport,
+.detail-drawer,
+.business-appointment-row,
+.attendance-cards,
+.kanban-board {
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+ion-app::-webkit-scrollbar,
+ion-content::-webkit-scrollbar,
+ion-content::part(scroll)::-webkit-scrollbar,
+.inner-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  -webkit-appearance: none !important;
+}
+
+
 

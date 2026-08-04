@@ -175,17 +175,47 @@ button:not(:disabled), a { transition: scale var(--staff-motion-fast) var(--staf
 button:not(:disabled):active, a:active { scale: .98; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 
-/* Hide scrollbars globally across mobile & desktop while preserving 100% full scrollability */
-* {
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+/* Complete, bulletproof scrollbar suppression for Android WebView, iOS WebKit, Ionic Shadow DOM, and Desktop */
+*,
+*::before,
+*::after,
+html,
+body,
+ion-app,
+ion-content,
+ion-content::part(scroll),
+.inner-scroll,
+.page,
+.chat-shell,
+.chat-sidebar,
+.chat-message-viewport,
+.detail-drawer,
+.business-appointment-row,
+.attendance-cards,
+.kanban-board {
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
-*::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-  background: transparent;
+*::-webkit-scrollbar,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+ion-app::-webkit-scrollbar,
+ion-content::-webkit-scrollbar,
+ion-content::part(scroll)::-webkit-scrollbar,
+.inner-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  -webkit-appearance: none !important;
 }
 
