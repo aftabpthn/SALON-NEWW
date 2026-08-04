@@ -229,8 +229,11 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
       const attendance = Array.isArray(currentToday?.attendance) ? currentToday.attendance : [];
       const isOpen = attendance.some((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")));
       if (isOpen) {
-        const attendanceId = attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")))?.id || "";
-        await this.runMutation("clock-out", () => this.staff.clockOut(attendanceId), "Clocked out.");
+        const openRecord = attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")));
+        const clockInMs = new Date(openRecord?.clockInAt || "").getTime();
+        const isStale = !!openRecord && Number.isFinite(clockInMs) && clockInMs < Date.now() - 36 * 60 * 60 * 1000;
+        if (isStale) { this.actionMessage.set("Your last shift wasn’t clocked out. Ask your owner to close it, then you can clock in fresh."); this.actionFailed.set(false); return; }
+        await this.runMutation("clock-out", () => this.staff.clockOut(openRecord?.id || ""), "Clocked out.");
       } else {
         await this.runMutation("clock-in", () => this.staff.clockIn(), "Clocked in.");
       }

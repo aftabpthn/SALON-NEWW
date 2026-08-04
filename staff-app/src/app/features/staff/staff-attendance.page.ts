@@ -184,7 +184,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   currentMonthLabel(): string { const key = String(this.today()?.date || "").slice(0, 7); return /^\d{4}-\d{2}$/.test(key) ? this.monthLabel(key) : "Current month"; }
   private monthLabel(key: string): string { const [year, month] = key.split("-").map(Number); return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(Date.UTC(year, month - 1, 1))); }
   async clockIn() { await this.runAction("clock-in", () => this.staff.clockIn(), "Clock-in saved."); }
-  async clockOut() { await this.runAction("clock-out", () => this.staff.clockOut(this.activeAttendance()?.id), "Clock-out saved."); }
+  async clockOut() { const active = this.activeAttendance(); const clockInMs = new Date(active?.clockInAt || "").getTime(); if (active && !active.clockOutAt && Number.isFinite(clockInMs) && clockInMs < Date.now() - 36 * 60 * 60 * 1000) { this.localError.set("Your last shift wasn’t clocked out. Ask your owner to close it, then you can clock in fresh."); return; } await this.runAction("clock-out", () => this.staff.clockOut(active?.id), "Clock-out saved."); }
   async startBreak() { await this.runAction("start-break", () => this.staff.startBreak(), "Break started."); }
   async endBreak() { await this.runAction("end-break", () => this.staff.endBreak(), "Break ended."); }
   private async runAction(action: NonNullable<ReturnType<typeof this.pendingAction>>, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {

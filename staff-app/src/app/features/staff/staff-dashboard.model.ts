@@ -66,6 +66,7 @@ type ActionContext = DashboardViewModelInput & {
   openTaskCount: number;
   priorityTask: StaffToday["tasks"][number] | null;
   openAttendance: StaffToday["attendance"][number] | null;
+  staleOpenAttendance: StaffToday["attendance"][number] | null;
   shiftCompleted: boolean;
 };
 
@@ -178,13 +179,20 @@ function context(input: DashboardViewModelInput): ActionContext {
     || todayAppointments.find((item) => isActiveStatus(item.status)) || null;
   const tasks = openTasks(input);
   const attendance = input.today?.attendance || [];
+  const now = input.now || new Date();
+  const staleCutoffMs = now.getTime() - 36 * 60 * 60 * 1000;
+  const isStaleClock = (item: StaffToday["attendance"][number]) => {
+    const clockInMs = new Date(item.clockInAt || "").getTime();
+    return Number.isFinite(clockInMs) && clockInMs < staleCutoffMs;
+  };
   return {
     ...input,
     activeAppointment,
     nextAppointment: nextAppointment(input),
     openTaskCount: tasks.length,
     priorityTask: [...tasks].sort((left, right) => taskPriority(left, input.now || new Date()) - taskPriority(right, input.now || new Date()))[0] || null,
-    openAttendance: attendance.find(isOpenAttendance) || null,
+    openAttendance: attendance.find((item) => isOpenAttendance(item) && !isStaleClock(item)) || null,
+    staleOpenAttendance: attendance.find((item) => isOpenAttendance(item) && isStaleClock(item)) || null,
     shiftCompleted: (input.today?.schedules || []).some((schedule) => /completed|closed|finished|ended/i.test(String(schedule.status || "")))
   };
 }
@@ -267,6 +275,12 @@ function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashbo
   const actions: DashboardAction[] = [];
   if (activeAlerts.some((item) => item.tone === "critical")) {
     title = "The floor needs attention"; detail = activeAlerts[0].detail; actions.push({ id: "urgent", label: "Review urgent items", route: activeAlerts[0].route, primary: true });
+  } else if (input.staleOpenAttendance) {
+    eyebrow = "Needs attention";
+    title = "Clock needs owner approval";
+    detail = "Your last shift wasn’t clocked out";
+    hint = "Ask your owner to close it, then you can clock in fresh.";
+    if (canOpenAttendance) actions.push({ id: "attendance-details", label: "Attendance", route: "/staff/attendance", primary: true });
   } else if (input.openAttendance) {
     eyebrow = "Clocked in";
     title = "You're clocked in";
@@ -346,7 +360,7 @@ function quickActionStatus(id: string, input: ActionContext): string | undefined
   if (id === "appointments") return summary.todayAppointments ? `${summary.todayAppointments} today` : "No bookings";
   if (id === "queue") return summary.liveAppointments ? `${summary.liveAppointments} live` : "No live services";
   if (id === "tasks") return input.openTaskCount ? `${input.openTaskCount} pending` : "All clear";
-  if (id === "attendance") return input.today?.activeBreak ? "On break" : input.openAttendance ? "Clocked in" : input.shiftCompleted ? "Shift complete" : "Not clocked in";
+  if (id === "attendance") return input.today?.activeBreak ? "On break" : input.staleOpenAttendance ? "Needs owner" : input.openAttendance ? "Clocked in" : input.shiftCompleted ? "Shift complete" : "Not clocked in";
   if (id === "calendar") return "View shifts";
   return undefined;
 }
@@ -365,6 +379,9 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
     .filter((entry) => allowed(entry, ctx))
     .map((entry) => {
       if (entry.item.id === "attendance") {
+        if (ctx.staleOpenAttendance) {
+          return { ...entry.item, label: "Attendance", kind: undefined, route: "/staff/attendance", status: quickActionStatus(entry.item.id, ctx) };
+        }
         if (!ctx.openAttendance && (ctx.shiftCompleted || !!ctx.today?.activeBreak)) {
           return { ...entry.item, label: "Attendance", kind: undefined, route: "/staff/attendance", status: quickActionStatus(entry.item.id, ctx) };
         }
