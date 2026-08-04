@@ -430,6 +430,104 @@ pub async fn sessions(db: &PgPool, account_id: &str) -> Result<Vec<Value>, sqlx:
         .bind(account_id).fetch_all(db).await
 }
 
+/// The user agent and address a session was created from.
+///
+/// Read on refresh so a rotated token can be checked against the device that
+/// obtained it, rather than being honoured wherever it turns up.
+pub async fn session_binding(
+    db: &PgPool,
+    session_id: &str,
+) -> Result<Option<(String, String)>, sqlx::Error> {
+    sqlx::query_as("SELECT user_agent,ip_hash FROM customer_sessions WHERE id=$1")
+        .bind(session_id)
+        .fetch_optional(db)
+        .await
+}
+
+/// Records the address a session was last seen from, so a later refresh
+/// compares against where the guest actually is rather than where they first
+/// signed in weeks ago.
+pub async fn touch_session_ip(
+    db: &PgPool,
+    session_id: &str,
+    ip_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE customer_sessions SET ip_hash=$2 WHERE id=$1")
+        .bind(session_id)
+        .bind(ip_hash)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// Revokes the oldest active sessions beyond `keep`, newest kept.
+///
+/// A guest signing in on a new phone should not silently accumulate sessions
+/// forever: every live session is another refresh token that can be stolen.
+pub async fn revoke_sessions_beyond(
+    db: &PgPool,
+    account_id: &str,
+    keep: i64,
+    reason: &str,
+) -> Result<u64, sqlx::Error> {
+    Ok(sqlx::query(
+        r#"UPDATE customer_sessions SET revoked_at=NOW(),revoke_reason=$3
+            WHERE id IN (
+                SELECT id FROM customer_sessions
+                 WHERE account_id=$1 AND revoked_at IS NULL AND expires_at>NOW()
+                 ORDER BY last_used_at DESC, created_at DESC
+                 OFFSET $2
+            )"#,
+    )
+    .bind(account_id)
+    .bind(keep)
+    .bind(reason)
+    .execute(db)
+    .await?
+    .rows_affected())
+}
+
+/// Appends to the guest's own security history.
+///
+/// customer_security_events has existed since the portal shipped and nothing
+/// ever wrote to it; sign-ins, new devices and rejected refreshes now land here
+/// so a guest can see their own account activity.
+pub async fn record_security_event(
+    db: &PgPool,
+    account_id: &str,
+    session_id: &str,
+    event_type: &str,
+    outcome: &str,
+    metadata: &Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO customer_security_events (account_id,session_id,event_type,outcome,metadata_json) VALUES ($1,$2,$3,$4,$5)",
+    )
+    .bind(account_id)
+    .bind(session_id)
+    .bind(event_type)
+    .bind(outcome)
+    .bind(metadata)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// The guest's own recent security history.
+pub async fn security_events(
+    db: &PgPool,
+    account_id: &str,
+    limit: i64,
+) -> Result<Vec<Value>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT jsonb_build_object('id',id,'sessionId',session_id,'eventType',event_type,'outcome',outcome,'metadata',metadata_json,'createdAt',created_at) FROM customer_security_events WHERE account_id=$1 ORDER BY created_at DESC LIMIT $2",
+    )
+    .bind(account_id)
+    .bind(limit.clamp(1, 200))
+    .fetch_all(db)
+    .await
+}
+
 pub async fn session_is_active(
     db: &PgPool,
     account_id: &str,

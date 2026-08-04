@@ -61,6 +61,7 @@ pub fn router() -> Router<AppState> {
             get(sessions).delete(revoke_all_sessions),
         )
         .route("/customer/sessions/:id", delete(revoke_session))
+        .route("/customer/security-events", get(security_events))
         .route("/customer/rewards", get(customer_rewards))
         .route("/customer/rewards/redeem", post(redeem_customer_rewards))
         .route("/customer/wallet", get(customer_wallet))
@@ -648,10 +649,18 @@ async fn verify_login(
 
 async fn refresh(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<RefreshRequest>,
 ) -> ApiResult<service::TokenBundle> {
     Ok(Json(ApiResponse::ok(
-        service::refresh(&state.db, &state.settings, body.refresh_token.trim()).await?,
+        service::refresh(
+            &state.db,
+            &state.settings,
+            body.refresh_token.trim(),
+            header_text(&headers, header::USER_AGENT.as_str()),
+            &ip_hash(&headers),
+        )
+        .await?,
     )))
 }
 
@@ -874,6 +883,20 @@ async fn verify_profile_change(
         )
         .await?,
     )))
+}
+
+/// The guest's own account activity: sign-ins, new devices, rejected refreshes.
+///
+/// customer_security_events has existed since the portal shipped with nothing
+/// writing to or reading from it. Showing a guest where their account has been
+/// used is how an account takeover gets noticed by the only person who can
+/// recognise it.
+async fn security_events(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    let rows = repo::security_events(&state.db, &claims.sub, 50)
+        .await
+        .map_err(|_| AppError::internal("failed to load customer security events"))?;
+    Ok(Json(ApiResponse::ok(json!({ "events": rows }))))
 }
 
 async fn sessions(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Value> {
