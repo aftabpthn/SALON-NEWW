@@ -1,5 +1,5 @@
 import { DatePipe } from "@angular/common";
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { StaffAppService, StaffChatConversation, StaffConversationMessage, StaffMessageReceiptUpdate } from "../../core/staff-app.service";
 
@@ -103,7 +103,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
                 </div>
               </div>
 
-              <div #messageViewport class="chat-message-viewport" (scroll)="onMessageScroll()" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">
+              <div class="chat-message-viewport" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">
                 @if (messagesLoading()) {
                   <div class="chat-message-loading"><div class="chat-skeleton bubble"></div><div class="chat-skeleton bubble mine"></div></div>
                 } @else if (messagesError()) {
@@ -188,8 +188,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
     }
   `]
 })
-export class StaffChatPage implements OnInit, OnDestroy {
-  @ViewChild("messageViewport") private messageViewport?: ElementRef<HTMLElement>;
+export class StaffChatPage implements OnInit, AfterViewInit, OnDestroy {
   readonly conversations = signal<StaffChatConversation[]>([]);
   readonly messages = signal<StaffConversationMessage[]>([]);
   readonly activeConversationId = signal("");
@@ -273,7 +272,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
   private readonly deliveredMessageIds = new Set<string>();
   private readonly readMessageIds = new Set<string>();
 
-  constructor(readonly staff: StaffAppService) {}
+  constructor(readonly staff: StaffAppService, private readonly hostRef: ElementRef<HTMLElement>) {}
 
   ngOnInit(): void {
     if (!this.canReadChat()) return;
@@ -287,8 +286,16 @@ export class StaffChatPage implements OnInit, OnDestroy {
     }, 15000);
   }
 
+  ngAfterViewInit(): void {
+    const scroller = this.pageScroller();
+    scroller.addEventListener("scroll", this.scrollerScrollListener, { passive: true });
+    this.attachedScroller = scroller;
+  }
+
   ngOnDestroy(): void {
     this.destroyed = true;
+    this.attachedScroller?.removeEventListener("scroll", this.scrollerScrollListener);
+    this.attachedScroller = null;
     window.removeEventListener("online", this.handleOnline);
     window.removeEventListener("offline", this.handleOffline);
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
@@ -459,16 +466,33 @@ export class StaffChatPage implements OnInit, OnDestroy {
   }
 
   onMessageScroll(): void {
-    const viewport = this.messageViewport?.nativeElement;
-    if (!viewport) return;
-    this.nearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+    const scroller = this.pageScroller();
+    this.nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     if (this.nearBottom) this.unseenMessageCount.set(0);
   }
 
   scrollToLatest(smooth: boolean): void {
     this.nearBottom = true;
     this.unseenMessageCount.set(0);
-    window.setTimeout(() => this.messageViewport?.nativeElement.scrollTo({ top: this.messageViewport.nativeElement.scrollHeight, behavior: smooth ? "smooth" : "auto" }));
+    window.setTimeout(() => {
+      const scroller = this.pageScroller();
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  private attachedScroller: HTMLElement | null = null;
+
+  private readonly scrollerScrollListener = (): void => this.onMessageScroll();
+
+  /** The scroll container that actually moves the whole chat page (staff-content on desktop, staff-main-shell on mobile). */
+  private pageScroller(): HTMLElement {
+    let el: HTMLElement | null = this.hostRef.nativeElement.parentElement;
+    while (el) {
+      const style = window.getComputedStyle(el);
+      if (style.overflowY === "auto" || style.overflowY === "scroll") return el;
+      el = el.parentElement;
+    }
+    return (document.scrollingElement as HTMLElement) || document.body;
   }
 
   private readonly handleOnline = (): void => {
