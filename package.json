@@ -19,6 +19,7 @@
     "seed:ai-knowledge": "node scripts/seed-aurashine-ai-knowledge.mjs",
     "backup:db": "node scripts/backup-database.mjs",
     "smoke:staff-mobile": "node scripts/smoke-staff-mobile.mjs",
+    "migrate:staff-perms": "node server/migrations/fix-staff-app-permissions.js",
     "prebuild": "node -e \"const{execSync:c}=require('child_process');try{c('chmod -R 755 src',{stdio:'inherit'})}catch(e){}\"",
     "build": "npm run build:client",
     "build:client": "npx ng build",
