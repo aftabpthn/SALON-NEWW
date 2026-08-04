@@ -10,6 +10,7 @@ import { AttendanceBiometricService, AttendanceInstallationIdentity, NativeAtten
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
 const STAFF_OFFLINE_LEASE_KEY = "auraStaffOfflineQueueLease";
 const STAFF_BIOMETRIC_HINT_KEY = "auraStaffBiometricLoginHint";
+const STAFF_DATA_CACHE_PREFIX = "auraStaffData:";
 const LEGACY_STAFF_AUTH_KEYS = ["auraStaffAccessToken", "auraStaffRefreshToken", "auraStaffSession", "auraStaffBiometricEnabled", "auraStaffBiometricCredentialId"];
 
 export type MutationResult<T> =
@@ -623,6 +624,7 @@ export class StaffAppService {
         if (response.status >= 300) this.throwNativeError(response);
         const dashboard = this.unwrap(response.data);
         this.profile.set(dashboard.staff);
+        this.writeStoredData("dashboard", dashboard);
         return dashboard;
       });
     } catch (error) {
@@ -1093,6 +1095,11 @@ export class StaffAppService {
     return this.readOfflineQueue().length;
   }
 
+  /** Last successfully fetched payload for a data key, if available on this device. */
+  storedData<T>(key: string): T | undefined {
+    return this.readStoredData<T>(key);
+  }
+
   private authHeaders(): HttpHeaders {
     const token = this.accessTokenValue;
     if (!token) throw new Error("Staff login required.");
@@ -1132,9 +1139,12 @@ export class StaffAppService {
     const promise = request().then((value) => {
       this.responseCache.set(key, { value, expiresAt: now + ttlMs });
       this.inFlightResponses.delete(key);
+      this.writeStoredData(key, value);
       return value;
     }).catch((error) => {
       this.inFlightResponses.delete(key);
+      const stored = this.readStoredData<T>(key);
+      if (stored !== undefined) return stored;
       throw error;
     });
     this.inFlightResponses.set(key, promise);
@@ -1402,6 +1412,35 @@ export class StaffAppService {
   }
 
   private writeOfflineQueue(queue: OfflineQueueEntry[]): void { localStorage.setItem(STAFF_OFFLINE_QUEUE_KEY, JSON.stringify(queue)); }
+
+  private storedDataKey(key: string): string {
+    const user = this.user();
+    return `${STAFF_DATA_CACHE_PREFIX}${this.tenantIdValue}:${user?.branchId || "branch"}:${user?.id || user?.staffId || "user"}:${key}`;
+  }
+
+  private readStoredData<T>(key: string): T | undefined {
+    try {
+      const raw = localStorage.getItem(this.storedDataKey(key));
+      if (!raw) return undefined;
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && "v" in (parsed as Record<string, unknown>)
+        ? (parsed as { v: T }).v
+        : undefined;
+    } catch { return undefined; }
+  }
+
+  private writeStoredData<T>(key: string, value: T): void {
+    try { localStorage.setItem(this.storedDataKey(key), JSON.stringify({ v: value })); } catch { /* Storage unavailable or full — data still works from the network. */ }
+  }
+
+  private clearStoredData(): void {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(STAFF_DATA_CACHE_PREFIX)) localStorage.removeItem(key);
+      }
+    } catch { /* Best-effort cleanup. */ }
+  }
   private clearOfflineState(): void { localStorage.removeItem(STAFF_OFFLINE_QUEUE_KEY); localStorage.removeItem(STAFF_OFFLINE_LEASE_KEY); }
   private isQueueOwner(item: OfflineQueueEntry): boolean {
     return !!this.user()?.id && item.userId === this.user()?.id && item.tenantId === this.tenantIdValue && item.sessionId === this.sessionIdValue;
@@ -1447,6 +1486,7 @@ export class StaffAppService {
     this.user.set(null);
     this.biometricLocked.set(false);
     this.clearOfflineState();
+    this.clearStoredData();
     this.purgeLegacyAuthStorage();
     localStorage.removeItem("auraStaffRecent");
     if (clearBiometric) localStorage.removeItem(STAFF_BIOMETRIC_HINT_KEY);

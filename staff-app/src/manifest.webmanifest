@@ -1,7 +1,7 @@
 {
   "name": "Aura Staff OS",
   "short_name": "Aura Staff",
-  "description": "Online staff workspace for Aura salons. An internet connection is required; offline use is not supported.",
+  "description": "Online staff workspace for Aura salons. Pages load instantly and work offline with your last synced data.",
   "start_url": "/staff/login",
   "display": "standalone",
   "background_color": "#f0f2f5",
