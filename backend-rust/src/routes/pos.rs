@@ -34,6 +34,7 @@ use crate::{
     services::invoice_pdf::{self, InvoicePdfLayout},
     services::membership_service,
     services::payment_gateway_service,
+    services::payment_link_access_service,
     services::payment_platform_service,
     services::razorpay_payment_service,
     services::security_service,
@@ -1505,6 +1506,10 @@ pub struct PosPaymentLinkResponse {
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Sent to the guest instead of `url`. Returned once, on creation: after
+    /// this it exists only in the message the guest received.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub guest_link_token: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -10655,7 +10660,35 @@ pub(crate) async fn create_payment_link_for_invoice(
     .await
     .map_err(|_| AppError::internal("failed to save provider payment link"))?;
 
-    Ok(payment_link_response(updated))
+    // One invoice, one working link. An older URL sitting in a chat thread must
+    // not keep taking payments after the amount has been revised.
+    payment_link_access_service::supersede_other_links(
+        &state.db,
+        tenant_id,
+        branch_id,
+        id,
+        &updated.id,
+    )
+    .await?;
+
+    // The guest is sent our token rather than the provider URL, so a forwarded
+    // link is useless to whoever it reaches and every open is recorded.
+    let require_verification = security_service::get_policy(&state.db, tenant_id, branch_id)
+        .await?
+        .settings
+        .payment_link_phone_verification;
+    let access_token = payment_link_access_service::issue_access_token(
+        &state.db,
+        tenant_id,
+        branch_id,
+        &updated.id,
+        require_verification,
+    )
+    .await?;
+
+    let mut response = payment_link_response(updated);
+    response.guest_link_token = access_token;
+    Ok(response)
 }
 
 async fn list_pos_payment_links(
@@ -10899,6 +10932,7 @@ fn payment_link_response(row: PosPaymentLinkRow) -> PosPaymentLinkResponse {
         expires_at: row.expires_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        guest_link_token: String::new(),
     }
 }
 

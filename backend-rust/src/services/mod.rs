@@ -60,6 +60,7 @@ pub mod outgoing_funds_service;
 pub mod package_service;
 pub mod payment_dispute_service;
 pub mod payment_gateway_service;
+pub mod payment_link_access_service;
 pub mod payment_platform_service;
 pub mod pos_enterprise_service;
 pub mod profit_governance_service;

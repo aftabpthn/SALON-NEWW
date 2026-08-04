@@ -53,6 +53,13 @@ pub struct SecurityPolicy {
     /// security alert. Relative to the person, because "a lot" means something
     /// different for a receptionist and for a marketing manager.
     pub client_export_anomaly_multiplier: i64,
+    /// Whether a guest confirms the last four digits of the phone on the
+    /// invoice before a payment link forwards them to the provider.
+    ///
+    /// On by default, unlike the export ceiling: a guest always knows their own
+    /// number, and a link with no phone on the client record forwards straight
+    /// through, so turning this on cannot lock anyone out of paying.
+    pub payment_link_phone_verification: bool,
 }
 
 impl Default for SecurityPolicy {
@@ -69,6 +76,7 @@ impl Default for SecurityPolicy {
             client_export_daily_row_budget: 2_000,
             client_export_budget_enforced: false,
             client_export_anomaly_multiplier: 5,
+            payment_link_phone_verification: true,
         }
     }
 }

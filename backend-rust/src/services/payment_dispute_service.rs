@@ -344,8 +344,31 @@ pub async fn evidence_pack(
         gaps.push("The invoice has no line items");
     }
 
+    // How the guest interacted with the payment link. A hosted checkout cannot
+    // otherwise show that the guest themselves authorised the charge, so an
+    // open from their device and a confirmed phone is the strongest
+    // authorisation evidence available for a link-paid invoice.
+    let link_activity: Vec<Value> = sqlx::query_scalar(
+        r#"SELECT JSONB_BUILD_OBJECT(
+                    'eventType', event.event_type, 'sourceIp', event.source_ip,
+                    'createdAt', event.created_at, 'details', event.details_json)
+             FROM pos_payment_link_events event
+             JOIN pos_payment_links link ON link.id = event.link_id
+             JOIN payment_disputes dispute ON dispute.sale_id = link.sale_id
+            WHERE dispute.tenant_id = $1 AND dispute.branch_id = $2 AND dispute.id = $3
+              AND event.tenant_id = $1
+            ORDER BY event.created_at"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(dispute_id)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to load payment link activity"))?;
+
     Ok(json!({
         "dispute": header,
+        "paymentLinkActivity": link_activity,
         "invoice": {
             "invoiceNumber": facts.invoice_number,
             "totalPaise": facts.sale_total_paise,
