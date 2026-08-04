@@ -122,6 +122,18 @@ type Prediction = {
   signals: string[];
 };
 
+/** How this forecast kind has actually performed on predictions already checked. */
+type PredictionAccuracy = {
+  resolved: number;
+  hits: number;
+  pending: number;
+  unresolvable: number;
+  /** Null until enough predictions have resolved to state a rate honestly. */
+  hitRatePercent: number | null;
+  meanError: number | null;
+  statement: string;
+};
+
 type PredictionRun = {
   runId: string;
   kind: ForecastKind;
@@ -133,6 +145,7 @@ type PredictionRun = {
   insufficientSubjects: number;
   basis: string;
   disclaimer: string;
+  accuracy: PredictionAccuracy;
 };
 
 type BriefingSection = {
@@ -1164,6 +1177,28 @@ export class CommandCenterPageComponent implements OnInit {
 
   canApproveAction(action: PriorityAction): boolean {
     return this.canManageProfitActions && action.status === 'pending' && action.createdByUserId !== this.auth.userId;
+  }
+
+  /**
+   * The forecast's own track record, in the fewest words that stay honest.
+   *
+   * Returns an empty string until enough predictions of this kind have been
+   * checked, because a rate from a handful of outcomes would read as a measured
+   * figure while moving double digits on the next one. The card then shows how
+   * many are still waiting instead of implying a score it does not have.
+   */
+  forecastAccuracy(run: PredictionRun | null): string {
+    const accuracy = run?.accuracy;
+    if (!accuracy) return '';
+    if (accuracy.hitRatePercent === null) {
+      return accuracy.pending > 0 ? `${accuracy.pending} awaiting outcome` : 'Track record not started';
+    }
+    return `${Math.round(accuracy.hitRatePercent)}% correct of ${accuracy.resolved} checked`;
+  }
+
+  /** The full statement, including what counted as a hit, for the tooltip. */
+  forecastAccuracyDetail(run: PredictionRun | null): string {
+    return run?.accuracy?.statement ?? '';
   }
 
   forecastRange(prediction?: Prediction): string {

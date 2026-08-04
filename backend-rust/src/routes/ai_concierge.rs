@@ -24,6 +24,7 @@ use crate::{
             self, ConciergeMessageRequest, ConciergeResponse, GovernanceRequest, OpenSessionRequest,
         },
         ai_copilot_tools,
+        ai_prediction_outcome_service::{self, PredictionAccuracy},
         ai_prediction_service::{self, PredictionKind, PredictionRun},
         ai_scope_service::ScopeRequest,
         ai_what_if_service::{self, WhatIf, WhatIfResult},
@@ -49,6 +50,10 @@ pub fn router() -> Router<AppState> {
         .route("/ai/concierge/calls/report", get(call_report))
         .route("/ai/predictions/:kind", post(run_prediction))
         .route("/ai/predictions/:kind/latest", get(get_latest_prediction))
+        .route(
+            "/ai/predictions/:kind/accuracy",
+            get(get_prediction_accuracy),
+        )
         .route("/ai/what-if", post(run_what_if))
         .route("/ai/briefing/:cadence", get(get_briefing))
         .route("/ai/briefing/compare/:signal", get(compare_branches))
@@ -343,6 +348,34 @@ async fn get_latest_prediction(
         .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
     Ok(Json(ApiResponse::ok(
         ai_prediction_service::latest_run(
+            &state.db,
+            &tenant_id,
+            &claims,
+            kind,
+            &ScopeRequest::default(),
+        )
+        .await?,
+    )))
+}
+
+/// How this prediction kind has actually performed.
+///
+/// Reads only resolved outcomes, so it says nothing about predictions still
+/// inside their horizon beyond how many there are. Same scope chain as the
+/// prediction itself: a login sees the track record for the branches whose
+/// predictions it could have read.
+async fn get_prediction_accuracy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(kind): Path<String>,
+) -> ApiResult<PredictionAccuracy> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let kind = PredictionKind::from_name(&kind)
+        .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_prediction_outcome_service::accuracy(
             &state.db,
             &tenant_id,
             &claims,

@@ -219,6 +219,24 @@ async fn main() -> Result<()> {
         },
     );
 
+    // Checks predictions whose horizon has passed against what actually
+    // happened. Six-hourly rather than daily because horizons expire on a
+    // calendar the worker does not control, and a missed cycle would push a
+    // whole day's outcomes behind the next one.
+    worker::spawn(
+        &state,
+        "ai_prediction_outcomes",
+        Duration::from_secs(21_600),
+        |state| async move {
+            if services::ai_prediction_outcome_service::run_outcome_resolution_worker(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_prediction_outcomes", "resolve_outcomes");
+            }
+        },
+    );
+
     worker::spawn(
         &state,
         "happy_hours_auto_sunset",

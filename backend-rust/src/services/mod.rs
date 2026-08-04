@@ -8,6 +8,7 @@ pub mod ai_copilot_tools;
 pub mod ai_cross_module_tools;
 #[cfg(test)]
 mod ai_evaluation_tests;
+pub mod ai_prediction_outcome_service;
 pub mod ai_prediction_service;
 pub mod ai_scope_service;
 pub mod ai_scoped_copilot_tools;

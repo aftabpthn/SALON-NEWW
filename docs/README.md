@@ -25,6 +25,7 @@ Endpoint references in this README are catalog entries, not automatic runtime cl
 - [ZENOTI_MASTER_PARITY_REGISTER.md](./ZENOTI_MASTER_PARITY_REGISTER.md) — locked public Zenoti capability index, Aura evidence map, route truth and product-owner gate.
 - [INVENTORY_ZENOTI_PARITY_REGISTER.md](./INVENTORY_ZENOTI_PARITY_REGISTER.md) — permanent Zenoti-to-AuraShine inventory workflow and verification register.
 - [STAFF_APP_ZENOTI_PARITY_REGISTER.md](./STAFF_APP_ZENOTI_PARITY_REGISTER.md) — linked Staff App parity and certification sub-register.
+- [AI_PREDICTION_OUTCOMES.md](./AI_PREDICTION_OUTCOMES.md) — how stored predictions are checked against what happened, and how measured accuracy is reported.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
 - [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.
 

@@ -27,6 +27,14 @@ pub struct PredictionRecord {
     pub data_sufficient: bool,
     pub signals: Value,
     pub created_at: DateTime<Utc>,
+    /// `pending`, `resolved` or `unresolvable` — see migration 0420. Carried on
+    /// the audit read so a stored run shows not only what was claimed but
+    /// whether it held.
+    pub outcome_status: String,
+    pub outcome_hit: Option<bool>,
+    /// Text rather than a float for the same reason as the bounds above.
+    pub actual_value: Option<String>,
+    pub outcome_note: String,
 }
 
 /// The run that produced a set of predictions.
@@ -56,6 +64,13 @@ pub struct NewPrediction {
     pub sample_size: i32,
     pub data_sufficient: bool,
     pub signals: Value,
+    /// The date this prediction becomes checkable, fixed here rather than when
+    /// it is judged. `None` when it never will be — an unscored subject has no
+    /// claim to check — and such a row is filed as unresolvable immediately
+    /// rather than sitting in the resolver's backlog forever.
+    pub horizon_end: Option<NaiveDate>,
+    /// Why there is no horizon. Required by the schema whenever there is none.
+    pub unresolvable_reason: String,
 }
 
 /// Writes a run and its predictions atomically.
@@ -118,8 +133,11 @@ pub async fn record_run(
         sqlx::query(
             r#"INSERT INTO ai_predictions(
                   tenant_id,branch_id,run_id,subject_kind,subject_id,subject_name,
-                  lower_value,upper_value,unit,confidence,sample_size,data_sufficient,signals
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)"#,
+                  lower_value,upper_value,unit,confidence,sample_size,data_sufficient,signals,
+                  horizon_end,outcome_status,outcome_note
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+                  CASE WHEN $14::DATE IS NULL THEN 'unresolvable' ELSE 'pending' END,
+                  CASE WHEN $14::DATE IS NULL THEN $15 ELSE '' END)"#,
         )
         .bind(tenant_id)
         .bind(scope.branch_id)
@@ -134,6 +152,8 @@ pub async fn record_run(
         .bind(prediction.sample_size)
         .bind(prediction.data_sufficient)
         .bind(&prediction.signals)
+        .bind(prediction.horizon_end)
+        .bind(&prediction.unresolvable_reason)
         .execute(&mut *tx)
         .await?;
     }
@@ -174,7 +194,8 @@ pub async fn predictions_for_run(
         r#"SELECT id,subject_kind,subject_id,subject_name,
                   lower_value::TEXT AS lower_value,
                   upper_value::TEXT AS upper_value,
-                  unit,confidence,sample_size,data_sufficient,signals,created_at
+                  unit,confidence,sample_size,data_sufficient,signals,created_at,
+                  outcome_status,outcome_hit,actual_value::TEXT AS actual_value,outcome_note
              FROM ai_predictions
             WHERE tenant_id=$1 AND branch_id=$2 AND run_id=$3
             ORDER BY created_at, id"#,

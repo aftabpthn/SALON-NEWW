@@ -176,6 +176,9 @@
               <small>{{ card.prediction?.subjectName || 'No subject with sufficient history' }} · {{ label(card.prediction?.confidence || 'insufficient') }}</small>
               <p>{{ card.prediction?.signals?.join(' · ') || card.run.basis }}</p>
               <small>{{ card.run.modelVersion }} · {{ dateTime(card.run.historyEnd) }}</small>
+              @if (forecastAccuracy(card.run); as accuracy) {
+                <small class="forecast-accuracy" [title]="forecastAccuracyDetail(card.run)">{{ accuracy }}</small>
+              }
             }
           </article>
         }
