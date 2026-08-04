@@ -46,6 +46,9 @@ pub fn router() -> Router<AppState> {
         .route("/pos/day-close/:date", get(day_close_status))
         .route("/pos/day-close/:date/lock", post(lock_day))
         .route("/pos/day-close/:date/reopen", post(reopen_day))
+        // GET only, and deliberately so: an X-report has nothing to POST
+        // because it produces no document and changes no state.
+        .route("/pos/x-reports/:date", get(get_x_report))
         .route(
             "/pos/z-reports/:date",
             get(get_z_report).post(generate_z_report),
@@ -637,6 +640,22 @@ async fn reopen_day(
     state.publish_pos_event(&t, &b, "day_close", &date.to_string(), "day.reopened");
     Ok(Json(ApiResponse::ok(row)))
 }
+/// The register as it stands right now, mid-shift.
+///
+/// Unlike the Z-report this needs no locked day and no closed drawer, and it
+/// writes nothing — so a manager can check the till at any hour without ending
+/// the trading day to find out.
+async fn get_x_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(date): Path<String>,
+) -> ApiResult<Value> {
+    let date = parse_date(&date)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let report = pos_enterprise_service::x_report(&state.db, &t, &b, date).await?;
+    Ok(Json(ApiResponse::ok(report)))
+}
+
 async fn get_z_report(
     State(state): State<AppState>,
     headers: HeaderMap,

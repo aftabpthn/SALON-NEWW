@@ -97,6 +97,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/pos/invoices/:id/print", get(get_pos_invoice_print))
         .route("/pos/invoices/:id/pdf", get(get_pos_invoice_pdf))
+        .route("/pos/compliance/queue", get(get_compliance_queue))
         .route("/pos/invoices/:id/compliance", get(get_invoice_compliance))
         .route(
             "/pos/invoices/:id/compliance/queue",
@@ -5044,6 +5045,77 @@ async fn get_invoice_compliance(
     })))
 }
 
+/// The branch's whole e-invoice and e-way bill queue in one place.
+///
+/// Per-invoice status already existed, and that is the wrong altitude for this:
+/// a failure only surfaced if somebody happened to open the one invoice it
+/// happened to. Forty invoices can fail their IRN in an afternoon — an expired
+/// provider token does exactly that — and under the old view nobody finds out
+/// until a customer asks for a document that was never generated.
+///
+/// It also reports whether a provider is configured at all, because the most
+/// likely reason a queue is not moving is that nothing is connected to it, and
+/// an empty "queued" count looks identical either way.
+async fn get_compliance_queue(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let counts: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT document_type,status,COUNT(*)::BIGINT \
+           FROM pos_compliance_jobs \
+          WHERE tenant_id=$1 AND branch_id=$2 \
+          GROUP BY document_type,status ORDER BY document_type,status",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to summarise the compliance queue"))?;
+
+    // Exhausted jobs first: those have stopped retrying and will not move again
+    // without someone looking at them.
+    let attention: Vec<(String, String, String, String, i32, String)> = sqlx::query_as(
+        "SELECT job.id,COALESCE(sale.invoice_number,''),job.document_type,job.status,\
+                job.attempt_count,job.last_error \
+           FROM pos_compliance_jobs job \
+           LEFT JOIN pos_sales sale ON sale.id=job.sale_id AND sale.tenant_id=job.tenant_id \
+          WHERE job.tenant_id=$1 AND job.branch_id=$2 \
+            AND (job.status='failed' OR job.attempt_count >= 5) \
+          ORDER BY job.updated_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load compliance jobs needing attention"))?;
+
+    let stuck = attention.len() as i64;
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "providerConfigured": state.settings.compliance_provider_enabled(),
+        "counts": counts
+            .into_iter()
+            .map(|(document_type, status, count)| serde_json::json!({
+                "documentType": document_type, "status": status, "count": count
+            }))
+            .collect::<Vec<Value>>(),
+        "needsAttentionCount": stuck,
+        "needsAttention": attention
+            .into_iter()
+            .map(|(id, invoice_number, document_type, status, attempts, last_error)| {
+                serde_json::json!({
+                    "jobId": id,
+                    "invoiceNumber": invoice_number,
+                    "documentType": document_type,
+                    "status": status,
+                    "attemptCount": attempts,
+                    "lastError": last_error,
+                })
+            })
+            .collect::<Vec<Value>>(),
+    }))))
+}
+
 #[derive(FromRow)]
 struct ComplianceSaleRow {
     invoice_type: String,
@@ -5319,25 +5391,21 @@ async fn update_invoice_business_profile(
     Ok(Json(ApiResponse::ok(saved)))
 }
 
-async fn get_pos_invoice_pdf(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Query(query): Query<InvoicePdfQuery>,
-) -> Result<Response, AppError> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let layout = InvoicePdfLayout::parse(query.layout.as_deref())?;
-    let sale = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
-    let file_name = invoice_print_file_name(&sale.invoice_number, "pdf");
-    if let Some(snapshot) =
-        read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str()).await?
-    {
-        return invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name);
-    }
-
-    let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
-    let gst_context = gst_context_from_sale(&state, &tenant_id, &branch_id, &id).await?;
-    let profile = read_invoice_business_profile(&state, &tenant_id, &branch_id).await?;
+/// Everything the PDF renderer needs about one sale, plus the UPI URI it also
+/// takes separately.
+///
+/// Shared by the download route and by the seal at finalize so that both write
+/// the same bytes; building the document twice, slightly differently, is how a
+/// sealed record stops matching what the guest was handed.
+async fn build_invoice_pdf_document(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) -> Result<(Value, String), AppError> {
+    let details = load_pos_sale_details(state, tenant_id, branch_id, sale_id).await?;
+    let gst_context = gst_context_from_sale(state, tenant_id, branch_id, sale_id).await?;
+    let profile = read_invoice_business_profile(state, tenant_id, branch_id).await?;
     let upi_uri = profile
         .as_ref()
         .and_then(invoice_profile_upi_uri)
@@ -5355,19 +5423,34 @@ async fn get_pos_invoice_pdf(
     });
     document["seller"] = serde_json::to_value(profile)
         .map_err(|_| AppError::internal("failed to serialize invoice business profile"))?;
-    document["appearance"] = serde_json::to_value(
-        read_invoice_appearance_settings(&state, &tenant_id, &branch_id).await?,
-    )
-    .map_err(|_| AppError::internal("failed to serialize invoice settings"))?;
+    document["appearance"] =
+        serde_json::to_value(read_invoice_appearance_settings(state, tenant_id, branch_id).await?)
+            .map_err(|_| AppError::internal("failed to serialize invoice settings"))?;
+    Ok((document, upi_uri))
+}
+
+/// Renders one layout and writes it as the permanent record for the invoice.
+///
+/// `ON CONFLICT DO NOTHING` is what makes it permanent: the first seal wins and
+/// every later call reads it back instead of overwriting. Callers must only
+/// reach this for a finalized invoice — see [`seal_finalized_invoice_pdfs`].
+async fn store_invoice_pdf_snapshot(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    layout: InvoicePdfLayout,
+) -> Result<InvoicePdfSnapshotRow, AppError> {
+    let (document, upi_uri) =
+        build_invoice_pdf_document(state, tenant_id, branch_id, sale_id).await?;
     let pdf = invoice_pdf::render(&document, layout, &upi_uri)?;
     let sha256 = invoice_pdf::sha256_hex(&pdf);
-
-    let inserted_snapshot = sqlx::query_as::<_, InvoicePdfSnapshotRow>(
+    let inserted = sqlx::query_as::<_, InvoicePdfSnapshotRow>(
         "INSERT INTO pos_invoice_documents (tenant_id, branch_id, sale_id, layout, sha256, source_json, pdf_bytes) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7) ON CONFLICT (tenant_id, branch_id, sale_id, layout) DO NOTHING RETURNING pdf_bytes, sha256",
     )
-    .bind(&tenant_id)
-    .bind(&branch_id)
-    .bind(&id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
     .bind(layout.as_str())
     .bind(&sha256)
     .bind(document.to_string())
@@ -5375,13 +5458,77 @@ async fn get_pos_invoice_pdf(
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to snapshot invoice PDF"))?;
-    let snapshot = match inserted_snapshot {
-        Some(snapshot) => snapshot,
-        None => read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str())
+    match inserted {
+        Some(snapshot) => Ok(snapshot),
+        // Another request sealed it first. Theirs is the record.
+        None => read_invoice_pdf_snapshot(state, tenant_id, branch_id, sale_id, layout.as_str())
             .await?
-            .ok_or_else(|| AppError::internal("invoice PDF snapshot was not found"))?,
-    };
+            .ok_or_else(|| AppError::internal("invoice PDF snapshot was not found")),
+    }
+}
 
+/// Seals both layouts at the moment the invoice becomes one.
+///
+/// The snapshot used to be written lazily, by whoever first downloaded a PDF.
+/// That made the "permanent record" a record of whenever somebody happened to
+/// click, not of what was issued — and because nothing checked `finalized_at`,
+/// downloading a draft sealed the draft, so the finalized invoice would hand
+/// back a PDF of a bill that was still being edited.
+///
+/// Failures here are logged rather than returned. The finalize transaction has
+/// already committed by the time this runs, so there is nothing left to roll
+/// back, and refusing the response would tell the counter the sale failed when
+/// it did not. The download path still seals on first read, which now covers
+/// this case correctly because the invoice is finalized by then.
+async fn seal_finalized_invoice_pdfs(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) {
+    for layout in [InvoicePdfLayout::A4, InvoicePdfLayout::Thermal] {
+        if let Err(error) =
+            store_invoice_pdf_snapshot(state, tenant_id, branch_id, sale_id, layout).await
+        {
+            tracing::warn!(
+                sale_id = %sale_id,
+                layout = layout.as_str(),
+                error = ?error,
+                "invoice PDF snapshot deferred to first download"
+            );
+        }
+    }
+}
+
+async fn get_pos_invoice_pdf(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<InvoicePdfQuery>,
+) -> Result<Response, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let layout = InvoicePdfLayout::parse(query.layout.as_deref())?;
+    let sale = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
+    let file_name = invoice_print_file_name(&sale.invoice_number, "pdf");
+    if let Some(snapshot) =
+        read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str()).await?
+    {
+        return invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name);
+    }
+
+    // A draft is still being edited, so there is nothing to preserve yet.
+    // Sealing one would freeze a half-finished bill as the invoice's permanent
+    // record, and every later download — including after finalize — would hand
+    // back that draft.
+    if sale.finalized_at.is_none() {
+        let (document, upi_uri) =
+            build_invoice_pdf_document(&state, &tenant_id, &branch_id, &id).await?;
+        let pdf = invoice_pdf::render(&document, layout, &upi_uri)?;
+        let sha256 = invoice_pdf::sha256_hex(&pdf);
+        return invoice_pdf_response(pdf, &sha256, &file_name);
+    }
+
+    let snapshot = store_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout).await?;
     invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name)
 }
 
@@ -12397,6 +12544,9 @@ pub(crate) async fn finalize_pos_invoice(
         .await
         .map_err(|_| AppError::internal("failed to commit invoice finalize"))?;
     state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.finalized");
+    // The invoice exists as a document from this moment, so this is when its
+    // permanent copy is taken — not whenever somebody first clicks download.
+    seal_finalized_invoice_pdfs(&state, &tenant_id, &branch_id, &id).await;
     if let Err(error) =
         happy_hours_service::scan_coupon_abuse_for_sale(&state.db, &tenant_id, &branch_id, &id)
             .await
