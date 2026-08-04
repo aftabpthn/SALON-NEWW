@@ -2,6 +2,28 @@ import { inject } from "@angular/core";
 import { CanActivateFn, Router } from "@angular/router";
 import { StaffAppService } from "./staff-app.service";
 
+export const rootRedirectGuard: CanActivateFn = async () => {
+  const staff = inject(StaffAppService);
+  const router = inject(Router);
+  if (staff.hasSavedSession() || await staff.tryRestoreSession()) {
+    const user = staff.user();
+    const isOwner = String(user?.role || "").trim().toLowerCase() === "owner";
+    return router.createUrlTree([isOwner ? "/owner/dashboard" : "/staff/dashboard"]);
+  }
+  return router.createUrlTree(["/staff/login"]);
+};
+
+export const staffGuestGuard: CanActivateFn = async () => {
+  const staff = inject(StaffAppService);
+  const router = inject(Router);
+  if (staff.hasSavedSession() || await staff.tryRestoreSession()) {
+    const user = staff.user();
+    const isOwner = String(user?.role || "").trim().toLowerCase() === "owner";
+    return router.createUrlTree([isOwner ? "/owner/dashboard" : "/staff/dashboard"]);
+  }
+  return true;
+};
+
 export const staffAuthGuard: CanActivateFn = async () => {
   const staff = inject(StaffAppService);
   const router = inject(Router);
