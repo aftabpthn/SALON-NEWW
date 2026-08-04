@@ -1169,6 +1169,11 @@ pub struct PosSaleUpdate {
     pub staff_id: Option<String>,
     pub source: Option<String>,
     pub reference_id: Option<String>,
+    /// Required to re-attribute a finalized invoice to a different staff member.
+    ///
+    /// Optional on a draft, where nothing has been reported or paid yet.
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -4136,6 +4141,74 @@ mod billing_completion_tests {
         assert!(validated_discount_reason(&payload).is_err());
         payload.discount_reason = Some("Service recovery".to_string());
         assert!(validated_discount_reason(&payload).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod finalized_invoice_patch_tests {
+    use super::{refuse_frozen_finalized_fields, require_lifecycle_reason, PosSaleUpdate};
+
+    fn patch() -> PosSaleUpdate {
+        PosSaleUpdate {
+            status: None,
+            staff_id: None,
+            source: None,
+            reference_id: None,
+            reason: None,
+        }
+    }
+
+    #[test]
+    fn a_finalized_invoice_status_goes_through_the_reversal_paths() {
+        // Payroll excludes void/refunded/cancelled sales, so patching status
+        // moved a sale in or out of someone's payout without touching the
+        // ledger the reversal paths maintain.
+        let mut change = patch();
+        change.status = Some("voided".into());
+        let error = refuse_frozen_finalized_fields(&change).expect_err("status must be refused");
+        assert!(
+            format!("{error:?}").contains("void, refund or credit note"),
+            "the refusal has to name the path that does work: {error:?}"
+        );
+    }
+
+    #[test]
+    fn reconciliation_references_are_frozen_after_finalize() {
+        // These change no number, which is exactly why a mismatch found weeks
+        // later is so hard to trace back to anything.
+        for mutate in [
+            (|p: &mut PosSaleUpdate| p.source = Some("manual".into())) as fn(&mut PosSaleUpdate),
+            |p: &mut PosSaleUpdate| p.reference_id = Some("ref-9".into()),
+        ] {
+            let mut change = patch();
+            mutate(&mut change);
+            assert!(refuse_frozen_finalized_fields(&change).is_err());
+        }
+    }
+
+    #[test]
+    fn re_attribution_is_not_blanket_refused() {
+        // Tagging the wrong therapist is a real mistake and has to stay
+        // correctable, or the correction happens directly in the database.
+        let mut change = patch();
+        change.staff_id = Some("staff-2".into());
+        change.reason = Some("Wrong therapist tagged at the counter".into());
+        assert!(refuse_frozen_finalized_fields(&change).is_ok());
+    }
+
+    #[test]
+    fn re_attribution_still_costs_a_reason() {
+        assert!(require_lifecycle_reason("", "staff re-attribution").is_err());
+        assert!(require_lifecycle_reason("  ", "staff re-attribution").is_err());
+        assert!(require_lifecycle_reason("Wrong therapist tagged", "staff re-attribution").is_ok());
+    }
+
+    #[test]
+    fn an_untouched_patch_is_allowed_through() {
+        // Nothing here refuses a request on its own; only the named fields do.
+        // That a draft never reaches this function at all is a property of the
+        // handler, asserted in the wiring test rather than pretended at here.
+        assert!(refuse_frozen_finalized_fields(&patch()).is_ok());
     }
 }
 
@@ -9671,13 +9744,62 @@ async fn ensure_cash_drawer_open(
     Ok(tills.into_iter().next())
 }
 
+/// Patches the mutable fields of a sale.
+///
+/// Before finalize this is ordinary editing. After it, the same three fields
+/// move money: `staff_id` is what tip payout attributes against, and `status`
+/// is what decides whether payroll counts the sale at all — so a silent PATCH
+/// here paid the wrong person, with nothing in the audit trail to show it
+/// happened. Every other post-finalize change to an invoice already demands a
+/// reason and leaves a record; this path did not, and no screen calls it, which
+/// is what let it stay that way.
+///
+/// So after finalize: status changes belong to void, refund or credit note,
+/// where the approval and reversal logic lives, and the reconciliation
+/// references are frozen. Re-attribution stays possible, because tagging the
+/// wrong therapist is a real mistake that has to be correctable — but it costs
+/// a permission, a reason and an audit row, and it stops once the tip has
+/// actually been paid, since money that has left cannot be moved by an UPDATE.
 async fn update_pos_sale(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<PosSaleUpdate>,
 ) -> ApiResult<PosSaleResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let existing = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
+
+    let requested_staff_id = payload
+        .staff_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
+    let reattributing = !requested_staff_id.is_empty() && requested_staff_id != existing.staff_id;
+    let reason = payload.reason.as_deref().unwrap_or("").trim().to_string();
+
+    if existing.finalized_at.is_some() {
+        refuse_frozen_finalized_fields(&payload)?;
+        if reattributing {
+            require_pos_permission(&claims, "pos.manage")?;
+            require_lifecycle_reason(&reason, "staff re-attribution")?;
+            let tip_paid = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM staff_tip_payout_items WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
+            )
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .bind(&id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| AppError::internal("failed to check tip payouts for this invoice"))?;
+            if tip_paid > 0 {
+                return Err(AppError::conflict(
+                    "the tip on this invoice has already been paid out; correct it through payroll rather than re-attributing the sale",
+                ));
+            }
+        }
+    }
 
     let sale = sqlx::query_as::<_, PosSaleRow>(
         r#"
@@ -9705,6 +9827,28 @@ async fn update_pos_sale(
     .await
     .map_err(|_| AppError::internal("failed to update pos sale"))?
     .ok_or_else(|| AppError::not_found("pos sale was not found"))?;
+
+    // Recorded on drafts too. Attribution is the thing people dispute months
+    // later, and "who changed it and when" is worth more then than the small
+    // cost of a row now.
+    if reattributing {
+        security_service::record_audit(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            "pos.sale.staff_reattributed",
+            serde_json::json!({
+                "saleId": sale.id,
+                "invoiceNumber": sale.invoice_number,
+                "fromStaffId": existing.staff_id,
+                "toStaffId": sale.staff_id,
+                "finalized": existing.finalized_at.is_some(),
+                "reason": reason,
+            }),
+        )
+        .await?;
+    }
 
     let line_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
@@ -14190,6 +14334,28 @@ async fn reverse_happy_hour_lock(
     .execute(&mut **tx)
     .await
     .map_err(|_| AppError::internal("failed to reverse happy hour discount"))?;
+    Ok(())
+}
+
+/// The fields a PATCH may no longer touch once the invoice is finalized.
+///
+/// `status` decides whether payroll counts the sale at all, so flipping it here
+/// would move money while bypassing void, refund and credit note — the paths
+/// that actually reverse the ledger and ask for approval. `source` and
+/// `reference_id` are what a settlement is reconciled against; rewriting them
+/// breaks the match without changing a single number, which is the hardest kind
+/// of discrepancy to chase down later.
+fn refuse_frozen_finalized_fields(payload: &PosSaleUpdate) -> Result<(), AppError> {
+    if payload.status.is_some() {
+        return Err(AppError::validation(
+            "a finalized invoice's status cannot be patched; use void, refund or credit note",
+        ));
+    }
+    if payload.source.is_some() || payload.reference_id.is_some() {
+        return Err(AppError::validation(
+            "a finalized invoice's source and reference cannot be changed",
+        ));
+    }
     Ok(())
 }
 
