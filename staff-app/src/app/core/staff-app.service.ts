@@ -1245,15 +1245,19 @@ export class StaffAppService {
   private async refreshSession(): Promise<void> {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = (async () => {
+      let status = 0;
       try {
         const response = await CapacitorHttp.post({
           url: `${this.baseUrl}/auth/refresh`,
           headers: { "Content-Type": "application/json" },
           data: { device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() } }
         });
-        if (response.status < 200 || response.status >= 300) {
-          const message = this.errorMessage({ error: response.data, message: `Session refresh failed (${response.status}).` }, "Staff session refresh failed.");
-          throw new Error(message);
+        status = response.status || 0;
+        if (status < 200 || status >= 300) {
+          const message = this.errorMessage({ error: response.data, message: `Session refresh failed (${status}).` }, "Staff session refresh failed.");
+          const err = new Error(message);
+          (err as unknown as { status: number }).status = status;
+          throw err;
         }
         const session = this.unwrap<StaffRefreshResponse>(response.data);
         if (!session.accessToken) throw new Error("Staff session refresh failed.");
@@ -1266,7 +1270,7 @@ export class StaffAppService {
           this.sessionIdValue ||= crypto.randomUUID();
         }
       } catch (error) {
-        this.clearLocalAuthState(false);
+        if (status === 401) this.clearLocalAuthState(false);
         throw error;
       }
     })().finally(() => { this.refreshPromise = null; });
@@ -1281,6 +1285,7 @@ export class StaffAppService {
       const status = (error as unknown as { status?: number }).status;
       if (status === 401) return true;
       if (status === 400 && this.isProxyBadRequest((error as unknown as { error?: unknown }).error)) return true;
+      if (status && status >= 400 && status !== 401) return false;
       const msg = (error.message || "").toLowerCase();
       return msg.includes("401") || msg.includes("unauthorized") || msg.includes("session") || msg.includes("expired");
     }
