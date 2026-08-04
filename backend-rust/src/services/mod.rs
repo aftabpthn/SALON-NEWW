@@ -12,6 +12,7 @@ pub mod ai_prediction_outcome_service;
 pub mod ai_prediction_service;
 pub mod ai_scope_service;
 pub mod ai_scoped_copilot_tools;
+pub mod ai_semantic_service;
 pub mod ai_tool_dispatcher;
 pub mod ai_what_if_service;
 pub mod ai_workforce_service;

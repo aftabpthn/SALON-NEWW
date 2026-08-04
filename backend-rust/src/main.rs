@@ -219,6 +219,27 @@ async fn main() -> Result<()> {
         },
     );
 
+    // Keeps the semantic index in step with the CRM and embeds what is queued.
+    // Hourly rather than six-hourly because a note deleted in the CRM has to
+    // stop being retrievable quickly, and reconciliation is the cheap half of
+    // the cycle — the embedding half is bounded per pass.
+    worker::spawn(
+        &state,
+        "ai_semantic_index",
+        Duration::from_secs(3_600),
+        |state| async move {
+            if services::ai_semantic_service::run_semantic_index_worker(
+                &state.db,
+                services::ai_semantic_service::EmbeddingProvider::from_settings(&state.settings),
+            )
+            .await
+            .is_err()
+            {
+                worker::note_failure("ai_semantic_index", "index_corpus");
+            }
+        },
+    );
+
     // Checks predictions whose horizon has passed against what actually
     // happened. Six-hourly rather than daily because horizons expire on a
     // calendar the worker does not control, and a missed cycle would push a

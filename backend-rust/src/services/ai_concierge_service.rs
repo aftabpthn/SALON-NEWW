@@ -15,7 +15,7 @@ use crate::{
         ai_channel_service,
         ai_copilot_tools::{self, CopilotAnswer},
         ai_scope_service::{self, ScopeRequest},
-        ai_tool_dispatcher,
+        ai_semantic_service, ai_tool_dispatcher,
         auth_service::AuthClaims,
     },
 };
@@ -97,6 +97,11 @@ pub struct ConciergeResponse {
     /// Set when a tool matched the question but the caller's role may not run it.
     #[serde(skip_serializing_if = "str::is_empty")]
     pub restricted_tool: String,
+    /// CRM text retrieved because no tool matched. Returned so the reply can be
+    /// traced back to the rows it was written from — a passage without its
+    /// source is indistinguishable from something the model made up.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub retrieved: Vec<ai_semantic_service::SemanticPassage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -659,6 +664,28 @@ async fn process_message(
         }
         None => CopilotOutcome::NotApplicable,
     };
+    // Retrieval is consulted only where the tools produced nothing at all. A
+    // question a tool answered is already grounded in a query someone can
+    // audit, and putting quoted text next to that would invite the provider to
+    // blend the two. A refusal is likewise final — retrieving around a
+    // permission the caller does not hold is exactly what must not happen.
+    let retrieved = match (&copilot, web_claims) {
+        (CopilotOutcome::NotApplicable, Some(claims)) => {
+            ai_semantic_service::search(
+                db,
+                ai_semantic_service::EmbeddingProvider::new(
+                    provider_endpoint.url,
+                    provider_endpoint.token,
+                ),
+                tenant_id,
+                claims,
+                &raw_body,
+                &ScopeRequest::default(),
+            )
+            .await
+        }
+        _ => Vec::new(),
+    };
     // A refusal is a final answer: sending it to the provider would invite a
     // generic reply about data this role is not allowed to see.
     let (provider, provider_status) = if let CopilotOutcome::Forbidden(tool) = copilot {
@@ -679,6 +706,7 @@ async fn process_message(
             web_claims,
             &governance,
             copilot.answer(),
+            &retrieved,
         )
         .await
     };
@@ -787,6 +815,7 @@ async fn process_message(
         provider_status: provider_status.into(),
         copilot: copilot_answer,
         restricted_tool,
+        retrieved,
     })
 }
 
@@ -994,6 +1023,7 @@ async fn call_provider(
     web_claims: Option<&AuthClaims>,
     governance: &AiGovernanceRecord,
     copilot: Option<&CopilotAnswer>,
+    retrieved: &[ai_semantic_service::SemanticPassage],
 ) -> (ProviderResponse, &'static str) {
     let financials_visible = web_claims.is_some_and(|claims| {
         ai_scope_service::domain_allowed(claims, ai_scope_service::AiDomain::Finance)
@@ -1053,6 +1083,19 @@ async fn call_provider(
             "recommended_action":answer.recommended_action,
             "confidence":answer.confidence,
             "instruction":"These figures come from the CRM database and are authoritative. Explain and summarise them, keeping the branch, the date period, the current-vs-previous values, the stated reason, the confidence level and the recommended action. Never invent numbers, names, dates or causes that are not present here, and never state a cause more strongly than the stated confidence supports."
+        })),
+        // Quoted CRM text, retrieved only because no tool matched. Unlike
+        // `crm_evidence` these are passages, not computed figures, so the
+        // instruction is the opposite one: summarise what is written here and
+        // say where it came from, but do not turn prose into a statistic.
+        "retrieved_passages":(!retrieved.is_empty()).then(||json!({
+            "passages":retrieved.iter().map(|passage|json!({
+                "source":passage.source_kind,
+                "title":passage.title,
+                "text":passage.content,
+                "similarity":passage.similarity
+            })).collect::<Vec<_>>(),
+            "instruction":"This is text stored in the CRM, retrieved because no report answered the question. Answer only from what it says and name the source you used. Do not compute totals, counts, trends or money from it, and do not treat it as current if it does not say so — if the question needs a figure, say the reports do not cover it rather than deriving one from this text."
         })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });
