@@ -11,7 +11,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     <section class="page attendance-page">
       <header class="page-head attendance-head"><div><h1>Attendance</h1><p>Your shift, attendance timeline, and monthly summary.</p></div><span class="date-chip">{{ today()?.date | date:'EEE, d MMM' }}</span></header>
       @if (!canUseAttendance()) { <section staffPageState class="notice">You do not have permission to use attendance controls.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading attendance...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
       @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
@@ -96,13 +95,12 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   `]
 })
 export class StaffAttendancePage implements OnInit, OnDestroy {
-  readonly today = signal<StaffToday | null>(null);
-  readonly attendance = signal<StaffAttendance[]>([]);
+  readonly today = signal<StaffToday>(this.staff.readStoredData<StaffToday>("today") || { date: businessDate(), schedules: [], attendance: [], activeBreak: null, tasks: [] });
+  readonly attendance = signal<StaffAttendance[]>(this.staff.readStoredData<StaffAttendance[]>("attendance-history") || []);
   readonly monthlyAttendance = signal<StaffAttendance[]>([]);
   readonly currentTime = signal(Date.now());
   readonly view = signal<"today" | "history" | "monthly">("today");
   readonly views = [{ id: "today", label: "Today", icon: "TD" }, { id: "history", label: "Timeline", icon: "TL" }, { id: "monthly", label: "Month", icon: "MO" }] as const;
-  readonly loading = signal(false);
   readonly historyLoading = signal(false);
   readonly selectedDays = signal<30 | 90 | 180 | 365>(30);
   readonly historyRanges = [{ days: 30, label: "30 days", rangeLabel: "Last 30 days" }, { days: 90, label: "3 months", rangeLabel: "Last 3 months" }, { days: 180, label: "6 months", rangeLabel: "Last 6 months" }, { days: 365, label: "12 months", rangeLabel: "Last 12 months" }] as const;
@@ -148,15 +146,6 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   async load(fresh = false) {
     const generation = ++this.loadGeneration;
     const historyGeneration = ++this.historyGeneration;
-    const cachedToday = this.staff.readStoredData<StaffToday>("today");
-    const cachedAttendance = this.staff.readStoredData<StaffAttendance[]>("attendance-history");
-    if (cachedToday) {
-      this.today.set(cachedToday);
-      if (cachedAttendance) this.attendance.set(cachedAttendance);
-      this.loading.set(false);
-    } else {
-      this.loading.set(true);
-    }
     try {
       const date = businessDate();
       const monthStart = `${date.slice(0, 7)}-01`;
@@ -170,7 +159,9 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
       }
       this.monthlyAttendance.set(monthlyAttendance);
       this.verificationPolicy.set(!!policy && policy.status === "active" && (policy.enforceClockIn || policy.enforceClockOut));
-    } finally { if (generation === this.loadGeneration) this.loading.set(false); }
+    } catch {
+      // Backend error handled by StaffAppService
+    }
   }
   canUseAttendance(): boolean { return this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"]); }
   attendanceStatus(): string { return this.activeOrLatestAttendance()?.status?.replace(/_/g, " ") || "not clocked in"; }

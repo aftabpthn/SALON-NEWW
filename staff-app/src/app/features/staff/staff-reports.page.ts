@@ -20,7 +20,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
       </header>
 
       @if (!canReadReports()) { <section staffPageState class="notice">You do not have permission to view reports.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading reports...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
@@ -314,9 +313,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   `]
 })
 export class StaffReportsPage implements OnInit {
-  readonly os = signal<StaffEnterpriseOs | null>(null);
-  readonly dashboard = signal<StaffDashboard | null>(null);
-  readonly loading = signal(false);
+  readonly os = signal<StaffEnterpriseOs | null>(this.staff.readStoredData<StaffEnterpriseOs>("enterprise-os") || null);
+  readonly dashboard = signal<StaffDashboard | null>(this.staff.readStoredData<StaffDashboard>("dashboard") || null);
   readonly message = signal("");
   fromDate = this.dateOffset(6);
   toDate = this.dateOffset(0);
@@ -355,15 +353,6 @@ export class StaffReportsPage implements OnInit {
       this.dashboard.set(null);
       return;
     }
-    const cachedOs = this.staff.readStoredData<StaffEnterpriseOs>("enterprise-os");
-    const cachedDashboard = this.staff.readStoredData<StaffDashboard>("dashboard");
-    if (cachedOs) {
-      this.os.set(cachedOs);
-      if (cachedDashboard) this.dashboard.set(cachedDashboard);
-      this.loading.set(false);
-    } else {
-      this.loading.set(true);
-    }
     this.message.set("");
     try {
       const params = { from: this.fromDate, to: this.toDate, date: this.toDate };
@@ -373,8 +362,8 @@ export class StaffReportsPage implements OnInit {
       this.dashboard.set(dashboard);
       this.staff.writeStoredData("enterprise-os", os);
       this.staff.writeStoredData("dashboard", dashboard);
-    } finally {
-      if (generation === this.loadGeneration) this.loading.set(false);
+    } catch {
+      // Backend error handled by StaffAppService
     }
   }
 
