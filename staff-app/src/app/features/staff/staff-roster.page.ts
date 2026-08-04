@@ -143,7 +143,13 @@ export class StaffRosterPage implements OnInit, OnDestroy {
 
   async load() {
     const generation = ++this.loadGeneration;
-    this.loading.set(true);
+    const cachedToday = this.staff.readStoredData<StaffToday>("today");
+    if (cachedToday) {
+      this.today.set(cachedToday);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     this.message.set("");
     this.errorMessage.set("");
     const from = this.windowStart();

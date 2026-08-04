@@ -148,14 +148,26 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   async load(fresh = false) {
     const generation = ++this.loadGeneration;
     const historyGeneration = ++this.historyGeneration;
-    this.loading.set(true);
+    const cachedToday = this.staff.readStoredData<StaffToday>("today");
+    const cachedAttendance = this.staff.readStoredData<StaffAttendance[]>("attendance-history");
+    if (cachedToday) {
+      this.today.set(cachedToday);
+      if (cachedAttendance) this.attendance.set(cachedAttendance);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     try {
       const date = businessDate();
       const monthStart = `${date.slice(0, 7)}-01`;
       const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(undefined, fresh), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
       if (generation !== this.loadGeneration) return;
       this.today.set(today);
-      if (historyGeneration === this.historyGeneration) this.attendance.set(attendance);
+      this.staff.writeStoredData("today", today);
+      if (historyGeneration === this.historyGeneration) {
+        this.attendance.set(attendance);
+        this.staff.writeStoredData("attendance-history", attendance);
+      }
       this.monthlyAttendance.set(monthlyAttendance);
       this.verificationPolicy.set(!!policy && policy.status === "active" && (policy.enforceClockIn || policy.enforceClockOut));
     } finally { if (generation === this.loadGeneration) this.loading.set(false); }

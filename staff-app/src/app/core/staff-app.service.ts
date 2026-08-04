@@ -1451,7 +1451,7 @@ export class StaffAppService {
     return `${STAFF_DATA_CACHE_PREFIX}${this.tenantIdValue}:${user?.branchId || "branch"}:${user?.id || user?.staffId || "user"}:${key}`;
   }
 
-  private readStoredData<T>(key: string): T | undefined {
+  readStoredData<T>(key: string): T | undefined {
     try {
       const raw = localStorage.getItem(this.storedDataKey(key));
       if (!raw) return undefined;
@@ -1462,7 +1462,7 @@ export class StaffAppService {
     } catch { return undefined; }
   }
 
-  private writeStoredData<T>(key: string, value: T): void {
+  writeStoredData<T>(key: string, value: T): void {
     try { localStorage.setItem(this.storedDataKey(key), JSON.stringify({ v: value })); } catch { /* Storage unavailable or full — data still works from the network. */ }
   }
 

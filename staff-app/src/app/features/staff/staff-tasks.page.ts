@@ -98,7 +98,22 @@ export class StaffTasksPage implements OnInit {
   readonly columns = [{ label: "Open", status: "open" }, { label: "In Progress", status: "in_progress" }, { label: "Done", status: "completed" }];
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadTasks()) void this.load(); }
-  async load(fresh = false) { this.loading.set(true); try { this.today.set(await this.staff.today(undefined, fresh)); } finally { this.loading.set(false); } }
+  async load(fresh = false) {
+    const cachedToday = this.staff.readStoredData<StaffToday>("today");
+    if (cachedToday) {
+      this.today.set(cachedToday);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
+    try {
+      const today = await this.staff.today(undefined, fresh);
+      this.today.set(today);
+      this.staff.writeStoredData("today", today);
+    } finally {
+      this.loading.set(false);
+    }
+  }
   canReadTasks(): boolean { return this.staff.hasPermission("read:staff"); }
   canUpdateTasks(): boolean { return this.staff.hasAnyPermission(["write:staff", "update:staff"]); }
   taskCount(status: string): number { return this.tasksByStatus(status).length; }

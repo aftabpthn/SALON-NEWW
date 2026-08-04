@@ -170,7 +170,7 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (!hasData) this.optionalErrors.set([]);
 
     if (!hasData) {
-      const cached = this.staff.storedData<StaffDashboard>("dashboard");
+      const cached = this.staff.readStoredData<StaffDashboard>("dashboard");
       if (cached) {
         this.data.set(cached);
         this.initialLoading.set(false);
