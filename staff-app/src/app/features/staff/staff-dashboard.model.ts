@@ -166,14 +166,16 @@ function taskPriority(task: StaffToday["tasks"][number], now: Date): number {
 
 function nextAppointment(input: DashboardViewModelInput): StaffAppointment | null {
   const now = (input.now || new Date()).getTime();
-  return [...input.dashboard.todayAppointments]
+  return [...(Array.isArray(input.dashboard.todayAppointments) ? input.dashboard.todayAppointments : [])]
     .filter((item) => !isActiveStatus(item.status) && new Date(item.endAt || item.startAt).getTime() >= now)
     .sort((left, right) => new Date(left.startAt).getTime() - new Date(right.startAt).getTime())[0] || null;
 }
 
 function context(input: DashboardViewModelInput): ActionContext {
-  const activeAppointment = input.dashboard.liveAppointments.find((item) => isActiveStatus(item.status))
-    || input.dashboard.todayAppointments.find((item) => isActiveStatus(item.status)) || null;
+  const liveAppointments = Array.isArray(input.dashboard.liveAppointments) ? input.dashboard.liveAppointments : [];
+  const todayAppointments = Array.isArray(input.dashboard.todayAppointments) ? input.dashboard.todayAppointments : [];
+  const activeAppointment = liveAppointments.find((item) => isActiveStatus(item.status))
+    || todayAppointments.find((item) => isActiveStatus(item.status)) || null;
   const tasks = openTasks(input);
   const attendance = input.today?.attendance || [];
   return {
@@ -218,7 +220,7 @@ function work(input: ActionContext): DashboardWork {
     const overrun = timer ? Math.max(0, timer.elapsedMinutes - timer.totalMinutes) : 0;
     return {
       mode: "active", tone: overrun ? "amber" : "sage", eyebrow: "Current service", title: "Assigned appointment",
-      detail: active.serviceNames.join(", ") || "Service", status: statusLabel(active.status),
+      detail: (active.serviceNames || []).join(", ") || "Service", status: statusLabel(active.status),
       meta: timer ? (overrun ? `${compactDurationLabel(timer.elapsedMinutes)} elapsed · ${compactDurationLabel(overrun)} over` : `${compactDurationLabel(timer.elapsedMinutes)} elapsed`) : "Timer unavailable",
       progress: timer?.progress, actions: appointmentActions(input, active, "active"),
       queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined,
@@ -234,7 +236,7 @@ function work(input: ActionContext): DashboardWork {
     const minutesToStart = timeline?.minutesToStart ?? Math.round((new Date(next.startAt).getTime() - (input.now || new Date()).getTime()) / 60000);
     return {
       mode, tone: delayed ? "amber" : waiting ? "sage" : "neutral", eyebrow: waiting ? "Appointment waiting" : delayed ? "Running late" : "Next appointment",
-      title: "Assigned appointment", detail: `${next.serviceNames.join(", ") || "Service"} · ${next.durationMinutes || 0} min`,
+      title: "Assigned appointment", detail: `${(next.serviceNames || []).join(", ") || "Service"} · ${next.durationMinutes || 0} min`,
       meta: delayed ? `${timeLabel(next.startAt)} · ${compactDurationLabel(Math.abs(minutesToStart))} late` : waiting ? timeLabel(next.startAt) : `${timeLabel(next.startAt)} · ${minutesUntilLabel(minutesToStart)}`,
       status: statusLabel(next.status), actions: appointmentActions(input, next, mode), queueRoute: input.hasPermission("read:appointments") && input.hasPermission("read:staff") ? "/staff/queue" : undefined
     };
@@ -253,7 +255,8 @@ function statusLabel(value: string): string {
 }
 
 function hero(input: ActionContext, activeAlerts: DashboardAlert[]): StaffDashboardViewModel["hero"] {
-  const shift = input.today?.schedules[0];
+  const schedules = Array.isArray(input.today?.schedules) ? input.today.schedules : [];
+  const shift = schedules[0];
   const shiftText = shift ? `${shift.startTime || "--"}–${shift.endTime || "--"}` : "";
   const canClock = ATTENDANCE_PERMISSIONS.some(input.hasPermission);
   const canOpenAttendance = [...ATTENDANCE_PERMISSIONS, "read:staff"].some(input.hasPermission);
@@ -339,8 +342,9 @@ export function shouldShowDashboardRecommendation(state: DashboardRecommendation
 }
 
 function quickActionStatus(id: string, input: ActionContext): string | undefined {
-  if (id === "appointments") return input.dashboard.summary.todayAppointments ? `${input.dashboard.summary.todayAppointments} today` : "No bookings";
-  if (id === "queue") return input.dashboard.summary.liveAppointments ? `${input.dashboard.summary.liveAppointments} live` : "No live services";
+  const summary = input.dashboard.summary || {};
+  if (id === "appointments") return summary.todayAppointments ? `${summary.todayAppointments} today` : "No bookings";
+  if (id === "queue") return summary.liveAppointments ? `${summary.liveAppointments} live` : "No live services";
   if (id === "tasks") return input.openTaskCount ? `${input.openTaskCount} pending` : "All clear";
   if (id === "attendance") return input.today?.activeBreak ? "On break" : input.openAttendance ? "Clocked in" : input.shiftCompleted ? "Shift complete" : "Not clocked in";
   if (id === "calendar") return "View shifts";

@@ -225,9 +225,11 @@ export class StaffDashboardPage implements OnInit, OnDestroy {
     if (this.pendingMutation()) return;
     if (action.route) { await this.router.navigate(Array.isArray(action.route) ? [...action.route] : [action.route]); return; }
     if (action.kind === "clock") {
-      const isOpen = this.today()?.attendance.some((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")));
+      const currentToday = this.today();
+      const attendance = Array.isArray(currentToday?.attendance) ? currentToday.attendance : [];
+      const isOpen = attendance.some((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")));
       if (isOpen) {
-        const attendanceId = this.today()?.attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")))?.id || "";
+        const attendanceId = attendance.find((item) => !item.clockOutAt && !/out|closed|complete/i.test(String(item.status || "")))?.id || "";
         await this.runMutation("clock-out", () => this.staff.clockOut(attendanceId), "Clocked out.");
       } else {
         await this.runMutation("clock-in", () => this.staff.clockIn(), "Clocked in.");
