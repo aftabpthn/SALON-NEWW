@@ -46,4 +46,5 @@ outputs/
 happy-hours-control-tower-*.zip
 *.rar
 staff-app/apk-output/
+staff-app/*.apk
 staff-app/mobile-attendance-feature-20260721/

@@ -31,7 +31,6 @@ type DashboardModule = "enterprise" | "today" | "overtime" | "leave" | "preferen
       } @else if (viewModel(); as vm) {
         @if (!online()) { <section class="sync-banner offline" role="status"><b>Offline</b><span>Live data may be out of date. Supported changes will sync when you reconnect.</span></section> }
         @if (queuedActions() > 0) { <section class="sync-banner" role="status"><b>{{ queuedActions() }} pending</b><span>Staff action{{ queuedActions() === 1 ? '' : 's' }} waiting to sync.</span></section> }
-        @if (refreshing() && data()) { <div staffPageState class="refresh-line" role="status" [loading]="true">Refreshing today’s data</div> }
 
         @if (showTip()) {
           <aside class="context-notice" aria-label="Recommended action"><span class="recommendation-mark" aria-hidden="true">✓</span><b>{{ recommendationText() }}</b><button type="button" (click)="dismissTip()" aria-label="Dismiss recommendation">×</button></aside>
