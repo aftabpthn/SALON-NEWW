@@ -49,9 +49,17 @@ export class StaffQueuePage implements OnInit {
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { if (this.canReadQueue()) void this.load(); }
   async load() {
-    this.loading.set(true);
+    const cached = this.staff.readStoredData<StaffEnterpriseOs>("enterprise-os");
+    if (cached) {
+      this.os.set(cached);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     try {
-      this.os.set(await this.staff.enterpriseOs());
+      const data = await this.staff.enterpriseOs();
+      this.os.set(data);
+      this.staff.writeStoredData("enterprise-os", data);
     } finally {
       this.loading.set(false);
     }

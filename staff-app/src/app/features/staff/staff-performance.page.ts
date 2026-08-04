@@ -25,7 +25,7 @@ export class StaffPerformancePage implements OnInit {
   readonly loading = signal(false);
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { void this.load(); }
-  async load() { this.loading.set(true); try { this.os.set(await this.staff.enterpriseOs()); } finally { this.loading.set(false); } }
+  async load() { const cached = this.staff.readStoredData<StaffEnterpriseOs>("enterprise-os"); if (cached) { this.os.set(cached); this.loading.set(false); } else { this.loading.set(true); } try { const data = await this.staff.enterpriseOs(); this.os.set(data); this.staff.writeStoredData("enterprise-os", data); } finally { this.loading.set(false); } }
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }
   reportKeys(): Array<"daily" | "weekly" | "monthly" | "yearly"> { return ["daily", "weekly", "monthly", "yearly"]; }
 }

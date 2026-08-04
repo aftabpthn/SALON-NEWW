@@ -48,11 +48,21 @@ export class StaffLeavesPage implements OnInit {
 
   async load(fresh = false) {
     if (!this.canReadLeaves()) return;
-    this.loading.set(true);
+    const cachedLeaves = this.staff.readStoredData<StaffLeave[]>("leaves");
+    const cachedBalances = this.staff.readStoredData<StaffLeaveBalance[]>("leave-balances");
+    if (cachedLeaves) {
+      this.leaves.set(cachedLeaves);
+      if (cachedBalances) this.balances.set(cachedBalances);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     try {
       const [leaves, balances] = await Promise.all([this.staff.leaves(), this.staff.leaveBalances(fresh)]);
       this.leaves.set(leaves);
       this.balances.set(balances);
+      this.staff.writeStoredData("leaves", leaves);
+      this.staff.writeStoredData("leave-balances", balances);
     } finally {
       this.loading.set(false);
     }

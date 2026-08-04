@@ -355,7 +355,15 @@ export class StaffReportsPage implements OnInit {
       this.dashboard.set(null);
       return;
     }
-    this.loading.set(true);
+    const cachedOs = this.staff.readStoredData<StaffEnterpriseOs>("enterprise-os");
+    const cachedDashboard = this.staff.readStoredData<StaffDashboard>("dashboard");
+    if (cachedOs) {
+      this.os.set(cachedOs);
+      if (cachedDashboard) this.dashboard.set(cachedDashboard);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     this.message.set("");
     try {
       const params = { from: this.fromDate, to: this.toDate, date: this.toDate };
@@ -363,6 +371,8 @@ export class StaffReportsPage implements OnInit {
       if (generation !== this.loadGeneration) return;
       this.os.set(os);
       this.dashboard.set(dashboard);
+      this.staff.writeStoredData("enterprise-os", os);
+      this.staff.writeStoredData("dashboard", dashboard);
     } finally {
       if (generation === this.loadGeneration) this.loading.set(false);
     }

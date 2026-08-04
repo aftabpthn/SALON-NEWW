@@ -366,17 +366,26 @@ export class StaffChatPage implements OnInit, AfterViewInit, OnDestroy {
   async loadConversations(silent = false): Promise<void> {
     if (!this.canReadChat()) return;
     const generation = ++this.conversationGeneration;
-    if (!silent) this.initialLoading.set(true);
+    const cached = this.staff.readStoredData<StaffChatConversation[]>("chat-conversations");
+    if (cached) {
+      this.conversations.set(this.sortConversations(cached));
+      const defaultConversation = cached.find((item) => item.type === "team") || cached[0];
+      if (defaultConversation && !this.activeConversationId()) void this.openConversation(defaultConversation.id);
+      this.initialLoading.set(false);
+    } else if (!silent) {
+      this.initialLoading.set(true);
+    }
     this.loadError.set("");
     try {
       const conversations = await this.staff.staffChatConversations();
       if (generation !== this.conversationGeneration) return;
       this.conversations.set(this.sortConversations(conversations));
+      this.staff.writeStoredData("chat-conversations", conversations);
       const currentExists = conversations.some((item) => item.id === this.activeConversationId());
       const defaultConversation = conversations.find((item) => item.type === "team") || conversations[0];
       if (!currentExists && defaultConversation) await this.openConversation(defaultConversation.id);
     } catch {
-      if (generation === this.conversationGeneration && !silent) this.loadError.set(this.staff.error() || "Check your connection and try again.");
+      if (generation === this.conversationGeneration && !silent && !cached) this.loadError.set(this.staff.error() || "Check your connection and try again.");
     } finally {
       if (generation === this.conversationGeneration) this.initialLoading.set(false);
     }
