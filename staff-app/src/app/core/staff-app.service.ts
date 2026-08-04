@@ -5,11 +5,13 @@ import { environment } from "../../environments/environment";
 import { resetCsrfState } from "./csrf.interceptor";
 import { addBusinessDays, businessDate } from "./business-date";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
 import { AttendanceBiometricService, AttendanceInstallationIdentity, NativeAttendanceLocation } from "./attendance-biometric.service";
 
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
 const STAFF_OFFLINE_LEASE_KEY = "auraStaffOfflineQueueLease";
 const STAFF_BIOMETRIC_HINT_KEY = "auraStaffBiometricLoginHint";
+const STAFF_SESSION_KEY = "auraStaffPersistentSession";
 const STAFF_DATA_CACHE_PREFIX = "auraStaffData:";
 const LEGACY_STAFF_AUTH_KEYS = ["auraStaffAccessToken", "auraStaffRefreshToken", "auraStaffSession", "auraStaffBiometricEnabled", "auraStaffBiometricCredentialId"];
 
@@ -456,6 +458,13 @@ type StaffLoginResponse = {
   user: StaffUser;
 };
 
+type StoredStaffSession = {
+  accessToken: string;
+  refreshToken?: string;
+  user: StaffUser;
+  tenantId: string;
+};
+
 export type StaffChatConversation = {
   id: string;
   type: "team" | "private-owner";
@@ -526,6 +535,16 @@ export class StaffAppService {
 
   async tryRestoreSession(): Promise<boolean> {
     if (this.isAuthenticated()) return true;
+    const stored = await this.readStoredSession();
+    if (stored?.accessToken && stored?.user?.staffId) {
+      this.accessTokenValue = stored.accessToken;
+      this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "";
+      this.sessionIdValue = crypto.randomUUID();
+      this.profile.set(null);
+      this.user.set(this.normalizeUser(stored.user));
+      void this.refreshSession().catch(() => undefined);
+      return true;
+    }
     try { await this.refreshSession(); } catch { /* refresh failed */ }
     return this.isAuthenticated();
   }
@@ -1229,6 +1248,7 @@ export class StaffAppService {
     this.sessionIdValue = crypto.randomUUID();
     this.profile.set(null);
     this.user.set(this.normalizeUser(session.user));
+    void this.writeStoredSession({ accessToken: session.accessToken, refreshToken: session.refreshToken, user: this.user()!, tenantId });
   }
 
   private async withRefreshRetry<T>(request: () => Promise<T>): Promise<T> {
@@ -1247,10 +1267,14 @@ export class StaffAppService {
     this.refreshPromise = (async () => {
       let status = 0;
       try {
+        const stored = await this.readStoredSession();
         const response = await CapacitorHttp.post({
           url: `${this.baseUrl}/auth/refresh`,
           headers: { "Content-Type": "application/json" },
-          data: { device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() } }
+          data: {
+            ...(stored?.refreshToken ? { refreshToken: stored.refreshToken } : {}),
+            device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() }
+          }
         });
         status = response.status || 0;
         if (status < 200 || status >= 300) {
@@ -1262,12 +1286,16 @@ export class StaffAppService {
         const session = this.unwrap<StaffRefreshResponse>(response.data);
         if (!session.accessToken) throw new Error("Staff session refresh failed.");
         this.accessTokenValue = session.accessToken;
+        const refreshedUser = session.user?.staffId ? this.normalizeUser(session.user) : this.user();
         if (session.user?.staffId) {
           if (this.user()?.id && this.user()?.id !== session.user.id) this.clearOfflineState();
           this.profile.set(null);
-          this.user.set(this.normalizeUser(session.user));
+          this.user.set(refreshedUser);
           this.tenantIdValue ||= this.readBiometricHint()?.tenantId || "";
           this.sessionIdValue ||= crypto.randomUUID();
+        }
+        if (refreshedUser?.staffId) {
+          void this.writeStoredSession({ accessToken: session.accessToken, refreshToken: (session as StaffLoginResponse).refreshToken, user: refreshedUser, tenantId: this.tenantIdValue });
         }
       } catch (error) {
         if (status === 401) this.clearLocalAuthState(false);
@@ -1492,6 +1520,7 @@ export class StaffAppService {
     this.biometricLocked.set(false);
     this.clearOfflineState();
     this.clearStoredData();
+    void this.clearStoredSession();
     this.purgeLegacyAuthStorage();
     localStorage.removeItem("auraStaffRecent");
     if (clearBiometric) localStorage.removeItem(STAFF_BIOMETRIC_HINT_KEY);
@@ -1509,6 +1538,38 @@ export class StaffAppService {
       const hint = value as Record<string, unknown>;
       return typeof hint["tenantId"] === "string" && typeof hint["loginId"] === "string" ? { tenantId: hint["tenantId"], loginId: hint["loginId"] } : null;
     } catch { return null; }
+  }
+
+  private async readStoredSession(): Promise<StoredStaffSession | null> {
+    if (!Capacitor.isNativePlatform()) return null;
+    try {
+      const { value } = await Preferences.get({ key: STAFF_SESSION_KEY });
+      if (!value) return null;
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object") return null;
+      const stored = parsed as Partial<StoredStaffSession>;
+      if (typeof stored.accessToken !== "string" || !stored.user || typeof stored.user !== "object") return null;
+      return {
+        accessToken: stored.accessToken,
+        refreshToken: typeof stored.refreshToken === "string" ? stored.refreshToken : undefined,
+        user: stored.user as StaffUser,
+        tenantId: typeof stored.tenantId === "string" ? stored.tenantId : ""
+      };
+    } catch { return null; }
+  }
+
+  private async writeStoredSession(session: StoredStaffSession): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await Preferences.set({ key: STAFF_SESSION_KEY, value: JSON.stringify(session) });
+    } catch { /* persistence is best-effort */ }
+  }
+
+  private async clearStoredSession(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      await Preferences.remove({ key: STAFF_SESSION_KEY });
+    } catch { /* persistence is best-effort */ }
   }
 
   private async publicPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
