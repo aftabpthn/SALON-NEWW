@@ -90,7 +90,21 @@ be told from one that does.
 `purge_expired` runs on the existing `ai_transcript_retention` worker, six
 hourly. It is the same class of obligation as a transcript expiring and belongs
 on the same clock rather than on a second one somebody has to remember exists.
-It deletes expired notes and notes about clients the CRM no longer holds.
+Each pass does three things:
+
+1. Deletes notes past `expires_at`.
+2. Deletes notes about clients the CRM no longer holds, by anti-join.
+3. **Prunes ordinary notes nobody has recalled in 180 days** — never recalled
+   since it was written, or not recalled inside the window. A subject has twenty
+   slots and a note nobody has needed in half a year is holding one something
+   current could use. Keeping personal information for no reason is the thing
+   retention exists to prevent, so this is part of retention rather than a
+   separate feature.
+
+Sensitive notes are exempt from step 3, and the exemption is the point rather
+than an oversight: an allergy is not less true because no conversation happened
+to surface it, and deleting one quietly because a chatbot never mentioned it
+would be actively harmful. Those already expire on their own shorter clock.
 
 ## 7. API surface
 
@@ -100,17 +114,41 @@ It deletes expired notes and notes about clients the CRM no longer holds.
 | `GET /api/v1/ai/memory/:subjectKind/:subjectId` | One subject's live notes |
 | `DELETE /api/v1/ai/memory/notes/:id` | Forget one note |
 | `DELETE /api/v1/ai/memory/clients/:id` | Forget everything about a client |
+| `GET /api/v1/customer/me/memory` | What a signed-in customer sees is remembered about them |
+| `DELETE /api/v1/customer/me/memory` | A customer erasing their own memory |
 
 The record response includes a `retentionStatement` saying how long the note
 will actually last and when it will go, because the requested retention is
 clamped and a caller that asked for five years should be told it got one.
 
-## 8. Future roadmap
+## 8. What the client themselves can see
 
-- Surface memory on the client profile screen, so notes are visible where
-  someone would look for them rather than only through the assistant.
-- Let a client's own portal see and correct what is remembered about them. The
-  data model supports it; the open question is who may edit versus only view.
-- Prune on `last_recalled_at` as well as `expires_at` — a note nobody has needed
-  in six months is taking up one of twenty slots that something useful could
-  hold.
+A signed-in customer reads and erases their own memory through the portal,
+scoped through `customer_account_clients` so an account reaches only the client
+records it is linked to.
+
+They can **see** and **erase**, but not **edit**. A memory a client could
+rewrite would stop being a record of what was said. Erasing is different:
+removing information about yourself is never the dangerous direction, and it is
+the reason this is a customer-facing capability at all.
+
+Sensitive notes are excluded from the portal read. A client is entitled to know
+what is held, but a self-service page is not where a health note a staff member
+wrote — and may never have discussed with them — should first appear. An erase
+still removes them, because that request covers everything.
+
+## 9. Where it appears in the app
+
+The client profile's clinical tab carries a **What the assistant remembers**
+card, next to allergies and preferences because it is the same class of
+information. It lists live notes with their expiry, marks sensitive ones as
+never leaving the app, and offers a single text field to add one. The card says
+in as many words that the assistant never writes here itself.
+
+## 10. Future roadmap
+
+- Show a client's memory on the customer app's own account screen; the API is
+  live and only the front-end view is missing.
+- Let a client dispute rather than only erase — "that is not right" is more
+  useful to a salon than a silent deletion, but it needs a workflow for who
+  reviews it.

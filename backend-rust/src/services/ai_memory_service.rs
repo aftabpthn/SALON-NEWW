@@ -55,6 +55,13 @@ pub const MAX_NOTES_PER_SUBJECT: i64 = 20;
 /// Notes handed to the assistant for one conversation.
 pub const RECALL_LIMIT: i64 = 8;
 
+/// How long an ordinary note may go unrecalled before it is pruned.
+///
+/// A subject has twenty slots, and a note nobody has needed in half a year is
+/// holding one that something current could use. Sensitive notes are exempt:
+/// an allergy is not less true because no conversation happened to surface it.
+pub const STALE_UNRECALLED_DAYS: i32 = 180;
+
 /// Who or what a note is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubjectKind {
@@ -334,15 +341,56 @@ pub async fn forget_client(
         .map_err(|_| AppError::internal("failed to remove that client's memory"))
 }
 
+/// What a client can see is remembered about them, through their own portal.
+///
+/// Read-only in the sense that a client cannot edit a note — a memory they
+/// could rewrite would stop being a record of what was said. They can delete
+/// it, though: it is information about them, and removing it is never the
+/// dangerous direction.
+pub async fn for_customer_account(
+    db: &PgPool,
+    account_id: &str,
+) -> Result<Vec<MemoryNote>, AppError> {
+    repository::notes_for_account(db, account_id.trim(), MAX_NOTES_PER_SUBJECT)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to read a customer's own memory");
+            AppError::internal("failed to read what is remembered about you")
+        })
+}
+
+/// A client asking to be forgotten, from their own portal.
+pub async fn forget_for_customer_account(db: &PgPool, account_id: &str) -> Result<u64, AppError> {
+    let removed = repository::forget_for_account(db, account_id.trim())
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to forget a customer's memory on request");
+            AppError::internal("failed to remove what is remembered about you")
+        })?;
+    tracing::info!(removed, "customer erased their own copilot memory");
+    Ok(removed)
+}
+
 /// Deletes expired notes and notes about clients the CRM no longer holds.
 ///
 /// Runs on the existing AI retention cycle, alongside transcript purging: it is
 /// the same class of obligation and belongs on the same clock rather than on a
 /// second one somebody has to remember exists.
 pub async fn purge_expired(db: &PgPool) -> Result<u64, AppError> {
-    repository::purge_expired(db)
+    let purged = repository::purge_expired(db)
         .await
-        .map_err(|_| AppError::internal("failed to apply memory retention"))
+        .map_err(|_| AppError::internal("failed to apply memory retention"))?;
+
+    // Staleness pruning is part of retention, not a separate feature: keeping a
+    // note nobody has needed in half a year is keeping personal information for
+    // no reason, which is the thing retention exists to prevent.
+    let pruned = repository::prune_unrecalled(db, STALE_UNRECALLED_DAYS)
+        .await
+        .map_err(|_| AppError::internal("failed to prune unrecalled memory"))?;
+    if pruned > 0 {
+        tracing::info!(pruned, "pruned memory notes nobody had recalled");
+    }
+    Ok(purged + pruned)
 }
 
 /// The rules that make keeping notes about a person defensible.
@@ -696,6 +744,204 @@ mod memory_tests {
                 .expect("recall runs")
                 .is_empty()
         );
+    }
+
+    /// A note nobody has needed in half a year gives up its slot. A sensitive
+    /// one does not: an allergy is not less true because no conversation
+    /// happened to surface it.
+    #[tokio::test]
+    async fn stale_notes_are_pruned_but_sensitive_ones_are_exempt() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            400,
+        )
+        .await;
+        write_note(&db, &tenant, branch, &client, "Allergic to PPD", true, 100).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Parks in the side street",
+            false,
+            400,
+        )
+        .await;
+
+        // Two have gone unrecalled for a year; one was used last week.
+        sqlx::query(
+            r#"UPDATE ai_memory_notes
+                  SET created_at=NOW() - INTERVAL '365 days'
+                WHERE tenant_id=$1"#,
+        )
+        .bind(&tenant)
+        .execute(&db)
+        .await
+        .expect("notes are aged");
+        sqlx::query(
+            "UPDATE ai_memory_notes SET last_recalled_at=NOW() - INTERVAL '7 days' WHERE tenant_id=$1 AND content=$2",
+        )
+        .bind(&tenant)
+        .bind("Parks in the side street")
+        .execute(&db)
+        .await
+        .expect("one note is marked recalled");
+
+        purge_expired(&db).await.expect("retention runs");
+
+        let surviving: Vec<String> = sqlx::query_scalar(
+            "SELECT content FROM ai_memory_notes WHERE tenant_id=$1 ORDER BY content",
+        )
+        .bind(&tenant)
+        .fetch_all(&db)
+        .await
+        .expect("notes are readable");
+        assert_eq!(
+            surviving,
+            vec![
+                "Allergic to PPD".to_string(),
+                "Parks in the side street".to_string()
+            ],
+            "only the unrecalled, non-sensitive note should be pruned"
+        );
+    }
+
+    /// A note written yesterday is not stale, however little it has been used.
+    #[tokio::test]
+    async fn a_fresh_note_is_never_pruned_for_being_unrecalled() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(&db, &tenant, branch, &client, "Just recorded", false, 365).await;
+
+        purge_expired(&db).await.expect("retention runs");
+        let remaining: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM ai_memory_notes WHERE tenant_id=$1")
+                .bind(&tenant)
+                .fetch_one(&db)
+                .await
+                .expect("count reads");
+        assert_eq!(remaining, 1);
+    }
+
+    async fn link_account(db: &PgPool, tenant: &str, branch: &str, client: &str) -> String {
+        let account_id: String = sqlx::query_scalar(
+            "INSERT INTO customer_accounts(first_name,last_name) VALUES('Priya','S') RETURNING id",
+        )
+        .fetch_one(db)
+        .await
+        .expect("account is seeded");
+        sqlx::query(
+            r#"INSERT INTO customer_account_clients(account_id,tenant_id,branch_id,client_id)
+               VALUES ($1,$2,$3,$4)"#,
+        )
+        .bind(&account_id)
+        .bind(tenant)
+        .bind(branch)
+        .bind(client)
+        .execute(db)
+        .await
+        .expect("account is linked");
+        account_id
+    }
+
+    /// A client may see what is remembered about them — but a portal page is
+    /// not where a health note a staff member wrote should surface.
+    #[tokio::test]
+    async fn a_customer_sees_their_own_memory_without_the_sensitive_notes() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        write_note(&db, &tenant, branch, &client, "Allergic to PPD", true, 100).await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+
+        let mine = for_customer_account(&db, &account)
+            .await
+            .expect("portal read runs");
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].content, "Prefers Saturday");
+    }
+
+    /// And another customer's account reaches none of it.
+    #[tokio::test]
+    async fn a_customer_cannot_see_another_customers_memory() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let mine = seed_client(&db, &tenant, branch).await;
+        let theirs = seed_client(&db, &tenant, "branch2").await;
+        write_note(
+            &db,
+            &tenant,
+            "branch2",
+            &theirs,
+            "Their preference",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &mine).await;
+
+        let visible = for_customer_account(&db, &account)
+            .await
+            .expect("portal read runs");
+        assert!(visible.is_empty());
+    }
+
+    /// Erasing is a customer's own right, and it is scoped to their link.
+    #[tokio::test]
+    async fn a_customer_can_erase_their_own_memory() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        write_note(&db, &tenant, branch, &client, "Allergic to PPD", true, 100).await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+
+        let removed = forget_for_customer_account(&db, &account)
+            .await
+            .expect("erase runs");
+        assert_eq!(removed, 2, "erasing takes the sensitive note too");
+
+        let remaining: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM ai_memory_notes WHERE tenant_id=$1")
+                .bind(&tenant)
+                .fetch_one(&db)
+                .await
+                .expect("count reads");
+        assert_eq!(remaining, 0);
     }
 
     #[test]

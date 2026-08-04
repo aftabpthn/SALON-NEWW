@@ -380,6 +380,21 @@
     } @else {
       <div class="small-empty">No records yet</div>
     }</article>
+    <article class="wide-card"><header><strong>What the assistant remembers</strong><small class="memory-hint">Only what someone typed here. The assistant never adds to this itself.</small></header>
+      @if (memoryNotes.length) {
+        <div class="record-list">@for (note of memoryNotes; track note.id) {
+          <div><span><b>{{ note.content }}</b><small>@if (note.sensitive) { Sensitive · never sent over WhatsApp or voice · } Kept until {{ formatDateTime(note.expiresAt) }}</small></span><button type="button" [disabled]="!canManageClients" (click)="forgetMemory(note.id)">Forget</button></div>
+        }</div>
+      } @else {
+        <div class="small-empty">Nothing remembered yet</div>
+      }
+      <div class="memory-compose">
+        <input type="text" [(ngModel)]="memoryDraft" maxlength="500" placeholder="e.g. Prefers ammonia-free colour" [disabled]="!canManageClients" />
+        <label><input type="checkbox" [(ngModel)]="memorySensitive" [disabled]="!canManageClients" /> Sensitive</label>
+        <button type="button" [disabled]="!canManageClients || savingMemory || !memoryDraft.trim()" (click)="saveMemory()">{{ savingMemory ? 'Saving…' : 'Remember this' }}</button>
+      </div>
+      @if (memoryError) { <div class="small-empty">{{ memoryError }}</div> }
+    </article>
     <article class="wide-card"><header><strong>SOAP notes</strong></header>@if (soapNotes.length) {
     <div class="record-list">@for (note of soapNotes; track note) {
       <div><span><b>{{ note.status }} · v{{ note.version }}</b><small>{{ note.assessment || note.subjective || note.objective || note.plan }} · {{ formatDateTime(note.updatedAt) }}</small></span>@if (note.status === 'draft') {

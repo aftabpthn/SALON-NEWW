@@ -185,6 +185,88 @@ pub async fn purge_expired(db: &PgPool) -> Result<u64, sqlx::Error> {
     Ok(expired + orphaned)
 }
 
+/// Everything remembered about the clients one customer account is linked to.
+///
+/// A customer account can be linked to a client record in more than one branch,
+/// so this reads across the link table rather than taking a branch. Sensitive
+/// notes are excluded outright: a client asking what is remembered about them is
+/// entitled to see it, but a portal page is not the place to surface a health
+/// note that a staff member wrote and may not have discussed with them.
+pub async fn notes_for_account(
+    db: &PgPool,
+    account_id: &str,
+    limit: i64,
+) -> Result<Vec<MemoryNote>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT note.id,note.subject_kind,note.subject_id,note.source,note.content,
+                  note.sensitive,note.recorded_by,note.expires_at,note.created_at
+             FROM ai_memory_notes note
+             JOIN customer_account_clients link
+               ON link.tenant_id=note.tenant_id
+              AND link.branch_id=note.branch_id
+              AND link.client_id=note.subject_id
+            WHERE link.account_id=$1
+              AND note.subject_kind='client'
+              AND note.sensitive = FALSE
+              AND note.expires_at > NOW()
+            ORDER BY note.created_at DESC
+            LIMIT $2"#,
+    )
+    .bind(account_id)
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+/// Forgets everything remembered about the clients an account is linked to.
+///
+/// Scoped through the same link table as the read, so an account can only
+/// delete its own. Removing memory is never the dangerous direction, which is
+/// why this is a customer-facing capability at all.
+pub async fn forget_for_account(db: &PgPool, account_id: &str) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        r#"DELETE FROM ai_memory_notes note
+            USING customer_account_clients link
+            WHERE link.account_id=$1
+              AND link.tenant_id=note.tenant_id
+              AND link.branch_id=note.branch_id
+              AND link.client_id=note.subject_id
+              AND note.subject_kind='client'"#,
+    )
+    .bind(account_id)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected())
+}
+
+/// Removes ordinary notes nobody has needed in a long time.
+///
+/// A note occupies one of a subject's twenty slots whether or not it is ever
+/// useful, so a preference nobody has recalled in half a year is holding a slot
+/// something current could use. Recall is the signal: a note that has never been
+/// recalled since it was written, or not recalled in the staleness window, has
+/// not earned its place.
+///
+/// Sensitive notes are exempt, and that exemption is the point rather than an
+/// oversight. An allergy is not less true because no conversation happened to
+/// surface it, and deleting one quietly because a chatbot never mentioned it
+/// would be actively harmful. Those already expire on their own shorter clock.
+pub async fn prune_unrecalled(db: &PgPool, stale_days: i32) -> Result<u64, sqlx::Error> {
+    sqlx::query(
+        r#"DELETE FROM ai_memory_notes
+            WHERE sensitive = FALSE
+              AND (
+                (last_recalled_at IS NULL
+                   AND created_at < NOW() - MAKE_INTERVAL(days => $1))
+                OR last_recalled_at < NOW() - MAKE_INTERVAL(days => $1)
+              )"#,
+    )
+    .bind(stale_days)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected())
+}
+
 /// How many live notes a subject already has, so a cap can be enforced before
 /// another is written.
 pub async fn live_note_count(
