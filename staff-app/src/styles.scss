@@ -174,3 +174,38 @@ button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation
 button:not(:disabled), a { transition: scale var(--staff-motion-fast) var(--staff-motion-ease), transform var(--staff-motion-fast) var(--staff-motion-ease), background-color var(--staff-motion-fast) var(--staff-motion-ease), border-color var(--staff-motion-fast) var(--staff-motion-ease), color var(--staff-motion-fast) var(--staff-motion-ease), box-shadow var(--staff-motion-fast) var(--staff-motion-ease), opacity var(--staff-motion-fast) var(--staff-motion-ease); }
 button:not(:disabled):active, a:active { scale: .98; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+
+/* Global scrollbar hiding for mobile & desktop while keeping 100% full scrollability */
+* {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+html, body, ion-app, ion-content, section, div, main, aside, nav, article {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+ion-app::-webkit-scrollbar,
+ion-content::-webkit-scrollbar,
+section::-webkit-scrollbar,
+div::-webkit-scrollbar,
+main::-webkit-scrollbar,
+aside::-webkit-scrollbar,
+nav::-webkit-scrollbar,
+article::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
