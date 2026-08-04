@@ -491,6 +491,31 @@ async fn main() -> Result<()> {
         },
     );
 
+    // Client contact details are encrypted behind the live plaintext, in
+    // batches, because the key lives in the application and a migration cannot
+    // reach it. Nothing reads the result yet, so this is safe to run at any
+    // time; it exists so the table is already complete on the day reads move
+    // off plaintext. The interval is short because a stalled backfill is
+    // invisible — the CRM keeps working — and would only surface at cutover.
+    if state.settings.security_encryption_key.is_some() {
+        worker::spawn(
+            &state,
+            "client_pii_backfill",
+            Duration::from_secs(120),
+            |state| async move {
+                let Some(key) = state.settings.security_encryption_key.as_deref() else {
+                    return;
+                };
+                if services::client_pii_backfill_service::run_batch(&state.db, key)
+                    .await
+                    .is_err()
+                {
+                    worker::note_failure("client_pii_backfill", "run_batch");
+                }
+            },
+        );
+    }
+
     worker::spawn(
         &state,
         "profit_action_queue",

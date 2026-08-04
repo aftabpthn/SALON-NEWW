@@ -24,8 +24,8 @@ use crate::{
     },
     routes::context::tenant_branch,
     services::{
-        auth_service::AuthClaims, client_export_governance_service, pos_enterprise_service,
-        security_service, sso_service, staff_service, webauthn_service,
+        auth_service::AuthClaims, client_export_governance_service, client_pii_backfill_service,
+        pos_enterprise_service, security_service, sso_service, staff_service, webauthn_service,
     },
     state::AppState,
 };
@@ -37,6 +37,7 @@ pub fn router() -> Router<AppState> {
         .route("/security/field-audit", get(list_field_audit))
         .route("/security/client-exports", get(list_client_exports))
         .route("/security/client-exports/usage", get(client_export_usage))
+        .route("/security/client-encryption", get(client_encryption_status))
         .route("/security/audit-chain/verify", get(verify_audit_chain))
         .route("/security/audit-chain/seal", post(seal_audit_chain))
         .route("/security/sessions", get(list_sessions))
@@ -2077,6 +2078,25 @@ async fn client_export_usage(
         client_export_governance_service::usage(&state.db, &tenant_id, &branch_id, &claims.sub)
             .await?;
     Ok(Json(ApiResponse::ok(usage)))
+}
+
+/// How far client contact encryption has got, and whether cutover is safe.
+///
+/// The decision this reports on is irreversible in the direction that matters:
+/// once plaintext is dropped, a client whose row was never encrypted is a client
+/// nobody can find. So the numbers behind that decision are a first-class
+/// endpoint rather than something to check by hand in psql on the day.
+async fn client_encryption_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+) -> ApiResult<client_pii_backfill_service::BackfillStatus> {
+    require_security_read(&claims)?;
+    let status = client_pii_backfill_service::status(
+        &state.db,
+        state.settings.security_encryption_key.is_some(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(status)))
 }
 
 pub(crate) fn require_security_read(claims: &AuthClaims) -> Result<(), AppError> {

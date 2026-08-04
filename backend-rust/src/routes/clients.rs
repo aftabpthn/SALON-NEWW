@@ -33,8 +33,8 @@ use crate::{
     routes::context::tenant_branch,
     services::{
         auth_service::{self, AuthClaims},
-        client_export_governance_service, client_service, migration_file_service,
-        staff_enterprise_service,
+        client_export_governance_service, client_pii_backfill_service, client_service,
+        migration_file_service, staff_enterprise_service,
     },
     state::{AppState, AppointmentEvent},
 };
@@ -3329,6 +3329,18 @@ async fn create_client(
     )
     .await
     .map_err(|error| client_write_error(error, "failed to create client"))?;
+    // The backfill worker would reach this row within a couple of minutes
+    // anyway, but a guest created at the counter has to be searchable before the
+    // next guest walks in. Deriving here closes that window; the worker stays
+    // the safety net for every other write path.
+    client_pii_backfill_service::encrypt_client(
+        &state.db,
+        state.settings.security_encryption_key.as_deref(),
+        &row.id,
+        phone,
+        email,
+    )
+    .await?;
     publish_client_timeline(
         &state,
         &tenant_id,
