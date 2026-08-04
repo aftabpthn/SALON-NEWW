@@ -527,6 +527,23 @@ export class StaffAppService {
 
   constructor(private readonly http: HttpClient, private readonly attendanceBiometric: AttendanceBiometricService) {
     this.purgeLegacyAuthStorage();
+    this.restoreInitialSessionSync();
+  }
+
+  private restoreInitialSessionSync(): void {
+    try {
+      const raw = localStorage.getItem(STAFF_SESSION_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      const stored = parsed as Partial<StoredStaffSession>;
+      if (typeof stored.accessToken === "string" && stored.user && typeof stored.user === "object" && (stored.user as StaffUser).staffId) {
+        this.accessTokenValue = stored.accessToken;
+        this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "tenant_aura";
+        this.sessionIdValue = crypto.randomUUID();
+        this.user.set(this.normalizeUser(stored.user as StaffUser));
+      }
+    } catch { /* best-effort */ }
   }
 
   isAuthenticated(): boolean {
@@ -538,19 +555,24 @@ export class StaffAppService {
     const stored = await this.readStoredSession();
     if (stored?.accessToken && stored?.user?.staffId) {
       this.accessTokenValue = stored.accessToken;
-      this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "";
+      this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "tenant_aura";
       this.sessionIdValue = crypto.randomUUID();
       this.profile.set(null);
       this.user.set(this.normalizeUser(stored.user));
+      void this.writeStoredSession(stored);
       void this.refreshSession().catch(() => undefined);
       return true;
     }
-    try { await this.refreshSession(); } catch { /* refresh failed */ }
     return this.isAuthenticated();
   }
 
   hasSavedSession(): boolean {
-    return this.isAuthenticated();
+    if (this.isAuthenticated()) return true;
+    try {
+      return !!localStorage.getItem(STAFF_SESSION_KEY);
+    } catch {
+      return false;
+    }
   }
 
   async ensureDemoSession(): Promise<boolean> {
@@ -1298,8 +1320,8 @@ export class StaffAppService {
           void this.writeStoredSession({ accessToken: session.accessToken, refreshToken: (session as StaffLoginResponse).refreshToken, user: refreshedUser, tenantId: this.tenantIdValue });
         }
       } catch (error) {
-        if (status === 401) this.clearLocalAuthState(false);
-        throw error;
+        // Do NOT clear local session state on background refresh error or 401 response.
+        // User session remains logged in locally until explicitly logged out by user.
       }
     })().finally(() => { this.refreshPromise = null; });
     return this.refreshPromise;
@@ -1541,9 +1563,17 @@ export class StaffAppService {
   }
 
   private async readStoredSession(): Promise<StoredStaffSession | null> {
-    if (!Capacitor.isNativePlatform()) return null;
     try {
-      const { value } = await Preferences.get({ key: STAFF_SESSION_KEY });
+      let value: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const pref = await Preferences.get({ key: STAFF_SESSION_KEY });
+          value = pref.value;
+        } catch { /* fallback to localStorage */ }
+      }
+      if (!value) {
+        try { value = localStorage.getItem(STAFF_SESSION_KEY); } catch { /* best-effort */ }
+      }
       if (!value) return null;
       const parsed: unknown = JSON.parse(value);
       if (!parsed || typeof parsed !== "object") return null;
@@ -1559,17 +1589,26 @@ export class StaffAppService {
   }
 
   private async writeStoredSession(session: StoredStaffSession): Promise<void> {
-    if (!Capacitor.isNativePlatform()) return;
+    const raw = JSON.stringify(session);
     try {
-      await Preferences.set({ key: STAFF_SESSION_KEY, value: JSON.stringify(session) });
+      localStorage.setItem(STAFF_SESSION_KEY, raw);
     } catch { /* persistence is best-effort */ }
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.set({ key: STAFF_SESSION_KEY, value: raw });
+      } catch { /* persistence is best-effort */ }
+    }
   }
 
   private async clearStoredSession(): Promise<void> {
-    if (!Capacitor.isNativePlatform()) return;
     try {
-      await Preferences.remove({ key: STAFF_SESSION_KEY });
+      localStorage.removeItem(STAFF_SESSION_KEY);
     } catch { /* persistence is best-effort */ }
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.remove({ key: STAFF_SESSION_KEY });
+      } catch { /* persistence is best-effort */ }
+    }
   }
 
   private async publicPost<T>(path: string, body: Record<string, unknown>): Promise<T> {
