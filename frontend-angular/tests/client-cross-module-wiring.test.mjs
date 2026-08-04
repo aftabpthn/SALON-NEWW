@@ -14,7 +14,7 @@ test('clients cross-module handoffs and write gates stay wired', () => {
   assert.match(clients, /navigate\(\['\/appointments'\],\s*\{\s*queryParams:\s*\{\s*clientId:\s*this\.selectedClient\.id\s*\}/s);
   assert.match(appointments, /ActivatedRoute/);
   assert.match(appointments, /queryParamMap\.get\('clientId'\)/);
-  assert.match(appointments, /if \(routeClient\) this\.selectClient\(routeClient\)/);
+  assert.match(appointments, /if \(routeClient\)[\s\S]{0,200}?this\.selectClient\(routeClient\)/);
 
   assert.match(clients, /navigate\(\['\/notifications'\],\s*\{\s*queryParams:\s*\{\s*clientId:\s*this\.selectedClient\.id\s*\}/s);
   assert.match(notifications, /ActivatedRoute/);

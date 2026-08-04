@@ -54,6 +54,10 @@ test('service recipe approval queue exposes permission-gated approve and reject 
 
 test('backend rejects a second open container for the same product', () => {
   const repository = readBackend('src/repositories/inventory_governance_repository.rs');
-  assert.match(repository, /NOT EXISTS/);
-  assert.match(repository, /active\.inventory_item_id=c\.inventory_item_id AND active\.status='open'/);
+  // A silent NOT EXISTS subquery was replaced by an explicit locked lookup that
+  // blocks the open, records why, and surfaces a manager-override path instead
+  // of just failing. Assert all three so the audit trail cannot be dropped.
+  assert.match(repository, /inventory_item_id=\$3 AND status='open' FOR UPDATE/);
+  assert.match(repository, /premature_open_blocked/);
+  assert.match(repository, /"alertType":"premature_tube_opening"[\s\S]{0,80}?managerOverrideRequired/);
 });

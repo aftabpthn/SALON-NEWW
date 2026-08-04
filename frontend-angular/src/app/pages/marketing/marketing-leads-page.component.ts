@@ -38,6 +38,18 @@ type CampaignAttribution = { id: string; title: string; audienceName: string; au
 type BranchAttribution = { branchId: string; audience: number; bookings: number; revenuePaise: number; roiBps: number };
 type MarketingAttribution = { campaigns: CampaignAttribution[]; branchPerformance: BranchAttribution[] };
 type LeadAdvice = { leadId: string; leadName: string; stage: string; priorityScore: number; reason: string; bestChannel: string; suggestedMessage: string; nextFollowUpDate: string; clientId: string; appointmentId: string; activityCount: number; source: string };
+type LeadScoreFactor = { key: string; label: string; points: number; detail: string };
+type LeadScore = {
+  leadId: string;
+  storedScore: number;
+  storedScoreSource: 'manual' | 'auto';
+  storedModelVersion: string;
+  storedFactors: LeadScoreFactor[];
+  policyScore: number;
+  policyModelVersion: string;
+  policyFactors: LeadScoreFactor[];
+  branchConversionRate: number;
+};
 type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: string; quietEnd: string; timezone: string; offerApprovalThresholdBps: number; controlGroupBps: number; attributionWindowDays: number }; exclusions: { clientId: string; clientName: string }[] };
 type MarketingOutboxItem = { id: string; campaignId: string; clientId: string; channel: string; status: string; attempts: number; maxAttempts: number; lastError: string; nextAttemptAt: string; deadLetteredAt?: string; updatedAt?: string };
 
@@ -98,7 +110,8 @@ export class MarketingLeadsPageComponent implements OnInit {
   loading = true;
   busy = false;
   error = '';
-  drawer: 'lead' | 'campaign' | 'whatsapp-plan' | 'activity' | 'offer' | 'offer-share' | 'automation' | 'template' | '' = '';
+  drawer: 'lead' | 'campaign' | 'whatsapp-plan' | 'activity' | 'offer' | 'offer-share' | 'automation' | 'template' | 'lead-score' | '' = '';
+  leadScore: LeadScore | null = null;
   leadDraft = this.emptyLead();
   campaignDraft = this.emptyCampaign();
   whatsappPlanDraft = this.emptyWhatsAppPlan();
@@ -497,6 +510,43 @@ export class MarketingLeadsPageComponent implements OnInit {
     const lead = this.leads.find((candidate) => candidate.id === item.leadId);
     if (lead) void this.openActivity(lead);
   }
+
+  async openLeadScore(lead: Lead) {
+    this.selectedLead = lead;
+    this.leadScore = null;
+    this.drawer = 'lead-score';
+    this.error = '';
+    try {
+      const response = await firstValueFrom(this.api.get<ApiEnvelope<LeadScore>>(`/marketing/leads/${lead.id}/score`));
+      this.leadScore = response.data ?? null;
+    } catch (error) { this.error = this.message(error, 'Lead score could not be loaded'); }
+  }
+
+  async setLeadScoreMode(automatic: boolean) {
+    const lead = this.selectedLead;
+    if (!lead || this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      const response = await firstValueFrom(this.api.patch<ApiEnvelope<LeadScore>>(`/marketing/leads/${lead.id}/score/mode`, { automatic }));
+      this.leadScore = response.data ?? null;
+      await this.reload();
+    } catch (error) { this.error = this.message(error, 'Lead scoring mode could not be changed'); }
+    finally { this.busy = false; }
+  }
+
+  async refreshLeadScores() {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = '';
+    try {
+      await firstValueFrom(this.api.post('/marketing/leads/score/refresh', {}));
+      await this.reload();
+    } catch (error) { this.error = this.message(error, 'Lead scores could not be refreshed'); }
+    finally { this.busy = false; }
+  }
+
+  scoreFactorClass(points: number) { return points < 0 ? 'score-factor negative' : 'score-factor'; }
 
   async saveActivity() {
     const lead = this.selectedLead;

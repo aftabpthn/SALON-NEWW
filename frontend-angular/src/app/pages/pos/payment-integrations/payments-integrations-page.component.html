@@ -50,6 +50,46 @@
     </div>
   </section>
 
+  @if (disputeQueue.length) {
+    <section class="operations-card" aria-label="Disputes needing evidence">
+      <header><h2>Disputes to answer</h2><span>Deadline first</span></header>
+      <div class="operations-table">
+        @for (row of disputeQueue; track row.dispute.disputeId) {
+          <div>
+            <strong>{{ row.invoiceNumber || row.dispute.disputeId }}</strong>
+            <span>{{ row.dispute.provider }} · {{ row.dispute.reason || 'No reason given' }}</span>
+            <span>{{ disputeDueLabel(row.dispute.daysToEvidenceDue) }}</span>
+            <span>Evidence strength {{ row.strengthScore }}/100</span>
+            <button type="button" [disabled]="disputeBusy" (click)="openDisputeEvidence(row)">Evidence</button>
+          </div>
+        }
+      </div>
+    </section>
+  }
+
+  @if (disputeEvidence) {
+    <section class="operations-card" aria-label="Dispute evidence pack">
+      <header>
+        <h2>Evidence pack</h2>
+        <button type="button" aria-label="Close" (click)="closeDisputeEvidence()">×</button>
+      </header>
+      <div class="dispute-evidence">
+        <p><b>{{ disputeEvidence.invoice.invoiceNumber }}</b> · strength {{ disputeEvidence.strengthScore }}/100 · {{ disputeDueLabel(disputeEvidence.dispute.daysToEvidenceDue) }}</p>
+        @for (factor of disputeEvidence.strengthFactors; track factor.key) {
+          <article><strong>{{ factor.label }}</strong><p>+{{ factor.points }} · {{ factor.detail }}</p></article>
+        }
+        @if (disputeEvidence.gaps.length) {
+          <h3>Find these before the deadline</h3>
+          <ul>@for (gap of disputeEvidence.gaps; track gap) { <li>{{ gap }}</li> }</ul>
+        }
+        <p class="dispute-note">{{ disputeEvidence.submissionNote }}</p>
+        <button type="button" [disabled]="disputeBusy" (click)="prepareDisputeEvidence(disputeEvidence.dispute.disputeId)">
+          {{ disputeBusy ? 'Preparing…' : 'Mark evidence prepared' }}
+        </button>
+      </div>
+    </section>
+  }
+
   @if (recentOperations.length) {
     <section class="operations-card" aria-label="Recent provider operations">
       <header><h2>Provider operations</h2><span>Latest 50</span></header>

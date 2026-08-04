@@ -34,6 +34,7 @@ use crate::{
     services::invoice_pdf::{self, InvoicePdfLayout},
     services::membership_service,
     services::payment_gateway_service,
+    services::payment_link_access_service,
     services::payment_platform_service,
     services::razorpay_payment_service,
     services::security_service,
@@ -96,6 +97,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/pos/invoices/:id/print", get(get_pos_invoice_print))
         .route("/pos/invoices/:id/pdf", get(get_pos_invoice_pdf))
+        .route("/pos/compliance/queue", get(get_compliance_queue))
         .route("/pos/invoices/:id/compliance", get(get_invoice_compliance))
         .route(
             "/pos/invoices/:id/compliance/queue",
@@ -1168,6 +1170,11 @@ pub struct PosSaleUpdate {
     pub staff_id: Option<String>,
     pub source: Option<String>,
     pub reference_id: Option<String>,
+    /// Required to re-attribute a finalized invoice to a different staff member.
+    ///
+    /// Optional on a draft, where nothing has been reported or paid yet.
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1505,6 +1512,10 @@ pub struct PosPaymentLinkResponse {
     pub expires_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
+    /// Sent to the guest instead of `url`. Returned once, on creation: after
+    /// this it exists only in the message the guest received.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub guest_link_token: String,
 }
 
 #[derive(Debug, Serialize, FromRow)]
@@ -4135,6 +4146,74 @@ mod billing_completion_tests {
 }
 
 #[cfg(test)]
+mod finalized_invoice_patch_tests {
+    use super::{refuse_frozen_finalized_fields, require_lifecycle_reason, PosSaleUpdate};
+
+    fn patch() -> PosSaleUpdate {
+        PosSaleUpdate {
+            status: None,
+            staff_id: None,
+            source: None,
+            reference_id: None,
+            reason: None,
+        }
+    }
+
+    #[test]
+    fn a_finalized_invoice_status_goes_through_the_reversal_paths() {
+        // Payroll excludes void/refunded/cancelled sales, so patching status
+        // moved a sale in or out of someone's payout without touching the
+        // ledger the reversal paths maintain.
+        let mut change = patch();
+        change.status = Some("voided".into());
+        let error = refuse_frozen_finalized_fields(&change).expect_err("status must be refused");
+        assert!(
+            format!("{error:?}").contains("void, refund or credit note"),
+            "the refusal has to name the path that does work: {error:?}"
+        );
+    }
+
+    #[test]
+    fn reconciliation_references_are_frozen_after_finalize() {
+        // These change no number, which is exactly why a mismatch found weeks
+        // later is so hard to trace back to anything.
+        for mutate in [
+            (|p: &mut PosSaleUpdate| p.source = Some("manual".into())) as fn(&mut PosSaleUpdate),
+            |p: &mut PosSaleUpdate| p.reference_id = Some("ref-9".into()),
+        ] {
+            let mut change = patch();
+            mutate(&mut change);
+            assert!(refuse_frozen_finalized_fields(&change).is_err());
+        }
+    }
+
+    #[test]
+    fn re_attribution_is_not_blanket_refused() {
+        // Tagging the wrong therapist is a real mistake and has to stay
+        // correctable, or the correction happens directly in the database.
+        let mut change = patch();
+        change.staff_id = Some("staff-2".into());
+        change.reason = Some("Wrong therapist tagged at the counter".into());
+        assert!(refuse_frozen_finalized_fields(&change).is_ok());
+    }
+
+    #[test]
+    fn re_attribution_still_costs_a_reason() {
+        assert!(require_lifecycle_reason("", "staff re-attribution").is_err());
+        assert!(require_lifecycle_reason("  ", "staff re-attribution").is_err());
+        assert!(require_lifecycle_reason("Wrong therapist tagged", "staff re-attribution").is_ok());
+    }
+
+    #[test]
+    fn an_untouched_patch_is_allowed_through() {
+        // Nothing here refuses a request on its own; only the named fields do.
+        // That a draft never reaches this function at all is a property of the
+        // handler, asserted in the wiring test rather than pretended at here.
+        assert!(refuse_frozen_finalized_fields(&patch()).is_ok());
+    }
+}
+
+#[cfg(test)]
 mod compliance_tests {
     use super::{
         e_invoice_required, e_way_bill_required, ComplianceSaleRow, InvoiceComplianceSettings,
@@ -4966,6 +5045,77 @@ async fn get_invoice_compliance(
     })))
 }
 
+/// The branch's whole e-invoice and e-way bill queue in one place.
+///
+/// Per-invoice status already existed, and that is the wrong altitude for this:
+/// a failure only surfaced if somebody happened to open the one invoice it
+/// happened to. Forty invoices can fail their IRN in an afternoon — an expired
+/// provider token does exactly that — and under the old view nobody finds out
+/// until a customer asks for a document that was never generated.
+///
+/// It also reports whether a provider is configured at all, because the most
+/// likely reason a queue is not moving is that nothing is connected to it, and
+/// an empty "queued" count looks identical either way.
+async fn get_compliance_queue(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let counts: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT document_type,status,COUNT(*)::BIGINT \
+           FROM pos_compliance_jobs \
+          WHERE tenant_id=$1 AND branch_id=$2 \
+          GROUP BY document_type,status ORDER BY document_type,status",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to summarise the compliance queue"))?;
+
+    // Exhausted jobs first: those have stopped retrying and will not move again
+    // without someone looking at them.
+    let attention: Vec<(String, String, String, String, i32, String)> = sqlx::query_as(
+        "SELECT job.id,COALESCE(sale.invoice_number,''),job.document_type,job.status,\
+                job.attempt_count,job.last_error \
+           FROM pos_compliance_jobs job \
+           LEFT JOIN pos_sales sale ON sale.id=job.sale_id AND sale.tenant_id=job.tenant_id \
+          WHERE job.tenant_id=$1 AND job.branch_id=$2 \
+            AND (job.status='failed' OR job.attempt_count >= 5) \
+          ORDER BY job.updated_at DESC LIMIT 100",
+    )
+    .bind(&tenant_id)
+    .bind(&branch_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| AppError::internal("failed to load compliance jobs needing attention"))?;
+
+    let stuck = attention.len() as i64;
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "providerConfigured": state.settings.compliance_provider_enabled(),
+        "counts": counts
+            .into_iter()
+            .map(|(document_type, status, count)| serde_json::json!({
+                "documentType": document_type, "status": status, "count": count
+            }))
+            .collect::<Vec<Value>>(),
+        "needsAttentionCount": stuck,
+        "needsAttention": attention
+            .into_iter()
+            .map(|(id, invoice_number, document_type, status, attempts, last_error)| {
+                serde_json::json!({
+                    "jobId": id,
+                    "invoiceNumber": invoice_number,
+                    "documentType": document_type,
+                    "status": status,
+                    "attemptCount": attempts,
+                    "lastError": last_error,
+                })
+            })
+            .collect::<Vec<Value>>(),
+    }))))
+}
+
 #[derive(FromRow)]
 struct ComplianceSaleRow {
     invoice_type: String,
@@ -5241,25 +5391,21 @@ async fn update_invoice_business_profile(
     Ok(Json(ApiResponse::ok(saved)))
 }
 
-async fn get_pos_invoice_pdf(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Query(query): Query<InvoicePdfQuery>,
-) -> Result<Response, AppError> {
-    let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let layout = InvoicePdfLayout::parse(query.layout.as_deref())?;
-    let sale = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
-    let file_name = invoice_print_file_name(&sale.invoice_number, "pdf");
-    if let Some(snapshot) =
-        read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str()).await?
-    {
-        return invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name);
-    }
-
-    let details = load_pos_sale_details(&state, &tenant_id, &branch_id, &id).await?;
-    let gst_context = gst_context_from_sale(&state, &tenant_id, &branch_id, &id).await?;
-    let profile = read_invoice_business_profile(&state, &tenant_id, &branch_id).await?;
+/// Everything the PDF renderer needs about one sale, plus the UPI URI it also
+/// takes separately.
+///
+/// Shared by the download route and by the seal at finalize so that both write
+/// the same bytes; building the document twice, slightly differently, is how a
+/// sealed record stops matching what the guest was handed.
+async fn build_invoice_pdf_document(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) -> Result<(Value, String), AppError> {
+    let details = load_pos_sale_details(state, tenant_id, branch_id, sale_id).await?;
+    let gst_context = gst_context_from_sale(state, tenant_id, branch_id, sale_id).await?;
+    let profile = read_invoice_business_profile(state, tenant_id, branch_id).await?;
     let upi_uri = profile
         .as_ref()
         .and_then(invoice_profile_upi_uri)
@@ -5277,19 +5423,34 @@ async fn get_pos_invoice_pdf(
     });
     document["seller"] = serde_json::to_value(profile)
         .map_err(|_| AppError::internal("failed to serialize invoice business profile"))?;
-    document["appearance"] = serde_json::to_value(
-        read_invoice_appearance_settings(&state, &tenant_id, &branch_id).await?,
-    )
-    .map_err(|_| AppError::internal("failed to serialize invoice settings"))?;
+    document["appearance"] =
+        serde_json::to_value(read_invoice_appearance_settings(state, tenant_id, branch_id).await?)
+            .map_err(|_| AppError::internal("failed to serialize invoice settings"))?;
+    Ok((document, upi_uri))
+}
+
+/// Renders one layout and writes it as the permanent record for the invoice.
+///
+/// `ON CONFLICT DO NOTHING` is what makes it permanent: the first seal wins and
+/// every later call reads it back instead of overwriting. Callers must only
+/// reach this for a finalized invoice — see [`seal_finalized_invoice_pdfs`].
+async fn store_invoice_pdf_snapshot(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+    layout: InvoicePdfLayout,
+) -> Result<InvoicePdfSnapshotRow, AppError> {
+    let (document, upi_uri) =
+        build_invoice_pdf_document(state, tenant_id, branch_id, sale_id).await?;
     let pdf = invoice_pdf::render(&document, layout, &upi_uri)?;
     let sha256 = invoice_pdf::sha256_hex(&pdf);
-
-    let inserted_snapshot = sqlx::query_as::<_, InvoicePdfSnapshotRow>(
+    let inserted = sqlx::query_as::<_, InvoicePdfSnapshotRow>(
         "INSERT INTO pos_invoice_documents (tenant_id, branch_id, sale_id, layout, sha256, source_json, pdf_bytes) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7) ON CONFLICT (tenant_id, branch_id, sale_id, layout) DO NOTHING RETURNING pdf_bytes, sha256",
     )
-    .bind(&tenant_id)
-    .bind(&branch_id)
-    .bind(&id)
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(sale_id)
     .bind(layout.as_str())
     .bind(&sha256)
     .bind(document.to_string())
@@ -5297,13 +5458,77 @@ async fn get_pos_invoice_pdf(
     .fetch_optional(&state.db)
     .await
     .map_err(|_| AppError::internal("failed to snapshot invoice PDF"))?;
-    let snapshot = match inserted_snapshot {
-        Some(snapshot) => snapshot,
-        None => read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str())
+    match inserted {
+        Some(snapshot) => Ok(snapshot),
+        // Another request sealed it first. Theirs is the record.
+        None => read_invoice_pdf_snapshot(state, tenant_id, branch_id, sale_id, layout.as_str())
             .await?
-            .ok_or_else(|| AppError::internal("invoice PDF snapshot was not found"))?,
-    };
+            .ok_or_else(|| AppError::internal("invoice PDF snapshot was not found")),
+    }
+}
 
+/// Seals both layouts at the moment the invoice becomes one.
+///
+/// The snapshot used to be written lazily, by whoever first downloaded a PDF.
+/// That made the "permanent record" a record of whenever somebody happened to
+/// click, not of what was issued — and because nothing checked `finalized_at`,
+/// downloading a draft sealed the draft, so the finalized invoice would hand
+/// back a PDF of a bill that was still being edited.
+///
+/// Failures here are logged rather than returned. The finalize transaction has
+/// already committed by the time this runs, so there is nothing left to roll
+/// back, and refusing the response would tell the counter the sale failed when
+/// it did not. The download path still seals on first read, which now covers
+/// this case correctly because the invoice is finalized by then.
+async fn seal_finalized_invoice_pdfs(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    sale_id: &str,
+) {
+    for layout in [InvoicePdfLayout::A4, InvoicePdfLayout::Thermal] {
+        if let Err(error) =
+            store_invoice_pdf_snapshot(state, tenant_id, branch_id, sale_id, layout).await
+        {
+            tracing::warn!(
+                sale_id = %sale_id,
+                layout = layout.as_str(),
+                error = ?error,
+                "invoice PDF snapshot deferred to first download"
+            );
+        }
+    }
+}
+
+async fn get_pos_invoice_pdf(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<InvoicePdfQuery>,
+) -> Result<Response, AppError> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let layout = InvoicePdfLayout::parse(query.layout.as_deref())?;
+    let sale = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
+    let file_name = invoice_print_file_name(&sale.invoice_number, "pdf");
+    if let Some(snapshot) =
+        read_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout.as_str()).await?
+    {
+        return invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name);
+    }
+
+    // A draft is still being edited, so there is nothing to preserve yet.
+    // Sealing one would freeze a half-finished bill as the invoice's permanent
+    // record, and every later download — including after finalize — would hand
+    // back that draft.
+    if sale.finalized_at.is_none() {
+        let (document, upi_uri) =
+            build_invoice_pdf_document(&state, &tenant_id, &branch_id, &id).await?;
+        let pdf = invoice_pdf::render(&document, layout, &upi_uri)?;
+        let sha256 = invoice_pdf::sha256_hex(&pdf);
+        return invoice_pdf_response(pdf, &sha256, &file_name);
+    }
+
+    let snapshot = store_invoice_pdf_snapshot(&state, &tenant_id, &branch_id, &id, layout).await?;
     invoice_pdf_response(snapshot.pdf_bytes, &snapshot.sha256, &file_name)
 }
 
@@ -9666,13 +9891,62 @@ async fn ensure_cash_drawer_open(
     Ok(tills.into_iter().next())
 }
 
+/// Patches the mutable fields of a sale.
+///
+/// Before finalize this is ordinary editing. After it, the same three fields
+/// move money: `staff_id` is what tip payout attributes against, and `status`
+/// is what decides whether payroll counts the sale at all — so a silent PATCH
+/// here paid the wrong person, with nothing in the audit trail to show it
+/// happened. Every other post-finalize change to an invoice already demands a
+/// reason and leaves a record; this path did not, and no screen calls it, which
+/// is what let it stay that way.
+///
+/// So after finalize: status changes belong to void, refund or credit note,
+/// where the approval and reversal logic lives, and the reconciliation
+/// references are frozen. Re-attribution stays possible, because tagging the
+/// wrong therapist is a real mistake that has to be correctable — but it costs
+/// a permission, a reason and an audit row, and it stops once the tip has
+/// actually been paid, since money that has left cannot be moved by an UPDATE.
 async fn update_pos_sale(
     State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(payload): Json<PosSaleUpdate>,
 ) -> ApiResult<PosSaleResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let existing = load_pos_sale(&state, &tenant_id, &branch_id, &id).await?;
+
+    let requested_staff_id = payload
+        .staff_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default();
+    let reattributing = !requested_staff_id.is_empty() && requested_staff_id != existing.staff_id;
+    let reason = payload.reason.as_deref().unwrap_or("").trim().to_string();
+
+    if existing.finalized_at.is_some() {
+        refuse_frozen_finalized_fields(&payload)?;
+        if reattributing {
+            require_pos_permission(&claims, "pos.manage")?;
+            require_lifecycle_reason(&reason, "staff re-attribution")?;
+            let tip_paid = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM staff_tip_payout_items WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
+            )
+            .bind(&tenant_id)
+            .bind(&branch_id)
+            .bind(&id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| AppError::internal("failed to check tip payouts for this invoice"))?;
+            if tip_paid > 0 {
+                return Err(AppError::conflict(
+                    "the tip on this invoice has already been paid out; correct it through payroll rather than re-attributing the sale",
+                ));
+            }
+        }
+    }
 
     let sale = sqlx::query_as::<_, PosSaleRow>(
         r#"
@@ -9700,6 +9974,28 @@ async fn update_pos_sale(
     .await
     .map_err(|_| AppError::internal("failed to update pos sale"))?
     .ok_or_else(|| AppError::not_found("pos sale was not found"))?;
+
+    // Recorded on drafts too. Attribution is the thing people dispute months
+    // later, and "who changed it and when" is worth more then than the small
+    // cost of a row now.
+    if reattributing {
+        security_service::record_audit(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            "pos.sale.staff_reattributed",
+            serde_json::json!({
+                "saleId": sale.id,
+                "invoiceNumber": sale.invoice_number,
+                "fromStaffId": existing.staff_id,
+                "toStaffId": sale.staff_id,
+                "finalized": existing.finalized_at.is_some(),
+                "reason": reason,
+            }),
+        )
+        .await?;
+    }
 
     let line_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM pos_sale_lines WHERE tenant_id=$1 AND branch_id=$2 AND sale_id=$3",
@@ -10655,7 +10951,35 @@ pub(crate) async fn create_payment_link_for_invoice(
     .await
     .map_err(|_| AppError::internal("failed to save provider payment link"))?;
 
-    Ok(payment_link_response(updated))
+    // One invoice, one working link. An older URL sitting in a chat thread must
+    // not keep taking payments after the amount has been revised.
+    payment_link_access_service::supersede_other_links(
+        &state.db,
+        tenant_id,
+        branch_id,
+        id,
+        &updated.id,
+    )
+    .await?;
+
+    // The guest is sent our token rather than the provider URL, so a forwarded
+    // link is useless to whoever it reaches and every open is recorded.
+    let require_verification = security_service::get_policy(&state.db, tenant_id, branch_id)
+        .await?
+        .settings
+        .payment_link_phone_verification;
+    let access_token = payment_link_access_service::issue_access_token(
+        &state.db,
+        tenant_id,
+        branch_id,
+        &updated.id,
+        require_verification,
+    )
+    .await?;
+
+    let mut response = payment_link_response(updated);
+    response.guest_link_token = access_token;
+    Ok(response)
 }
 
 async fn list_pos_payment_links(
@@ -10899,6 +11223,7 @@ fn payment_link_response(row: PosPaymentLinkRow) -> PosPaymentLinkResponse {
         expires_at: row.expires_at,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        guest_link_token: String::new(),
     }
 }
 
@@ -12219,6 +12544,9 @@ pub(crate) async fn finalize_pos_invoice(
         .await
         .map_err(|_| AppError::internal("failed to commit invoice finalize"))?;
     state.publish_pos_event(&tenant_id, &branch_id, "invoice", &id, "invoice.finalized");
+    // The invoice exists as a document from this moment, so this is when its
+    // permanent copy is taken — not whenever somebody first clicks download.
+    seal_finalized_invoice_pdfs(&state, &tenant_id, &branch_id, &id).await;
     if let Err(error) =
         happy_hours_service::scan_coupon_abuse_for_sale(&state.db, &tenant_id, &branch_id, &id)
             .await
@@ -14156,6 +14484,28 @@ async fn reverse_happy_hour_lock(
     .execute(&mut **tx)
     .await
     .map_err(|_| AppError::internal("failed to reverse happy hour discount"))?;
+    Ok(())
+}
+
+/// The fields a PATCH may no longer touch once the invoice is finalized.
+///
+/// `status` decides whether payroll counts the sale at all, so flipping it here
+/// would move money while bypassing void, refund and credit note — the paths
+/// that actually reverse the ledger and ask for approval. `source` and
+/// `reference_id` are what a settlement is reconciled against; rewriting them
+/// breaks the match without changing a single number, which is the hardest kind
+/// of discrepancy to chase down later.
+fn refuse_frozen_finalized_fields(payload: &PosSaleUpdate) -> Result<(), AppError> {
+    if payload.status.is_some() {
+        return Err(AppError::validation(
+            "a finalized invoice's status cannot be patched; use void, refund or credit note",
+        ));
+    }
+    if payload.source.is_some() || payload.reference_id.is_some() {
+        return Err(AppError::validation(
+            "a finalized invoice's source and reference cannot be changed",
+        ));
+    }
     Ok(())
 }
 

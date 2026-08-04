@@ -344,6 +344,16 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff",
     },
     PermissionDefinition {
+        code: "staff.governance.read",
+        label: "View staff rules and SOP",
+        group: "Staff",
+    },
+    PermissionDefinition {
+        code: "staff.governance.manage",
+        label: "Manage staff rules and SOP",
+        group: "Staff",
+    },
+    PermissionDefinition {
         code: "staff.self_manage",
         label: "Use staff self-service",
         group: "Staff",
@@ -664,6 +674,21 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
         group: "Staff App",
     },
     PermissionDefinition {
+        code: "staff.app.profile.manage",
+        label: "Update Staff App profile",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.scribe.read",
+        label: "Show AI Scribe drafts",
+        group: "Staff App",
+    },
+    PermissionDefinition {
+        code: "staff.app.scribe.manage",
+        label: "Record and approve AI Scribe drafts",
+        group: "Staff App",
+    },
+    PermissionDefinition {
         code: "staff.app.settings.read",
         label: "Show Staff App settings",
         group: "Staff App",
@@ -791,6 +816,11 @@ pub const TENANT_PERMISSION_CATALOG: &[PermissionDefinition] = &[
     PermissionDefinition {
         code: "security.manage",
         label: "Manage security controls and sessions",
+        group: "Security",
+    },
+    PermissionDefinition {
+        code: "security.export.elevated",
+        label: "Export client data beyond the daily limit",
         group: "Security",
     },
     PermissionDefinition {

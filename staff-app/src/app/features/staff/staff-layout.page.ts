@@ -486,6 +486,7 @@ export class StaffLayoutPage implements OnInit, OnDestroy {
     { label: "Offers", path: "/staff/offers", iconPath: "M20 12v8H4v-8h16zM7 4a3 3 0 0 1 5 2.2A3 3 0 1 1 17 4c0 1.1-.6 2-1.4 2.5H20v4H4v-4h4.4A3 3 0 0 1 7 4zm2 0a1 1 0 1 0 1 1H9V4zm5 1h-1a1 1 0 1 0 1-1v1z", group: "Work", permission: "staff.app.offers.read" },
     { label: "Tasks", path: "/staff/tasks", iconPath: "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z", group: "Work", permission: "staff.app.tasks.read" },
     { label: "Rules & SOP", path: "/staff/rules", iconPath: "M5 3h14a2 2 0 0 1 2 2v16l-4-2-5 2-5-2-4 2V5a2 2 0 0 1 2-2zm2 4v2h10V7H7zm0 4v2h10v-2H7zm0 4v2h7v-2H7z", group: "Work", permission: "staff.app.rules.read" },
+    { label: "AI Scribe", path: "/staff/scribe", iconPath: "M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z", group: "Work", permission: "staff.app.scribe.read" },
     { label: "Attendance", path: "/staff/attendance", iconPath: "M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4 0-8 2-8 5v1h16v-1c0-3-4-5-8-5z", group: "Work", permission: "staff.app.attendance.read" },
     { label: "Roster", path: "/staff/roster", iconPath: "M4 4h16v4H4V4zm0 6h7v10H4V10zm9 0h7v10h-7V10z", group: "Work", permission: "staff.app.roster.read" },
     { label: "Calendar", path: "/staff/calendar", iconPath: "M19 3h-1V1h-2v2H8V1H6v2H5a2 2 0 0 0-2 2v16h18V5a2 2 0 0 0-2-2zm0 16H5V9h14v10z", group: "Work", permission: "staff.app.calendar.read" },

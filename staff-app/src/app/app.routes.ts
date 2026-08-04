@@ -24,6 +24,7 @@ export const routes: Routes = [
       { path: "roster", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.roster.read" }, loadComponent: () => import("./features/staff/staff-roster.page").then((m) => m.StaffRosterPage) },
       { path: "performance", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.performance.read" }, loadComponent: () => import("./features/staff/staff-performance.page").then((m) => m.StaffPerformancePage) },
       { path: "copilot", loadComponent: () => import("./features/staff/staff-copilot.page").then((m) => m.StaffCopilotPage) },
+      { path: "scribe", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.scribe.read" }, loadComponent: () => import("./features/staff/staff-scribe.page").then((m) => m.StaffScribePage) },
       { path: "leaderboard", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.leaderboard.read" }, loadComponent: () => import("./features/staff/staff-leaderboard.page").then((m) => m.StaffLeaderboardPage) },
       { path: "notifications", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.notifications.read" }, loadComponent: () => import("./features/staff/staff-notifications.page").then((m) => m.StaffNotificationsPage) },
       { path: "reports", canActivate: [staffPermissionGuard], data: { permissions: "staff.app.reports.read" }, loadComponent: () => import("./features/staff/staff-reports.page").then((m) => m.StaffReportsPage) },

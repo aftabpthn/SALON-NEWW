@@ -287,16 +287,121 @@ pub async fn exchange_firebase_token(
     issue_new_session(db, settings, account, device, user_agent, ip_hash).await
 }
 
+/// How many live sessions one guest account may hold.
+///
+/// Every active session is another refresh token that can be stolen, and a
+/// guest with six phones is far rarer than a guest whose token leaked. The
+/// oldest is revoked rather than the newest refused, so signing in on a new
+/// device always works.
+const MAX_ACTIVE_SESSIONS: i64 = 5;
+
+/// Reduces a user agent to the part that should not change within a session.
+///
+/// Comparing the full string would reject a guest whose browser auto-updated,
+/// which is common and harmless. Comparing the platform and engine catches what
+/// actually matters: a refresh token presented by something that is not the app
+/// or browser it was issued to.
+fn user_agent_family(user_agent: &str) -> String {
+    let lowered = user_agent.to_ascii_lowercase();
+    let platform = ["android", "iphone", "ipad", "windows", "macintosh", "linux"]
+        .into_iter()
+        .find(|needle| lowered.contains(needle))
+        .unwrap_or("unknown");
+    // Scripted clients are listed explicitly rather than falling into the
+    // unknown bucket. Without them a replay by curl from an unrecognised
+    // platform would compare equal to any other unrecognised agent, which is
+    // exactly the case worth catching.
+    let engine = [
+        "edg/",
+        "chrome/",
+        "crios/",
+        "firefox/",
+        "safari/",
+        "okhttp",
+        "dart/",
+        "curl/",
+        "wget",
+        "python-requests",
+        "python-httpx",
+        "postmanruntime",
+        "go-http-client",
+        "java/",
+        "axios/",
+        "node-fetch",
+    ]
+    .into_iter()
+    .find(|needle| lowered.contains(needle))
+    .unwrap_or("unknown");
+    format!("{platform}|{engine}")
+}
+
 pub async fn refresh(
     db: &PgPool,
     settings: &Settings,
     refresh_token: &str,
+    user_agent: &str,
+    ip_hash: &str,
 ) -> Result<TokenBundle, AppError> {
     let claims = decode_customer_token(
         refresh_token,
         &settings.jwt_refresh_secret,
         REFRESH_TOKEN_TYPE,
     )?;
+
+    // A rotated refresh token is still a bearer token: whoever holds it is
+    // treated as the guest. Checking it against the device that obtained it is
+    // what stops a stolen one being usable from somewhere else.
+    if let Some((stored_agent, stored_ip)) = repo::session_binding(db, &claims.session_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load customer session"))?
+    {
+        if !stored_agent.is_empty()
+            && !user_agent.is_empty()
+            && user_agent_family(&stored_agent) != user_agent_family(user_agent)
+        {
+            // Revoked rather than merely refused: if the token is being replayed
+            // elsewhere, leaving the session live leaves the thief a second try.
+            let _ = repo::revoke_session(
+                db,
+                &claims.sub,
+                &claims.session_id,
+                "device mismatch on refresh",
+            )
+            .await;
+            let _ = repo::record_security_event(
+                db,
+                &claims.sub,
+                &claims.session_id,
+                "refresh_device_mismatch",
+                "failure",
+                &json!({
+                    "storedFamily": user_agent_family(&stored_agent),
+                    "presentedFamily": user_agent_family(user_agent),
+                }),
+            )
+            .await;
+            return Err(AppError::unauthenticated(
+                "this session was signed in on a different device; please sign in again",
+            ));
+        }
+
+        // An address change is normal — mobile networks rotate constantly — so
+        // it is recorded and never blocks. Blocking on it would sign guests out
+        // on the train.
+        if !stored_ip.is_empty() && !ip_hash.is_empty() && stored_ip != ip_hash {
+            let _ = repo::record_security_event(
+                db,
+                &claims.sub,
+                &claims.session_id,
+                "refresh_address_changed",
+                "success",
+                &json!({}),
+            )
+            .await;
+            let _ = repo::touch_session_ip(db, &claims.session_id, ip_hash).await;
+        }
+    }
+
     let account = repo::account(db, &claims.sub)
         .await
         .map_err(|_| AppError::internal("failed to load customer account"))?
@@ -752,6 +857,46 @@ async fn issue_new_session(
     )
     .await
     .map_err(|_| AppError::internal("failed to create customer session"))?;
+
+    // Signing in on a new device is the moment a guest can still recognise an
+    // account takeover, so it is recorded where they can see it.
+    let _ = repo::record_security_event(
+        db,
+        &account.id,
+        &session_id,
+        "session_started",
+        "success",
+        &json!({
+            "deviceName": device.name.as_deref().unwrap_or(""),
+            "deviceType": device.device_type.as_deref().unwrap_or(""),
+            "userAgentFamily": user_agent_family(user_agent),
+        }),
+    )
+    .await;
+
+    // Trim to the newest sessions rather than refusing this one: a guest on a
+    // new phone must always be able to sign in.
+    if let Ok(revoked) = repo::revoke_sessions_beyond(
+        db,
+        &account.id,
+        MAX_ACTIVE_SESSIONS,
+        "session limit reached",
+    )
+    .await
+    {
+        if revoked > 0 {
+            let _ = repo::record_security_event(
+                db,
+                &account.id,
+                &session_id,
+                "sessions_trimmed",
+                "success",
+                &json!({ "revoked": revoked, "keep": MAX_ACTIVE_SESSIONS }),
+            )
+            .await;
+        }
+    }
+
     Ok(bundle(
         settings,
         account,
@@ -1042,6 +1187,61 @@ mod tests {
         assert_eq!(
             result["nextBestActions"][0]["action"],
             "Start win-back outreach"
+        );
+    }
+}
+
+#[cfg(test)]
+mod session_binding_tests {
+    use super::user_agent_family;
+
+    #[test]
+    fn a_browser_auto_update_does_not_break_the_session() {
+        // Chrome bumps its version constantly. Comparing full user agents would
+        // sign guests out for doing nothing, which is how a security control
+        // gets switched off.
+        let before = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36";
+        let after = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/132.0.6834.84 Safari/537.36";
+        assert_eq!(user_agent_family(before), user_agent_family(after));
+    }
+
+    #[test]
+    fn a_token_replayed_by_a_different_client_is_a_mismatch() {
+        let browser = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit/605.1 Safari/604.1";
+        // The shape of a stolen token being replayed from a script or a
+        // different platform.
+        for other in [
+            "curl/8.4.0",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131.0.0.0 Safari/537.36",
+            "Dalvik/2.1.0 (Linux; U; Android 14) okhttp/4.12.0",
+        ] {
+            assert_ne!(
+                user_agent_family(browser),
+                user_agent_family(other),
+                "{other} should not pass as the iPhone browser"
+            );
+        }
+    }
+
+    #[test]
+    fn the_same_app_on_the_same_platform_matches() {
+        let first = "Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8) okhttp/4.12.0";
+        let second = "Dalvik/2.1.0 (Linux; U; Android 14; Pixel 8 Pro) okhttp/4.12.0";
+        assert_eq!(user_agent_family(first), user_agent_family(second));
+    }
+
+    #[test]
+    fn an_unknown_agent_is_still_compared_rather_than_waved_through() {
+        // Two unrecognised agents share a family, which is deliberate: the
+        // caller only skips the check when a stored or presented agent is
+        // empty, never because parsing failed.
+        assert_eq!(
+            user_agent_family("something-odd"),
+            user_agent_family("other-odd")
+        );
+        assert_ne!(
+            user_agent_family("something-odd"),
+            user_agent_family("curl/8.4.0")
         );
     }
 }

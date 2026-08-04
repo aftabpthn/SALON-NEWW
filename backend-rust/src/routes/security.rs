@@ -24,8 +24,8 @@ use crate::{
     },
     routes::context::tenant_branch,
     services::{
-        auth_service::AuthClaims, pos_enterprise_service, security_service, sso_service,
-        staff_service, webauthn_service,
+        auth_service::AuthClaims, client_export_governance_service, client_pii_backfill_service,
+        pos_enterprise_service, security_service, sso_service, staff_service, webauthn_service,
     },
     state::AppState,
 };
@@ -35,6 +35,9 @@ pub fn router() -> Router<AppState> {
         .route("/security/summary", get(summary))
         .route("/security/audit", get(list_audit).post(record_audit))
         .route("/security/field-audit", get(list_field_audit))
+        .route("/security/client-exports", get(list_client_exports))
+        .route("/security/client-exports/usage", get(client_export_usage))
+        .route("/security/client-encryption", get(client_encryption_status))
         .route("/security/audit-chain/verify", get(verify_audit_chain))
         .route("/security/audit-chain/seal", post(seal_audit_chain))
         .route("/security/sessions", get(list_sessions))
@@ -2031,6 +2034,69 @@ async fn revoke_scim_token(
         .await
         .map_err(|_| AppError::internal("failed to revoke SCIM token"))?;
     Ok(Json(ApiResponse::ok(MutationResult { updated: true })))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportHistoryQuery {
+    limit: Option<i64>,
+}
+
+/// Who exported client data, when, how much, and under what filter.
+///
+/// The master client audit records changes; this records reads in bulk, which
+/// is the half that was missing and the half an insider uses.
+async fn list_client_exports(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Query(query): Query<ExportHistoryQuery>,
+) -> ApiResult<Vec<Value>> {
+    require_security_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let events = client_export_governance_service::history(
+        &state.db,
+        &tenant_id,
+        &branch_id,
+        query.limit.unwrap_or(100),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(events)))
+}
+
+/// The caller's own standing against today's budget.
+///
+/// Deliberately not gated on security.read: a user is entitled to know the
+/// limit they are working against before they hit it.
+async fn client_export_usage(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<client_export_governance_service::ExportUsage> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let usage =
+        client_export_governance_service::usage(&state.db, &tenant_id, &branch_id, &claims.sub)
+            .await?;
+    Ok(Json(ApiResponse::ok(usage)))
+}
+
+/// How far client contact encryption has got, and whether cutover is safe.
+///
+/// The decision this reports on is irreversible in the direction that matters:
+/// once plaintext is dropped, a client whose row was never encrypted is a client
+/// nobody can find. So the numbers behind that decision are a first-class
+/// endpoint rather than something to check by hand in psql on the day.
+async fn client_encryption_status(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+) -> ApiResult<client_pii_backfill_service::BackfillStatus> {
+    require_security_read(&claims)?;
+    let status = client_pii_backfill_service::status(
+        &state.db,
+        state.settings.security_encryption_key.is_some(),
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(status)))
 }
 
 pub(crate) fn require_security_read(claims: &AuthClaims) -> Result<(), AppError> {

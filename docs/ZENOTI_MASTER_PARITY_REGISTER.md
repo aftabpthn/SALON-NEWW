@@ -44,6 +44,24 @@ Source content hashes and access timestamps are stored in the JSON register. Sal
 - [Inventory parity register](./INVENTORY_ZENOTI_PARITY_REGISTER.md)
 - [Staff App parity register](./STAFF_APP_ZENOTI_PARITY_REGISTER.md)
 
+## Reading the Unmapped rows
+
+2561 rows carry `No AuraShine evidence is mapped for this public Zenoti
+capability`. That records missing **mapping work**, not a missing feature — spot
+checks found shipped capabilities sitting in that pile, so the count cannot be
+read as a parity gap.
+
+[Zenoti parity triage](./ZENOTI_PARITY_TRIAGE.md) ranks those rows against the
+real AuraShine surface so they can be worked in order instead of as one opaque
+block. Regenerate it with:
+
+```bash
+node scripts/map-zenoti-parity-candidates.mjs
+```
+
+It never writes to this register. A row still becomes Complete only when a
+person records the UI, API route and test behind it.
+
 ## Product-owner gate
 
 Phase 0 technical register gate: **PASS**.
@@ -52,4 +70,4 @@ Phase 1 authorization: **APPROVED**.
 Product owner: ____________________
 Decision: **APPROVED_BY_USER_INSTRUCTION_2026-08-02**
 Date: ____________________
-Baseline hash: `7beaf9488a070dff050b0816d1bbb9d872ef2a7a2fe7041a0161e696de0afd1a`
+Baseline hash: `39c8acb6a32a6c98120c564f895d23855bf5cc8a6160d650dce9e320eb181f22`

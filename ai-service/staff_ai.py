@@ -1,11 +1,17 @@
 """Deterministic staff risk signals. Python advises; Rust remains authoritative."""
 
+import base64
+import binascii
+import os
+import re
 from collections import defaultdict
 from datetime import UTC, date, datetime
 from statistics import median
 from uuid import uuid4
 
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
 router = APIRouter(prefix="/api/v1/staff-ai", tags=["staff-ai"])
@@ -110,6 +116,20 @@ class RosterCoverage(BaseModel):
 class RosterRequest(Scope):
     rows: list[RosterFact] = Field(default_factory=list, max_length=5000)
     coverage: RosterCoverage
+
+
+def _error_envelope(message: str):
+    """Local copy of main's error shape; importing it would be circular because
+    main imports this router."""
+    return {
+        "success": False,
+        "error": {"message": message},
+        "meta": {
+            "requestId": str(uuid4()),
+            "version": "v1",
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
+    }
 
 
 def _envelope(data):
@@ -344,3 +364,121 @@ def roster_recommendations(payload: RosterRequest):
     result = _result(payload, "roster_recommendation", signals[:200])
     result["writeAuthority"] = "rust_roster_optimizer_and_manager_approval"
     return _envelope(result)
+
+
+# --- AI Scribe transcription -------------------------------------------------
+#
+# The Rust backend owns consent, retention and the form submission; this
+# endpoint only turns audio into text and proposes field values. It holds the
+# audio for the duration of the call and returns nothing that identifies the
+# guest beyond what they said.
+#
+# When no transcription provider is configured this returns 503 rather than a
+# plausible-looking transcript. A fabricated clinical note is worse than no
+# note, and the repository rule against invented data is at its most important
+# here.
+
+
+class ScribeFormField(BaseModel):
+    key: str = Field(min_length=1, max_length=120)
+    label: str = ""
+    type: str = "text"
+
+
+class ScribeTranscribeRequest(BaseModel):
+    audio_base64: str = Field(alias="audioBase64", min_length=1)
+    language_code: str = Field(alias="languageCode", default="en-IN", max_length=16)
+    content_type: str = Field(alias="contentType", default="application/octet-stream", max_length=120)
+    duration_seconds: int = Field(alias="durationSeconds", default=0, ge=0, le=5700)
+    form_fields: list[ScribeFormField] = Field(alias="formFields", default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+def _scribe_suggestions(transcript: str, fields: list[ScribeFormField]) -> list[dict]:
+    """Maps transcript sentences onto form fields by label mention.
+
+    Deliberately conservative: a field is only proposed when its own label or
+    key is spoken, and the sentence that triggered it travels with the
+    suggestion as evidence. A staff member reviews every value before it is
+    submitted, so a missed field costs a moment of typing while an invented one
+    would land in a clinical record.
+    """
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", transcript) if part.strip()]
+    suggestions = []
+    for field in fields:
+        needles = {word for word in re.split(r"[^a-z0-9]+", f"{field.label} {field.key}".lower()) if len(word) > 3}
+        if not needles:
+            continue
+        for sentence in sentences:
+            lowered = sentence.lower()
+            if any(needle in lowered for needle in needles):
+                suggestions.append({
+                    "fieldKey": field.key,
+                    "label": field.label or field.key,
+                    "value": sentence,
+                    "evidence": sentence,
+                    "confidence": "mentioned",
+                })
+                break
+    return suggestions
+
+
+@router.post("/scribe/transcribe")
+async def scribe_transcribe(payload: ScribeTranscribeRequest):
+    provider = os.getenv("SCRIBE_PROVIDER", "").strip().lower()
+    if provider not in {"openai"}:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=_error_envelope(
+                "SCRIBE_PROVIDER_NOT_CONFIGURED: set SCRIBE_PROVIDER and its credentials"
+            ),
+        )
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=_error_envelope("SCRIBE_PROVIDER_NOT_CONFIGURED: OPENAI_API_KEY is missing"),
+        )
+
+    try:
+        audio = base64.b64decode(payload.audio_base64, validate=True)
+    except (ValueError, binascii.Error):
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=_error_envelope("audio payload is not valid base64"),
+        )
+
+    model = os.getenv("SCRIBE_MODEL", "whisper-1")
+    try:
+        async with httpx.AsyncClient(timeout=110.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files={"file": ("recording", audio, payload.content_type)},
+                data={"model": model, "language": payload.language_code.split("-")[0]},
+            )
+    except httpx.HTTPError:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=_error_envelope("transcription provider could not be reached"),
+        )
+    if response.status_code >= 400:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=_error_envelope(f"transcription provider returned HTTP {response.status_code}"),
+        )
+
+    transcript = str(response.json().get("text", "")).strip()
+    suggestions = _scribe_suggestions(transcript, payload.form_fields)
+    return _envelope({
+        "transcript": transcript,
+        "provider": provider,
+        "model": model,
+        "summary": {
+            "wordCount": len(transcript.split()),
+            "durationSeconds": payload.duration_seconds,
+            "suggestedFieldCount": len(suggestions),
+        },
+        "suggestions": suggestions,
+    })

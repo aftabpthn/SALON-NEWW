@@ -277,6 +277,200 @@ pub async fn generate_z_report(
         .map_err(|_| AppError::internal("failed to store immutable Z-report"))
 }
 
+/// What still stands between the branch and a Z-report.
+///
+/// The same three conditions `generate_z_report` enforces, reported instead of
+/// refused. Phrased as what to go and do rather than as a status code: this is
+/// read by whoever is on the floor, and "unbalanced journals" is not an
+/// instruction. All of them are listed, not just the first, because finding out
+/// one at a time at closing is how a branch stays open an extra hour.
+fn z_report_blockers(day_locked: bool, open_drawers: i64, reconciled: bool) -> Vec<&'static str> {
+    let mut blockers = Vec::new();
+    if !day_locked {
+        blockers.push("the business day is not locked yet");
+    }
+    if open_drawers > 0 {
+        blockers.push("a cash drawer is still open or awaiting approval");
+    }
+    if !reconciled {
+        blockers.push("invoice, payment, register and accounting totals do not reconcile yet");
+    }
+    blockers
+}
+
+/// A mid-shift read of the register. Changes nothing.
+///
+/// The Z-report is the fiscal close: it demands a locked day, every drawer shut
+/// and approved, and full reconciliation, then it seals a hashed, versioned
+/// record. That is correct, and it is also why a manager could not use it to
+/// answer "how much cash should be in the till right now" — the only way to
+/// find out was to close the day.
+///
+/// So this reads the same figures with none of the preconditions and none of
+/// the writes. Nothing is locked, closed, reset or persisted; running it twenty
+/// times in an afternoon leaves the database exactly as it was. That is the
+/// whole distinction between an X-report and a Z-report, and it is the reason
+/// this deliberately does not store its output: a saved X-report starts looking
+/// like a fiscal document, and a second fiscal document for the same day is
+/// worse than none.
+///
+/// It also reports what is still standing between the branch and its Z-report,
+/// so the answer arrives at four in the afternoon rather than at eleven at
+/// night when the day will not close and nobody knows why.
+pub async fn x_report(
+    db: &PgPool,
+    tenant: &str,
+    branch: &str,
+    date: NaiveDate,
+) -> Result<Value, AppError> {
+    let sales: (i64, i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT,\
+                COALESCE(SUM(subtotal_paise),0)::BIGINT,\
+                COALESCE(SUM(discount_paise),0)::BIGINT,\
+                COALESCE(SUM(tax_paise),0)::BIGINT,\
+                COALESCE(SUM(total_paise),0)::BIGINT,\
+                COALESCE(SUM(paid_paise),0)::BIGINT \
+           FROM pos_sales \
+          WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 \
+            AND status NOT IN ('draft','voided','cancelled')",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to aggregate X-report sales"))?;
+
+    // Counted separately rather than excluded silently: a shift with fourteen
+    // voids in it is the thing a mid-shift read exists to surface.
+    let voided: (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT,COALESCE(SUM(total_paise),0)::BIGINT \
+           FROM pos_sales \
+          WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 \
+            AND status IN ('voided','cancelled')",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to aggregate X-report voids"))?;
+
+    let open_invoices: (i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*)::BIGINT,COALESCE(SUM(total_paise-paid_paise),0)::BIGINT \
+           FROM pos_sales \
+          WHERE tenant_id=$1 AND branch_id=$2 AND business_date=$3 \
+            AND status NOT IN ('draft','voided','cancelled') AND total_paise > paid_paise",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_one(db)
+    .await
+    .map_err(|_| AppError::internal("failed to aggregate X-report open invoices"))?;
+
+    let payments: Vec<(String, i64, i64)> = sqlx::query_as(
+        "SELECT payment.method,COUNT(*)::BIGINT,COALESCE(SUM(payment.amount_paise),0)::BIGINT \
+           FROM pos_payments payment \
+           JOIN pos_sales sale ON sale.id=payment.sale_id \
+            AND sale.tenant_id=payment.tenant_id AND sale.branch_id=payment.branch_id \
+          WHERE payment.tenant_id=$1 AND payment.branch_id=$2 AND sale.business_date=$3 \
+            AND sale.status NOT IN ('draft','voided','cancelled') \
+          GROUP BY payment.method ORDER BY payment.method",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to aggregate X-report payments"))?;
+
+    // Per drawer, because "expected cash" is only actionable against the till
+    // the person is standing at. A branch total tells a cashier nothing about
+    // the drawer in front of them.
+    let drawers: Vec<(String, String, String, i64, i64, i64)> = sqlx::query_as(
+        "SELECT session.id,session.status,session.opened_by_user_id,\
+                session.opening_cash_paise,\
+                session.opening_cash_paise + COALESCE((\
+                  SELECT SUM(movement.amount_paise) FROM cash_drawer_movements movement \
+                   WHERE movement.tenant_id=session.tenant_id \
+                     AND movement.branch_id=session.branch_id \
+                     AND movement.drawer_session_id=session.id \
+                     AND movement.movement_type <> 'opening'),0)::BIGINT,\
+                COALESCE(session.counted_cash_paise,0)::BIGINT \
+           FROM cash_drawer_sessions session \
+          WHERE session.tenant_id=$1 AND session.branch_id=$2 AND session.business_date=$3 \
+            AND session.status <> 'voided' \
+          ORDER BY session.opened_at",
+    )
+    .bind(tenant)
+    .bind(branch)
+    .bind(date)
+    .fetch_all(db)
+    .await
+    .map_err(|_| AppError::internal("failed to read X-report drawers"))?;
+
+    let reconciliation = eod_reconciliation(db, tenant, branch, date).await?;
+    let day_locked = pos_enterprise_repository::get_day_lock(db, tenant, branch, date)
+        .await
+        .map_err(|_| AppError::internal("failed to read day lock"))?
+        .is_some_and(|row| row.status == "locked");
+    let open_drawers = drawers
+        .iter()
+        .filter(|drawer| matches!(drawer.1.as_str(), "open" | "pending_approval"))
+        .count() as i64;
+    let reconciled = reconciliation
+        .get("ready")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let blockers = z_report_blockers(day_locked, open_drawers, reconciled);
+
+    Ok(json!({
+        "businessDate": date,
+        "generatedAt": Utc::now(),
+        // Said plainly, because the difference from a Z-report is the point.
+        "fiscal": false,
+        "note": "An X-report is a read of the register as it stands. It closes nothing and is not stored.",
+        "sales": {
+            "invoiceCount": sales.0,
+            "subtotalPaise": sales.1,
+            "discountPaise": sales.2,
+            "taxPaise": sales.3,
+            "totalPaise": sales.4,
+            "paidPaise": sales.5,
+        },
+        "voided": { "count": voided.0, "totalPaise": voided.1 },
+        "openInvoices": { "count": open_invoices.0, "outstandingPaise": open_invoices.1 },
+        "payments": payments
+            .into_iter()
+            .map(|(method, count, amount_paise)| json!({
+                "method": method, "count": count, "amountPaise": amount_paise
+            }))
+            .collect::<Vec<Value>>(),
+        "drawers": drawers
+            .into_iter()
+            .map(|(id, status, opened_by, opening, expected, counted)| json!({
+                "sessionId": id,
+                "status": status,
+                "openedByUserId": opened_by,
+                "openingCashPaise": opening,
+                // What should be in the till right now: opening plus every
+                // movement since. This is the number a manager counts against.
+                "expectedCashPaise": expected,
+                "countedCashPaise": counted,
+            }))
+            .collect::<Vec<Value>>(),
+        "zReportReadiness": {
+            "dayLocked": day_locked,
+            "openDrawers": open_drawers,
+            "reconciled": reconciled,
+            "ready": blockers.is_empty(),
+            "blockers": blockers,
+        },
+    }))
+}
+
 pub async fn eod_reconciliation(
     db: &PgPool,
     tenant: &str,
@@ -793,6 +987,44 @@ pub async fn float_suggestion(db: &PgPool, tenant: &str, branch: &str) -> Result
     Ok(
         json!({"suggestedOpeningCashPaise":suggested,"basis":"average_closed_drawer_opening_cash","sampleDays":values.len(),"history":values.into_iter().map(|(date,amount)| json!({"businessDate":date,"openingCashPaise":amount})).collect::<Vec<_>>() }),
     )
+}
+
+#[cfg(test)]
+mod x_report_tests {
+    use super::z_report_blockers;
+
+    #[test]
+    fn a_ready_day_lists_nothing() {
+        assert!(z_report_blockers(true, 0, true).is_empty());
+    }
+
+    #[test]
+    fn every_blocker_is_reported_at_once() {
+        // Discovering them one at a time at closing is how a branch stays open
+        // an extra hour.
+        let blockers = z_report_blockers(false, 2, false);
+        assert_eq!(blockers.len(), 3, "{blockers:?}");
+    }
+
+    #[test]
+    fn each_condition_is_reported_on_its_own() {
+        assert_eq!(z_report_blockers(false, 0, true).len(), 1);
+        assert_eq!(z_report_blockers(true, 1, true).len(), 1);
+        assert_eq!(z_report_blockers(true, 0, false).len(), 1);
+    }
+
+    #[test]
+    fn a_blocker_says_what_to_go_and_do() {
+        // Read by whoever is on the floor, not by an engineer with the schema
+        // open, so it names the thing to act on rather than the failed check.
+        for blocker in z_report_blockers(false, 1, false) {
+            assert!(
+                blocker.chars().next().is_some_and(char::is_lowercase),
+                "blockers read as a sentence fragment in a list: {blocker}"
+            );
+            assert!(blocker.split_whitespace().count() >= 5, "{blocker}");
+        }
+    }
 }
 
 #[cfg(test)]

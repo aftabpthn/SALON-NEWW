@@ -53,6 +53,11 @@ graphify-out/*.tmp.json
 customer-app/graphify-out/
 staff-app/graphify-out/
 
+# Parity triage detail: several MB, regenerated from the register and the code
+# by scripts/map-zenoti-parity-candidates.mjs. The reviewable summary it also
+# writes, docs/ZENOTI_PARITY_TRIAGE.md, is tracked.
+docs/evidence/zenoti-parity-candidates.json
+
 # OS/editor files
 .DS_Store
 Thumbs.db

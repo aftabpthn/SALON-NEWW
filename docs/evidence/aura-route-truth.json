@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-08-03T08:17:43.864Z",
+  "generatedAt": "2026-08-03T15:11:27.540Z",
   "scanRule": "Exact static Axum route literal in a mounted router; all other README contracts are explicitly future, external, or retired.",
   "mountedModuleCount": 59,
-  "mountedRouteLiteralCount": 4523,
+  "mountedRouteLiteralCount": 4526,
   "claims": [
     {
       "endpoint": "/api",

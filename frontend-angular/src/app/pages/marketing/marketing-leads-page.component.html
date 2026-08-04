@@ -386,9 +386,52 @@
 <button type="button" [disabled]="busy" (click)="saveActivity()">{{ busy ? 'Saving…' : 'Log activity' }}</button>
 }@if (drawer === 'activity') {
 <button class="primary" type="button" [disabled]="busy" (click)="convertLead()">Mark converted</button>
+}@if (drawer === 'activity') {
+<button type="button" [disabled]="busy" (click)="openLeadScore(selectedLead!)">Why this score</button>
 }@if (drawer === 'lead') {
 <button class="primary" type="button" [disabled]="busy" (click)="saveLead()">{{ busy ? 'Saving…' : 'Save lead' }}</button>
 }</footer>
 </aside>
+}
+
+@if (drawer === 'lead-score' && selectedLead) {
+  <aside class="drawer">
+    <header><h2>Lead score</h2><button type="button" aria-label="Close" (click)="closeDrawer()">×</button></header>
+    <div class="drawer-body">
+      <p><strong>{{ displayName(selectedLead) }}</strong> · {{ selectedLead.stage }}</p>
+      @if (!leadScore) {
+        <div class="column-empty">Loading score…</div>
+      } @else {
+        <p>
+          <b>{{ leadScore.storedScore }}</b> / 100 ·
+          {{ leadScore.storedScoreSource === 'auto' ? 'Scored automatically' : 'Set manually' }}
+          @if (leadScore.storedScoreSource === 'auto' && leadScore.storedModelVersion) { · {{ leadScore.storedModelVersion }} }
+        </p>
+        @if (leadScore.storedScoreSource === 'manual') {
+          <p>The scoring policy would give this lead <b>{{ leadScore.policyScore }}</b>. Switching to automatic replaces the manual value and keeps it current as the lead moves.</p>
+        }
+        <p><small>Branch conversion rate: {{ leadScore.branchConversionRate }}% — source quality is judged against this, not a fixed table.</small></p>
+        <div class="activity-list">
+          @for (factor of (leadScore.storedScoreSource === 'auto' ? leadScore.storedFactors : leadScore.policyFactors); track factor.key) {
+            <article [class]="scoreFactorClass(factor.points)">
+              <strong>{{ factor.label }}</strong>
+              <p>{{ factor.points > 0 ? '+' : '' }}{{ factor.points }} · {{ factor.detail }}</p>
+            </article>
+          }
+          @if (!(leadScore.storedScoreSource === 'auto' ? leadScore.storedFactors : leadScore.policyFactors).length) {
+            <div class="column-empty">No factors recorded yet</div>
+          }
+        </div>
+      }
+    </div>
+    <footer>
+      <button type="button" (click)="closeDrawer()">Close</button>
+      @if (leadScore && leadScore.storedScoreSource === 'auto') {
+        <button type="button" [disabled]="busy" (click)="setLeadScoreMode(false)">Switch to manual</button>
+      } @else if (leadScore) {
+        <button class="primary" type="button" [disabled]="busy" (click)="setLeadScoreMode(true)">Score automatically</button>
+      }
+    </footer>
+  </aside>
 }
 </section>

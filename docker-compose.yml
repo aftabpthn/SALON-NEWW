@@ -109,6 +109,8 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-local}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+      SCRIBE_PROVIDER: ${SCRIBE_PROVIDER:-}
+      SCRIBE_MODEL: ${SCRIBE_MODEL:-whisper-1}
     expose:
       - "8081"
     healthcheck:

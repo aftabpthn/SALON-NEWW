@@ -222,112 +222,6 @@
       @if (assistantRestrictedTool) {
         <div class="assistant-notice">{{ 'header.aiToolRestricted' | translate }}</div>
       }
-      @if (assistantCopilot; as copilot) {
-        <section class="assistant-evidence" [attr.aria-label]="'header.aiEvidence' | translate">
-          <header>
-            <strong>{{ 'header.aiEvidence' | translate }}</strong>
-            <span class="assistant-confidence" [attr.data-level]="copilot.confidence">{{ 'header.aiConfidence' | translate }}: {{ copilot.confidence }}</span>
-          </header>
-          <p class="assistant-evidence-scope">
-            @if (copilot.branchName) {
-              <span>{{ copilot.branchName }}</span>
-            }
-            @if (copilot.period.label) {
-              <span>· {{ copilot.period.label }}</span>
-            }
-          </p>
-          @if (copilot.period.start) {
-            <p class="assistant-evidence-period">
-              {{ copilot.period.start }} → {{ copilot.period.end }}
-              @if (copilot.period.previousStart) {
-                <span>({{ 'header.aiPreviousPeriod' | translate }}: {{ copilot.period.previousStart }} → {{ copilot.period.previousEnd }})</span>
-              }
-            </p>
-          }
-          @if (copilot.metrics.length) {
-            <dl class="assistant-metrics">
-              @for (metric of copilot.metrics; track metric.label) {
-                <div>
-                  <dt>{{ metric.label }}</dt>
-                  <dd>
-                    <span class="assistant-metric-previous">{{ metric.previous }}</span>
-                    <span aria-hidden="true">→</span>
-                    <span class="assistant-metric-current">{{ metric.current }}</span>
-                    @if (metric.changePercent !== null) {
-                      <span class="assistant-metric-change" [attr.data-direction]="metric.direction">{{ metric.changePercent > 0 ? '+' : '' }}{{ metric.changePercent }}%</span>
-                    }
-                  </dd>
-                </div>
-              }
-            </dl>
-          }
-          @if (copilot.reason) {
-            <p class="assistant-evidence-reason">{{ copilot.reason }}</p>
-          }
-          @if (copilot.evidence.length) {
-            <ul>
-              @for (line of copilot.evidence; track line) {
-                <li>{{ line }}</li>
-              }
-            </ul>
-          }
-          @if (copilot.recommendedAction) {
-            <p class="assistant-evidence-action">{{ copilot.recommendedAction }}</p>
-          }
-          @if (copilot.proposals.length) {
-            <p class="assistant-proposals-note">{{ 'header.aiProposalsNote' | translate }}</p>
-            <div class="assistant-proposals">
-              @for (proposal of copilot.proposals; track proposal.kind) {
-                <button type="button" [attr.data-approval]="proposal.requiresApproval" (click)="selectProposal(proposal)">
-                  {{ proposal.label }}
-                  @if (proposal.requiresApproval) {
-                    <span class="assistant-proposal-flag">{{ 'header.aiNeedsApproval' | translate }}</span>
-                  }
-                </button>
-              }
-            </div>
-          } @else if (copilot.deepLink) {
-            <button type="button" (click)="openCopilotLink()">{{ 'header.aiOpenScreen' | translate }}</button>
-          }
-          @if (copilot.entities?.length) {
-            <p class="assistant-evidence-label">{{ 'header.aiRelatedRecords' | translate }}</p>
-            <ul class="assistant-entities">
-              @for (entity of copilot.entities; track entity.kind + entity.id) {
-                <li>
-                  @if (entity.link) {
-                    <button type="button" class="assistant-entity" [attr.data-kind]="entity.kind" (click)="openEntity(entity)">{{ entity.name }}</button>
-                  } @else {
-                    <span class="assistant-entity" [attr.data-kind]="entity.kind">{{ entity.name }}</span>
-                  }
-                </li>
-              }
-            </ul>
-          }
-          @if (copilot.source) {
-            <p class="assistant-evidence-source">{{ 'header.aiSource' | translate }}: {{ copilot.source }}</p>
-          }
-        </section>
-        @if (assistantLastMessageId) {
-          <div class="assistant-feedback">
-            <span>{{ 'header.aiWasThisHelpful' | translate }}</span>
-            <button type="button" [attr.aria-pressed]="assistantFeedback === 'helpful'" [class.selected]="assistantFeedback === 'helpful'" (click)="rateAnswer(true)">{{ 'header.aiHelpful' | translate }}</button>
-            <button type="button" [attr.aria-pressed]="assistantFeedback === 'not_helpful'" [class.selected]="assistantFeedback === 'not_helpful'" (click)="rateAnswer(false)">{{ 'header.aiNotHelpful' | translate }}</button>
-          </div>
-        }
-        @if (assistantPendingProposal; as pending) {
-          <div class="assistant-approval" role="alertdialog" [attr.aria-label]="'header.aiApprovalNeeded' | translate">
-            <strong>{{ 'header.aiApprovalNeeded' | translate }}</strong>
-            <p>{{ pending.approvalPrompt }}</p>
-            @if (pending.expectedImpact) {
-              <p class="assistant-approval-impact">{{ 'header.aiExpectedImpact' | translate }}: {{ pending.expectedImpact }}</p>
-            }
-            <div class="assistant-approval-buttons">
-              <button type="button" class="assistant-approve" (click)="confirmProposal()">{{ pending.label }}</button>
-              <button type="button" (click)="cancelProposal()">{{ 'common.cancel' | translate }}</button>
-            </div>
-          </div>
-        }
-      }
       <div class="assistant-transcript" #assistantTranscript role="log" aria-live="polite">
         @for (message of assistantMessages; track message) {
           <article [class.assistant]="message.role === 'assistant'">
@@ -339,6 +233,114 @@
         }
         @if (assistantBusy && !assistantMessages.length) {
           <div class="assistant-empty">{{ 'header.connecting' | translate }}…</div>
+        }
+      </div>
+      <div class="assistant-context">
+        @if (assistantCopilot; as copilot) {
+          <section class="assistant-evidence" [attr.aria-label]="'header.aiEvidence' | translate">
+            <header>
+              <strong>{{ 'header.aiEvidence' | translate }}</strong>
+              <span class="assistant-confidence" [attr.data-level]="copilot.confidence">{{ 'header.aiConfidence' | translate }}: {{ copilot.confidence }}</span>
+            </header>
+            <p class="assistant-evidence-scope">
+              @if (copilot.branchName) {
+                <span>{{ copilot.branchName }}</span>
+              }
+              @if (copilot.period.label) {
+                <span>· {{ copilot.period.label }}</span>
+              }
+            </p>
+            @if (copilot.period.start) {
+              <p class="assistant-evidence-period">
+                {{ copilot.period.start }} → {{ copilot.period.end }}
+                @if (copilot.period.previousStart) {
+                  <span>({{ 'header.aiPreviousPeriod' | translate }}: {{ copilot.period.previousStart }} → {{ copilot.period.previousEnd }})</span>
+                }
+              </p>
+            }
+            @if (copilot.metrics.length) {
+              <dl class="assistant-metrics">
+                @for (metric of copilot.metrics; track metric.label) {
+                  <div>
+                    <dt>{{ metric.label }}</dt>
+                    <dd>
+                      <span class="assistant-metric-previous">{{ metric.previous }}</span>
+                      <span aria-hidden="true">→</span>
+                      <span class="assistant-metric-current">{{ metric.current }}</span>
+                      @if (metric.changePercent !== null) {
+                        <span class="assistant-metric-change" [attr.data-direction]="metric.direction">{{ metric.changePercent > 0 ? '+' : '' }}{{ metric.changePercent }}%</span>
+                      }
+                    </dd>
+                  </div>
+                }
+              </dl>
+            }
+            @if (copilot.reason) {
+              <p class="assistant-evidence-reason">{{ copilot.reason }}</p>
+            }
+            @if (copilot.evidence.length) {
+              <ul>
+                @for (line of copilot.evidence; track line) {
+                  <li>{{ line }}</li>
+                }
+              </ul>
+            }
+            @if (copilot.recommendedAction) {
+              <p class="assistant-evidence-action">{{ copilot.recommendedAction }}</p>
+            }
+            @if (copilot.proposals.length) {
+              <p class="assistant-proposals-note">{{ 'header.aiProposalsNote' | translate }}</p>
+              <div class="assistant-proposals">
+                @for (proposal of copilot.proposals; track proposal.kind) {
+                  <button type="button" [attr.data-approval]="proposal.requiresApproval" (click)="selectProposal(proposal)">
+                    {{ proposal.label }}
+                    @if (proposal.requiresApproval) {
+                      <span class="assistant-proposal-flag">{{ 'header.aiNeedsApproval' | translate }}</span>
+                    }
+                  </button>
+                }
+              </div>
+            } @else if (copilot.deepLink) {
+              <button type="button" (click)="openCopilotLink()">{{ 'header.aiOpenScreen' | translate }}</button>
+            }
+            @if (copilot.entities?.length) {
+              <p class="assistant-evidence-label">{{ 'header.aiRelatedRecords' | translate }}</p>
+              <ul class="assistant-entities">
+                @for (entity of copilot.entities; track entity.kind + entity.id) {
+                  <li>
+                    @if (entity.link) {
+                      <button type="button" class="assistant-entity" [attr.data-kind]="entity.kind" (click)="openEntity(entity)">{{ entity.name }}</button>
+                    } @else {
+                      <span class="assistant-entity" [attr.data-kind]="entity.kind">{{ entity.name }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+            }
+            @if (copilot.source) {
+              <p class="assistant-evidence-source">{{ 'header.aiSource' | translate }}: {{ copilot.source }}</p>
+            }
+          </section>
+          @if (assistantLastMessageId) {
+            <div class="assistant-feedback">
+              <span>{{ 'header.aiWasThisHelpful' | translate }}</span>
+              <button type="button" [attr.aria-pressed]="assistantFeedback === 'helpful'" [class.selected]="assistantFeedback === 'helpful'" (click)="rateAnswer(true)">{{ 'header.aiHelpful' | translate }}</button>
+              <button type="button" [attr.aria-pressed]="assistantFeedback === 'not_helpful'" [class.selected]="assistantFeedback === 'not_helpful'" (click)="rateAnswer(false)">{{ 'header.aiNotHelpful' | translate }}</button>
+            </div>
+          }
+          @if (assistantPendingProposal; as pending) {
+            <div class="assistant-approval" role="alertdialog" [attr.aria-label]="'header.aiApprovalNeeded' | translate">
+              <strong>{{ 'header.aiApprovalNeeded' | translate }}</strong>
+              <p>{{ pending.approvalPrompt }}</p>
+              @if (pending.expectedImpact) {
+                <p class="assistant-approval-impact">{{ 'header.aiExpectedImpact' | translate }}: {{ pending.expectedImpact }}</p>
+              }
+              <div class="assistant-approval-buttons">
+                <button type="button" class="assistant-approve" (click)="confirmProposal()">{{ pending.label }}</button>
+                <button type="button" (click)="cancelProposal()">{{ 'common.cancel' | translate }}</button>
+              </div>
+            </div>
+          }
         }
       </div>
       @if (assistantAction?.type === 'booking_draft') {

@@ -1,0 +1,28 @@
+{
+  "recordedAt": "2026-08-03T19:14:22.673Z",
+  "note": "Known drift. New entries fail CI; this list should only ever shrink.",
+  "driftedDependencies": [
+    "@angular-devkit/build-angular",
+    "@angular/animations",
+    "@angular/cli",
+    "@angular/common",
+    "@angular/compiler",
+    "@angular/compiler-cli",
+    "@angular/core",
+    "@angular/forms",
+    "@angular/platform-browser",
+    "@angular/platform-browser-dynamic",
+    "@angular/router",
+    "@capacitor/app",
+    "rxjs",
+    "tslib",
+    "typescript",
+    "zone.js"
+  ],
+  "forkedSharedModules": [
+    "auth.guard.ts",
+    "auth.interceptor.ts",
+    "auth.service.ts",
+    "csrf.interceptor.ts"
+  ]
+}

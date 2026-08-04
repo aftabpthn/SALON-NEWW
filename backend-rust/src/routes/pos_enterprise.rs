@@ -46,6 +46,9 @@ pub fn router() -> Router<AppState> {
         .route("/pos/day-close/:date", get(day_close_status))
         .route("/pos/day-close/:date/lock", post(lock_day))
         .route("/pos/day-close/:date/reopen", post(reopen_day))
+        // GET only, and deliberately so: an X-report has nothing to POST
+        // because it produces no document and changes no state.
+        .route("/pos/x-reports/:date", get(get_x_report))
         .route(
             "/pos/z-reports/:date",
             get(get_z_report).post(generate_z_report),
@@ -637,6 +640,22 @@ async fn reopen_day(
     state.publish_pos_event(&t, &b, "day_close", &date.to_string(), "day.reopened");
     Ok(Json(ApiResponse::ok(row)))
 }
+/// The register as it stands right now, mid-shift.
+///
+/// Unlike the Z-report this needs no locked day and no closed drawer, and it
+/// writes nothing — so a manager can check the till at any hour without ending
+/// the trading day to find out.
+async fn get_x_report(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(date): Path<String>,
+) -> ApiResult<Value> {
+    let date = parse_date(&date)?;
+    let (t, b) = tenant_branch(&headers)?;
+    let report = pos_enterprise_service::x_report(&state.db, &t, &b, date).await?;
+    Ok(Json(ApiResponse::ok(report)))
+}
+
 async fn get_z_report(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -693,7 +712,11 @@ async fn export_z_report(
         "tally" => tally_xml(&accounting_lines)?,
         "busy" => busy_csv(&accounting_lines)?,
         "quickbooks-desktop" => quickbooks_iif(&accounting_lines)?,
-        _ => return Err(AppError::validation("format must be json, csv, tally, busy, or quickbooks-desktop")),
+        _ => {
+            return Err(AppError::validation(
+                "format must be json, csv, tally, busy, or quickbooks-desktop",
+            ))
+        }
     };
     Ok(Json(ApiResponse::ok(
         json!({"businessDate":date,"version":row.version,"format":format,"sha256":row.sha256,"journalLineCount":accounting_lines.len(),"content":content}),
@@ -1259,7 +1282,9 @@ fn validate_accounting_export_lines(
     lines: &[pos_enterprise_repository::DailyAccountingExportLine],
 ) -> Result<(), AppError> {
     if lines.is_empty() {
-        return Err(AppError::conflict("no posted accounting journals exist for this date"));
+        return Err(AppError::conflict(
+            "no posted accounting journals exist for this date",
+        ));
     }
     let mut journals = std::collections::HashMap::<&str, (i64, i64)>::new();
     for line in lines {
@@ -1310,7 +1335,12 @@ fn tsv_field(value: &str) -> String {
 mod accounting_export_tests {
     use super::*;
 
-    fn line(journal: &str, account: &str, debit_paise: i64, credit_paise: i64) -> pos_enterprise_repository::DailyAccountingExportLine {
+    fn line(
+        journal: &str,
+        account: &str,
+        debit_paise: i64,
+        credit_paise: i64,
+    ) -> pos_enterprise_repository::DailyAccountingExportLine {
         pos_enterprise_repository::DailyAccountingExportLine {
             journal_entry_id: journal.into(),
             business_date: NaiveDate::from_ymd_opt(2026, 8, 3).unwrap(),
@@ -1325,12 +1355,18 @@ mod accounting_export_tests {
 
     #[test]
     fn accounting_exports_require_each_journal_to_balance() {
-        let balanced = vec![line("j1", "CASH", 10_050, 0), line("j1", "SALES", 0, 10_050)];
+        let balanced = vec![
+            line("j1", "CASH", 10_050, 0),
+            line("j1", "SALES", 0, 10_050),
+        ];
         assert!(tally_xml(&balanced).unwrap().contains("100.50"));
         assert!(busy_csv(&balanced).unwrap().contains("100.50"));
         assert!(quickbooks_iif(&balanced).unwrap().contains("-100.50"));
 
-        let cross_balanced = vec![line("j1", "CASH", 10_000, 0), line("j2", "SALES", 0, 10_000)];
+        let cross_balanced = vec![
+            line("j1", "CASH", 10_000, 0),
+            line("j2", "SALES", 0, 10_000),
+        ];
         assert!(validate_accounting_export_lines(&cross_balanced).is_err());
     }
 }

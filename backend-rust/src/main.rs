@@ -168,6 +168,15 @@ async fn main() -> Result<()> {
             {
                 worker::note_failure("ai_transcript_retention", "purge_transcripts");
             }
+            // Scribe transcripts expire on their own per-session window rather
+            // than the concierge retention policy, but they are the same class
+            // of content and belong on the same cycle.
+            if services::staff_ai_scribe_service::purge_expired_transcripts(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "purge_scribe_transcripts");
+            }
             if repositories::communication_repository::redact_expired_content(&state.db)
                 .await
                 .is_err()
@@ -464,6 +473,49 @@ async fn main() -> Result<()> {
         },
     );
 
+    // Lead scores decay with silence and shift as the branch's own conversion
+    // history grows, so they are recomputed on a cycle rather than only on
+    // write. The query only picks up branches whose scores are over an hour
+    // old, so a quiet tenant costs one indexed lookup.
+    worker::spawn(
+        &state,
+        "marketing_lead_scoring",
+        Duration::from_secs(900),
+        |state| async move {
+            if services::marketing_lead_scoring_service::process_due(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("marketing_lead_scoring", "process_due");
+            }
+        },
+    );
+
+    // Client contact details are encrypted behind the live plaintext, in
+    // batches, because the key lives in the application and a migration cannot
+    // reach it. Nothing reads the result yet, so this is safe to run at any
+    // time; it exists so the table is already complete on the day reads move
+    // off plaintext. The interval is short because a stalled backfill is
+    // invisible — the CRM keeps working — and would only surface at cutover.
+    if state.settings.security_encryption_key.is_some() {
+        worker::spawn(
+            &state,
+            "client_pii_backfill",
+            Duration::from_secs(120),
+            |state| async move {
+                let Some(key) = state.settings.security_encryption_key.as_deref() else {
+                    return;
+                };
+                if services::client_pii_backfill_service::run_batch(&state.db, key)
+                    .await
+                    .is_err()
+                {
+                    worker::note_failure("client_pii_backfill", "run_batch");
+                }
+            },
+        );
+    }
+
     worker::spawn(
         &state,
         "profit_action_queue",
@@ -487,7 +539,49 @@ async fn main() -> Result<()> {
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown_signal())
     .await?;
 
+    tracing::info!("aura-shine-backend stopped accepting connections");
+
     Ok(())
+}
+
+/// Resolves when the process is asked to stop.
+///
+/// ECS sends SIGTERM and only escalates to SIGKILL after its stop timeout, and
+/// the target group drains for `deregistration_delay` seconds before that.
+/// Without this, the process died on the first signal and every request still
+/// in flight during the drain window — a checkout, a payment callback — was cut
+/// mid-transaction on each rollout.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            tracing::warn!("unable to listen for the interrupt signal");
+            // Never resolve, so a broken handler cannot trigger a shutdown by
+            // itself; the other branch still works.
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(_) => {
+                tracing::warn!("unable to listen for the terminate signal");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("interrupt received; draining in-flight requests"),
+        _ = terminate => tracing::info!("SIGTERM received; draining in-flight requests"),
+    }
 }

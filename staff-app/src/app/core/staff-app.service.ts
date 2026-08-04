@@ -277,6 +277,19 @@ export type StaffCashDrawer = {
   countedCashPaise?: number | null; variancePaise?: number | null; status: string; blind: boolean;
 };
 
+export type StaffScribeSuggestion = { fieldKey: string; label: string; value: string; evidence: string; confidence: string };
+export type StaffScribeSession = {
+  id: string; appointmentId: string; clientId: string; staffId: string; serviceId: string;
+  formDefinitionId: string; formSubmissionId: string | null; guestParticipant: boolean;
+  consentVersion: string; consentStatus: "granted" | "refused" | "revoked"; consentName: string;
+  status: "consent_granted" | "refused" | "recording" | "processing" | "draft_ready" | "approved" | "revoked" | "discarded" | "failed";
+  durationSeconds: number; provider: string; model: string; languageCode: string;
+  providerErrorCode: string; transcript: string;
+  structuredSummary: Record<string, unknown>; formSuggestions: StaffScribeSuggestion[];
+  version: number;
+};
+export type StaffScribeEvent = { id: string; eventType: string; actorUserId: string; details: Record<string, unknown>; createdAt: string };
+
 export type StaffGuestFormField = {
   key: string;
   label: string;
@@ -1522,6 +1535,63 @@ export class StaffAppService {
     });
     this.clearGetCache();
     return result;
+  }
+
+  // --- AI Scribe ---
+  // Consent is captured before anything records, and the recording itself is
+  // posted as raw bytes: the browser never keeps a copy and neither does the
+  // backend, which forwards it to the provider and stores only the transcript.
+
+  async startScribeSession(input: {
+    appointmentId: string;
+    clientId: string;
+    staffId: string;
+    serviceId?: string;
+    formDefinitionId: string;
+    guestParticipant: boolean;
+    consentStatus: "granted" | "refused";
+    consentName?: string;
+    languageCode?: string;
+  }): Promise<StaffScribeSession> {
+    return this.post<StaffScribeSession>("/staff-scribe/sessions", { ...input });
+  }
+
+  async scribeSession(id: string): Promise<StaffScribeSession> {
+    return this.get<StaffScribeSession>(`/staff-scribe/sessions/${encodeURIComponent(id)}`);
+  }
+
+  async scribeSessionsForAppointment(appointmentId: string): Promise<StaffScribeSession[]> {
+    return this.get<StaffScribeSession[]>(`/staff-scribe/appointments/${encodeURIComponent(appointmentId)}/sessions`);
+  }
+
+  async scribeEvents(id: string): Promise<StaffScribeEvent[]> {
+    return this.get<StaffScribeEvent[]>(`/staff-scribe/sessions/${encodeURIComponent(id)}/events`);
+  }
+
+  async uploadScribeRecording(id: string, recording: Blob, durationSeconds: number): Promise<StaffScribeSession> {
+    if (!recording.size) throw new Error("The recording is empty.");
+    if (recording.size > 25 * 1024 * 1024) throw new Error("Recording must be 25 MB or smaller.");
+    if (durationSeconds > 5700) throw new Error("Recording must be 95 minutes or shorter.");
+    const result = await this.withRefreshRetry(async () => {
+      const response = await firstValueFrom(this.http.post<StaffScribeSession | ApiEnvelope<StaffScribeSession>>(
+        `${this.baseUrl}/staff-scribe/sessions/${encodeURIComponent(id)}/transcribe?durationSeconds=${Math.max(0, Math.round(durationSeconds))}`,
+        recording,
+        { headers: this.authHeaders().set("Content-Type", recording.type || "application/octet-stream") }
+      ));
+      return this.unwrap(response);
+    });
+    this.clearGetCache();
+    return result;
+  }
+
+  /// `responses` are the values the staff member reviewed, not the raw
+  /// suggestions; the backend writes exactly what is sent here.
+  async approveScribeDraft(id: string, responses: Record<string, unknown>, version: number, signatureName = ""): Promise<StaffScribeSession> {
+    return this.post<StaffScribeSession>(`/staff-scribe/sessions/${encodeURIComponent(id)}/approve`, { responses, version, signatureName });
+  }
+
+  async revokeScribeConsent(id: string, reason = ""): Promise<{ id: string; status: string; transcriptCleared: boolean }> {
+    return this.post(`/staff-scribe/sessions/${encodeURIComponent(id)}/revoke`, { reason });
   }
 
   async selfProfilePhoto(fileId: string): Promise<Blob> {

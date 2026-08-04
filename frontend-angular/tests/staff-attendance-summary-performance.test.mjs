@@ -6,8 +6,15 @@ const source = readFileSync('src/app/pages/staff/attendance-summary/staff-attend
 const template = readFileSync('src/app/pages/staff/attendance-summary/staff-attendance-summary-page.component.html', 'utf8');
 const repository = readFileSync('../backend-rust/src/repositories/staff_attendance_repository.rs', 'utf8');
 
-test('attendance summary uses one initial request and includes active staff', () => {
-  assert.match(source, /ngOnInit\(\) \{ void this\.loadSummary\(\); \}/);
+test('attendance summary loads without a per-staff fan-out and includes active staff', () => {
+  // The original defect was a roster fan-out on init: the page pulled the
+  // staff list and then queried per staff member. Pin that shape, not the exact
+  // body of ngOnInit — the pending-corrections panel renders on first paint and
+  // legitimately adds a second, constant-cost request.
+  const onInit = source.match(/ngOnInit\(\)\s*\{([^}]*)\}/);
+  assert.ok(onInit, 'ngOnInit should exist');
+  const initialLoads = onInit[1].match(/this\.load[A-Za-z]*\(/g) || [];
+  assert.deepEqual(initialLoads, ['this.loadSummary(', 'this.loadCorrectionRequests(']);
   assert.doesNotMatch(source, /\/staff\/list/);
   assert.doesNotMatch(repository, /a\.staff_id IS NOT NULL OR su\.staff_id IS NOT NULL/);
 });
