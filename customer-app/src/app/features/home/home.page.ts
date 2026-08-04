@@ -1599,9 +1599,21 @@ interface ConsultationChatMessage {
         right: 0 !important;
         width: auto !important;
       }
+
+      /* Mobile-only treatment: a taller card image and a tighter gap suit a
+         single column on a phone. These two rules sat one line below the
+         closing brace of this block, so despite their indentation they applied
+         at every width — recommended cards carried a portrait image ratio and a
+         10px gap on desktop while every neighbouring section used 18px, so the
+         cards never lined up down the page. */
+      .home-page .business-grid.recommended aura-business-card {
+        --card-image-ratio: 1.65;
+      }
+
+      .home-page .business-grid.recommended {
+        gap: 10px;
+      }
     }
-      .home-page .business-grid.recommended aura-business-card { --card-image-ratio: 1.65; }
-      .home-page .business-grid.recommended { gap: 10px !important; }
 
     @media (min-width: 1024px) {
       ion-header {
@@ -1622,7 +1634,20 @@ interface ConsultationChatMessage {
     }
 
     @media (min-width: 1440px) {
-      .business-grid.recommended {
+      /* Every card grid widens together. Only .business-grid.recommended used
+         to reach four columns, so on a wide screen "Nearby businesses" sat
+         three-up directly beneath sections that were four-up — two rows of the
+         same card at two different widths, which reads as a broken page rather
+         than as a deliberate emphasis.
+
+         The skeleton is in the list for a second reason: it stood at three
+         columns while the results it stands in for arrived at four, so the page
+         jumped sideways the moment loading finished. A placeholder has to
+         occupy the space its content will actually take. */
+      .business-grid,
+      .business-grid.recommended,
+      .nearby-grid,
+      .skeleton-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
