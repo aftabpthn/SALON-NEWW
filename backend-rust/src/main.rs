@@ -183,6 +183,15 @@ async fn main() -> Result<()> {
             {
                 worker::note_failure("ai_transcript_retention", "redact_communications");
             }
+            // Memory retention is the same class of obligation as a transcript
+            // expiring, so it runs on the same clock rather than on a second
+            // one somebody has to remember exists.
+            if services::ai_memory_service::purge_expired(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "purge_memory");
+            }
         },
     );
 

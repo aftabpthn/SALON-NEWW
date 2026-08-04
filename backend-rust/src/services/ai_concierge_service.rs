@@ -14,6 +14,7 @@ use crate::{
     services::{
         ai_channel_service,
         ai_copilot_tools::{self, CopilotAnswer},
+        ai_memory_service,
         ai_scope_service::{self, ScopeRequest},
         ai_semantic_service, ai_tool_dispatcher,
         auth_service::AuthClaims,
@@ -669,6 +670,17 @@ async fn process_message(
     // audit, and putting quoted text next to that would invite the provider to
     // blend the two. A refusal is likewise final — retrieving around a
     // permission the caller does not hold is exactly what must not happen.
+    // What this client told us, recalled the same way every time. Unlike
+    // retrieval this is not similarity-ranked and does not depend on the tools
+    // having failed: a stated preference is relevant to a booking question and
+    // to a small-talk one alike.
+    let client_memory = match session.client_id.as_deref() {
+        Some(client_id) => {
+            ai_memory_service::for_channel(db, tenant_id, branch_id, client_id, &session.channel)
+                .await
+        }
+        None => Vec::new(),
+    };
     let retrieved = match (&copilot, web_claims) {
         (CopilotOutcome::NotApplicable, Some(claims)) => {
             ai_semantic_service::search(
@@ -707,6 +719,7 @@ async fn process_message(
             &governance,
             copilot.answer(),
             &retrieved,
+            &client_memory,
         )
         .await
     };
@@ -1024,6 +1037,7 @@ async fn call_provider(
     governance: &AiGovernanceRecord,
     copilot: Option<&CopilotAnswer>,
     retrieved: &[ai_semantic_service::SemanticPassage],
+    client_memory: &[crate::repositories::ai_memory_repository::MemoryNote],
 ) -> (ProviderResponse, &'static str) {
     let financials_visible = web_claims.is_some_and(|claims| {
         ai_scope_service::domain_allowed(claims, ai_scope_service::AiDomain::Finance)
@@ -1096,6 +1110,15 @@ async fn call_provider(
                 "similarity":passage.similarity
             })).collect::<Vec<_>>(),
             "instruction":"This is text stored in the CRM, retrieved because no report answered the question. Answer only from what it says and name the source you used. Do not compute totals, counts, trends or money from it, and do not treat it as current if it does not say so — if the question needs a figure, say the reports do not cover it rather than deriving one from this text."
+        })),
+        // Facts a person chose to keep about this client. Stated rather than
+        // inferred, and already filtered for what this channel may repeat back.
+        "client_memory":(!client_memory.is_empty()).then(||json!({
+            "notes":client_memory.iter().map(|note|json!({
+                "text":note.content,
+                "source":note.source,
+            })).collect::<Vec<_>>(),
+            "instruction":"These are things this client told us or that staff recorded about them. Use them to make the reply fit the person. Do not read them out as a list, do not treat them as current bookings or purchases, and do not infer anything further about the client from them."
         })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
     });

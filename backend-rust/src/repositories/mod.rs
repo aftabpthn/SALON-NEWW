@@ -2,6 +2,7 @@ pub mod ai_action_autonomy_repository;
 pub mod ai_action_repository;
 pub mod ai_concierge_repository;
 pub mod ai_copilot_repository;
+pub mod ai_memory_repository;
 pub mod ai_prediction_outcome_repository;
 pub mod ai_prediction_repository;
 pub mod ai_scope_repository;

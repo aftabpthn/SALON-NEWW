@@ -470,6 +470,35 @@ async fn confirm_autonomously(
         "ran without confirmation under an earned autonomy grant",
     )
     .await;
+
+    // Told, not left to be discovered. An undo window nobody knows about is not
+    // a control, and a daily digest could arrive with only hours of a
+    // twenty-four hour window left — so this is per run, at the moment it runs.
+    let notice = json!({
+        "draftId": draft_id,
+        "actionType": kind.name(),
+        "route": kind.route(),
+        "undoDeadline": deadline,
+        "undoRoute": format!("/api/v1/ai/actions/drafts/{draft_id}/undo"),
+    });
+    if let Err(error) = autonomy_repository::deliver_autonomy_notice(
+        db,
+        tenant_id,
+        branch_id,
+        "The copilot completed this without asking",
+        &format!(
+            "{}\n\nIt ran because this branch has approved these consistently. You can undo it until {}.",
+            confirmed.summary,
+            deadline.format("%d %b %Y, %H:%M UTC")
+        ),
+        &notice,
+    )
+    .await
+    {
+        // The run happened and is still reversible through the undoable list,
+        // so a failed notice must be loud rather than fatal.
+        tracing::error!(%error, action = kind.name(), "autonomous run completed but the branch was not notified");
+    }
     Ok(confirmed)
 }
 

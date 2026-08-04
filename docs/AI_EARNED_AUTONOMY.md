@@ -33,11 +33,31 @@ that stops completing on approval also stops being eligible.
 | Minimum decisions | 20 |
 | Approval rate | strictly above 95% |
 | Undone runs in window | 0 |
+| Task completion rate | at least 60%, once 10 runs have been judged |
 
 Strictly above, not equal: at exactly 95%, one decision in twenty is still a
 refusal, which is the confirmation step doing its job. Below 20 decisions the
 approval rate is withheld entirely, the same discipline the prediction hit rate
 uses on a thin sample.
+
+The completion rate is the check an approval rate cannot make. Not being undone
+is weak evidence — it is equally consistent with nobody having looked. A kind
+can keep clearing the approval bar while every task it raises is quietly
+ignored, which is the copilot generating work nobody wanted. So the tasks
+created by autonomous runs are followed:
+
+- **completed** — somebody finished it. Strong evidence the proposal was worth
+  making.
+- **abandoned** — cancelled outside the undo path, or still open 30 days later.
+  Being ignored is a verdict too.
+- **pending** — raised too recently to judge, and counted in neither half, so a
+  busy week of fresh proposals cannot look like a failing one.
+
+The floor is inclusive at 60% and applies only once 10 runs have been judged: a
+kind that has just started running is observed, not assessed. It is lower than
+the approval bar because it measures something different — a salon legitimately
+drops some follow-ups, so this is a floor against generating noise, not a demand
+for perfection.
 
 **Granted.** An owner or admin switches it on per kind. A measured rate is
 evidence, not consent — nothing becomes autonomous because a threshold happened
@@ -69,7 +89,13 @@ cannot complete degrades into the ask-first flow, never into an error.
 
 ## 4. The undo
 
-Every autonomous run carries a 24-hour undo deadline. Anyone who could have
+Every autonomous run carries a 24-hour undo deadline, and the branch is told the
+moment it happens — an undo window nobody knows about is not a control. The
+notice is per run rather than a daily digest, because a digest could arrive with
+only hours of a twenty-four hour window left. It is filed in the ordinary
+`notifications` table under `ai_autonomous_action`, carries the draft id, and
+points at the undo route. A failed notice is logged loudly but never fails the
+run, which is still reversible through the undoable list. Anyone who could have
 refused the action may undo it: the point of the window is that the person who
 would have been asked still gets the last word. An undo is not a correction of
 someone's mistake — it is the review step, moved after the fact.
@@ -134,12 +160,5 @@ week.
 
 ## 8. Future roadmap
 
-- Notify the branch when a run completes on its own, rather than relying on
-  someone opening the undoable list. The notification worker pattern already
-  exists; the open question is per-run versus a daily digest.
-- Record whether an autonomous task was subsequently *completed* rather than
-  merely not undone. Not being reversed is weak evidence; a task someone
-  actioned is strong evidence, and would let the bar rise over time instead of
-  staying a fixed threshold.
 - Extend the same earned/granted/reversible frame to proactive proposals raised
   by the briefing worker, which today always wait for a person.

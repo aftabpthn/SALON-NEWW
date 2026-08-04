@@ -140,9 +140,11 @@ the model made up.
 
 ## 9. Future roadmap
 
-- Per-client and per-user memory, so the assistant can recall a stated
-  preference across sessions. It belongs on this schema but needs its own
-  retention rules before it is written.
+Per-client and per-user memory, once listed here, is delivered separately in
+[AI_MEMORY.md](./AI_MEMORY.md). It deliberately does *not* sit on this schema:
+recall of a stated fact must be exact and expiring, which is a different
+problem from similarity search over a derived index.
+
 - Index appointment and treatment history summaries once there is a derived,
   non-clinical form of them that carries no retention obligation.
 - Feed retrieval hit rate into the same measured-accuracy discipline the

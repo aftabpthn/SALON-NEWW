@@ -57,6 +57,26 @@ pub const APPROVAL_BAR_PERCENT: f64 = 95.0;
 /// How long an autonomous run stays reversible.
 pub const UNDO_WINDOW_HOURS: i64 = 24;
 
+/// How long a task the copilot created gets before an untouched one counts
+/// against it.
+///
+/// Not being undone is weak evidence — it is equally consistent with nobody
+/// having looked. A follow-up still sitting open a month later was not worth
+/// raising, whatever the click record says.
+pub const TASK_JUDGEMENT_DAYS: i32 = 30;
+
+/// Judged autonomous runs needed before their downstream record can block a
+/// kind. Below this the kind is still being observed, not assessed.
+pub const MIN_TASK_OUTCOMES: i64 = 10;
+
+/// Share of judged autonomous runs whose task somebody actually completed.
+///
+/// Lower than the approval bar on purpose, and measuring something different.
+/// The approval bar asks whether people agree with the proposal; this asks
+/// whether the work got done. A salon legitimately drops some follow-ups, so
+/// this is a floor against generating noise, not a demand for perfection.
+pub const MIN_TASK_COMPLETION_PERCENT: f64 = 60.0;
+
 /// How long a kind stays suspended after an undo.
 ///
 /// The suspension is the smaller half of the penalty: the grant is withdrawn
@@ -105,6 +125,8 @@ pub enum AutonomyBlock {
     TooFewDecisions,
     ApprovalRateTooLow,
     RecentlyUndone,
+    /// People stopped undoing them but stopped doing them too.
+    TasksNotActioned,
 }
 
 impl AutonomyBlock {
@@ -116,6 +138,7 @@ impl AutonomyBlock {
             Self::TooFewDecisions => "too_few_decisions",
             Self::ApprovalRateTooLow => "approval_rate_too_low",
             Self::RecentlyUndone => "recently_undone",
+            Self::TasksNotActioned => "tasks_not_actioned",
         }
     }
 }
@@ -136,6 +159,15 @@ pub struct AutonomyStatus {
     pub decided: i64,
     pub approved: i64,
     pub undone: i64,
+    /// Tasks raised without confirmation that somebody then completed.
+    pub tasks_completed: i64,
+    /// Ones cancelled outside the undo path, or left open past the judgement
+    /// period. Being ignored is a verdict too.
+    pub tasks_abandoned: i64,
+    /// Too recent to judge either way.
+    pub tasks_pending: i64,
+    /// `None` until enough runs have been judged to state a rate.
+    pub task_completion_percent: Option<f64>,
     /// `None` below `MIN_DECISIONS`, for the same reason a prediction hit rate
     /// is withheld on a thin sample.
     pub approval_percent: Option<f64>,
@@ -165,6 +197,20 @@ fn approval_percent(decided: i64, approved: i64) -> Option<f64> {
     Some((approved as f64 / decided as f64) * 100.0)
 }
 
+/// Share of judged autonomous runs whose task was completed, withheld until
+/// enough have been judged to mean anything.
+///
+/// Runs still inside their judgement period are excluded from both halves: a
+/// task raised yesterday is neither done nor ignored yet, and counting it as
+/// either would make a busy week look like a failing one.
+fn completion_percent(completed: i64, abandoned: i64) -> Option<f64> {
+    let judged = completed + abandoned;
+    if judged < MIN_TASK_OUTCOMES {
+        return None;
+    }
+    Some((completed as f64 / judged as f64) * 100.0)
+}
+
 /// The single reason a kind is not autonomous, or `None` when it is.
 fn blocking_reason(
     kind: ActionKind,
@@ -173,6 +219,8 @@ fn blocking_reason(
     decided: i64,
     approved: i64,
     undone: i64,
+    completed: i64,
+    abandoned: i64,
 ) -> Option<AutonomyBlock> {
     if !autonomy_capable(kind) {
         return Some(AutonomyBlock::NotCapable);
@@ -194,6 +242,16 @@ fn blocking_reason(
         }
         None => return Some(AutonomyBlock::TooFewDecisions),
         _ => {}
+    }
+    // The second-order check, and the one an approval rate alone cannot make.
+    // A kind can keep clearing the approval bar while every task it creates is
+    // quietly ignored, which is the copilot generating work nobody wanted. Only
+    // applied once enough runs have actually been judged, so a kind that has
+    // just started running is observed rather than assessed.
+    if let Some(percent) = completion_percent(completed, abandoned) {
+        if percent < MIN_TASK_COMPLETION_PERCENT {
+            return Some(AutonomyBlock::TasksNotActioned);
+        }
     }
     if !enabled {
         return Some(AutonomyBlock::NotEnabled);
@@ -227,6 +285,9 @@ fn statement(
         Some(AutonomyBlock::ApprovalRateTooLow) => format!(
             "People still change their mind about these: {approved} of {decided} were approved, and more than {APPROVAL_BAR_PERCENT:.0}% is required."
         ),
+        Some(AutonomyBlock::TasksNotActioned) => format!(
+            "Nobody is undoing these, but nobody is doing them either: fewer than {MIN_TASK_COMPLETION_PERCENT:.0}% of the tasks raised on their own were completed. Confirmation is required until that changes."
+        ),
         Some(AutonomyBlock::NotEnabled) => format!(
             "Eligible — {approved} of the last {decided} proposals were approved — but an owner has not switched it on."
         ),
@@ -258,6 +319,19 @@ pub async fn status(
         tracing::error!(%error, action = kind.name(), "failed to read the decision history");
         AppError::internal("failed to read the action decision history")
     })?;
+    let tasks = repository::autonomous_task_outcomes(
+        db,
+        tenant_id,
+        branch_id,
+        kind.name(),
+        DECISION_WINDOW_DAYS,
+        TASK_JUDGEMENT_DAYS,
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, action = kind.name(), "failed to read autonomous task outcomes");
+        AppError::internal("failed to read the copilot's task outcomes")
+    })?;
 
     let now = Utc::now();
     let suspended_until = grant.as_ref().and_then(|row| row.suspended_until);
@@ -271,6 +345,8 @@ pub async fn status(
         history.decided,
         history.approved,
         history.undone,
+        tasks.completed,
+        tasks.abandoned,
     );
     // "Earned" is the measured half alone: it stays true for a kind nobody has
     // switched on, which is what lets the settings screen show that the option
@@ -282,6 +358,7 @@ pub async fn status(
             | Some(AutonomyBlock::RecentlyUndone)
             | Some(AutonomyBlock::TooFewDecisions)
             | Some(AutonomyBlock::ApprovalRateTooLow)
+            | Some(AutonomyBlock::TasksNotActioned)
     );
 
     Ok(AutonomyStatus {
@@ -293,6 +370,10 @@ pub async fn status(
         decided: history.decided,
         approved: history.approved,
         undone: history.undone,
+        tasks_completed: tasks.completed,
+        tasks_abandoned: tasks.abandoned,
+        tasks_pending: tasks.pending,
+        task_completion_percent: completion_percent(tasks.completed, tasks.abandoned),
         approval_percent: approval_percent(history.decided, history.approved),
         window_days: DECISION_WINDOW_DAYS,
         suspended_until,
@@ -519,6 +600,8 @@ mod autonomy_tests {
         assert!(!may_grant("staff"));
     }
 
+    /// Defaults to a downstream record that neither helps nor blocks: too few
+    /// judged runs to state a completion rate at all.
     fn block(
         enabled: bool,
         suspended: bool,
@@ -533,6 +616,23 @@ mod autonomy_tests {
             decided,
             approved,
             undone,
+            0,
+            0,
+        )
+    }
+
+    /// A kind with a clean approval record, varying only in what became of the
+    /// tasks it raised.
+    fn block_with_tasks(completed: i64, abandoned: i64) -> Option<AutonomyBlock> {
+        blocking_reason(
+            ActionKind::CreateFollowUpTask,
+            true,
+            false,
+            40,
+            40,
+            0,
+            completed,
+            abandoned,
         )
     }
 
@@ -606,7 +706,16 @@ mod autonomy_tests {
     #[test]
     fn an_incapable_kind_is_blocked_before_anything_else_is_considered() {
         assert_eq!(
-            blocking_reason(ActionKind::OpenClientProfile, true, false, 500, 500, 0),
+            blocking_reason(
+                ActionKind::OpenClientProfile,
+                true,
+                false,
+                500,
+                500,
+                0,
+                0,
+                0
+            ),
             Some(AutonomyBlock::NotCapable)
         );
     }
@@ -955,6 +1064,125 @@ mod autonomy_tests {
         );
     }
 
+    /// The undo window is only a control if somebody is told about it.
+    #[tokio::test]
+    async fn an_autonomous_run_tells_the_branch_it_happened() {
+        let Some(db) = connect().await else { return };
+        let (tenant, branch) = seed(&db).await;
+        seed_decisions(&db, &tenant, &branch, 40, 0).await;
+        set_grant(
+            &db,
+            &tenant,
+            &branch,
+            "owner",
+            "owner-1",
+            AutonomyGrantRequest {
+                action_type: "create_follow_up_task".into(),
+                enabled: true,
+            },
+        )
+        .await
+        .expect("grant is stored");
+
+        let draft = draft_follow_up(&db, &tenant, &branch).await;
+
+        let (title, body, draft_ref): (String, String, Option<String>) = sqlx::query_as(
+            r#"SELECT title, body, metadata_json->>'draftId'
+                 FROM notifications
+                WHERE tenant_id=$1 AND branch_id=$2
+                  AND notification_type='ai_autonomous_action'"#,
+        )
+        .bind(&tenant)
+        .bind(&branch)
+        .fetch_one(&db)
+        .await
+        .expect("the branch was notified");
+        assert!(!title.is_empty());
+        assert_eq!(draft_ref.as_deref(), Some(draft.id.as_str()));
+        assert!(
+            body.contains("undo"),
+            "the notice has to point at the undo, not merely announce the run"
+        );
+    }
+
+    /// Seeds a completed autonomous run whose task ended in a given state, and
+    /// backdates it so the judgement period has passed.
+    async fn seed_autonomous_run(db: &PgPool, tenant: &str, branch: &str, task_status: &str) {
+        let draft_id: String = sqlx::query_scalar(
+            r#"INSERT INTO ai_action_drafts(
+                  tenant_id,branch_id,action_type,status,summary,requires_confirmation,
+                  created_by,decided_by,decided_at,decision_mode)
+               VALUES ($1,$2,'create_follow_up_task','approved','historic',TRUE,
+                       'seed','seed',NOW() - INTERVAL '45 days','autonomous')
+               RETURNING id"#,
+        )
+        .bind(tenant)
+        .bind(branch)
+        .fetch_one(db)
+        .await
+        .expect("autonomous run is seeded");
+        sqlx::query(
+            r#"INSERT INTO staff_tasks(tenant_id,branch_id,title,status,origin_action_draft_id)
+               VALUES ($1,$2,'Seeded task',$3,$4)"#,
+        )
+        .bind(tenant)
+        .bind(branch)
+        .bind(task_status)
+        .bind(&draft_id)
+        .execute(db)
+        .await
+        .expect("task is seeded");
+    }
+
+    /// The check an approval rate cannot make, against the real schema: nobody
+    /// undid these, and nobody did them either.
+    #[tokio::test]
+    async fn tasks_left_untouched_withdraw_autonomy_in_practice() {
+        let Some(db) = connect().await else { return };
+        let (tenant, branch) = seed(&db).await;
+        seed_decisions(&db, &tenant, &branch, 40, 0).await;
+        // Twelve judged runs, only two of which anyone finished.
+        for _ in 0..2 {
+            seed_autonomous_run(&db, &tenant, &branch, "completed").await;
+        }
+        for _ in 0..10 {
+            seed_autonomous_run(&db, &tenant, &branch, "open").await;
+        }
+
+        let status = status(&db, &tenant, &branch, ActionKind::CreateFollowUpTask)
+            .await
+            .expect("status reads");
+        assert_eq!(status.tasks_completed, 2);
+        assert_eq!(
+            status.tasks_abandoned, 10,
+            "an open task past the judgement period counts as ignored"
+        );
+        assert_eq!(status.tasks_pending, 0);
+        assert!(
+            !status.earned,
+            "a kind generating ignored work is not earned"
+        );
+        assert_eq!(status.blocked_by.as_deref(), Some("tasks_not_actioned"));
+    }
+
+    /// Work that actually gets done leaves the kind earned.
+    #[tokio::test]
+    async fn tasks_people_complete_keep_a_kind_earned() {
+        let Some(db) = connect().await else { return };
+        let (tenant, branch) = seed(&db).await;
+        seed_decisions(&db, &tenant, &branch, 40, 0).await;
+        for _ in 0..12 {
+            seed_autonomous_run(&db, &tenant, &branch, "completed").await;
+        }
+
+        let status = status(&db, &tenant, &branch, ActionKind::CreateFollowUpTask)
+            .await
+            .expect("status reads");
+        assert_eq!(status.task_completion_percent, Some(100.0));
+        assert!(status.earned);
+        assert_eq!(status.blocked_by.as_deref(), Some("not_enabled"));
+    }
+
     /// A kind that only opens a screen cannot be granted autonomy at all, so
     /// the boundary cannot be crossed through configuration.
     #[tokio::test]
@@ -1002,6 +1230,47 @@ mod autonomy_tests {
         )
         .await;
         assert!(refused.is_err());
+    }
+
+    /// The check an approval rate cannot make: a kind can keep being approved
+    /// while every task it raises is quietly ignored.
+    #[test]
+    fn tasks_nobody_actions_block_a_kind_that_still_clears_the_approval_bar() {
+        assert_eq!(block_with_tasks(20, 0), None, "work that gets done is fine");
+        assert_eq!(
+            block_with_tasks(4, 16),
+            Some(AutonomyBlock::TasksNotActioned),
+            "20% completion is the copilot generating noise"
+        );
+    }
+
+    /// A kind that has only just started running is observed, not assessed: a
+    /// handful of outcomes cannot revoke autonomy.
+    #[test]
+    fn too_few_judged_runs_state_no_completion_rate() {
+        assert!(completion_percent(1, 2).is_none());
+        assert_eq!(block_with_tasks(1, 2), None);
+        assert_eq!(completion_percent(6, 4), Some(60.0));
+    }
+
+    /// The floor is inclusive: exactly 60% clears it, unlike the approval bar,
+    /// because a salon legitimately drops some follow-ups.
+    #[test]
+    fn the_completion_floor_is_inclusive() {
+        assert_eq!(block_with_tasks(6, 4), None);
+        assert_eq!(
+            block_with_tasks(5, 5),
+            Some(AutonomyBlock::TasksNotActioned)
+        );
+    }
+
+    /// Runs still inside the judgement period count as neither, so a busy week
+    /// of fresh proposals cannot look like a failing one.
+    #[test]
+    fn pending_runs_do_not_count_against_a_kind() {
+        // Twelve judged, all completed; anything still pending is simply absent
+        // from both halves of the rate.
+        assert_eq!(completion_percent(12, 0), Some(100.0));
     }
 
     #[test]

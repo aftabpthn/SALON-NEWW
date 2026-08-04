@@ -28,6 +28,7 @@ Endpoint references in this README are catalog entries, not automatic runtime cl
 - [AI_PREDICTION_OUTCOMES.md](./AI_PREDICTION_OUTCOMES.md) — how stored predictions are checked against what happened, and how measured accuracy is reported.
 - [AI_SEMANTIC_RETRIEVAL.md](./AI_SEMANTIC_RETRIEVAL.md) — the pgvector index behind copilot retrieval: what is indexed, what deliberately is not, and how scope is enforced.
 - [AI_EARNED_AUTONOMY.md](./AI_EARNED_AUTONOMY.md) — when the copilot may complete a task without confirmation, what it takes to earn that, and how any run is reversed.
+- [AI_MEMORY.md](./AI_MEMORY.md) — what the copilot remembers about a client, who may write it, and how it expires.
 - [SECURITY.md](./SECURITY.md) — auth, JWT/session behavior, and production hardening baseline.
 - [AUDIT_REMEDIATION_PLAN.md](./AUDIT_REMEDIATION_PLAN.md) — phased tracker for full audit gaps and pending verification.
 

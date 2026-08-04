@@ -175,6 +175,68 @@ pub async fn decisions(
     .await
 }
 
+/// What became of the tasks autonomous runs created.
+///
+/// Not being undone is weak evidence: it is equally consistent with nobody
+/// having looked. A task somebody actually completed is strong evidence that
+/// the proposal was worth making, and a task left open for weeks is evidence
+/// that it was not — even though nobody objected loudly enough to undo it.
+#[derive(Debug, Clone, FromRow)]
+pub struct TaskOutcomeRecord {
+    /// Runs whose task somebody finished.
+    pub completed: i64,
+    /// Runs whose task was cancelled outside the undo path, or left open past
+    /// the point where it is fair to call it ignored.
+    pub abandoned: i64,
+    /// Runs too recent to judge either way.
+    pub pending: i64,
+}
+
+/// Downstream outcomes for one kind's autonomous runs.
+///
+/// Undone runs are excluded: they are already counted against the kind through
+/// the undo path, and counting them twice would double the penalty for one
+/// reversal.
+pub async fn autonomous_task_outcomes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_type: &str,
+    window_days: i32,
+    judgement_days: i32,
+) -> Result<TaskOutcomeRecord, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT
+             COUNT(*) FILTER (WHERE task.status='completed')::BIGINT AS completed,
+             COUNT(*) FILTER (
+               WHERE task.status='cancelled'
+                  OR (task.status NOT IN ('completed','cancelled')
+                      AND draft.decided_at < NOW() - MAKE_INTERVAL(days => $5))
+             )::BIGINT AS abandoned,
+             COUNT(*) FILTER (
+               WHERE task.status NOT IN ('completed','cancelled')
+                 AND draft.decided_at >= NOW() - MAKE_INTERVAL(days => $5)
+             )::BIGINT AS pending
+           FROM ai_action_drafts draft
+           JOIN staff_tasks task
+             ON task.tenant_id=draft.tenant_id
+            AND task.branch_id=draft.branch_id
+            AND task.origin_action_draft_id=draft.id
+          WHERE draft.tenant_id=$1 AND draft.branch_id=$2 AND draft.action_type=$3
+            AND draft.decision_mode='autonomous'
+            AND draft.status IN ('approved','executed')
+            AND draft.undone_at IS NULL
+            AND draft.decided_at >= NOW() - MAKE_INTERVAL(days => $4)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(action_type)
+    .bind(window_days)
+    .bind(judgement_days)
+    .fetch_one(db)
+    .await
+}
+
 /// Marks a draft as having been decided by the copilot rather than a person,
 /// and opens its undo window.
 pub async fn mark_autonomous(
@@ -230,6 +292,36 @@ pub async fn mark_undone(
     .execute(db)
     .await
     .map(|result| result.rows_affected() == 1)
+}
+
+/// Tells the branch that the copilot completed something on its own.
+///
+/// Filed in the same `notifications` table as everything else, under its own
+/// resource type so it is not misread as a briefing. The draft id travels in
+/// the metadata because the notification's only real job is to get someone to
+/// the undo button while the window is still open.
+pub async fn deliver_autonomy_notice(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    title: &str,
+    body: &str,
+    metadata: &serde_json::Value,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO notifications(
+              tenant_id,branch_id,created_by,notification_type,title,body,
+              resource_type,metadata_json
+            ) VALUES ($1,$2,'system','ai_autonomous_action',$3,$4,'ai_action_draft',$5)
+            RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(title)
+    .bind(body)
+    .bind(metadata)
+    .fetch_one(db)
+    .await
 }
 
 /// Autonomous runs still inside their undo window, newest first.
