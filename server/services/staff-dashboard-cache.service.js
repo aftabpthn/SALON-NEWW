@@ -10,14 +10,14 @@ function scopeOf(access = {}) {
     .join("|");
 }
 
-function keyOf(query = {}, access = {}) {
+function keyOf(query = {}, access = {}, namespace = "") {
   const scope = scopeOf(access);
   const hash = createHash("sha1").update(JSON.stringify(query || {})).digest("hex");
-  return `${scope}|${hash}`;
+  return `${scope}|${namespace}|${hash}`;
 }
 
-export function cachedStaffRead(query, access, compute, ttlMs = TTL_MS) {
-  const key = keyOf(query, access);
+export function cachedStaffRead(query, access, compute, ttlMs = TTL_MS, namespace = "") {
+  const key = keyOf(query, access, namespace);
   const now = Date.now();
   const hit = cache.get(key);
   if (hit && now < hit.expiresAt) return hit.value;
@@ -32,8 +32,8 @@ export function cachedStaffRead(query, access, compute, ttlMs = TTL_MS) {
   return value;
 }
 
-export function cachedStaffDashboard(query, access, compute) {
-  return cachedStaffRead(query, access, compute, TTL_MS);
+export function cachedStaffDashboard(query, access, compute, namespace = "") {
+  return cachedStaffRead(query, access, compute, TTL_MS, namespace);
 }
 
 export function applyCachedResponseHeaders(res, value, ttlSeconds) {

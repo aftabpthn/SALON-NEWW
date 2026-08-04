@@ -25,7 +25,8 @@ staffBusinessRouter.get(
       req.query,
       req.access,
       (query, access) => staffSelfResponsePresenterService.staffData(staffBusinessService.daily(query, access), access),
-      10_000
+      10_000,
+      "business"
     );
     applyCachedResponseHeaders(res, data, 10);
     res.json(data);

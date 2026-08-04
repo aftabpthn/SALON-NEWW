@@ -488,7 +488,7 @@ export class StaffLoginService {
   }
 
   enterpriseOs(query = {}, access) {
-    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a));
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const staffId = dashboard.staff.id;
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const date = String(query.date || dashboard.range.date || istBusinessDate()).slice(0, 10);
@@ -615,7 +615,7 @@ export class StaffLoginService {
   }
 
   clients(query = {}, access) {
-    const dashboard = cachedStaffDashboard({}, access, (q, a) => this.staffDashboard(q, a));
+    const dashboard = cachedStaffDashboard({}, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const columns = columnsFor("clients");
     const q = String(query.q || query.search || "").trim().toLowerCase();
@@ -646,7 +646,7 @@ export class StaffLoginService {
 
   client360(clientId, query = {}, access) {
     ensureStaffSelfAppSchema();
-    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a));
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const client = this.clientRecord(access.tenantId, branchId, clientId);
     if (!client) throw notFound("Client record not found");

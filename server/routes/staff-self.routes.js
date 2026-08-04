@@ -28,7 +28,7 @@ staffSelfRouter.get(
   staffSelfContext(),
   requireStaffAppSelfPermission("read", "staff-app-appointments"),
   asyncHandler((req, res) => {
-    const result = cachedStaffDashboard(req.query, req.access, (q, a) => staffLoginService.staffDashboard(q, a));
+    const result = cachedStaffDashboard(req.query, req.access, (q, a) => staffLoginService.staffDashboard(q, a), "dashboard");
     res.json(staffSelfResponsePresenterService.dashboard(result, req.access));
   })
 );

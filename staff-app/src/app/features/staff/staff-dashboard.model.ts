@@ -355,7 +355,7 @@ export function buildStaffDashboardViewModel(input: DashboardViewModelInput): St
   const ctx = context(input);
   const activeAlerts = alerts(ctx);
   const dashboardTools = orderedTools(input).slice(0, 6).map((item) => {
-    if (item.id === "leave") return { ...item, hint: `${(input.leaveBalances || []).reduce((sum, balance) => sum + Number(balance?.balance || 0), 0)} days available` };
+    if (item.id === "leave") return { ...item, hint: `${(Array.isArray(input.leaveBalances) ? input.leaveBalances : []).reduce((sum, balance) => sum + Number(balance?.balance || 0), 0)} days available` };
     if (item.id === "reports") return { ...item, hint: `${input.dashboard?.summary?.completedAppointments || 0} completed today` };
     if (item.id === "calendar" && input.overtime) return { ...item, hint: `${durationLabel(input.overtime?.weekMinutes || 0)} overtime this week` };
     return item;

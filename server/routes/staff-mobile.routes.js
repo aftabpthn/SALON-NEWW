@@ -20,7 +20,8 @@ staffMobileRouter.get("/staff-os/mobile/today", canReadAppointments, derivedStaf
     req.query,
     req.access,
     (query, access) => staffSelfResponsePresenterService.staffData(staffMobileService.mobileToday(query, access), access),
-    5_000
+    5_000,
+    "today"
   );
   applyCachedResponseHeaders(res, data, 5);
   res.json(data);

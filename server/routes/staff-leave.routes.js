@@ -26,7 +26,8 @@ staffLeaveRouter.get("/staff-os/leave-balances", canReadOwnLeave, derivedStaffQu
     req.query,
     req.access,
     (query, access) => staffLeaveService.leaveBalances(query, managedStaffAccess(access)),
-    60_000
+    60_000,
+    "leave-balances"
   );
   applyCachedResponseHeaders(res, data, 60);
   res.json(data);

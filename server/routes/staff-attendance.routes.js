@@ -20,7 +20,8 @@ staffAttendanceRouter.get("/staff-os/attendance/overtime-summary", canReadAttend
     req.query,
     req.access,
     (query, access) => staffAttendanceService.overtimeSummary(query, managedStaffAccess(access)),
-    5_000
+    5_000,
+    "overtime-summary"
   );
   applyCachedResponseHeaders(res, data, 5);
   res.json(data);
@@ -30,7 +31,8 @@ staffAttendanceRouter.get("/staff-os/attendance", canReadAttendance, derivedStaf
     req.query,
     req.access,
     (query, access) => staffAttendanceService.listAttendance(query, managedStaffAccess(access)),
-    5_000
+    5_000,
+    "attendance-list"
   );
   applyCachedResponseHeaders(res, data, 5);
   res.json(data);
