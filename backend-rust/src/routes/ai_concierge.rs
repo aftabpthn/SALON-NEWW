@@ -15,6 +15,7 @@ use crate::{
     },
     routes::context::tenant_branch,
     services::{
+        ai_action_autonomy_service::{self, AutonomyGrantRequest, AutonomyStatus},
         ai_action_service::{self, ActionDraft, ConfirmDraftRequest, CreateDraftRequest},
         ai_briefing_service::{
             self, BranchComparisonRow, Briefing, Cadence, Signal, SignalDecision,
@@ -61,6 +62,12 @@ pub fn router() -> Router<AppState> {
         .route("/ai/actions/drafts", post(create_action_draft))
         .route("/ai/actions/drafts/:id/confirm", post(confirm_action_draft))
         .route("/ai/actions/drafts/:id/cancel", post(cancel_action_draft))
+        .route("/ai/actions/drafts/:id/undo", post(undo_action_draft))
+        .route(
+            "/ai/actions/autonomy",
+            get(get_action_autonomy).put(set_action_autonomy),
+        )
+        .route("/ai/actions/autonomy/undoable", get(list_undoable_runs))
 }
 
 async fn get_workforce(
@@ -353,6 +360,93 @@ async fn get_latest_prediction(
             &claims,
             kind,
             &ScopeRequest::default(),
+        )
+        .await?,
+    )))
+}
+
+/// Where each action kind stands on running without confirmation.
+///
+/// Readable by anyone who may use the copilot: someone about to be told an
+/// action already ran is entitled to see why it was allowed to.
+async fn get_action_autonomy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<AutonomyStatus>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::statuses(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+/// Grants or withdraws autonomy for one action kind.
+///
+/// Owner and admin only, and narrower than the roles that may confirm these
+/// actions by hand: approving one task is operational, deciding a whole class
+/// no longer needs approving is policy.
+async fn set_action_autonomy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<AutonomyGrantRequest>,
+) -> ApiResult<AutonomyStatus> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::set_grant(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+/// Runs the copilot completed on its own that can still be taken back.
+async fn list_undoable_runs(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_action_autonomy_repository::AutonomousRun>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::undoable(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UndoRequest {
+    #[serde(default)]
+    reason: String,
+}
+
+/// Reverses an autonomous run and withdraws the grant that allowed it.
+async fn undo_action_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+    Json(payload): Json<UndoRequest>,
+) -> ApiResult<ActionDraft> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let reason = payload.reason.trim().chars().take(500).collect::<String>();
+    Ok(Json(ApiResponse::ok(
+        ai_action_service::undo_draft(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            &draft_id,
+            &reason,
         )
         .await?,
     )))

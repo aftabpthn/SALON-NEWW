@@ -1,3 +1,4 @@
+pub mod ai_action_autonomy_repository;
 pub mod ai_action_repository;
 pub mod ai_concierge_repository;
 pub mod ai_copilot_repository;

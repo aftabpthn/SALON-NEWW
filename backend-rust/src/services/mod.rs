@@ -1,4 +1,5 @@
 pub mod accounting_service;
+pub mod ai_action_autonomy_service;
 pub mod ai_action_service;
 pub mod ai_briefing_service;
 pub mod ai_channel_service;
