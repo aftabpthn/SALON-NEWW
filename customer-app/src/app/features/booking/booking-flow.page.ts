@@ -1981,6 +1981,50 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     return withImage.image || withImage.imageUrl || withImage.photoUrl || withImage.thumbnailUrl || business?.galleryImages?.[index % Math.max(business.galleryImages.length, 1)] || business?.coverImage || "assets/icons/icon.svg";
   }
 
+  /** Builds the full multi-service context passed to the confirmation screen via router state. */
+  private buildSuccessState() {
+    const business = this.business();
+    const items = this.bookingItems();
+    const timeline = this.reviewTimelineItems();
+    const lastBooking = this.marketplace.latestBooking();
+    const subtotalPaise = this.selectedServices().reduce((sum, service) => sum + service.pricePaise, 0);
+    const finalPaise = Math.max(0, subtotalPaise - this.discountPaise());
+    const services = items.map((item) => {
+      const service = this.serviceById(item.serviceId);
+      const startIso = item.slotStartAt || "";
+      let endIso = "";
+      if (startIso) {
+        const start = new Date(startIso);
+        if (Number.isFinite(start.getTime())) {
+          endIso = new Date(start.getTime() + ((service?.durationMinutes || 20) * 60000)).toISOString();
+        }
+      }
+      return {
+        name: service ? this.formatServiceName(service.name) : "Service",
+        staff: this.itemStaffName(item),
+        durationMinutes: service?.durationMinutes || 0,
+        pricePaise: service?.pricePaise || 0,
+        startIso,
+        endIso
+      };
+    });
+    const startIso = timeline[0]?.startIso || services.map((s) => s.startIso).filter(Boolean).sort()[0] || "";
+    const endIso = timeline[timeline.length - 1]?.endIso || services.map((s) => s.endIso).filter(Boolean).sort().reverse()[0] || "";
+    return {
+      services,
+      businessName: business?.businessName || "",
+      area: business?.area || "",
+      city: business?.city || "",
+      address: business?.address || "",
+      reference: lastBooking?.reference || "",
+      status: lastBooking?.status || "confirmed",
+      startIso,
+      endIso,
+      dueLabel: this.money(finalPaise),
+      paymentMode: "pay_at_venue"
+    };
+  }
+
   async confirmBooking() {
     const business = this.business();
     const items = this.bookingItems();
@@ -2030,7 +2074,8 @@ export class BookingFlowPage implements OnInit, OnDestroy {
       return;
     }
     this.clearPendingIntent();
-    this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success");
+    const successUrl = this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success";
+    this.router.navigateByUrl(successUrl, { state: this.buildSuccessState() });
   }
 
   backHref(): string {
