@@ -36,8 +36,12 @@ use serde_json::{json, Value};
 use sqlx::PgPool;
 
 use crate::{
-    models::common::AppError, repositories::ai_action_repository as action_repository,
-    services::staff_advanced_service,
+    models::common::AppError,
+    repositories::{
+        ai_action_autonomy_repository as autonomy_repository,
+        ai_action_repository as action_repository,
+    },
+    services::{ai_action_autonomy_service, staff_advanced_service},
 };
 
 /// The actions the copilot may draft. Every one either creates a *draft* record
@@ -381,7 +385,183 @@ pub async fn create_draft(
         "",
     )
     .await;
+
+    // Earned autonomy. A kind that this branch has approved consistently, that
+    // an owner has switched on, and that only writes a to-do, runs here instead
+    // of waiting for a click on the four-hundredth identical proposal.
+    //
+    // It runs by *confirming its own draft through the ordinary path* rather
+    // than by executing directly: same permission re-check, same claim, same
+    // idempotency, same audit trail. A second execution path would be a second
+    // place for the safety rules to be wrong.
+    if ai_action_autonomy_service::may_run_without_confirmation(db, tenant_id, branch_id, kind)
+        .await
+    {
+        return confirm_autonomously(db, tenant_id, branch_id, role, user_id, &record.id, kind)
+            .await;
+    }
     Ok(to_draft(record))
+}
+
+/// Confirms a draft the copilot raised, on its own authority.
+///
+/// A failure here is deliberately not fatal to the draft: the caller still gets
+/// the draft back, unconfirmed, and a person can approve it by hand. An
+/// autonomous run that could not complete must degrade into the ordinary
+/// ask-first flow, never into an error the user cannot act on.
+async fn confirm_autonomously(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    role: &str,
+    user_id: &str,
+    draft_id: &str,
+    kind: ActionKind,
+) -> Result<ActionDraft, AppError> {
+    // Derived from the draft so a retry of the same draft replays rather than
+    // acting twice, exactly as a client-supplied key would.
+    let idempotency_key = format!("autonomous:{draft_id}");
+    let confirmed = match confirm_draft(
+        db,
+        tenant_id,
+        branch_id,
+        role,
+        user_id,
+        draft_id,
+        ConfirmDraftRequest { idempotency_key },
+    )
+    .await
+    {
+        Ok(confirmed) => confirmed,
+        Err(error) => {
+            tracing::warn!(
+                action = kind.name(),
+                error = error.message(),
+                "autonomous confirmation failed; leaving the draft for a person"
+            );
+            let record = action_repository::by_id(db, tenant_id, branch_id, draft_id)
+                .await
+                .map_err(|_| AppError::internal("failed to load the action draft"))?
+                .ok_or_else(|| AppError::not_found("that action draft was not found"))?;
+            return Ok(to_draft(record));
+        }
+    };
+
+    // The undo window opens now. Recording it after the write means a run that
+    // completed is always reversible, whereas setting it first would leave a
+    // window pointing at a write that never happened.
+    let deadline = ai_action_autonomy_service::undo_deadline_from(chrono::Utc::now());
+    if let Err(error) =
+        autonomy_repository::mark_autonomous(db, tenant_id, branch_id, draft_id, deadline).await
+    {
+        // The write landed and cannot be un-landed here. Leaving the row marked
+        // `human` would misattribute it, so this is loud rather than silent.
+        tracing::error!(%error, action = kind.name(), "autonomous run was not marked as such");
+    }
+    audit(
+        db,
+        tenant_id,
+        branch_id,
+        Some(draft_id),
+        kind,
+        "autonomous",
+        user_id,
+        role,
+        "ran without confirmation under an earned autonomy grant",
+    )
+    .await;
+
+    // Told, not left to be discovered. An undo window nobody knows about is not
+    // a control, and a daily digest could arrive with only hours of a
+    // twenty-four hour window left — so this is per run, at the moment it runs.
+    let notice = json!({
+        "draftId": draft_id,
+        "actionType": kind.name(),
+        "route": kind.route(),
+        "undoDeadline": deadline,
+        "undoRoute": format!("/api/v1/ai/actions/drafts/{draft_id}/undo"),
+    });
+    if let Err(error) = autonomy_repository::deliver_autonomy_notice(
+        db,
+        tenant_id,
+        branch_id,
+        "The copilot completed this without asking",
+        &format!(
+            "{}\n\nIt ran because this branch has approved these consistently. You can undo it until {}.",
+            confirmed.summary,
+            deadline.format("%d %b %Y, %H:%M UTC")
+        ),
+        &notice,
+    )
+    .await
+    {
+        // The run happened and is still reversible through the undoable list,
+        // so a failed notice must be loud rather than fatal.
+        tracing::error!(%error, action = kind.name(), "autonomous run completed but the branch was not notified");
+    }
+    Ok(confirmed)
+}
+
+/// Reverses an autonomous run and withdraws the grant that allowed it.
+///
+/// Anyone who could have refused the action may undo it — the point of the undo
+/// window is that the person who would have been asked still gets the last
+/// word. Undoing is not a correction of a mistake someone made; it is the
+/// review step, moved after the fact.
+pub async fn undo_draft(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    role: &str,
+    user_id: &str,
+    draft_id: &str,
+    reason: &str,
+) -> Result<ActionDraft, AppError> {
+    let record = action_repository::by_id(db, tenant_id, branch_id, draft_id)
+        .await
+        .map_err(|_| AppError::internal("failed to load the action draft"))?
+        .ok_or_else(|| AppError::not_found("that action draft was not found"))?;
+    let kind = ActionKind::from_name(&record.action_type)
+        .ok_or_else(|| AppError::validation("that action is no longer available"))?;
+    if !kind.permitted_for(role) {
+        return Err(AppError::forbidden(
+            "this action is not available for your role",
+        ));
+    }
+
+    // Reversing first is safe because cancelling a task is idempotent, and it
+    // means two people undoing at once both reach a cancelled task while only
+    // one of them records the undo below.
+    staff_advanced_service::cancel_task_for_action(db, tenant_id, branch_id, &record.id).await?;
+
+    let recorded = ai_action_autonomy_service::record_undo(
+        db, tenant_id, branch_id, &record.id, kind, user_id, reason,
+    )
+    .await?;
+    if !recorded {
+        return Err(AppError::conflict(
+            "that run is no longer reversible: its undo window has closed, it was already undone, or it was a person's decision",
+        ));
+    }
+
+    audit(
+        db,
+        tenant_id,
+        branch_id,
+        Some(&record.id),
+        kind,
+        "undone",
+        user_id,
+        role,
+        reason,
+    )
+    .await;
+
+    let updated = action_repository::by_id(db, tenant_id, branch_id, draft_id)
+        .await
+        .map_err(|_| AppError::internal("failed to reload the action draft"))?
+        .ok_or_else(|| AppError::not_found("that action draft was not found"))?;
+    Ok(to_draft(updated))
 }
 
 /// Confirms a draft and records approval to open its owning CRM screen.

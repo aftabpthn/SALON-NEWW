@@ -1,6 +1,12 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector's own image, which is the stock PostgreSQL 16 image plus the
+    # `vector` extension. Migration 0421 creates that extension for the semantic
+    # index, so the plain postgres:16 image can no longer run migrations.
+    # Managed PostgreSQL 16 (including RDS) ships the extension already and
+    # needs no image change — only `CREATE EXTENSION vector`, which the
+    # migration performs.
+    image: pgvector/pgvector:pg16
     container_name: aurashine-postgres
     restart: unless-stopped
     environment:

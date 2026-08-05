@@ -1,4 +1,5 @@
 pub mod accounting_service;
+pub mod ai_action_autonomy_service;
 pub mod ai_action_service;
 pub mod ai_briefing_service;
 pub mod ai_channel_service;
@@ -8,9 +9,12 @@ pub mod ai_copilot_tools;
 pub mod ai_cross_module_tools;
 #[cfg(test)]
 mod ai_evaluation_tests;
+pub mod ai_memory_service;
+pub mod ai_prediction_outcome_service;
 pub mod ai_prediction_service;
 pub mod ai_scope_service;
 pub mod ai_scoped_copilot_tools;
+pub mod ai_semantic_service;
 pub mod ai_tool_dispatcher;
 pub mod ai_what_if_service;
 pub mod ai_workforce_service;

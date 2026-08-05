@@ -37,6 +37,7 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPaymentMethod,
+  CustomerMemoryNote,
   CustomerProfile,
   CustomerProfileExtensionRecord,
   CustomerPushProof,
@@ -255,6 +256,28 @@ export class CustomerApiService {
   getMe(): Observable<CustomerProfile> {
     return this.http.get<ApiResponse<CustomerProfile>>(`${this.baseUrl}/customer/me`).pipe(
       map((response) => this.unwrap<CustomerProfile>(response))
+    );
+  }
+
+  /// What the salon's assistant remembers about this customer.
+  listMyMemory(): Observable<CustomerMemoryNote[]> {
+    return this.http.get<ApiResponse<CustomerMemoryNote[]>>(`${this.baseUrl}/customer/me/memory`).pipe(
+      map((response) => this.unwrapList<CustomerMemoryNote>(response))
+    );
+  }
+
+  /// Tells the salon a remembered fact is wrong. It stops being used at once,
+  /// before anyone reviews it.
+  disputeMyMemory(noteId: string, reason: string): Observable<void> {
+    return this.http
+      .post<ApiResponse<void>>(`${this.baseUrl}/customer/me/memory/${encodeURIComponent(noteId)}/dispute`, { reason })
+      .pipe(map((response) => this.unwrap<void>(response)));
+  }
+
+  /// Erases everything remembered about this customer.
+  forgetMyMemory(): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/customer/me/memory`).pipe(
+      map((response) => this.unwrap<void>(response))
     );
   }
 

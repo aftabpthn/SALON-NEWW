@@ -146,6 +146,12 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
   salesRows: any[] = [];
   serviceHistory: any[] = [];
   clientNotes: any[] = [];
+  /// What the assistant has been told to remember about this client.
+  memoryNotes: any[] = [];
+  memoryDraft = '';
+  memorySensitive = false;
+  savingMemory = false;
+  memoryError = '';
   familyMembers: any[] = [];
   clinicalProfile: any = null;
   soapNotes: any[] = [];
@@ -539,6 +545,10 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.salesRows = [];
     this.serviceHistory = [];
     this.clientNotes = [];
+    this.memoryNotes = [];
+    this.memoryDraft = '';
+    this.memorySensitive = false;
+    this.memoryError = '';
     this.familyMembers = [];
     this.clinicalProfile = null;
     this.soapNotes = [];
@@ -994,6 +1004,81 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
       this.clientError = error instanceof Error ? error.message : 'Note save failed';
     } finally {
       this.savingNote = false;
+    }
+  }
+
+  /// Records something the client said, or that staff want remembered.
+  ///
+  /// Deliberately a typed note rather than anything derived: the API refuses a
+  /// model-sourced memory, so there is nothing to send but what a person wrote.
+  async saveMemory() {
+    if (!this.selectedClient || !this.memoryDraft.trim()) {
+      this.memoryError = 'Write what should be remembered';
+      return;
+    }
+    this.savingMemory = true;
+    this.memoryError = '';
+    try {
+      const result = await firstValueFrom(this.api.post<ApiEnvelope<any>>('/ai/memory', {
+        subjectKind: 'client',
+        subjectId: this.selectedClient.id,
+        content: this.memoryDraft.trim(),
+        source: 'stated_by_client',
+        sensitive: this.memorySensitive,
+      }));
+      if (!result.success) throw new Error(result?.error?.message || 'Could not remember that');
+      this.memoryDraft = '';
+      this.memorySensitive = false;
+      await this.loadClientMemory(this.selectedClient.id);
+    } catch (error) {
+      this.memoryError = error instanceof Error ? error.message : 'Could not remember that';
+    } finally {
+      this.savingMemory = false;
+    }
+  }
+
+  /// Closes a client's dispute.
+  ///
+  /// `corrected` removes the note, because agreeing it is wrong and keeping it
+  /// anyway would be the worst of both. `upheld` puts it back in use but leaves
+  /// the dispute on the record.
+  async resolveMemoryDispute(noteId: string, outcome: 'corrected' | 'upheld') {
+    if (!this.selectedClient) return;
+    this.memoryError = '';
+    try {
+      const result = await firstValueFrom(
+        this.api.post<ApiEnvelope<any>>(`/ai/memory/notes/${noteId}/dispute`, { outcome }),
+      );
+      if (!result.success) throw new Error(result?.error?.message || 'Could not close that');
+      await this.loadClientMemory(this.selectedClient.id);
+    } catch (error) {
+      this.memoryError = error instanceof Error ? error.message : 'Could not close that';
+    }
+  }
+
+  async forgetMemory(noteId: string) {
+    if (!this.selectedClient) return;
+    this.memoryError = '';
+    try {
+      const result = await firstValueFrom(this.api.delete<ApiEnvelope<any>>(`/ai/memory/notes/${noteId}`));
+      if (!result.success) throw new Error(result?.error?.message || 'Could not forget that');
+      await this.loadClientMemory(this.selectedClient.id);
+    } catch (error) {
+      this.memoryError = error instanceof Error ? error.message : 'Could not forget that';
+    }
+  }
+
+  /// Loaded separately from the client workspace because memory is served by
+  /// the AI routes rather than the client aggregate, and a login without AI
+  /// access should see the rest of the profile regardless.
+  async loadClientMemory(clientId: string) {
+    try {
+      const result = await firstValueFrom(
+        this.api.get<ApiEnvelope<any[]>>(`/ai/memory/client/${clientId}`),
+      );
+      this.memoryNotes = result.success && Array.isArray(result.data) ? result.data : [];
+    } catch {
+      this.memoryNotes = [];
     }
   }
 
@@ -1696,6 +1781,7 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     this.salesRows = Array.isArray(data[0]?.invoices) ? data[0].invoices : [];
     this.serviceHistory = Array.isArray(data[0]?.serviceHistory) ? data[0].serviceHistory : [];
     this.clientNotes = Array.isArray(data[0]?.clientNotes) ? data[0].clientNotes : [];
+    void this.loadClientMemory(clientId);
     this.familyMembers = Array.isArray(data[0]?.familyMembers) ? data[0].familyMembers : [];
     this.clinicalProfile = data[0]?.clinicalProfile || null;
     this.soapNotes = Array.isArray(data[0]?.soapNotes) ? data[0].soapNotes : [];

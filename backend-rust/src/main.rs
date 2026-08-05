@@ -183,6 +183,15 @@ async fn main() -> Result<()> {
             {
                 worker::note_failure("ai_transcript_retention", "redact_communications");
             }
+            // Memory retention is the same class of obligation as a transcript
+            // expiring, so it runs on the same clock rather than on a second
+            // one somebody has to remember exists.
+            if services::ai_memory_service::purge_expired(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_transcript_retention", "purge_memory");
+            }
         },
     );
 
@@ -215,6 +224,45 @@ async fn main() -> Result<()> {
                 .is_err()
             {
                 worker::note_failure("ai_daily_briefing", "run_briefing");
+            }
+        },
+    );
+
+    // Keeps the semantic index in step with the CRM and embeds what is queued.
+    // Hourly rather than six-hourly because a note deleted in the CRM has to
+    // stop being retrievable quickly, and reconciliation is the cheap half of
+    // the cycle — the embedding half is bounded per pass.
+    worker::spawn(
+        &state,
+        "ai_semantic_index",
+        Duration::from_secs(3_600),
+        |state| async move {
+            if services::ai_semantic_service::run_semantic_index_worker(
+                &state.db,
+                services::ai_semantic_service::EmbeddingProvider::from_settings(&state.settings),
+            )
+            .await
+            .is_err()
+            {
+                worker::note_failure("ai_semantic_index", "index_corpus");
+            }
+        },
+    );
+
+    // Checks predictions whose horizon has passed against what actually
+    // happened. Six-hourly rather than daily because horizons expire on a
+    // calendar the worker does not control, and a missed cycle would push a
+    // whole day's outcomes behind the next one.
+    worker::spawn(
+        &state,
+        "ai_prediction_outcomes",
+        Duration::from_secs(21_600),
+        |state| async move {
+            if services::ai_prediction_outcome_service::run_outcome_resolution_worker(&state.db)
+                .await
+                .is_err()
+            {
+                worker::note_failure("ai_prediction_outcomes", "resolve_outcomes");
             }
         },
     );

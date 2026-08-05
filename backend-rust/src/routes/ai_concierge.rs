@@ -15,6 +15,7 @@ use crate::{
     },
     routes::context::tenant_branch,
     services::{
+        ai_action_autonomy_service::{self, AutonomyGrantRequest, AutonomyStatus},
         ai_action_service::{self, ActionDraft, ConfirmDraftRequest, CreateDraftRequest},
         ai_briefing_service::{
             self, BranchComparisonRow, Briefing, Cadence, Signal, SignalDecision,
@@ -24,6 +25,8 @@ use crate::{
             self, ConciergeMessageRequest, ConciergeResponse, GovernanceRequest, OpenSessionRequest,
         },
         ai_copilot_tools,
+        ai_memory_service::{self, RecordNoteRequest, RecordedNote, ResolveDisputeRequest},
+        ai_prediction_outcome_service::{self, PredictionAccuracy},
         ai_prediction_service::{self, PredictionKind, PredictionRun},
         ai_scope_service::ScopeRequest,
         ai_what_if_service::{self, WhatIf, WhatIfResult},
@@ -49,6 +52,10 @@ pub fn router() -> Router<AppState> {
         .route("/ai/concierge/calls/report", get(call_report))
         .route("/ai/predictions/:kind", post(run_prediction))
         .route("/ai/predictions/:kind/latest", get(get_latest_prediction))
+        .route(
+            "/ai/predictions/:kind/accuracy",
+            get(get_prediction_accuracy),
+        )
         .route("/ai/what-if", post(run_what_if))
         .route("/ai/briefing/:cadence", get(get_briefing))
         .route("/ai/briefing/compare/:signal", get(compare_branches))
@@ -56,6 +63,27 @@ pub fn router() -> Router<AppState> {
         .route("/ai/actions/drafts", post(create_action_draft))
         .route("/ai/actions/drafts/:id/confirm", post(confirm_action_draft))
         .route("/ai/actions/drafts/:id/cancel", post(cancel_action_draft))
+        .route("/ai/actions/drafts/:id/undo", post(undo_action_draft))
+        .route(
+            "/ai/actions/autonomy",
+            get(get_action_autonomy).put(set_action_autonomy),
+        )
+        .route("/ai/actions/autonomy/undoable", get(list_undoable_runs))
+        .route(
+            "/ai/actions/proposals/outcomes",
+            get(list_proposal_outcomes),
+        )
+        .route("/ai/retrieval/helpfulness", get(retrieval_helpfulness))
+        .route("/ai/memory", post(record_memory))
+        .route("/ai/memory/:subjectKind/:subjectId", get(recall_memory))
+        .route("/ai/memory/notes/:id", axum::routing::delete(forget_memory))
+        .route("/ai/memory/disputes", get(list_memory_disputes))
+        .route("/ai/memory/disputes/by-recorder", get(memory_dispute_rates))
+        .route("/ai/memory/notes/:id/dispute", post(resolve_memory_dispute))
+        .route(
+            "/ai/memory/clients/:id",
+            axum::routing::delete(forget_client_memory),
+        )
 }
 
 async fn get_workforce(
@@ -343,6 +371,272 @@ async fn get_latest_prediction(
         .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
     Ok(Json(ApiResponse::ok(
         ai_prediction_service::latest_run(
+            &state.db,
+            &tenant_id,
+            &claims,
+            kind,
+            &ScopeRequest::default(),
+        )
+        .await?,
+    )))
+}
+
+/// Records something the client said, or that staff want remembered.
+///
+/// Deliberately a human-driven endpoint. There is no path by which the
+/// assistant writes here: a note it inferred would be recalled as fact
+/// indefinitely with nobody able to say where it came from.
+async fn record_memory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<RecordNoteRequest>,
+) -> ApiResult<RecordedNote> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::record(&state.db, &tenant_id, &branch_id, &claims, payload).await?,
+    )))
+}
+
+/// One subject's live notes.
+async fn recall_memory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path((subject_kind, subject_id)): Path<(String, String)>,
+) -> ApiResult<Vec<crate::repositories::ai_memory_repository::MemoryNote>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::recall(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims,
+            &subject_kind,
+            &subject_id,
+        )
+        .await?,
+    )))
+}
+
+/// Forgets one note.
+async fn forget_memory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(note_id): Path<String>,
+) -> ApiResult<Value> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_memory_service::forget(&state.db, &tenant_id, &branch_id, &claims, &note_id).await?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"forgotten": true}),
+    )))
+}
+
+/// Forgets everything remembered about one client.
+async fn forget_client_memory(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(client_id): Path<String>,
+) -> ApiResult<Value> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let removed =
+        ai_memory_service::forget_client(&state.db, &tenant_id, &claims, &client_id).await?;
+    Ok(Json(ApiResponse::ok(
+        serde_json::json!({"forgotten": removed}),
+    )))
+}
+
+/// Whether retrieval is actually helping, from votes already cast.
+async fn retrieval_helpfulness(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<crate::services::ai_semantic_service::RetrievalHelpfulness> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        crate::services::ai_semantic_service::helpfulness(
+            &state.db,
+            &tenant_id,
+            &claims,
+            &ScopeRequest::default(),
+        )
+        .await?,
+    )))
+}
+
+/// What clients have said is wrong and nobody has reviewed yet.
+async fn list_memory_disputes(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_memory_repository::MemoryNote>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::open_disputes(&state.db, &tenant_id, &branch_id, &claims).await?,
+    )))
+}
+
+/// How often each person's recorded notes get contested.
+async fn memory_dispute_rates(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_memory_repository::RecorderDisputeRate>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::dispute_rates_by_recorder(&state.db, &tenant_id, &branch_id, &claims)
+            .await?,
+    )))
+}
+
+/// Closes a dispute: `corrected` removes the note, `upheld` returns it to use
+/// while leaving the dispute on the record.
+async fn resolve_memory_dispute(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(note_id): Path<String>,
+    Json(payload): Json<ResolveDisputeRequest>,
+) -> ApiResult<Value> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_memory_service::resolve_dispute(
+        &state.db, &tenant_id, &branch_id, &claims, &note_id, payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(serde_json::json!({"resolved": true}))))
+}
+
+/// Where each action kind stands on running without confirmation.
+///
+/// Readable by anyone who may use the copilot: someone about to be told an
+/// action already ran is entitled to see why it was allowed to.
+async fn get_action_autonomy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<AutonomyStatus>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::statuses(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+/// Grants or withdraws autonomy for one action kind.
+///
+/// Owner and admin only, and narrower than the roles that may confirm these
+/// actions by hand: approving one task is operational, deciding a whole class
+/// no longer needs approving is policy.
+async fn set_action_autonomy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<AutonomyGrantRequest>,
+) -> ApiResult<AutonomyStatus> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::set_grant(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+/// What became of the tasks every approved proposal created.
+///
+/// Asks whether the copilot's proposals are worth making at all, which is a
+/// different question from whether autonomy is safe.
+async fn list_proposal_outcomes(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<ai_action_autonomy_service::ProposalOutcome>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::proposal_outcomes(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+/// Runs the copilot completed on its own that can still be taken back.
+async fn list_undoable_runs(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_action_autonomy_repository::AutonomousRun>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::undoable(&state.db, &tenant_id, &branch_id).await?,
+    )))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UndoRequest {
+    #[serde(default)]
+    reason: String,
+}
+
+/// Reverses an autonomous run and withdraws the grant that allowed it.
+async fn undo_action_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+    Json(payload): Json<UndoRequest>,
+) -> ApiResult<ActionDraft> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    let reason = payload.reason.trim().chars().take(500).collect::<String>();
+    Ok(Json(ApiResponse::ok(
+        ai_action_service::undo_draft(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.role,
+            &claims.sub,
+            &draft_id,
+            &reason,
+        )
+        .await?,
+    )))
+}
+
+/// How this prediction kind has actually performed.
+///
+/// Reads only resolved outcomes, so it says nothing about predictions still
+/// inside their horizon beyond how many there are. Same scope chain as the
+/// prediction itself: a login sees the track record for the branches whose
+/// predictions it could have read.
+async fn get_prediction_accuracy(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(kind): Path<String>,
+) -> ApiResult<PredictionAccuracy> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    let kind = PredictionKind::from_name(&kind)
+        .ok_or_else(|| AppError::not_found("that prediction is not available"))?;
+    Ok(Json(ApiResponse::ok(
+        ai_prediction_outcome_service::accuracy(
             &state.db,
             &tenant_id,
             &claims,

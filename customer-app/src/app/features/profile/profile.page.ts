@@ -212,6 +212,43 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
           <a routerLink="/tabs/gift-cards"><ion-icon name="gift-outline"></ion-icon><span>Gift cards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/referrals"><ion-icon name="share-social-outline"></ion-icon><span>Referrals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/family"><ion-icon name="people-outline"></ion-icon><span>Family profiles</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+        @if (marketplace.isAuthenticated()) {
+          <section class="memory-card premium-card">
+            <div class="section-heading">
+              <div>
+                <h2>What the salon remembers</h2>
+                <p class="muted">Things you told them, or that staff noted down. Their assistant uses these to make bookings fit you. It never adds anything here itself.</p>
+              </div>
+            </div>
+            @if (marketplace.myMemory().length) {
+              <ion-list>
+                @for (note of marketplace.myMemory(); track note.id) {
+                  <ion-item lines="full">
+                    <div class="memory-row">
+                      <strong>{{ note.content }}</strong>
+                      @if (note.disputedAt && !note.disputeResolvedAt) {
+                        <span class="memory-status">You told us this is wrong. We have stopped using it while the salon checks.</span>
+                      } @else {
+                        <span class="muted">Kept until {{ joinedLabel(note.expiresAt) }}</span>
+                        <ion-button size="small" fill="clear" (click)="disputeMemory(note.id)">This is not right</ion-button>
+                      }
+                    </div>
+                  </ion-item>
+                }
+              </ion-list>
+              <ion-button expand="block" fill="outline" color="danger" class="secondary-button" (click)="forgetMemory()">
+                <ion-icon name="trash-outline" slot="start"></ion-icon>
+                Erase all of it
+              </ion-button>
+            } @else {
+              <p class="muted">Nothing is remembered about you yet.</p>
+            }
+            @if (memoryNotice) {
+              <p class="notice-text">{{ memoryNotice }}</p>
+            }
+          </section>
+        }
+
           <a routerLink="/tabs/corporate"><ion-icon name="briefcase-outline"></ion-icon><span>Corporate benefits</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/goals"><ion-icon name="color-palette-outline"></ion-icon><span>Beauty goals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/notifications"><ion-icon name="notifications-outline"></ion-icon><span>Notifications</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
@@ -233,6 +270,14 @@ import { CustomerNotificationPreferences } from "../../core/api.types";
       display: grid;
       gap: 16px;
     }
+    .memory-row {
+      display: grid;
+      gap: 3px;
+      width: 100%;
+      padding: 6px 0;
+    }
+    .memory-row strong { font-size: 14px; }
+    .memory-status { color: #8a3b12; font-size: 12px; }
 
     .profile-card {
       position: relative;
@@ -758,6 +803,7 @@ export class ProfilePage implements OnInit {
   deleteConfirm = "";
   deletePassword = "";
   profileNotice = "";
+  memoryNotice = "";
   passwordNotice = "";
 
   constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly route: ActivatedRoute) {
@@ -769,6 +815,9 @@ export class ProfilePage implements OnInit {
       await this.marketplace.loadCustomer().then(() => this.syncForm()).catch(() => undefined);
       await this.marketplace.loadBookings().catch(() => undefined);
       await this.marketplace.loadFavorites().catch(() => undefined);
+      // Swallowed like the rest: a customer whose salon has never recorded
+      // anything should still see their profile.
+      await this.marketplace.loadMyMemory().catch(() => undefined);
     }
   }
 
@@ -898,6 +947,33 @@ export class ProfilePage implements OnInit {
         this.passwordNotice = "Password updated.";
       })
       .catch(() => undefined);
+  }
+
+  /// Telling the salon a remembered fact is wrong.
+  ///
+  /// Deliberately not an edit. A memory the subject could rewrite would stop
+  /// being a record of what was said; saying it is wrong stops it being used
+  /// straight away and puts it in front of a person.
+  async disputeMemory(noteId: string) {
+    this.memoryNotice = "";
+    const reason = (window.prompt("What is wrong with it? (optional)") ?? "").trim();
+    try {
+      await this.marketplace.disputeMyMemory(noteId, reason);
+      this.memoryNotice = "Thanks — we have stopped using that and the salon will review it.";
+    } catch {
+      this.memoryNotice = "That could not be sent. Please try again.";
+    }
+  }
+
+  async forgetMemory() {
+    this.memoryNotice = "";
+    if (!window.confirm("Erase everything the salon remembers about you?")) return;
+    try {
+      await this.marketplace.forgetMyMemory();
+      this.memoryNotice = "Erased.";
+    } catch {
+      this.memoryNotice = "That could not be erased. Please try again.";
+    }
   }
 
   async deleteAccount() {

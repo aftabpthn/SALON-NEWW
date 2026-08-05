@@ -109,6 +109,16 @@ class RecommendationRequest(BaseModel):
     candidate_services: list[CandidateService] = Field(default_factory=list)
 
 
+class EmbeddingRequest(BaseModel):
+    """Texts to embed, already selected and truncated by Rust.
+
+    Bounded on both axes so one call cannot become an unbounded provider spend:
+    Rust batches in chunks of 32 and truncates each passage before sending.
+    """
+
+    texts: list[str] = Field(min_length=1, max_length=64)
+
+
 class WhatsAppTextRequest(BaseModel):
     tenant_id: str
     message_type: str
@@ -395,6 +405,11 @@ def forecast(payload: ForecastRequest):
 # Version of the scoring below. Bump when a rule changes, so a stored run stays
 # traceable to the logic that produced it.
 PREDICTION_MODEL_VERSION = "aurashine-predict-v1"
+
+# The semantic index's vector column is declared at this width, so changing the
+# model means a migration and a re-index, not just an environment variable.
+EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_DIMENSIONS = 1536
 
 
 def _band(centre: float, spread: float, floor: float | None = None, ceiling: float | None = None):
@@ -905,6 +920,62 @@ async def migration_failure_assistant(payload: MigrationFailureRequest):
         "model": model,
         "summary": migration_failure_summary(payload),
         "recommendations": recommendations,
+    })
+
+
+@app.post("/api/v1/embeddings")
+async def embeddings(payload: EmbeddingRequest):
+    """Embeds CRM text for the semantic index.
+
+    There is deliberately no local fallback. Every other endpoint here degrades
+    to deterministic arithmetic over numbers Rust supplied, which stays honest
+    without a provider. An embedding has no such fallback: a locally invented
+    vector would place passages at meaningless distances and retrieval would
+    return confident nonsense. Without a provider this fails, and the Rust side
+    leaves the layer switched off.
+    """
+    if os.getenv("AI_PROVIDER", "local").strip().lower() != "openai":
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=error_envelope("embeddings require AI_PROVIDER=openai"),
+        )
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=error_envelope("OPENAI_API_KEY is not configured"),
+        )
+    model = os.getenv("OPENAI_EMBEDDING_MODEL", EMBEDDING_MODEL).strip() or EMBEDDING_MODEL
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={"authorization": f"Bearer {api_key}"},
+                json={"model": model, "input": payload.texts},
+            )
+            response.raise_for_status()
+            body = response.json()
+    except (httpx.HTTPError, ValueError):
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content=error_envelope("embedding provider is unavailable"),
+        )
+
+    # The API returns results with an explicit index. Sorting by it rather than
+    # trusting arrival order is what lets Rust pair vectors back to documents.
+    items = sorted(body.get("data", []), key=lambda item: item.get("index", 0))
+    vectors = [item.get("embedding") or [] for item in items]
+    if len(vectors) != len(payload.texts) or any(len(vector) != EMBEDDING_DIMENSIONS for vector in vectors):
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content=error_envelope("embedding provider returned an unusable response"),
+        )
+
+    return envelope({
+        "model": body.get("model", model),
+        "dimensions": EMBEDDING_DIMENSIONS,
+        "embeddings": [{"embedding": vector} for vector in vectors],
     })
 
 
