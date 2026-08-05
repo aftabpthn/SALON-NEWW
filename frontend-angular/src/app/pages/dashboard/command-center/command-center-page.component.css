@@ -212,6 +212,10 @@ button:disabled { cursor: wait; opacity: .65; }
 .forecast-grid > article > strong { color: #075dab; font-size: 16px; }
 .forecast-grid small { margin-top: 5px; color: var(--cc-muted); font-size: 10px; }
 .forecast-grid p { min-height: 30px; margin: 8px 0 0; color: #40536b; font-size: 10px; line-height: 1.45; }
+/* The measured track record sits apart from the model metadata above it: it is
+   the one line on the card that describes the forecast's reliability rather
+   than its provenance. */
+.forecast-grid .forecast-accuracy { margin-top: 6px; padding-top: 5px; border-top: 1px solid #eef2f7; color: #075dab; font-weight: 700; }
 .intelligence-detail-grid { display: grid; grid-template-columns: 1.35fr 1fr; border-top: 1px solid #e8edf4; }
 .intelligence-detail-grid > section { min-width: 0; border-right: 1px solid #e8edf4; }
 .intelligence-detail-grid > section:last-child { border-right: 0; }

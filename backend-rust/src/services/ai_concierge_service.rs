@@ -14,8 +14,9 @@ use crate::{
     services::{
         ai_channel_service,
         ai_copilot_tools::{self, CopilotAnswer},
+        ai_memory_service,
         ai_scope_service::{self, ScopeRequest},
-        ai_tool_dispatcher,
+        ai_semantic_service, ai_tool_dispatcher,
         auth_service::AuthClaims,
     },
 };
@@ -99,6 +100,11 @@ pub struct ConciergeResponse {
     /// Set when a tool matched the question but the caller's role may not run it.
     #[serde(skip_serializing_if = "str::is_empty")]
     pub restricted_tool: String,
+    /// CRM text retrieved because no tool matched. Returned so the reply can be
+    /// traced back to the rows it was written from — a passage without its
+    /// source is indistinguishable from something the model made up.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub retrieved: Vec<ai_semantic_service::SemanticPassage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -566,6 +572,16 @@ pub async fn process_external_message(
     .await
 }
 
+/// Marks a reply the semantic layer contributed to.
+///
+/// Appended to the model name rather than stored in a column of its own,
+/// because the transcript already carries the model per message and a second
+/// place to record the same thing is a second place for the two to disagree.
+pub const RETRIEVAL_MODEL_SUFFIX: &str = "+retrieval";
+
+/// The `tool` recorded against feedback on a retrieval-backed reply.
+pub const RETRIEVAL_FEEDBACK_TOOL: &str = "semantic_retrieval";
+
 /// The only two settings the message pipeline needs to reach the AI provider.
 ///
 /// Taking these instead of the whole `Settings` keeps the pipeline callable from
@@ -667,6 +683,39 @@ async fn process_message(
         }
         None => CopilotOutcome::NotApplicable,
     };
+    // Retrieval is consulted only where the tools produced nothing at all. A
+    // question a tool answered is already grounded in a query someone can
+    // audit, and putting quoted text next to that would invite the provider to
+    // blend the two. A refusal is likewise final — retrieving around a
+    // permission the caller does not hold is exactly what must not happen.
+    // What this client told us, recalled the same way every time. Unlike
+    // retrieval this is not similarity-ranked and does not depend on the tools
+    // having failed: a stated preference is relevant to a booking question and
+    // to a small-talk one alike.
+    let client_memory = match session.client_id.as_deref() {
+        Some(client_id) => {
+            ai_memory_service::for_channel(db, tenant_id, branch_id, client_id, &session.channel)
+                .await
+        }
+        None => Vec::new(),
+    };
+    let retrieved = match (&copilot, web_claims) {
+        (CopilotOutcome::NotApplicable, Some(claims)) => {
+            ai_semantic_service::search(
+                db,
+                ai_semantic_service::EmbeddingProvider::new(
+                    provider_endpoint.url,
+                    provider_endpoint.token,
+                ),
+                tenant_id,
+                claims,
+                &raw_body,
+                &ScopeRequest::default(),
+            )
+            .await
+        }
+        _ => Vec::new(),
+    };
     // A refusal is a final answer: sending it to the provider would invite a
     // generic reply about data this role is not allowed to see.
     let (provider, provider_status) = if let CopilotOutcome::Forbidden(tool) = copilot {
@@ -687,9 +736,21 @@ async fn process_message(
             web_claims,
             &governance,
             copilot.answer(),
+            &retrieved,
+            &client_memory,
         )
         .await
     };
+    // Mark a reply that was built from retrieved passages, so feedback about it
+    // can be attributed to retrieval rather than to whichever model wrote the
+    // sentence. Derived here rather than taken from the client, because a
+    // measurement the caller can assert is not a measurement.
+    let mut provider = provider;
+    if !retrieved.is_empty() && !provider.model.starts_with("crm-tool:") {
+        provider.model = format!("{}{RETRIEVAL_MODEL_SUFFIX}", provider.model);
+    }
+    let provider = provider;
+
     let safe_service = services.iter().find(|item| item.id == provider.service_id);
     let (action_type, action_payload) = if provider.handoff_required || provider.intent == "handoff"
     {
@@ -795,6 +856,7 @@ async fn process_message(
         provider_status: provider_status.into(),
         copilot: copilot_answer,
         restricted_tool,
+        retrieved,
     })
 }
 
@@ -1002,6 +1064,8 @@ async fn call_provider(
     web_claims: Option<&AuthClaims>,
     governance: &AiGovernanceRecord,
     copilot: Option<&CopilotAnswer>,
+    retrieved: &[ai_semantic_service::SemanticPassage],
+    client_memory: &[crate::repositories::ai_memory_repository::MemoryNote],
 ) -> (ProviderResponse, &'static str) {
     let financials_visible = web_claims.is_some_and(|claims| {
         ai_scope_service::domain_allowed(claims, ai_scope_service::AiDomain::Finance)
@@ -1065,6 +1129,28 @@ async fn call_provider(
         // `model_allowlist` is a hint so the service can pick an approved model
         // up front. It is not trusted: the reply is checked against the same
         // list on the way back.
+        // Quoted CRM text, retrieved only because no tool matched. Unlike
+        // `crm_evidence` these are passages, not computed figures, so the
+        // instruction is the opposite one: summarise what is written here and
+        // say where it came from, but do not turn prose into a statistic.
+        "retrieved_passages":(!retrieved.is_empty()).then(||json!({
+            "passages":retrieved.iter().map(|passage|json!({
+                "source":passage.source_kind,
+                "title":passage.title,
+                "text":passage.content,
+                "similarity":passage.similarity
+            })).collect::<Vec<_>>(),
+            "instruction":"This is text stored in the CRM, retrieved because no report answered the question. Answer only from what it says and name the source you used. Do not compute totals, counts, trends or money from it, and do not treat it as current if it does not say so — if the question needs a figure, say the reports do not cover it rather than deriving one from this text."
+        })),
+        // Facts a person chose to keep about this client. Stated rather than
+        // inferred, and already filtered for what this channel may repeat back.
+        "client_memory":(!client_memory.is_empty()).then(||json!({
+            "notes":client_memory.iter().map(|note|json!({
+                "text":note.content,
+                "source":note.source,
+            })).collect::<Vec<_>>(),
+            "instruction":"These are things this client told us or that staff recorded about them. Use them to make the reply fit the person. Do not read them out as a list, do not treat them as current bookings or purchases, and do not infer anything further about the client from them."
+        })),
         "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data,"model_allowlist":governance.model_allowlist}
     });
     let client = match reqwest::Client::builder()
@@ -1855,6 +1941,13 @@ pub async fn record_feedback(
     if tool.chars().count() > 80 {
         return Err(AppError::validation("feedback tool is invalid"));
     }
+    // What the reply was actually built from is a server-side fact. A client
+    // could otherwise label its own votes, and a hit rate anyone can assert is
+    // not a measurement.
+    let tool = match repository::message_model_name(db, tenant_id, branch_id, &message_id).await {
+        Ok(Some(model)) if model.ends_with(RETRIEVAL_MODEL_SUFFIX) => RETRIEVAL_FEEDBACK_TOOL,
+        _ => tool,
+    };
     repository::save_feedback(
         db,
         tenant_id,

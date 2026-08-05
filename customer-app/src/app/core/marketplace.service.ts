@@ -21,6 +21,7 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPaymentMethod,
+  CustomerMemoryNote,
   CustomerProfile,
   CustomerProfileExtensionRecord,
   CustomerPushProof,
@@ -59,6 +60,8 @@ export class MarketplaceService {
   readonly favorites = signal<CustomerFavorite[]>([]);
   readonly selectedBusiness = signal<Business | null>(null);
   readonly bookings = signal<Booking[]>([]);
+  /// What the salon's assistant has been told to remember about this customer.
+  readonly myMemory = signal<CustomerMemoryNote[]>([]);
   readonly selectedBooking = signal<Booking | null>(null);
   readonly latestBooking = signal<Booking | null>(null);
   readonly availability = signal<AvailabilityDay[]>([]);
@@ -385,6 +388,25 @@ export class MarketplaceService {
 
   async changePasswordWithPhoneOtp(phone: string, otp: string, newPassword: string): Promise<void> {
     return this.run("Unable to change password with mobile OTP", () => this.auth.changePasswordWithPhoneOtp(phone, otp, newPassword));
+  }
+
+  /// What the salon's assistant remembers about this customer.
+  async loadMyMemory(): Promise<CustomerMemoryNote[]> {
+    return this.run("Unable to load what is remembered about you", async () => {
+      const rows = await firstValueFrom(this.api.listMyMemory());
+      this.myMemory.set(rows);
+      return rows;
+    });
+  }
+
+  async disputeMyMemory(noteId: string, reason: string): Promise<void> {
+    await this.run("Unable to send that", () => firstValueFrom(this.api.disputeMyMemory(noteId, reason)));
+    await this.loadMyMemory();
+  }
+
+  async forgetMyMemory(): Promise<void> {
+    await this.run("Unable to erase that", () => firstValueFrom(this.api.forgetMyMemory()));
+    await this.loadMyMemory();
   }
 
   async deleteAccount(currentPassword = ""): Promise<void> {

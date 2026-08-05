@@ -958,3 +958,20 @@ export type CustomerAccountModule =
   | CustomerPaymentRecord[]
   | CustomerProfileExtensionRecord[]
   | CustomerNotification[];
+
+/// A fact the salon's assistant has been told to remember about this customer.
+///
+/// Read-only from the app's side: a customer may say a note is wrong or erase
+/// it, but never edit it — a memory the subject could rewrite would stop being
+/// a record of what was said.
+export interface CustomerMemoryNote {
+  id: string;
+  content: string;
+  source: string;
+  expiresAt: string;
+  createdAt: string;
+  disputedAt?: string | null;
+  disputeReason?: string;
+  disputeResolvedAt?: string | null;
+  disputeOutcome?: string;
+}

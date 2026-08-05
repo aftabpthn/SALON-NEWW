@@ -1,7 +1,8 @@
 use crate::{
     config::is_local_env,
     middleware::{
-        auth as auth_middleware, request_timing as request_timing_middleware,
+        auth as auth_middleware, csrf as csrf_middleware,
+        request_timing as request_timing_middleware,
         security_headers as security_headers_middleware, tenant as tenant_middleware,
     },
     state::AppState,
@@ -177,7 +178,15 @@ pub fn build_router(state: AppState) -> Router {
             auth_middleware::require_auth,
         ));
 
-    let api = public_api.merge(protected_api);
+    // Outside the auth layers so it also guards the cookie-only endpoints
+    // (`/auth/refresh`, `/auth/logout`) that authenticate before any bearer
+    // token exists.
+    let api = public_api
+        .merge(protected_api)
+        .layer(from_fn_with_state(
+            state.clone(),
+            csrf_middleware::require_csrf,
+        ));
 
     Router::new()
         .route("/", axum::routing::get(health::root))
@@ -235,6 +244,7 @@ fn cors_layer(state: &AppState) -> CorsLayer {
             HeaderName::from_static("x-api-key"),
             HeaderName::from_static("x-device-id"),
             HeaderName::from_static("x-request-id"),
+            HeaderName::from_static("x-csrf-token"),
             HeaderName::from_static("idempotency-key"),
         ])
         .allow_credentials(true)

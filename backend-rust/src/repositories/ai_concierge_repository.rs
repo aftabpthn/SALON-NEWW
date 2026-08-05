@@ -762,6 +762,23 @@ pub async fn record_tool_audit(
 /// Stores whether an answer was useful. A second vote by the same user on the
 /// same message replaces the first rather than stacking.
 #[allow(clippy::too_many_arguments)]
+/// What produced one assistant message, for attributing feedback about it.
+pub async fn message_model_name(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    message_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(
+        "SELECT model_name FROM ai_concierge_messages WHERE tenant_id=$1 AND branch_id=$2 AND id=$3",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(message_id)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn save_feedback(
     db: &PgPool,
     tenant_id: &str,

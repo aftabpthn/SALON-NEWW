@@ -813,6 +813,33 @@ pub async fn create_task(
 ///
 /// This is the recovery read: after a crash between the CRM write and the
 /// approval, it is how the retry learns the task exists.
+/// Cancels the task a copilot draft created, if it is still open.
+///
+/// Keyed on the draft rather than the task id so the caller never has to hold
+/// on to what the write produced, and idempotent by construction: a task
+/// already cancelled or completed is left exactly as it is, so two people
+/// undoing the same run cannot fight over it. `version` moves so any screen
+/// holding the old row is told it is stale rather than silently overwriting.
+pub async fn cancel_task_for_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    draft_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE staff_tasks
+              SET status='cancelled', version=version+1, updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND origin_action_draft_id=$3
+              AND status NOT IN ('completed','cancelled')"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(draft_id)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected() > 0)
+}
+
 pub async fn task_by_action_origin(
     db: &PgPool,
     tenant_id: &str,

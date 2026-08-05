@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     config::is_local_env,
+    middleware::csrf as csrf_middleware,
     models::common::{ApiResponse, ApiResult, AppError},
     repositories::auth_repository::{
         self, AuthAuditInput, AuthUser, BranchAccess, SessionTokenInput,
@@ -256,11 +257,19 @@ pub async fn accept_staff_invite(
     })))
 }
 
-pub async fn csrf() -> ApiResult<CsrfResponse> {
-    Ok(Json(ApiResponse::ok(CsrfResponse {
-        csrf_token: Uuid::new_v4().to_string(),
-        expires_at: (Utc::now() + chrono::Duration::minutes(10)).to_rfc3339(),
-    })))
+/// Hands out a signed CSRF token in the body and the same value in a `HttpOnly`
+/// cookie. `csrf_middleware::require_csrf` then rejects any cookie-carrying
+/// mutation whose header does not match both the cookie and the signature.
+pub async fn csrf(State(state): State<AppState>) -> AuthApiResult<CsrfResponse> {
+    let issued = csrf_middleware::issue(&state.settings.jwt_refresh_secret);
+    let cookie = csrf_middleware::cookie_header(&state, &issued.token, issued.max_age_seconds)?;
+    auth_response(
+        CsrfResponse {
+            csrf_token: issued.token,
+            expires_at: issued.expires_at.to_rfc3339(),
+        },
+        Some(cookie),
+    )
 }
 pub async fn sso_providers(
     State(state): State<AppState>,
