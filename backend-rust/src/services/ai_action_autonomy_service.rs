@@ -391,6 +391,74 @@ pub async fn status(
     })
 }
 
+/// Whether a kind's proposals are worth making, across every approval.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalOutcome {
+    pub action_type: String,
+    /// `human` or `autonomous`. Reported apart rather than pooled: a kind people
+    /// complete when they chose it and abandon when the copilot chose it is
+    /// telling you something a combined figure would hide.
+    pub decision_mode: String,
+    pub completed: i64,
+    pub abandoned: i64,
+    pub pending: i64,
+    /// `None` until enough have been judged to state a rate.
+    pub completion_percent: Option<f64>,
+    pub statement: String,
+}
+
+/// What became of the tasks every approved draft created.
+///
+/// A different question from the autonomy bar, which asks whether acting
+/// without confirmation is safe. This asks whether the proposals are worth
+/// making at all: a kind people approve readily and then never action is one
+/// the copilot should probably stop raising, however carefully it is gated.
+pub async fn proposal_outcomes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<ProposalOutcome>, AppError> {
+    let rows = repository::proposal_task_outcomes(
+        db,
+        tenant_id,
+        branch_id,
+        DECISION_WINDOW_DAYS,
+        TASK_JUDGEMENT_DAYS,
+    )
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "failed to read proposal outcomes");
+        AppError::internal("failed to read what became of the copilot's proposals")
+    })?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let percent = completion_percent(row.completed, row.abandoned);
+            let judged = row.completed + row.abandoned;
+            let label = row.action_type.replace('_', " ");
+            let statement = match percent {
+                Some(rate) => format!(
+                    "{rate:.0}% of {judged} checked {label} proposals were actually completed."
+                ),
+                None => format!(
+                    "Only {judged} {label} proposals have been checked; {MIN_TASK_OUTCOMES} are needed before a rate means anything."
+                ),
+            };
+            ProposalOutcome {
+                action_type: row.action_type,
+                decision_mode: row.decision_mode,
+                completed: row.completed,
+                abandoned: row.abandoned,
+                pending: row.pending,
+                completion_percent: percent,
+                statement,
+            }
+        })
+        .collect())
+}
+
 /// Every autonomy-capable kind's standing, for the settings screen.
 pub async fn statuses(
     db: &PgPool,
@@ -1181,6 +1249,72 @@ mod autonomy_tests {
         assert_eq!(status.task_completion_percent, Some(100.0));
         assert!(status.earned);
         assert_eq!(status.blocked_by.as_deref(), Some("not_enabled"));
+    }
+
+    /// Proposal outcomes cover every approval, not only the autonomous ones,
+    /// and keep the two apart so the more interesting gap stays visible.
+    #[tokio::test]
+    async fn proposal_outcomes_cover_human_approvals_as_well() {
+        let Some(db) = connect().await else { return };
+        let (tenant, branch) = seed(&db).await;
+
+        // Two autonomous runs, both completed.
+        for _ in 0..2 {
+            seed_autonomous_run(&db, &tenant, &branch, "completed").await;
+        }
+        // Three a person approved: one done, two left open past judgement.
+        for status in ["completed", "open", "open"] {
+            let draft_id: String = sqlx::query_scalar(
+                r#"INSERT INTO ai_action_drafts(
+                      tenant_id,branch_id,action_type,status,summary,requires_confirmation,
+                      created_by,decided_by,decided_at,decision_mode)
+                   VALUES ($1,$2,'create_follow_up_task','approved','historic',TRUE,
+                           'seed','seed',NOW() - INTERVAL '45 days','human')
+                   RETURNING id"#,
+            )
+            .bind(&tenant)
+            .bind(&branch)
+            .fetch_one(&db)
+            .await
+            .expect("human approval is seeded");
+            sqlx::query(
+                r#"INSERT INTO staff_tasks(tenant_id,branch_id,title,status,origin_action_draft_id)
+                   VALUES ($1,$2,'Seeded task',$3,$4)"#,
+            )
+            .bind(&tenant)
+            .bind(&branch)
+            .bind(status)
+            .bind(&draft_id)
+            .execute(&db)
+            .await
+            .expect("task is seeded");
+        }
+
+        let rows = proposal_outcomes(&db, &tenant, &branch)
+            .await
+            .expect("outcomes read");
+        assert_eq!(rows.len(), 2, "the two decision modes stay apart");
+
+        let autonomous = rows
+            .iter()
+            .find(|row| row.decision_mode == "autonomous")
+            .expect("autonomous row");
+        assert_eq!(autonomous.completed, 2);
+        assert_eq!(autonomous.abandoned, 0);
+
+        let human = rows
+            .iter()
+            .find(|row| row.decision_mode == "human")
+            .expect("human row");
+        assert_eq!(human.completed, 1);
+        assert_eq!(
+            human.abandoned, 2,
+            "an approval nobody actioned counts against the proposal"
+        );
+        // Five judged in total is under the floor, so no rate is stated for
+        // either population — the same discipline the autonomy bar uses.
+        assert!(human.completion_percent.is_none());
+        assert!(human.statement.contains("before a rate means anything"));
     }
 
     /// A kind that only opens a screen cannot be granted autonomy at all, so

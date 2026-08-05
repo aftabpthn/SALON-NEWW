@@ -237,6 +237,67 @@ pub async fn autonomous_task_outcomes(
     .await
 }
 
+/// What became of the tasks *every* approved draft created, autonomous or not.
+///
+/// A different question from `autonomous_task_outcomes`, which asks whether
+/// autonomy is safe. This asks whether the copilot's proposals are worth making
+/// at all: a kind people approve readily and then never action is one the
+/// copilot should probably stop raising, however carefully it is gated.
+///
+/// Split by how the decision was reached, because the two populations answer
+/// different things and pooling them would hide the more interesting gap — a
+/// kind people complete when they chose it and abandon when the copilot chose
+/// it is telling you something specific.
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalOutcomeRecord {
+    pub action_type: String,
+    pub decision_mode: String,
+    pub completed: i64,
+    pub abandoned: i64,
+    pub pending: i64,
+}
+
+pub async fn proposal_task_outcomes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    window_days: i32,
+    judgement_days: i32,
+) -> Result<Vec<ProposalOutcomeRecord>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT draft.action_type,
+             draft.decision_mode,
+             COUNT(*) FILTER (WHERE task.status='completed')::BIGINT AS completed,
+             COUNT(*) FILTER (
+               WHERE task.status='cancelled'
+                  OR (task.status NOT IN ('completed','cancelled')
+                      AND draft.decided_at < NOW() - MAKE_INTERVAL(days => $4))
+             )::BIGINT AS abandoned,
+             COUNT(*) FILTER (
+               WHERE task.status NOT IN ('completed','cancelled')
+                 AND draft.decided_at >= NOW() - MAKE_INTERVAL(days => $4)
+             )::BIGINT AS pending
+           FROM ai_action_drafts draft
+           JOIN staff_tasks task
+             ON task.tenant_id=draft.tenant_id
+            AND task.branch_id=draft.branch_id
+            AND task.origin_action_draft_id=draft.id
+          WHERE draft.tenant_id=$1 AND draft.branch_id=$2
+            AND draft.status IN ('approved','executed')
+            AND draft.undone_at IS NULL
+            AND draft.decided_at >= NOW() - MAKE_INTERVAL(days => $3)
+          GROUP BY draft.action_type, draft.decision_mode
+          ORDER BY draft.action_type, draft.decision_mode"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(window_days)
+    .bind(judgement_days)
+    .fetch_all(db)
+    .await
+}
+
 /// Marks a draft as having been decided by the copilot rather than a person,
 /// and opens its undo window.
 pub async fn mark_autonomous(

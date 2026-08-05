@@ -145,8 +145,6 @@ Per-client and per-user memory, once listed here, is delivered separately in
 recall of a stated fact must be exact and expiring, which is a different
 problem from similarity search over a derived index.
 
-- Index appointment and treatment history summaries once there is a derived,
-  non-clinical form of them that carries no retention obligation.
 Whether retrieval helps is now measured rather than assumed. A reply the
 semantic layer contributed to is marked in its stored model name
 (`…+retrieval`), and feedback on that message is labelled `semantic_retrieval`

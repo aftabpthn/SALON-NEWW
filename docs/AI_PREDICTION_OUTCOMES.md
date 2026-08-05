@@ -211,8 +211,29 @@ asserted — while the caller is shown the supported one.
 
 ## 9. Future roadmap
 
-- Use per-kind accuracy to decide which kinds are worth surfacing proactively in
-  the briefing, rather than surfacing all of them at a fixed confidence floor.
-- Extend the same outcome discipline to `ai_action_service` drafts: record
-  whether an approved offer or follow-up produced the effect it predicted. That
-  data is the precondition for any earned-autonomy work.
+- Withdrawn: *"use per-kind accuracy to gate what the briefing surfaces"*. The
+  briefing surfaces copilot **tool** signals, not predictions
+  (`ai_briefing_service` maps every signal to a `CopilotTool`), so there is no
+  prediction accuracy for it to gate. A tool answer is a SQL fact rather than a
+  forecast; it is not wrong in the way a prediction can be wrong, and its own
+  confidence suppression already covers what this item was reaching for.
+- Outcome discipline for `ai_action_service` drafts is **partly delivered**. The
+  tasks created by *autonomous* runs are followed to completion and feed the
+  autonomy bar (see [AI_EARNED_AUTONOMY.md](./AI_EARNED_AUTONOMY.md)). What was
+  still missing — and is now covered — is the same measure across *every*
+  approved draft, which answers a different question: not "is autonomy safe" but
+  "are the copilot's proposals worth making at all". See §10 below.
+
+## 10. Proposal outcomes
+
+`GET /api/v1/ai/actions/proposals/outcomes` follows the tasks *every* approved
+draft created, not only the autonomous ones. It answers a different question
+from the autonomy bar: not "is acting without confirmation safe" but "are these
+proposals worth making at all". A kind people approve readily and then never
+action is one the copilot should probably stop raising, however carefully it is
+gated.
+
+Figures are split by `decisionMode` rather than pooled, because a kind people
+complete when *they* chose it and abandon when the *copilot* chose it is telling
+you something specific that a combined number would hide. The same judgement
+period, floor and withheld-rate discipline apply as on the autonomy bar.

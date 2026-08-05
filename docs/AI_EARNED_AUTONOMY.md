@@ -158,7 +158,15 @@ until a kind reports `earned: true` and `blockedBy: "not_enabled"`, grant that
 one kind, and check `GET /ai/actions/autonomy/undoable` daily for the first
 week.
 
-## 8. Future roadmap
+## 8. Related: are the proposals worth making?
+
+The bar above asks whether acting without confirmation is safe. A separate
+read, `GET /api/v1/ai/actions/proposals/outcomes`, asks whether the proposals
+are worth raising at all — it follows the tasks from *every* approved draft,
+human or autonomous, split by which. See
+[AI_PREDICTION_OUTCOMES.md](./AI_PREDICTION_OUTCOMES.md) §10.
+
+## 9. Future roadmap
 
 - Extend the same earned/granted/reversible frame to proactive proposals raised
   by the briefing worker, which today always wait for a person.

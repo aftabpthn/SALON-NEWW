@@ -69,6 +69,10 @@ pub fn router() -> Router<AppState> {
             get(get_action_autonomy).put(set_action_autonomy),
         )
         .route("/ai/actions/autonomy/undoable", get(list_undoable_runs))
+        .route(
+            "/ai/actions/proposals/outcomes",
+            get(list_proposal_outcomes),
+        )
         .route("/ai/retrieval/helpfulness", get(retrieval_helpfulness))
         .route("/ai/memory", post(record_memory))
         .route("/ai/memory/:subjectKind/:subjectId", get(recall_memory))
@@ -551,6 +555,22 @@ async fn set_action_autonomy(
             payload,
         )
         .await?,
+    )))
+}
+
+/// What became of the tasks every approved proposal created.
+///
+/// Asks whether the copilot's proposals are worth making at all, which is a
+/// different question from whether autonomy is safe.
+async fn list_proposal_outcomes(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<ai_action_autonomy_service::ProposalOutcome>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_action_autonomy_service::proposal_outcomes(&state.db, &tenant_id, &branch_id).await?,
     )))
 }
 
