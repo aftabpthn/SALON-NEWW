@@ -692,6 +692,7 @@ type BookingFlowItem = {
             }
             </div>
           </div>
+        </div>
 
         @if (showPolicyModal()) {
           <div class="drawer-backdrop" (click)="showPolicyModal.set(false)"></div>
