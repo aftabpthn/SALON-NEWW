@@ -1171,6 +1171,9 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     try {
       const response = await fetch(`${this.kioskAccess.endpoint}/submissions`, {
         method: 'POST',
+        // Authorised by the public booking token alone; sending session cookies
+        // would only subject it to a CSRF check it has no token for.
+        credentials: 'omit',
         headers: { 'content-type': 'application/json', 'x-public-booking-token': String(this.kioskAccess.token) },
         body: JSON.stringify(this.kioskDraft),
       });

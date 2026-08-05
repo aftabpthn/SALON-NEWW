@@ -124,6 +124,10 @@ impl AppError {
         Self::new(StatusCode::FORBIDDEN, "FORBIDDEN", message)
     }
 
+    pub fn forbidden_code(code: &'static str, message: impl Into<String>) -> Self {
+        Self::new(StatusCode::FORBIDDEN, code, message)
+    }
+
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, "NOT_FOUND", message)
     }

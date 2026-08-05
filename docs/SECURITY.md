@@ -97,7 +97,16 @@ live in `docs/security-hardening.md`; the live permission matrix in `docs/permis
 
 - XSS: never render untrusted HTML unless sanitized by an approved path.
 - CSRF: cookie-backed flows require CSRF protection; bearer-token APIs require
-  strict CORS and authorization headers.
+  strict CORS and authorization headers. `GET /auth/csrf` mints an HMAC-signed
+  token (`{expiry}.{nonce}.{signature}`, one hour, signed with
+  `JWT_REFRESH_SECRET` under its own label) and mirrors it into the `HttpOnly`
+  `aurashine_csrf` cookie. `middleware/csrf.rs` rejects any mutating request
+  that carries `aurashine_csrf` or `aurashine_refresh_token` unless
+  `x-csrf-token` matches the cookie and verifies. Requests with no such cookie —
+  webhooks, API-key integrations, native clients on bearer tokens — are not
+  challenged, because they carry no credential a foreign page can borrow.
+  Front-end calls made outside the interceptor chain must send
+  `credentials: "omit"` so they stay in that unchallenged class.
 - File uploads: validate type, size, ownership, storage path, and download
   authorization.
 - Webhooks: verify signatures, timestamp tolerance, replay id, and provider
