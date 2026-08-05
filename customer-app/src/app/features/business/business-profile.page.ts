@@ -47,6 +47,14 @@ import { WebstoreProduct } from "../../core/api.types";
           </div>
         </section>
 
+        <nav class="profile-tabs app-container" aria-label="Business profile sections">
+          <button type="button" (click)="scrollToSection('profile-photos')">Photos</button>
+          <button type="button" (click)="scrollToSection('profile-services')">Services</button>
+          <button type="button" (click)="scrollToSection('profile-team')">Team</button>
+          <button type="button" (click)="scrollToSection('profile-reviews')">Reviews</button>
+          <button type="button" (click)="scrollToSection('profile-about')">About</button>
+        </nav>
+
         <section class="app-container profile-shell">
           <div class="main-column">
             <section class="intro premium-card">
@@ -67,7 +75,7 @@ import { WebstoreProduct } from "../../core/api.types";
               </div>
             </section>
 
-            <section class="gallery-section">
+            <section id="profile-photos" class="gallery-section profile-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Inside the studio</h2>
@@ -82,7 +90,7 @@ import { WebstoreProduct } from "../../core/api.types";
               </div>
             </section>
 
-            <section class="services-section">
+            <section id="profile-services" class="services-section profile-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">{{ business().services.length }} services available</h2>
@@ -130,7 +138,7 @@ import { WebstoreProduct } from "../../core/api.types";
               </section>
             }
 
-            <section class="staff-section">
+            <section id="profile-team" class="staff-section profile-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Choose your professional</h2>
@@ -152,7 +160,7 @@ import { WebstoreProduct } from "../../core/api.types";
               </div>
             </section>
 
-            <section class="review-section">
+            <section id="profile-reviews" class="review-section profile-section">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Loved by customers</h2>
@@ -172,7 +180,7 @@ import { WebstoreProduct } from "../../core/api.types";
               </div>
             </section>
 
-            <section class="info-grid">
+            <section id="profile-about" class="info-grid profile-section">
               <article class="premium-card info-card">
                 <h2>Location</h2>
                 <p><ion-icon name="location-outline"></ion-icon>{{ business().address }}</p>
@@ -259,6 +267,46 @@ import { WebstoreProduct } from "../../core/api.types";
   styles: [`
     .profile-page {
       padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    }
+
+    .profile-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-top: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.96);
+      scrollbar-width: none;
+    }
+
+    .profile-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .profile-tabs button {
+      flex: 0 0 auto;
+      min-height: 38px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      background: #ffffff;
+      font-weight: 800;
+    }
+
+    .profile-tabs button:hover,
+    .profile-tabs button:focus-visible {
+      border-color: var(--primary);
+      background: var(--surface-soft);
+      outline: none;
+    }
+
+    .profile-section {
+      scroll-margin-top: 72px;
     }
 
     .cover {
@@ -647,9 +695,6 @@ import { WebstoreProduct } from "../../core/api.types";
       .cover-copy p,
       .intro h2,
       .trust-row,
-      .staff-section,
-      .review-section,
-      .info-grid,
       .service-card p {
         display: none;
       }
@@ -882,5 +927,9 @@ export class BusinessProfilePage implements OnInit {
     const data = { title: this.business()?.businessName || "AuraShine", url: window.location.href };
     if (navigator.share) await navigator.share(data).catch(() => undefined);
     else await navigator.clipboard?.writeText(data.url).catch(() => undefined);
+  }
+
+  scrollToSection(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }

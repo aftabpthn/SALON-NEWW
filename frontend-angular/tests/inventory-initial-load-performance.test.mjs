@@ -19,7 +19,7 @@ test('inventory route loaders render primary data before secondary references', 
   const reload = block(inventory, 'async reload()', 'selectTab(');
   assert.match(reload, /\['products','suppliers','orders','grn','transfers'\]\.includes\(tab\)\) await references/);
   assert.match(reload, /else await this\.loadOperationalTab/);
-  assert.match(reload, /tab === 'products'[\s\S]*this\.loadOperationalTab/);
+  assert.match(reload, /this\.defer\(\['products','suppliers','orders','grn','transfers'\]\.includes\(tab\)[\s\S]*this\.loadOperationalTab/);
   assert.match(inventory, /private defer<T>/);
 
   const cases = [
