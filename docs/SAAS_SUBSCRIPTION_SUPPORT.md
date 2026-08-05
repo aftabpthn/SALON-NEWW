@@ -28,6 +28,22 @@ A code may be restricted to named plans, given a validity window, and limited bo
 
 Coupons are created directly in `saas_subscription_coupons`; `provider_offer_ref` must be an existing Razorpay Offer (`offer_...`) created in the Razorpay dashboard. A code whose offer does not exist fails at checkout, not at preview.
 
+## Past-due grace window
+
+`past_due` made the salon read-only the moment an invoice went overdue — a card expiring on a Friday stopped Saturday's walk-in billing over an invoice nobody had failed to pay, only failed to pay yet. `saas_plans.grace_period_days` (default 7) now keeps writes open for a window after the subscription falls behind; read-only is where it still ends up, just not on day one.
+
+`saas_subscriptions.past_due_since` is maintained by the `trg_saas_subscription_track_past_due` trigger rather than by the five statements that write `status`. Re-entering `past_due` after recovering starts a fresh window; staying in it does not, so repeated updates cannot extend grace indefinitely. Leaving `past_due` clears the stamp.
+
+`ensure_write_context` compares the window against the database clock. A missing stamp closes the window rather than opening it — failing open would let a delinquent salon write forever, which is the more expensive mistake. The refusal carries `graceEnded` alongside `readOnly` so the banner can tell the two states apart.
+
+## Checkout quote
+
+`POST /saas/subscriptions/quote` returns the breakdown shown before the Razorpay redirect. The total is read back from Razorpay's plan (`GET /plans/:id`), not from `saas_plans.base_price_paise` — the two are created from the same number, but only one of them is the number that gets charged. `source` reports which was used; it falls back to the local price only before the first checkout, when no Razorpay plan exists yet.
+
+GST is **split out of** the total, never added to it: plans are priced tax-inclusive, so `split_inclusive_gst` divides a known total and the two lines always add back to exactly what the card is charged. Computing a total by adding tax to a subtotal is how a checkout ends up displaying one number and charging another.
+
+A coupon deliberately does not produce a discounted total. Razorpay applies the offer at payment and is the only thing that knows the result; the quote lists the coupon as a named line and keeps the total a real number rather than blanking it.
+
 ## What a lapsed salon can still do
 
 Lapsing gates the product, not the record. Three things survive any subscription state, decided in `middleware/auth.rs`:

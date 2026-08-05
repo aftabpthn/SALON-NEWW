@@ -102,6 +102,38 @@ pub async fn create_subscription_plan(
     })
 }
 
+/// What one billing cycle of a Razorpay plan actually costs.
+///
+/// Read back from Razorpay rather than from our own plan row. The two are
+/// created from the same number, but only one of them is the number that gets
+/// charged, and a quote built from the other is a quote that can drift.
+pub async fn fetch_subscription_plan_amount(
+    settings: &Settings,
+    provider_plan_id: &str,
+) -> Result<i64, AppError> {
+    if !provider_plan_id.starts_with("plan_") {
+        return Err(AppError::validation("invalid Razorpay plan reference"));
+    }
+    let payload = request_json(
+        settings,
+        Method::GET,
+        &format!("/plans/{provider_plan_id}"),
+        None,
+    )
+    .await?;
+    payload
+        .get("item")
+        .and_then(|item| item.get("amount"))
+        .and_then(Value::as_i64)
+        .filter(|amount| *amount > 0)
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "PAYMENT_PROVIDER_UNAVAILABLE",
+                "Razorpay plan amount is unavailable",
+            )
+        })
+}
+
 /// Opens a Razorpay subscription, optionally under an Offer.
 ///
 /// `offer_ref` is the whole of our coupon support. The discount is applied by

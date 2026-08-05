@@ -251,6 +251,14 @@ pub struct CouponPreviewInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CheckoutQuoteInput {
+    pub plan_id: String,
+    #[serde(default)]
+    pub coupon_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubscriptionActionInput {
     pub action: String,
     #[serde(default)]
@@ -943,6 +951,97 @@ fn coupon_is_usable(
         return false;
     }
     tenant_redemptions < i64::from(coupon.max_redemptions_per_tenant)
+}
+
+/// GST on SaaS in India. Plans are priced tax-inclusive, so this splits a
+/// known total rather than being added to one.
+const GST_RATE_BPS: i64 = 1_800;
+
+/// Splits a tax-inclusive total into the amount and the GST inside it.
+///
+/// The total is the input, never the output. That is the whole point: the
+/// figure comes from the provider that will charge it, and this only says how
+/// much of it is tax. Computing a total by adding tax to a subtotal is how a
+/// checkout ends up showing one number while the card is charged another.
+///
+/// Tax is rounded to the paisa and the amount takes the remainder, so the two
+/// always add back to exactly the total.
+fn split_inclusive_gst(total_paise: i64) -> (i64, i64) {
+    if total_paise <= 0 {
+        return (0, 0);
+    }
+    let denominator = 10_000 + GST_RATE_BPS;
+    // Rounded half-up on the paisa.
+    let tax_paise = (total_paise * GST_RATE_BPS + denominator / 2) / denominator;
+    (total_paise - tax_paise, tax_paise)
+}
+
+/// What the salon will be charged, before it is sent to the provider to pay.
+///
+/// Every figure here is derived from the amount Razorpay reports for the plan,
+/// so the screen and the card cannot disagree. Nothing is computed from the
+/// local plan row unless Razorpay has no plan yet — which only happens before
+/// the first checkout, and is reported in `source` rather than hidden.
+///
+/// A coupon deliberately does not produce a discounted total. Razorpay applies
+/// the offer at payment and is the only thing that knows the result; inventing
+/// one here would reintroduce exactly the mismatch this endpoint exists to
+/// prevent. The coupon is returned as a named line instead, and the total
+/// stays a real number rather than going blank.
+pub async fn checkout_quote(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    payload: CheckoutQuoteInput,
+) -> Result<Value, AppError> {
+    let plan = saas_repository::provider_plan_context(db, payload.plan_id.trim())
+        .await
+        .map_err(|_| AppError::internal("failed to load SaaS plan"))?
+        .ok_or_else(|| AppError::not_found("active SaaS plan was not found"))?;
+    let coupon = resolve_checkout_coupon(
+        db,
+        tenant_id,
+        &plan.id,
+        payload.coupon_code.as_deref().unwrap_or_default(),
+    )
+    .await?;
+
+    let provider_plan_ref = saas_repository::provider_plan_ref(db, &plan.id, plan.version)
+        .await
+        .map_err(|_| AppError::internal("failed to load Razorpay plan mapping"))?;
+    let (total_paise, source) = match provider_plan_ref.as_deref() {
+        Some(reference) => (
+            razorpay_payment_service::fetch_subscription_plan_amount(settings, reference).await?,
+            "razorpay_plan",
+        ),
+        // No Razorpay plan exists until the first checkout creates one. The
+        // local price is what that plan will be built from, so it is the right
+        // number — but it is named differently because nothing has confirmed it.
+        None => (plan.base_price_paise, "saas_plan"),
+    };
+    let (amount_paise, tax_paise) = split_inclusive_gst(total_paise);
+
+    Ok(json!({
+        "planId": plan.id,
+        "planName": plan.name,
+        "billingInterval": plan.billing_interval,
+        "currency": "INR",
+        "amountPaise": amount_paise,
+        "taxPaise": tax_paise,
+        "taxRateBps": GST_RATE_BPS,
+        "taxInclusive": true,
+        "totalPaise": total_paise,
+        "source": source,
+        "coupon": coupon.as_ref().map(|coupon| json!({
+            "code": coupon.code,
+            "description": coupon.description,
+            "discountHintBps": coupon.discount_hint_bps,
+            "discountHintPaise": coupon.discount_hint_paise,
+            // Said plainly so the screen does not print a discounted total of
+            // its own invention.
+            "appliedBy": "razorpay_offer"
+        })),
+    }))
 }
 
 /// Checks a code without spending it, so the checkout screen can confirm a
@@ -2387,9 +2486,9 @@ async fn tenant_audit(
 #[cfg(test)]
 mod tests {
     use super::{
-        add_sla_minutes, coupon_is_usable, decode_ticket_attachments, extract_email, usage_charge,
-        BillingContext, TicketAttachmentInput, MANAGER_PERMISSION_CODES, STAFF_PERMISSION_CODES,
-        TENANT_PERMISSION_CATALOG,
+        add_sla_minutes, coupon_is_usable, decode_ticket_attachments, extract_email,
+        split_inclusive_gst, usage_charge, BillingContext, TicketAttachmentInput, GST_RATE_BPS,
+        MANAGER_PERMISSION_CODES, STAFF_PERMISSION_CODES, TENANT_PERMISSION_CATALOG,
     };
     use crate::repositories::saas_repository::SubscriptionCoupon;
     use chrono::{TimeZone, Utc};
@@ -2406,6 +2505,38 @@ mod tests {
             max_redemptions: None,
             max_redemptions_per_tenant: 1,
         }
+    }
+
+    #[test]
+    fn the_gst_split_always_adds_back_to_the_charged_total() {
+        // The property that matters: the quote can never show a breakdown that
+        // sums to something other than what the card is charged.
+        for total in [
+            1, 99, 100, 12_345, 220_000, 400_000, 550_000, 1_980_000, 99_999_999,
+        ] {
+            let (amount, tax) = split_inclusive_gst(total);
+            assert_eq!(amount + tax, total, "breakdown must reconstruct {total}");
+            assert!(amount >= 0 && tax >= 0);
+        }
+    }
+
+    #[test]
+    fn gst_is_taken_out_of_the_total_not_added_to_it() {
+        // ₹2,200 inclusive of 18% is ₹1,864.41 + ₹335.59, not ₹2,200 + ₹396.
+        let (amount, tax) = split_inclusive_gst(220_000);
+        assert_eq!(tax, 33_559);
+        assert_eq!(amount, 186_441);
+        // Adding the rate back onto the exclusive amount returns the total,
+        // which is what makes the breakdown a real invoice line.
+        assert_eq!(amount + amount * GST_RATE_BPS / 10_000, 220_000);
+    }
+
+    #[test]
+    fn a_zero_or_absent_price_splits_to_nothing() {
+        assert_eq!(split_inclusive_gst(0), (0, 0));
+        // A negative total is not reachable through the plan checks, but the
+        // split must not invent tax if one ever arrives.
+        assert_eq!(split_inclusive_gst(-1), (0, 0));
     }
 
     #[test]

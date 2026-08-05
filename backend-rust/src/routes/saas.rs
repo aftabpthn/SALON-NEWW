@@ -32,6 +32,7 @@ pub fn router() -> Router<AppState> {
             "/saas/subscriptions/checkout",
             post(create_razorpay_checkout),
         )
+        .route("/saas/subscriptions/quote", post(checkout_quote))
         .route(
             "/saas/subscriptions/coupon-preview",
             post(preview_checkout_coupon),
@@ -178,6 +179,17 @@ async fn create_razorpay_checkout(
         .await?,
     )))
 }
+async fn checkout_quote(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<saas_service::CheckoutQuoteInput>,
+) -> ApiResult<Value> {
+    let (tenant, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        saas_service::checkout_quote(&state.db, &state.settings, &tenant, payload).await?,
+    )))
+}
+
 async fn preview_checkout_coupon(
     State(state): State<AppState>,
     headers: HeaderMap,

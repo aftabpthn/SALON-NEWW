@@ -25,6 +25,8 @@ type TicketDetail = { ticket: Ticket; messages: Message[]; events: Array<{ id: s
 type TenantContext = { subscription?: Subscription; usage?: Usage; invoices: Invoice[]; tickets: Ticket[]; plans: Plan[] };
 /** A coupon the API confirmed. The discount fields are labels — Razorpay charges the amount. */
 type AppliedCoupon = { code: string; description: string; discountHintBps?: number | null; discountHintPaise?: number | null };
+/** The server's breakdown of what will be charged. Every figure comes from the API; none is computed here. */
+type CheckoutQuote = { planName: string; billingInterval: string; amountPaise: number; taxPaise: number; taxRateBps: number; taxInclusive: boolean; totalPaise: number; source: string; coupon?: AppliedCoupon | null };
 type TenantAdmin = { id: string; fullName: string; loginId: string; email: string; active: boolean; mustChangePassword: boolean; branchCount: number; createdAt: string };
 type TenantControl = {
   tenant: { id: string; name: string; status: string; businessType: string; gracePeriodEndsAt?: string; lifecycleReason: string; lifecycleVersion: number };
@@ -66,6 +68,7 @@ export class SaasAdminPageComponent implements OnInit {
   readonly billingIntervals = ['monthly', 'annual'] as const;
   checkoutInterval: 'monthly' | 'annual' = 'monthly';
   couponCode = ''; couponError = ''; appliedCoupon?: AppliedCoupon;
+  quote?: CheckoutQuote; quoteError = ''; quoteLoading = false;
   ticketDraft: { subject: string; category: string; severity: string; priority: string; message: string; attachments: DraftAttachment[] } = this.emptyTicket();
   onboardingDraft = this.emptyOnboarding();
   tenantAdminDraft = { fullName: '', loginId: '', email: '', initialPassword: '' };
@@ -191,22 +194,45 @@ export class SaasAdminPageComponent implements OnInit {
     this.checkoutInterval=interval;
     // The chosen plan and any applied coupon belong to the old interval; a
     // coupon may be restricted to plans that are no longer on screen.
-    this.checkoutPlanId=''; this.removeCoupon();
+    this.checkoutPlanId=''; this.removeCoupon(); this.quote=undefined; this.quoteError='';
   }
   /** A typed-over code is no longer the one the API confirmed. */
   clearCoupon() { if(this.appliedCoupon){this.appliedCoupon=undefined;} this.couponError=''; }
-  removeCoupon() { this.appliedCoupon=undefined; this.couponCode=''; this.couponError=''; }
+  removeCoupon() { this.appliedCoupon=undefined; this.couponCode=''; this.couponError=''; void this.loadQuote(); }
   async applyCoupon() {
     const code=this.couponCode.trim();
     if(!code||!this.checkoutPlanId)return;
     this.couponError='';
     try {
       this.appliedCoupon=await this.post<AppliedCoupon>('/saas/subscriptions/coupon-preview',{planId:this.checkoutPlanId,couponCode:code});
+      await this.loadQuote();
     } catch(error) {
       this.appliedCoupon=undefined;
       this.couponError=this.errorMessage(error,'Coupon code is not valid');
     }
   }
+  /**
+   * Asks the server what this plan costs.
+   *
+   * Nothing on this screen derives a price. The amount, the GST inside it and
+   * the total all arrive computed, from the figure Razorpay reports for the
+   * plan — so what is shown here and what the card is charged come from one
+   * source. A failure blanks the quote and says so rather than falling back to
+   * the plan list's price, because a stale figure next to a Pay button is worse
+   * than no figure.
+   */
+  async loadQuote() {
+    if(!this.checkoutPlanId){this.quote=undefined;this.quoteError='';return;}
+    this.quoteLoading=true; this.quoteError='';
+    try {
+      this.quote=await this.post<CheckoutQuote>('/saas/subscriptions/quote',{planId:this.checkoutPlanId,...(this.appliedCoupon?{couponCode:this.appliedCoupon.code}:{})});
+    } catch(error) {
+      this.quote=undefined;
+      this.quoteError=this.errorMessage(error,'Price could not be confirmed. Try again before paying.');
+    } finally { this.quoteLoading=false; }
+  }
+  onCheckoutPlanChange() { this.removeCoupon(); void this.loadQuote(); }
+  taxPercentLabel(bps:number) { return `${bps/100}%`; }
   /** Label only. Never used to compute a payable amount — Razorpay does that. */
   get couponDiscountLabel() {
     const coupon=this.appliedCoupon;

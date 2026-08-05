@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde_json::json;
 use sqlx::{PgPool, Postgres, Transaction};
 
@@ -108,11 +109,27 @@ fn ensure_login_context(context: &EntitlementContext) -> Result<(), AppError> {
 
 fn ensure_write_context(context: &EntitlementContext) -> Result<(), AppError> {
     ensure_login_context(context)?;
-    if context.subscription_status.as_deref() == Some("past_due") {
-        return Err(AppError::forbidden("past-due subscription is read-only")
-            .with_details(json!({"subscriptionStatus": "past_due", "readOnly": true})));
+    if context.subscription_status.as_deref() != Some("past_due") {
+        return Ok(());
     }
-    Ok(())
+    // Falling behind does not stop the salon working; staying behind does. The
+    // window comes from the plan and is measured by the database clock, so a
+    // client with a wrong system time cannot extend or shorten it.
+    //
+    // A missing end date means the stamp did not survive whatever wrote the
+    // status. Treating that as "grace forever" would let a delinquent salon
+    // keep writing indefinitely, so it closes the window instead.
+    let grace_active = context
+        .past_due_grace_ends_at
+        .is_some_and(|ends_at| Utc::now() < ends_at);
+    if grace_active {
+        return Ok(());
+    }
+    Err(
+        AppError::forbidden("past-due subscription is read-only").with_details(
+            json!({"subscriptionStatus": "past_due", "readOnly": true, "graceEnded": true}),
+        ),
+    )
 }
 
 fn ensure_feature_context(
@@ -255,6 +272,7 @@ mod tests {
             feature_overrides_json: serde_json::json!({}),
             included_branches: Some(1),
             overage_branch_paise: Some(0),
+            past_due_grace_ends_at: None,
             active_branch_count: 1,
         };
         assert!(branch_creation_decision(&context, 1).is_err());
@@ -284,6 +302,7 @@ mod tests {
             feature_overrides_json: serde_json::json!({}),
             included_branches: Some(1),
             overage_branch_paise: Some(0),
+            past_due_grace_ends_at: None,
             active_branch_count: 1,
         };
         assert!(super::ensure_login_context(&context).is_ok());
@@ -300,5 +319,66 @@ mod tests {
         context.features_json = None;
         context.feature_overrides_json = serde_json::json!({});
         assert!(super::ensure_feature_context(&context, "staff.payroll", true).is_ok());
+    }
+
+    fn past_due_context(
+        grace_ends_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> EntitlementContext {
+        EntitlementContext {
+            tenant_access_allowed: true,
+            subscription_status: Some("past_due".into()),
+            features_json: Some(serde_json::json!(["staff.basic"])),
+            feature_overrides_json: serde_json::json!({}),
+            included_branches: Some(1),
+            overage_branch_paise: Some(0),
+            past_due_grace_ends_at: grace_ends_at,
+            active_branch_count: 1,
+        }
+    }
+
+    #[test]
+    fn a_salon_keeps_working_while_the_grace_window_is_open() {
+        // The case this exists for: a card expires on Friday and the salon
+        // still bills walk-ins on Saturday.
+        let context = past_due_context(Some(chrono::Utc::now() + chrono::Duration::days(6)));
+        assert!(super::ensure_login_context(&context).is_ok());
+        assert!(super::ensure_write_context(&context).is_ok());
+        assert!(super::ensure_feature_context(&context, "staff.basic", true).is_ok());
+    }
+
+    #[test]
+    fn writes_stop_once_the_grace_window_closes() {
+        let context = past_due_context(Some(chrono::Utc::now() - chrono::Duration::minutes(1)));
+        // Reading never stopped, and does not stop now.
+        assert!(super::ensure_login_context(&context).is_ok());
+        let error = super::ensure_write_context(&context).expect_err("writes must be refused");
+        // The banner branches on these, so the shape is part of the contract.
+        let details = error.details().cloned().unwrap_or_default();
+        assert_eq!(details["subscriptionStatus"], serde_json::json!("past_due"));
+        assert_eq!(details["readOnly"], serde_json::json!(true));
+        assert_eq!(details["graceEnded"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn a_missing_grace_stamp_closes_the_window_rather_than_opening_it() {
+        // The stamp is trigger-maintained, so its absence means something went
+        // wrong upstream. Failing open here would let a delinquent salon write
+        // forever, which is the more expensive of the two mistakes.
+        assert!(super::ensure_write_context(&past_due_context(None)).is_err());
+    }
+
+    #[test]
+    fn the_grace_window_only_applies_to_past_due() {
+        // An open window must not rescue a status that was never about payment
+        // timing. A cancelled salon stays out whatever the column says.
+        let mut context = past_due_context(Some(chrono::Utc::now() + chrono::Duration::days(6)));
+        context.subscription_status = Some("cancelled".into());
+        assert!(super::ensure_write_context(&context).is_err());
+        context.subscription_status = Some("paused".into());
+        assert!(super::ensure_write_context(&context).is_err());
+        // And suspension is not a payment decision at all.
+        context.subscription_status = Some("past_due".into());
+        context.tenant_access_allowed = false;
+        assert!(super::ensure_write_context(&context).is_err());
     }
 }

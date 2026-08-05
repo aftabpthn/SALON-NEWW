@@ -260,6 +260,8 @@ pub struct EntitlementContext {
     pub feature_overrides_json: Value,
     pub included_branches: Option<i32>,
     pub overage_branch_paise: Option<i64>,
+    /// When a past-due salon loses write access. `None` unless past due.
+    pub past_due_grace_ends_at: Option<DateTime<Utc>>,
     pub active_branch_count: i64,
 }
 
@@ -272,11 +274,18 @@ const ENTITLEMENT_CONTEXT_SQL: &str = r#"
             WHERE feature.tenant_id=tenant.id AND (feature.expires_at IS NULL OR feature.expires_at>NOW())),'{}'::JSONB) AS feature_overrides_json,
            subscription.included_branches,
            subscription.overage_branch_paise,
+           -- When the salon stops being able to work, not when it fell behind.
+           -- NULL unless past due. Computed here so the window is decided by
+           -- the database clock rather than whatever the caller thinks the
+           -- time is.
+           subscription.past_due_since
+             + MAKE_INTERVAL(days => subscription.grace_period_days) AS past_due_grace_ends_at,
            (SELECT COUNT(*) FROM branches branch
              WHERE branch.tenant_id=tenant.id AND branch.active=TRUE) AS active_branch_count
       FROM tenants tenant
       LEFT JOIN LATERAL (
-        SELECT current.status,plan.features_json,plan.included_branches,plan.overage_branch_paise
+        SELECT current.status,current.past_due_since,plan.features_json,
+               plan.included_branches,plan.overage_branch_paise,plan.grace_period_days
           FROM saas_subscriptions current
           JOIN saas_plans plan ON plan.id=current.plan_id
          WHERE current.tenant_id=tenant.id::text

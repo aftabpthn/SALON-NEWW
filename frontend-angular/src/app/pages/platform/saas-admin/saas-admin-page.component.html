@@ -69,7 +69,7 @@
           }
         </div>
       }
-      <div class="section-action"><select [(ngModel)]="checkoutPlanId" aria-label="Select subscription plan"><option value="">Select plan</option>@for (plan of checkoutPlans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }} · {{ money(plan.basePricePaise) }}</option>}</select><button class="primary-button" type="button" [disabled]="busy || !checkoutPlanId" (click)="startCheckout()">Pay with Razorpay</button></div>
+      <div class="section-action"><select [(ngModel)]="checkoutPlanId" (ngModelChange)="onCheckoutPlanChange()" aria-label="Select subscription plan"><option value="">Select plan</option>@for (plan of checkoutPlans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }} · {{ money(plan.basePricePaise) }}</option>}</select><button class="primary-button" type="button" [disabled]="busy || quoteLoading || !checkoutPlanId" (click)="startCheckout()">Pay with Razorpay</button></div>
       <div class="section-action coupon-row">
         <input type="text" [(ngModel)]="couponCode" placeholder="Coupon code" aria-label="Coupon code" autocomplete="off" [disabled]="!!appliedCoupon" (ngModelChange)="clearCoupon()" />
         @if (!appliedCoupon) {
@@ -83,6 +83,19 @@
         <p class="coupon-applied"><i class="bi bi-tag" aria-hidden="true"></i> <strong>{{ appliedCoupon.code }}</strong> applied{{ appliedCoupon.description ? ' · ' + appliedCoupon.description : '' }}{{ couponDiscountLabel ? ' · ' + couponDiscountLabel : '' }}. Razorpay shows the final amount before you pay.</p>
       }
       @if (couponError) { <p class="coupon-error" role="alert">{{ couponError }}</p> }
+      @if (quoteLoading) { <p class="quote-status">Confirming price…</p> }
+      @if (quoteError) { <p class="coupon-error" role="alert">{{ quoteError }}</p> }
+      @if (quote && !quoteLoading) {
+        <dl class="checkout-quote">
+          <div><dt>{{ quote.planName }} · {{ label(quote.billingInterval) }}</dt><dd>{{ money(quote.amountPaise) }}</dd></div>
+          <div><dt>GST {{ taxPercentLabel(quote.taxRateBps) }} (included)</dt><dd>{{ money(quote.taxPaise) }}</dd></div>
+          @if (quote.coupon) {
+            <div class="quote-coupon"><dt>Coupon {{ quote.coupon.code }}</dt><dd>Applied by Razorpay at payment</dd></div>
+          }
+          <div class="quote-total"><dt>Total per cycle</dt><dd>{{ money(quote.totalPaise) }}</dd></div>
+        </dl>
+        <p class="quote-note">@if (quote.coupon) { Razorpay confirms the discounted amount before you pay. } @else { This is the amount Razorpay will charge. }</p>
+      }
     }
     @if (tenantSubscription) {
       <dl class="detail-grid">
