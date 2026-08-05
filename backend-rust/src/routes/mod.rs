@@ -243,8 +243,14 @@ fn cors_layer(state: &AppState) -> CorsLayer {
             HeaderName::from_static("x-public-booking-token"),
             HeaderName::from_static("x-api-key"),
             HeaderName::from_static("x-device-id"),
+            HeaderName::from_static("x-device-time"),
             HeaderName::from_static("x-request-id"),
             HeaderName::from_static("x-csrf-token"),
+            HeaderName::from_static("x-staff-app"),
+            HeaderName::from_static("x-staff-app-version"),
+            HeaderName::from_static("x-staff-latitude"),
+            HeaderName::from_static("x-staff-longitude"),
+            HeaderName::from_static("x-staff-accuracy"),
             HeaderName::from_static("idempotency-key"),
         ])
         .allow_credentials(true)

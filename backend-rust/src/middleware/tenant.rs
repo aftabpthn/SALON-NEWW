@@ -274,11 +274,6 @@ pub async fn require_route_role(
     let audit_idempotency_key = header_text(req.headers(), "idempotency-key");
     let geofence_path = normalize_route_path(req.uri().path()).to_owned();
     let geofence_method = req.method().clone();
-    let is_staff_app = req
-        .headers()
-        .get("x-staff-app")
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value == "1");
     let location = match (
         header_f64(&req, "x-staff-latitude"),
         header_f64(&req, "x-staff-longitude"),
@@ -293,7 +288,6 @@ pub async fn require_route_role(
     let geofence_claims = req.extensions().get::<AuthClaims>().cloned();
     let geofence_result = enforce_staff_app_geofence(
         &state,
-        is_staff_app,
         location,
         geofence_claims.as_ref(),
         &geofence_path,
@@ -603,16 +597,18 @@ fn valid_idempotency_key(value: &str) -> bool {
 
 async fn enforce_staff_app_geofence(
     state: &AppState,
-    is_staff_app: bool,
     location: Option<(f64, f64)>,
     claims: Option<&AuthClaims>,
     path: &str,
     method: &Method,
 ) -> Result<(), AppError> {
-    if !is_staff_app || staff_geofence_bypass(path) {
+    if staff_geofence_bypass(path) {
         return Ok(());
     }
     let claims = claims.ok_or_else(|| AppError::unauthenticated("missing auth claims"))?;
+    if !staff_geofence_applies(&claims.role, &claims.permissions) {
+        return Ok(());
+    }
     let branch_id = claims
         .branch_id
         .as_deref()
@@ -655,6 +651,17 @@ async fn enforce_staff_app_geofence(
             "Staff App access is blocked outside the configured geofence",
         ))
     }
+}
+
+fn staff_geofence_applies(role: &str, permissions: &[String]) -> bool {
+    role.eq_ignore_ascii_case("staff")
+        || permissions.iter().any(|permission| {
+            permission.starts_with("staff.app.")
+                || matches!(
+                    permission.as_str(),
+                    "staff.self_manage" | "staff_self.write"
+                )
+        })
 }
 
 fn staff_geofence_bypass(path: &str) -> bool {
@@ -1834,8 +1841,8 @@ mod tests {
     use super::{
         body_idempotency_key, distance_meters, inventory_stock_action, normalize_route_path,
         requires_platform_access, role_matches_tenant_context, role_or_permissions_allowed,
-        route_access, staff_geofence_bypass, valid_idempotency_key, MANAGEMENT_ROLES,
-        TENANT_ADMIN_ROLES, TENANT_ROLES,
+        route_access, staff_geofence_applies, staff_geofence_bypass, valid_idempotency_key,
+        MANAGEMENT_ROLES, TENANT_ADMIN_ROLES, TENANT_ROLES,
     };
     use crate::services::auth_service::AuthClaims;
     use axum::http::Method;
@@ -1871,6 +1878,16 @@ mod tests {
     fn phase1_staff_geofence_distance_and_recovery_paths_are_safe() {
         assert!(distance_meters(28.6139, 77.2090, 28.6139, 77.2090) < 0.01);
         assert!(distance_meters(28.6139, 77.2090, 28.6148, 77.2090) > 90.0);
+        assert!(staff_geofence_applies("staff", &[]));
+        assert!(staff_geofence_applies(
+            "Custom Stylist",
+            &["staff.app.dashboard.read".into()]
+        ));
+        assert!(staff_geofence_applies(
+            "Custom Stylist",
+            &["staff.self_manage".into()]
+        ));
+        assert!(!staff_geofence_applies("manager", &[]));
         assert!(staff_geofence_bypass("/auth/logout"));
         assert!(staff_geofence_bypass(
             "/staff/self/security/sessions/1/revoke"
