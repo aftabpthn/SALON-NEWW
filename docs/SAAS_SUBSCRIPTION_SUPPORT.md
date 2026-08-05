@@ -28,6 +28,18 @@ A code may be restricted to named plans, given a validity window, and limited bo
 
 Coupons are created directly in `saas_subscription_coupons`; `provider_offer_ref` must be an existing Razorpay Offer (`offer_...`) created in the Razorpay dashboard. A code whose offer does not exist fails at checkout, not at preview.
 
+## What a lapsed salon can still do
+
+Lapsing gates the product, not the record. Three things survive any subscription state, decided in `middleware/auth.rs`:
+
+- **Signing in.** `ensure_can_authenticate` replaces the old login check, which refused a cancelled salon outright — including the owner, who was therefore locked out of the only screen where they could renew. Renewal previously required contacting the platform.
+- **Taking your own data out.** `is_data_export` allows reads whose route ends in `/export`, plus the `/reports/exports` family. Queuing a report export is the one write permitted, because report exports are build-then-download and a read-only rule would make the whole family unreachable; the row it writes is a job, not salon data. `/security/client-exports` and `/security/pii-exports` are excluded — they administer exports rather than perform them, and the PII flow carries an approval step.
+- **Paying what you owe.** `is_billing_self_service` keeps `/saas/context` and `/saas/subscriptions/...` open, writes included, because paying is a write. Salon administration under `/saas` (onboarding, tenant admins) stays behind the paywall, and `/platform/saas` is never reachable this way.
+
+Platform suspension is a separate decision and still blocks everything: `tenant_access_allowed` covers abuse and fraud holds, which are not softened by any of the above.
+
+Client exports remain governed by `client_export_events` — daily caps, watermarking and audit apply exactly as they do for a paying salon.
+
 ## Read-only state in the UI
 
 `entitlement_service` turns a past-due subscription read-only for every mutating request, in `middleware/auth.rs`. The Angular HTTP interceptor reads the `subscriptionStatus` detail on a 403 and records it, and `app-subscription-banner` explains the state and links owners and admins to `/saas`. The block clears when a write succeeds — payment completes on the provider's site, so the app never observes it directly.

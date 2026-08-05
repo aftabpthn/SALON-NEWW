@@ -27,6 +27,43 @@ pub async fn ensure_can_write(db: &PgPool, tenant_id: &str) -> Result<(), AppErr
     ensure_write_context(&load_context(db, tenant_id).await?)
 }
 
+/// Whether the salon is barred outright, ignoring what it owes.
+///
+/// Lapsing gates the product, not the record. A salon behind on payment still
+/// has to be able to sign in, see what it owes, pay it, and — if it is leaving
+/// — take its own client book, invoices and payroll records with it. Refusing
+/// all of that is not a paywall, it is holding the data hostage, and it is the
+/// kind of thing salons tell other salons about.
+///
+/// Platform suspension is a different decision and still applies:
+/// `tenant_access_allowed` covers abuse and fraud holds, which are not softened
+/// by having paid.
+async fn ensure_not_suspended(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
+    if tenant_id.eq_ignore_ascii_case("platform") {
+        return Ok(());
+    }
+    if !load_context(db, tenant_id).await?.tenant_access_allowed {
+        return Err(AppError::forbidden("salon access is suspended"));
+    }
+    Ok(())
+}
+
+/// Whether a login may be issued at all.
+///
+/// Deliberately weaker than [`ensure_can_login`], which decides whether a
+/// request may reach the product. A lapsed salon is let through the door and
+/// stopped at the paywall inside, because the alternative locks the owner out
+/// of the one screen where they could pay — the previous behaviour, which left
+/// renewal reachable only by contacting the platform.
+pub async fn ensure_can_authenticate(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
+    ensure_not_suspended(db, tenant_id).await
+}
+
+/// Whether a salon may take its own data out, whatever its subscription says.
+pub async fn ensure_can_export(db: &PgPool, tenant_id: &str) -> Result<(), AppError> {
+    ensure_not_suspended(db, tenant_id).await
+}
+
 pub async fn ensure_feature(
     db: &PgPool,
     tenant_id: &str,

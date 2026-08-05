@@ -198,7 +198,12 @@ pub async fn require_auth(
         }
     }
 
-    if request_mutates_data(req.method()) {
+    // Paying what you owe, and leaving with your own records, both survive a
+    // lapsed subscription; using the product does not. Checked first because a
+    // cancelled subscription fails both of the checks below.
+    if is_data_export(req.method(), req.uri().path()) || is_billing_self_service(req.uri().path()) {
+        entitlement_service::ensure_can_export(&state.db, &claims.tenant_id).await?;
+    } else if request_mutates_data(req.method()) {
         entitlement_service::ensure_can_write(&state.db, &claims.tenant_id).await?;
     } else {
         entitlement_service::ensure_can_login(&state.db, &claims.tenant_id).await?;
@@ -257,6 +262,65 @@ fn request_mutates_data(method: &axum::http::Method) -> bool {
         *method,
         axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
     )
+}
+
+/// Whether this request is a salon taking its own records out.
+///
+/// Matched narrowly on purpose, because everything this returns `true` for is
+/// reachable with a cancelled subscription. Two shapes qualify: a read whose
+/// route ends in `/export`, and the report-export endpoints under
+/// `/reports/exports`.
+///
+/// Queuing a report export is the single write allowed. Report exports are
+/// build-then-download rather than streamed, so a read-only rule would leave
+/// that whole family unreachable — and the job row it writes is not salon data.
+///
+/// `/security/client-exports` and `/security/pii-exports` are deliberately not
+/// here. Those administer exports rather than perform them, and the PII flow
+/// carries an approval step that should not run for a lapsed salon.
+fn is_data_export(method: &axum::http::Method, path: &str) -> bool {
+    let path = normalize_export_path(path);
+    match *method {
+        axum::http::Method::GET | axum::http::Method::HEAD => {
+            path.ends_with("/export") || path_is_report_export(path)
+        }
+        axum::http::Method::POST => path == "/reports/exports",
+        _ => false,
+    }
+}
+
+/// Whether this request is the salon reading or settling its own subscription.
+///
+/// A paywall a lapsed salon cannot reach is just a locked door. These are the
+/// routes that let an owner see what is owed and pay it, so they stay open on
+/// any subscription state — including writes, because paying is a write.
+///
+/// Scoped to the tenant's own subscription. Salon administration under `/saas`
+/// — onboarding, tenant admins — is product, and stays behind the paywall with
+/// the rest of it. `/platform/saas` is the platform console and is never here.
+fn is_billing_self_service(path: &str) -> bool {
+    let path = normalize_export_path(path);
+    path == "/saas/context"
+        || path == "/saas/subscriptions"
+        || path.starts_with("/saas/subscriptions/")
+}
+
+fn normalize_export_path(path: &str) -> &str {
+    let path = path.strip_suffix('/').unwrap_or(path);
+    if let Some(rest) = path.strip_prefix("/api/v1") {
+        return rest;
+    }
+    if let Some(rest) = path.strip_prefix("/api") {
+        return rest;
+    }
+    path
+}
+
+/// `/reports/exports` and everything under it, without also matching a route
+/// that merely starts with those characters.
+fn path_is_report_export(path: &str) -> bool {
+    const PREFIX: &str = "/reports/exports";
+    path == PREFIX || (path.starts_with(PREFIX) && path.as_bytes().get(PREFIX.len()) == Some(&b'/'))
 }
 
 fn auth_cache_key(
@@ -647,8 +711,9 @@ mod tests {
     use axum::http::{HeaderMap, HeaderValue};
 
     use super::{
-        mask_value, masked_export_blocked, mfa_enrollment_required, password_change_required,
-        request_mutates_data, scope_header_mismatch, should_use_auth_cache,
+        is_billing_self_service, is_data_export, mask_value, masked_export_blocked,
+        mfa_enrollment_required, password_change_required, request_mutates_data,
+        scope_header_mismatch, should_use_auth_cache,
     };
     use crate::services::auth_service::AuthClaims;
 
@@ -691,6 +756,112 @@ mod tests {
         assert!(!request_mutates_data(&axum::http::Method::HEAD));
         assert!(request_mutates_data(&axum::http::Method::POST));
         assert!(request_mutates_data(&axum::http::Method::PATCH));
+    }
+
+    #[test]
+    fn a_lapsed_salon_can_still_take_its_own_records_out() {
+        let get = axum::http::Method::GET;
+        for path in [
+            "/api/v1/clients/bulk/export",
+            "/api/v1/clients/client-1/report/export",
+            "/api/v1/pos/z-reports/2026-08-05/export",
+            "/api/v1/staff-payroll/history/export",
+            "/api/v1/staff-payroll/runs/run-1/export",
+            "/api/v1/staff/payroll-compliance/export",
+            "/api/v1/finance/outgoing-funds/export",
+            "/api/v1/reports/exports/export-1",
+            "/api/v1/reports/exports/export-1/download",
+        ] {
+            assert!(is_data_export(&get, path), "{path} should be exportable");
+        }
+        // Building a report export is the one write that qualifies: without it
+        // the whole build-then-download family would be unreachable.
+        assert!(is_data_export(
+            &axum::http::Method::POST,
+            "/api/v1/reports/exports"
+        ));
+    }
+
+    #[test]
+    fn the_export_exemption_does_not_reach_ordinary_routes() {
+        let get = axum::http::Method::GET;
+        for path in [
+            "/api/v1/clients",
+            "/api/v1/reports/dashboard",
+            // Administers exports rather than performing one.
+            "/api/v1/security/client-exports",
+            "/api/v1/security/client-exports/usage",
+            // Carries an approval step that must not run for a lapsed salon.
+            "/api/v1/security/pii-exports/export-1/download",
+            // Must not be caught by a loose prefix match on /reports/exports.
+            "/api/v1/reports/exports-summary",
+        ] {
+            assert!(!is_data_export(&get, path), "{path} must stay gated");
+        }
+    }
+
+    #[test]
+    fn the_export_exemption_never_opens_a_write_path() {
+        // Only the report-export queue may be written to. Everything else that
+        // happens to sit under an export route stays behind the write gate, so
+        // a cancelled salon cannot edit its way back into the product.
+        for method in [
+            axum::http::Method::PATCH,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+        ] {
+            assert!(!is_data_export(&method, "/api/v1/clients/bulk/export"));
+            assert!(!is_data_export(&method, "/api/v1/reports/exports/export-1"));
+        }
+        assert!(!is_data_export(
+            &axum::http::Method::POST,
+            "/api/v1/clients/bulk/export"
+        ));
+    }
+
+    #[test]
+    fn a_lapsed_salon_can_still_reach_the_screen_where_it_pays() {
+        for path in [
+            "/api/v1/saas/context",
+            "/api/v1/saas/subscriptions/checkout",
+            "/api/v1/saas/subscriptions/coupon-preview",
+            "/api/v1/saas/subscriptions/sub-1/actions",
+            "/api/v1/saas/subscriptions/sub-1/change-plan",
+        ] {
+            assert!(
+                is_billing_self_service(path),
+                "{path} should stay reachable"
+            );
+        }
+    }
+
+    #[test]
+    fn the_billing_exemption_covers_only_the_tenants_own_subscription() {
+        for path in [
+            // Salon administration is product, not billing.
+            "/api/v1/saas/onboarding",
+            "/api/v1/saas/admins",
+            "/api/v1/saas/tickets",
+            // The platform console is never reachable this way.
+            "/api/v1/platform/saas/subscriptions",
+            "/api/v1/platform/saas/plans",
+            // Must not be caught by a loose prefix match.
+            "/api/v1/saas/subscriptions-archive",
+            "/api/v1/saas/contexts",
+        ] {
+            assert!(!is_billing_self_service(path), "{path} must stay gated");
+        }
+    }
+
+    #[test]
+    fn export_paths_match_whether_or_not_the_api_prefix_is_stripped() {
+        // Nesting strips `/api/v1` before the middleware sees the path, but the
+        // router is mounted at `/api` too and the codebase normalizes either.
+        let get = axum::http::Method::GET;
+        assert!(is_data_export(&get, "/clients/bulk/export"));
+        assert!(is_data_export(&get, "/api/clients/bulk/export"));
+        assert!(is_data_export(&get, "/api/v1/clients/bulk/export"));
+        assert!(is_data_export(&get, "/api/v1/clients/bulk/export/"));
     }
 
     #[test]

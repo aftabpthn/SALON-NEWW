@@ -87,9 +87,11 @@ export class SubscriptionBannerComponent {
   }
 
   detail(readOnly: boolean): string {
-    // Says what still works, so nobody assumes their data is gone.
+    // Both messages lead with what still works. "Read-only" and "your data is
+    // gone" are easy to confuse, and a salon that thinks it has lost its client
+    // book will say so to other salons.
     return readOnly
       ? 'Everything can still be viewed and exported. New bills, bookings and edits resume once payment clears.'
-      : 'Access is limited until the subscription is renewed.';
+      : 'Your records can still be exported, and billing stays open so you can renew. The rest of the salon resumes once payment clears.';
   }
 }
