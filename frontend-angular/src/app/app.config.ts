@@ -5,12 +5,13 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { loadingInterceptor } from './core/interceptors/loading.interceptor';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { csrfInterceptor } from './core/csrf.interceptor';
 import { environment } from '../environments/environment';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes, withPreloading(PreloadAllModules)),
-    provideHttpClient(withInterceptors([loadingInterceptor, authInterceptor])),
+    provideHttpClient(withInterceptors([loadingInterceptor, csrfInterceptor, authInterceptor])),
     provideServiceWorker('ngsw-worker.js', {
       enabled: environment.production,
       registrationStrategy: 'registerWhenStable:30000',

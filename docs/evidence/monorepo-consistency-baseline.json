@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-08-03T19:14:22.673Z",
+  "recordedAt": "2026-08-05T14:13:19.069Z",
   "note": "Known drift. New entries fail CI; this list should only ever shrink.",
   "driftedDependencies": [
     "@angular-devkit/build-angular",
@@ -22,7 +22,6 @@
   "forkedSharedModules": [
     "auth.guard.ts",
     "auth.interceptor.ts",
-    "auth.service.ts",
-    "csrf.interceptor.ts"
+    "auth.service.ts"
   ]
 }

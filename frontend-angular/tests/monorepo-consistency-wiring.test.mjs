@@ -39,7 +39,10 @@ test('app shells are not treated as forked shared code', () => {
   assert.doesNotMatch(script, /SHARED_CONCERNS = \[[^\]]*app\.routes\.ts/s);
   assert.match(script, /SHARED_CONCERNS = \[[^\]]*csrf\.interceptor\.ts/s);
   assert.ok(!baseline.forkedSharedModules.includes('app.component.ts'));
-  assert.ok(baseline.forkedSharedModules.includes('csrf.interceptor.ts'));
+  // csrf.interceptor.ts used to stand here as the example of a recorded fork.
+  // Unifying it across the three apps burned that entry off the baseline, so
+  // the assertion moved to a module that is still forked.
+  assert.ok(baseline.forkedSharedModules.includes('auth.service.ts'));
 });
 
 test('the debt has a written route out', () => {

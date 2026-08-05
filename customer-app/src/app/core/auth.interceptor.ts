@@ -87,6 +87,10 @@ async function refreshCustomerSession(requestUrl: string): Promise<CustomerSessi
 
   const response = await fetch(refreshUrlFor(requestUrl), {
     method: "POST",
+    // The refresh token travels in the body, so this call needs no cookies —
+    // and sending them would put it behind the CSRF check it cannot satisfy
+    // from outside the interceptor chain.
+    credentials: "omit",
     headers: {
       "Content-Type": "application/json"
     },
