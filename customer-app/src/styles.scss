@@ -980,8 +980,9 @@ ion-button::part(native)::after {
   }
 
   ion-tab-bar {
-    width: min(560px, calc(100% - 48px));
-    height: 76px;
+    width: min(520px, calc(100% - 32px));
+    height: 54px;
+    border-radius: 18px;
   }
 }
 
@@ -2036,7 +2037,7 @@ ion-segment-button {
   .app-container {
     width: min(calc(100% - 20px), var(--container-mobile));
     padding-top: 10px;
-    padding-bottom: calc(92px + var(--safe-bottom));
+    padding-bottom: calc(76px + var(--safe-bottom));
   }
 
   .home-page.page {

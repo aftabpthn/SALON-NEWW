@@ -132,9 +132,9 @@ import { Business } from "../../core/api.types";
       max-width: 1240px;
       gap: 28px;
       margin: 0 auto;
-      padding: 18px 16px calc(156px + env(safe-area-inset-bottom));
+      padding: 18px 16px calc(76px + env(safe-area-inset-bottom));
       overflow-x: clip;
-      scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom));
+      scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom));
     }
 
     .explore-page > *,
@@ -545,7 +545,7 @@ import { Business } from "../../core/api.types";
     .explore-state h2 { color: var(--text); font-size: 1.2rem; }
     .explore-state p { color: var(--muted); line-height: 1.5; }
     .explore-state button { min-height: 44px; margin-top: 4px; padding: 0 18px; border: 0; border-radius: 999px; color: #fff; background: var(--primary); font: inherit; font-weight: 900; }
-    ion-content::part(scroll) { scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom)); }
+    ion-content::part(scroll) { scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
     @keyframes shimmer {
       0% { background-position: 200% 0; }

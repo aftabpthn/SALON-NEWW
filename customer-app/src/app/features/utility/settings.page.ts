@@ -123,7 +123,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     </ion-content>
   `,
   styles: [`
-    .settings-page { display: grid; gap: 14px; padding-bottom: 32px; }
+    .settings-page { display: grid; gap: 14px; padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
     .settings-hero {
       display: grid;
       gap: 14px;

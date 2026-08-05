@@ -701,7 +701,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       width: min(100%, 1120px);
       min-height: 100%;
       margin: 0 auto;
-      padding: calc(76px + env(safe-area-inset-top)) 16px calc(48px + var(--safe-bottom));
+      padding: calc(76px + env(safe-area-inset-top)) 16px calc(88px + var(--safe-bottom));
       color: var(--ms-ink);
       overflow-x: clip;
     }
@@ -1052,7 +1052,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
       .ms-more-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
     }
     @media (min-width: 1024px) {
-      .ms-page { padding-top: calc(76px + env(safe-area-inset-top)); padding-bottom: 70px; }
+      .ms-page { padding-top: calc(76px + env(safe-area-inset-top)); padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
       .ms-service-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 32px; }
     }
     @keyframes ms-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }

@@ -151,22 +151,16 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </a>
       </div>
     </nav>
-    @if (!salonModeActive()) {
-      <a class="salon-mode-toggle" [routerLink]="mySalonHref()" aria-label="Enter My Salon Mode">
-        <span class="salon-mode-entry-icon" aria-hidden="true"><ion-icon name="sparkles-outline"></ion-icon></span>
-        <span class="salon-mode-toggle-copy"><strong>MY SALON</strong><small>ENTER</small></span>
-      </a>
-    }
     <ion-tabs [class.salon-mode-active]="salonModeActive()">
       @if (!salonModeActive()) {
       <ion-tab-bar slot="bottom">
-        <ion-tab-button tab="home" href="/tabs/home">
-          <ion-icon name="home-outline"></ion-icon>
-          <ion-label>Home</ion-label>
-        </ion-tab-button>
-        <ion-tab-button class="explore-tab" tab="search" href="/tabs/search">
+        <ion-tab-button tab="search" href="/tabs/search">
           <ion-icon name="compass"></ion-icon>
           <ion-label>Explore</ion-label>
+        </ion-tab-button>
+        <ion-tab-button tab="bookings" href="/tabs/bookings">
+          <ion-icon name="calendar-outline"></ion-icon>
+          <ion-label>Bookings</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="profile" href="/tabs/profile">
           <ion-icon name="person-outline"></ion-icon>
@@ -195,60 +189,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .salon-mode-hidden {
       display: none;
-    }
-
-    .salon-mode-toggle {
-      position: fixed;
-      left: 12px;
-      bottom: calc(68px + env(safe-area-inset-bottom));
-      z-index: 45;
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      min-height: 38px;
-      padding: 5px 11px 5px 6px;
-      border: 1px solid #8bc69a;
-      border-radius: 999px;
-      color: #174d2b;
-      background: rgba(226, 246, 231, 0.97);
-      box-shadow: 0 8px 20px rgba(29, 111, 57, 0.18);
-      text-decoration: none;
-      backdrop-filter: blur(14px);
-    }
-
-    .salon-mode-entry-icon {
-      width: 30px;
-      height: 30px;
-      flex: 0 0 30px;
-      display: grid;
-      place-items: center;
-      border-radius: 10px;
-      color: #fff;
-      background: #2f8f4e;
-      box-shadow: 0 5px 12px rgba(23, 77, 43, 0.2);
-    }
-
-    .salon-mode-entry-icon ion-icon {
-      font-size: 0.96rem;
-    }
-
-    .salon-mode-toggle-copy {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1px;
-      line-height: 1;
-    }
-
-    .salon-mode-toggle-copy strong {
-      font-size: 0.6rem;
-      font-weight: 950;
-    }
-
-    .salon-mode-toggle-copy small {
-      font-size: 0.48rem;
-      font-weight: 900;
-      letter-spacing: 0.1em;
     }
 
     .salon-mode-header {
@@ -324,45 +264,16 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     @media (max-width: 599px) {
-      .salon-mode-toggle {
-        position: fixed;
-        left: 8px;
-        right: auto;
-        bottom: calc(10px + env(safe-area-inset-bottom));
-        width: clamp(96px, 28vw, 116px);
-        height: 60px;
-        min-height: 60px;
-        padding: 5px 6px;
-        justify-content: center;
-        gap: 5px;
-        border-radius: 20px;
-        box-sizing: border-box;
-      }
-
-      .salon-mode-entry-icon {
-        width: 28px;
-        height: 28px;
-        flex-basis: 28px;
-      }
-
-      .salon-mode-toggle-copy strong {
-        font-size: 0.53rem;
-      }
-
-      .salon-mode-toggle-copy small {
-        font-size: 0.43rem;
-      }
-
       ion-tab-bar {
         position: fixed;
-        left: calc(18px + clamp(96px, 28vw, 116px));
+        left: 8px;
         right: 8px;
-        bottom: calc(10px + env(safe-area-inset-bottom));
+        bottom: calc(8px + env(safe-area-inset-bottom));
         width: auto;
-        height: 60px;
-        min-height: 60px;
+        height: calc(52px + env(safe-area-inset-bottom));
+        min-height: calc(52px + env(safe-area-inset-bottom));
         margin: 0;
-        border-radius: 20px;
+        border-radius: 16px;
         box-sizing: border-box;
         overflow: hidden;
       }
@@ -402,10 +313,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     ion-tab-bar {
       --background: var(--glass);
-      --border: 1px solid rgba(99, 102, 241, 0.18);
-      min-height: calc(62px + env(safe-area-inset-bottom));
-      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-      box-shadow: 0 -12px 32px rgba(28, 28, 28, 0.12);
+      --border: 1px solid rgba(99, 102, 241, 0.16);
+      height: calc(54px + env(safe-area-inset-bottom));
+      min-height: calc(54px + env(safe-area-inset-bottom));
+      padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+      box-shadow: 0 -8px 24px rgba(28, 28, 28, 0.08);
       backdrop-filter: blur(18px);
     }
 
@@ -414,28 +326,23 @@ import { MarketplaceService } from "../../core/marketplace.service";
       --color-selected: var(--primary);
       --ripple-color: rgba(99, 102, 241, 0.18);
       min-width: 0;
-      border-radius: 16px;
-      font-size: 0.68rem;
-      font-weight: 900;
-    }
-
-    ion-tab-button.tab-selected {
-      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(203, 213, 225, 0.92));
+      min-height: 44px;
+      border-radius: 12px;
+      font-size: 0.66rem;
+      font-weight: 850;
     }
 
     ion-tab-button ion-icon {
-      font-size: 1.18rem;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 1.16rem;
+      transition: background-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
     }
 
-    .explore-tab ion-icon {
-      color: var(--primary);
-      font-size: 1.42rem;
-      filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2));
-    }
-
-    .explore-tab.tab-selected ion-icon {
-      color: var(--primary-2);
-      transform: scale(1.08);
+    ion-tab-button.tab-selected ion-icon {
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 6px 14px rgba(99, 102, 241, 0.24);
     }
 
     @media (max-width: 1023px) {
@@ -449,10 +356,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     @media (min-width: 1024px) {
-      .salon-mode-toggle {
-        display: none;
-      }
-
       .mobile-topbar,
       .mobile-menu-backdrop,
       .mobile-menu-sheet {
@@ -931,7 +834,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 export class TabsPage implements OnInit {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
-  private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/profile"];
+  private readonly mobileSwipeRoutes = ["/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
   private swipeStartRoute = "";

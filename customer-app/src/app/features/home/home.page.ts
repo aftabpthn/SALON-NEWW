@@ -1316,8 +1316,8 @@ interface ConsultationChatMessage {
         gap: 24px;
         padding-top: 10px;
         padding-inline: 16px;
-        padding-bottom: calc(156px + env(safe-area-inset-bottom));
-        scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom));
+        padding-bottom: calc(76px + env(safe-area-inset-bottom));
+        scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom));
       }
 
       .hero {
@@ -1788,7 +1788,7 @@ interface ConsultationChatMessage {
       outline-offset: 3px;
     }
 
-    ion-content::part(scroll) { scroll-padding-bottom: calc(156px + env(safe-area-inset-bottom)); }
+    ion-content::part(scroll) { scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
     @media (max-width: 900px) {
       .home-page .business-rail,
