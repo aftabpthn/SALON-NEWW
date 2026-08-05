@@ -1,158 +1,134 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
-import { FormsModule } from "@angular/forms";
+import { IonBackButton, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, chevronForwardOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
+import { cardOutline, checkmarkCircleOutline, chevronForwardOutline, helpCircleOutline, locationOutline, repeatOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Booking } from "../../core/api.types";
 
-type BookingTab = "upcoming" | "past";
-type WaitlistDialog = {
-  booking: Booking;
-  preferredDate: string;
-  preferredTime: "any" | "morning" | "afternoon" | "evening";
-  priority: "normal" | "high";
-  reason: string;
-  error: string;
-};
+type BookingTab = "upcoming" | "past" | "cancelled";
+type BookingGroup = { key: string; label: string; countLabel: string; items: Booking[] };
+type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton],
+  imports: [RouterLink, IonBackButton, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton],
   template: `
     <ion-content>
+      <ion-refresher slot="fixed" (ionRefresh)="onPullRefresh($event)">
+        <ion-refresher-content pullingIcon="crescent" pullingText="Refreshing bookings..." refreshingSpinner="crescent"></ion-refresher-content>
+      </ion-refresher>
       <main class="page bookings-page">
         <section class="bookings-hero">
           <div class="content-title-row">
             <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
             <h1 class="page-title">My bookings</h1>
-          </div>
-          <div class="booking-command-grid">
-            @for (item of bookingCommands; track item.label) {
-              <article class="command-card premium-card">
-                <ion-icon [name]="item.icon"></ion-icon>
-                <strong>{{ item.label }}</strong>
-                <span>{{ item.copy }}</span>
-              </article>
-            }
+            <a class="support-link" [routerLink]="supportLink()" aria-label="Open booking support">
+              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Support</span>
+            </a>
           </div>
         </section>
 
         <ion-segment [value]="tab()" (ionChange)="setTab($any($event.detail.value) || 'upcoming')">
           <ion-segment-button value="upcoming">Upcoming</ion-segment-button>
           <ion-segment-button value="past">Past</ion-segment-button>
+          <ion-segment-button value="cancelled">Cancelled</ion-segment-button>
         </ion-segment>
 
-        @if (marketplace.loading()) {
-          <section class="empty premium-card"><h2>Loading bookings</h2></section>
-        } @else if (marketplace.error()) {
-          <section class="empty premium-card error"><h2>Could not load bookings</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
-        } @else {
-          <div class="booking-stack">
-            @for (booking of filtered(); track booking.id) {
-              <article
-                class="booking-card premium-card"
-                [attr.data-booking-id]="booking.id"
-                role="button"
-                tabindex="0"
-                aria-label="View booking details"
-                (click)="openBooking(booking)"
-                (keydown)="handleBookingKeydown($event, booking)"
-              >
-                <div class="date-block">
-                  <span>{{ dateParts(booking).month }}</span>
-                  <strong>{{ dateParts(booking).day }}</strong>
-                </div>
-                <div class="booking-content">
-                  <div class="booking-title-row">
-                    <h2>{{ booking.serviceName }}</h2>
-                    <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
-                  </div>
-                  <p>{{ booking.businessName }}</p>
-                  <div class="booking-bottom-row">
-                    <div class="booking-meta">
-                      <span><ion-icon name="time-outline"></ion-icon>{{ bookingTimeLabel(booking) }}</span>
-                      <span><ion-icon name="location-outline"></ion-icon>{{ booking.address || "Venue to be confirmed" }}</span>
-                    </div>
-                    <span class="view-details-btn">
-                      <span>View details</span>
-                      <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                    </span>
-                  </div>
-                </div>
-              </article>
-            } @empty {
-              <section class="empty premium-card">
-                <h2>No bookings yet</h2>
-                <ion-button class="primary-gradient" [routerLink]="discoverLink()">Find a place</ion-button>
-              </section>
-            }
-          </div>
+        @if (showTopProgress()) {
+          <div class="refresh-strip" role="status" aria-label="Updating bookings"><span></span></div>
         }
-      </main>
 
-      @if (waitlistDialog(); as dialog) {
-        <div class="reschedule-backdrop" role="presentation" (click)="closeWaitlist()">
-          <section class="waitlist-sheet" role="dialog" aria-modal="true" aria-label="Join appointment waitlist" (click)="$event.stopPropagation()">
-            <div class="sheet-head waitlist-head">
-              <div>
-                <h2>Join smart waitlist</h2>
-                <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
-              </div>
-              <button type="button" class="close-button" aria-label="Close waitlist" (click)="closeWaitlist()">x</button>
-            </div>
-
-            <div class="waitlist-body">
-              <div class="waitlist-summary">
-                <ion-icon name="hourglass-outline"></ion-icon>
-                <div>
-                  <strong>Auto-fill queue</strong>
-                  <span>We will look for earlier or backup slots and share the best match.</span>
-                </div>
-              </div>
-
-              <label class="waitlist-field">
-                <span>Preferred date</span>
-                <input type="date" [min]="todayKey()" [(ngModel)]="dialog.preferredDate" name="waitlistDate" (ngModelChange)="updateWaitlist({ preferredDate: $event })" />
-              </label>
-
-              <div class="waitlist-field">
-                <span>Preferred time</span>
-                <div class="waitlist-options" role="radiogroup" aria-label="Preferred waitlist time">
-                  @for (option of waitlistTimeOptions; track option.value) {
-                    <button type="button" [class.active]="dialog.preferredTime === option.value" (click)="updateWaitlist({ preferredTime: option.value })">{{ option.label }}</button>
+        @if (tabLoaded()[tab()]) {
+          @if (filtered().length) {
+            @for (group of groups(); track group.key) {
+              <section class="date-group" [attr.aria-label]="group.label || undefined">
+                @if (group.label) {
+                  <h2 class="date-group-label">{{ group.label }}@if (group.countLabel) { <span>{{ group.countLabel }}</span> }</h2>
+                }
+                <div class="booking-stack">
+                  @for (booking of group.items; track booking.id) {
+                    <article
+                      class="booking-card premium-card"
+                      [class.cancelled]="booking.status === 'cancelled'"
+                      [attr.data-booking-id]="booking.id"
+                      role="button"
+                      tabindex="0"
+                      [attr.aria-label]="cardLabel(booking)"
+                      (click)="openBooking(booking)"
+                      (keydown)="handleBookingKeydown($event, booking)"
+                    >
+                      <div class="date-block" aria-hidden="true">
+                        <span>{{ dateParts(booking).month }}</span>
+                        <strong>{{ dateParts(booking).day }}</strong>
+                      </div>
+                      <div class="booking-content">
+                        <div class="booking-main">
+                          <h2 class="booking-service">
+                            {{ booking.serviceName }}
+                            @if (serviceCount(booking) > 1) {
+                              <span class="service-count">{{ serviceCount(booking) }} services</span>
+                            }
+                          </h2>
+                          <p class="salon-name">{{ booking.businessName }}</p>
+                          <div class="booking-meta">
+                            <span class="meta-line">
+                              <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+                              <span class="meta-text">{{ bookingDateTimeLabel(booking) }}</span>
+                            </span>
+                            <span class="meta-line">
+                              <ion-icon name="location-outline" aria-hidden="true"></ion-icon>
+                              <span class="meta-text">{{ booking.address || "Venue to be confirmed" }}</span>
+                            </span>
+                            @if (paymentMetaLabel(booking); as payment) {
+                              <span class="meta-line tone-{{ payment.tone }}">
+                                <ion-icon name="card-outline" aria-hidden="true"></ion-icon>
+                                <span class="meta-text">{{ payment.label }}</span>
+                              </span>
+                            }
+                          </div>
+                        </div>
+                        <div class="booking-footer">
+                          <span class="status-pill status-{{ booking.status }}" role="status">{{ statusLabel(booking.status) }}</span>
+                          <div class="footer-actions">
+                            @if (showCheckIn(booking)) {
+                              <button type="button" class="card-action checkin" (click)="checkIn($event, booking)">
+                                <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
+                                Check-in
+                              </button>
+                            }
+                            @if (showRebook(booking)) {
+                              <button type="button" class="card-action rebook" (click)="rebook($event, booking)">
+                                <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
+                                Book again
+                              </button>
+                            }
+                          </div>
+                          <ion-icon class="card-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                        </div>
+                      </div>
+                    </article>
                   }
                 </div>
-              </div>
-
-              <div class="waitlist-field">
-                <span>Priority</span>
-                <div class="waitlist-options two" role="radiogroup" aria-label="Waitlist priority">
-                  <button type="button" [class.active]="dialog.priority === 'normal'" (click)="updateWaitlist({ priority: 'normal' })">Normal</button>
-                  <button type="button" [class.active]="dialog.priority === 'high'" (click)="updateWaitlist({ priority: 'high' })">Urgent</button>
-                </div>
-              </div>
-
-              <label class="waitlist-field">
-                <span>Note for the salon</span>
-                <textarea rows="3" maxlength="180" placeholder="Preferred staff, time window, or special request" [(ngModel)]="dialog.reason" name="waitlistReason" (ngModelChange)="updateWaitlist({ reason: $event })"></textarea>
-              </label>
-
-              @if (dialog.error) {
-                <p class="waitlist-error">{{ dialog.error }}</p>
-              }
-            </div>
-
-            <div class="sheet-actions">
-              <ion-button fill="clear" (click)="closeWaitlist()">Not now</ion-button>
-              <ion-button class="primary-gradient" [disabled]="!!actionLoading()" (click)="submitWaitlist()">
-                {{ actionLoading() === "waitlist:" + dialog.booking.id ? "Joining..." : "Join waitlist" }}
-              </ion-button>
-            </div>
+              </section>
+            }
+          } @else {
+            <section class="empty premium-card">
+              <h2>{{ emptyTitle() }}</h2>
+              <ion-button class="primary-gradient" [routerLink]="discoverLink()">{{ emptyActionLabel() }}</ion-button>
+            </section>
+          }
+        } @else if (tabBusy()[tab()]) {
+          <section class="empty premium-card"><h2>Loading bookings</h2></section>
+        } @else if (marketplace.error()) {
+          <section class="empty premium-card error">
+            <h2>Could not load bookings</h2>
+            <p>{{ marketplace.error() }}</p>
+            <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
           </section>
-        </div>
-      }
+        }
+      </main>
 
       @if (cancelDialog(); as booking) {
         <div class="cancel-backdrop" role="presentation" (click)="closeCancelDialog()">
@@ -205,41 +181,38 @@ type WaitlistDialog = {
       margin: 0;
     }
 
-    .bookings-hero .muted {
-      max-width: 680px;
-      margin: 0;
-    }
-
-    .booking-command-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 8px;
-    }
-
-    .command-card {
-      display: grid;
+    .support-link {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
       gap: 6px;
-      padding: 14px;
-    }
-
-    .command-card ion-icon {
-      width: 42px;
-      height: 42px;
-      padding: 10px;
-      border-radius: 16px;
-      color: #ffffff;
-      background: var(--primary);
-    }
-
-    .command-card strong {
-      color: var(--text);
-    }
-
-    .command-card span {
+      min-height: 38px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
       color: var(--muted);
-      line-height: 1.35;
-      font-size: 0.88rem;
+      background: var(--surface);
+      font-size: 0.78rem;
+      font-weight: 850;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
+    }
+
+    .support-link ion-icon {
+      font-size: 1rem;
+    }
+
+    .support-link:hover {
+      color: var(--primary);
+      border-color: rgba(99, 102, 241, 0.35);
+      background: var(--primary-soft);
+    }
+
+    .support-link:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+      border-radius: 999px;
     }
 
     ion-segment {
@@ -265,139 +238,278 @@ type WaitlistDialog = {
       background: var(--primary);
     }
 
+    .refresh-strip {
+      position: relative;
+      height: 3px;
+      margin: -10px 2px 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.14);
+    }
+
+    .refresh-strip span {
+      position: absolute;
+      inset: 0;
+      width: 42%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      animation: strip-slide 1.1s ease-in-out infinite;
+    }
+
+    @keyframes strip-slide {
+      from { transform: translateX(-110%); }
+      to { transform: translateX(360%); }
+    }
+
+    .date-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .date-group + .date-group {
+      margin-top: 18px;
+    }
+
+    .date-group-label {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 2px 4px 0;
+      color: var(--muted);
+      font-size: 0.68rem;
+      font-weight: 950;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .date-group-label span {
+      color: var(--muted);
+      opacity: 0.75;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: none;
+    }
+
     .booking-stack {
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .booking-card {
       display: grid;
-      grid-template-columns: 86px minmax(0, 1fr);
-      gap: 16px;
-      padding: 16px;
+      grid-template-columns: 62px minmax(0, 1fr);
+      gap: 14px;
+      align-items: stretch;
+      padding: 14px 14px 14px 10px;
       color: inherit;
       text-decoration: none;
-      transition: transform 180ms ease, box-shadow 180ms ease;
+      cursor: pointer;
+      transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+    }
+
+    .booking-card.cancelled {
+      opacity: 0.82;
     }
 
     .date-block {
-      min-height: 96px;
+      min-height: 84px;
       display: grid;
       place-items: center;
       align-content: center;
-      border-radius: 24px;
+      border-radius: 18px;
       color: #ffffff;
       background: var(--primary);
     }
 
     .date-block span {
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 900;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       opacity: 0.8;
     }
 
     .date-block strong {
-      font-size: 2rem;
+      font-size: 1.7rem;
       line-height: 1;
-    }
-
-    .booking-content h2 {
-      margin: 0;
-      letter-spacing: -0.04em;
     }
 
     .booking-content {
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
       min-width: 0;
-      height: 100%;
     }
 
-    .booking-title-row {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-      margin: 0 0 4px;
-    }
-
-    .booking-title-row h2 { min-width: 0; margin-top: 0; }
-    .booking-title-row .status-pill {
-      flex: 0 0 auto;
-      align-self: flex-start;
-      margin-top: 0;
-      min-height: 18px;
-      padding: 1px 7px;
-      border: 1px solid rgba(16, 185, 129, 0.42);
-      border-radius: 999px;
-      color: #059669;
-      background: rgba(16, 185, 129, 0.14);
-      font-size: 0.60rem;
+    .booking-service {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.04rem;
       font-weight: 850;
-      letter-spacing: 0.01em;
-      text-transform: lowercase;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      letter-spacing: -0.03em;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
     }
-    .booking-title-row .status-pill.closed {
-      color: #dc2626;
-      border-color: rgba(239, 68, 68, 0.35);
-      background: rgba(239, 68, 68, 0.12);
-    }
-    .booking-bottom-row {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 10px;
-      margin-top: auto;
-    }
-    .booking-bottom-row .booking-meta { flex: 1 1 auto; min-width: 0; }
-    .view-details-btn {
-      flex: 0 0 auto;
+
+    .service-count {
       display: inline-flex;
       align-items: center;
-      gap: 3px;
-      padding: 3px 9px;
-      border: 1px solid rgba(99, 102, 241, 0.22);
+      margin-left: 8px;
+      padding: 2px 8px;
       border-radius: 999px;
       color: var(--primary);
-      background: var(--primary-soft, rgba(99, 102, 241, 0.08));
-      font-size: 0.68rem;
-      font-weight: 850;
-      letter-spacing: -0.01em;
+      background: var(--primary-soft, rgba(99, 102, 241, 0.1));
+      font-size: 0.62rem;
+      font-weight: 900;
+      letter-spacing: 0.02em;
       white-space: nowrap;
-      transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+      vertical-align: middle;
     }
-    .view-details-btn ion-icon { font-size: 0.72rem; transition: transform 160ms ease; }
-    .booking-card:hover .view-details-btn {
-      color: #ffffff;
-      border-color: transparent;
-        background: var(--primary);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+
+    .salon-name {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .booking-card:hover .view-details-btn ion-icon { transform: translateX(2px); }
 
     .booking-meta {
       display: grid;
-      gap: 6px;
+      gap: 5px;
+      margin-top: 8px;
       color: var(--muted);
-      font-size: 0.9rem;
-      font-weight: 800;
+      font-size: 0.82rem;
+      font-weight: 750;
     }
 
-    .booking-meta span {
+    .meta-line {
       display: flex;
+      align-items: center;
       gap: 7px;
-      align-items: flex-start;
+      min-width: 0;
     }
 
-    .actions {
+    .meta-line ion-icon {
+      flex: 0 0 auto;
+      font-size: 0.92rem;
+      color: var(--primary);
+    }
+
+    .meta-line .meta-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta-line.tone-paid { color: #047857; }
+    .meta-line.tone-pending { color: #B45309; }
+    .meta-line.tone-refunded { color: #1D4ED8; }
+
+    .booking-footer {
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 10px;
+    }
+
+    .status-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 10px;
+      border: 1px solid;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 850;
+      letter-spacing: 0.01em;
+      text-transform: capitalize;
+      white-space: nowrap;
+    }
+
+    .status-pill.status-pending {
+      color: #92600A;
+      border-color: rgba(217, 119, 6, 0.35);
+      background: rgba(251, 191, 36, 0.14);
+    }
+
+    .status-pill.status-confirmed {
+      color: #047857;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.13);
+    }
+
+    .status-pill.status-completed {
+      color: #1D4ED8;
+      border-color: rgba(59, 130, 246, 0.36);
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    .status-pill.status-cancelled {
+      color: #B91C1C;
+      border-color: rgba(239, 68, 68, 0.38);
+      background: rgba(239, 68, 68, 0.11);
+    }
+
+    .footer-actions {
+      display: flex;
+      align-items: center;
       gap: 8px;
-      margin-top: 14px;
+      margin-left: auto;
+    }
+
+    .card-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 0.72rem;
+      font-weight: 850;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
+    }
+
+    .card-action ion-icon {
+      font-size: 0.9rem;
+    }
+
+    .card-action.checkin {
+      color: #ffffff;
+      border-color: transparent;
+      background: var(--primary);
+      box-shadow: 0 6px 14px rgba(99, 102, 241, 0.22);
+    }
+
+    .card-action.rebook {
+      color: var(--primary);
+      border-color: rgba(99, 102, 241, 0.22);
+      background: var(--primary-soft, rgba(99, 102, 241, 0.08));
+    }
+
+    .card-action:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .card-chevron {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .booking-card:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
     }
 
     .empty {
@@ -411,17 +523,6 @@ type WaitlistDialog = {
     .empty h2 {
       margin: 0;
       letter-spacing: -0.04em;
-    }
-
-    .reschedule-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 3000;
-      display: grid;
-      place-items: center;
-      padding: 18px;
-      background: rgba(17, 24, 39, 0.42);
-      backdrop-filter: blur(5px);
     }
 
     .cancel-backdrop {
@@ -451,223 +552,10 @@ type WaitlistDialog = {
     .cancel-actions .neutral-action { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
     .cancel-actions .destructive-action { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
-    .waitlist-sheet {
-      width: min(100%, 560px);
-      max-height: min(820px, calc(100vh - 36px));
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      overflow: hidden;
-      border: 1px solid rgba(99, 102, 241, 0.24);
-      border-radius: 28px;
-      background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98) 48%, rgba(231, 240, 248, 0.92)),
-        #FFFFFF;
-      box-shadow: 0 28px 70px rgba(28, 28, 28, 0.2);
-    }
-
-    .sheet-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 14px;
-      padding: 22px 22px 12px;
-    }
-
-    .sheet-head h2 {
-      margin: 0 0 8px;
-      color: var(--text);
-      font-size: 1.45rem;
-      letter-spacing: -0.035em;
-    }
-
-    .sheet-head p:not(.eyebrow) {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.4;
-      font-weight: 800;
-    }
-
-    .waitlist-head {
-      padding-bottom: 8px;
-    }
-
-    .waitlist-body {
-      display: grid;
-      gap: 14px;
-      overflow-y: auto;
-      padding: 10px 22px 18px;
-    }
-
-    .waitlist-summary {
-      display: grid;
-      grid-template-columns: 48px minmax(0, 1fr);
-      gap: 12px;
-      align-items: center;
-      padding: 14px;
-      border: 1px solid rgba(99, 102, 241, 0.22);
-      border-radius: 20px;
-      background: var(--glass);
-    }
-
-    .waitlist-summary ion-icon {
-      width: 28px;
-      height: 28px;
-      padding: 10px;
-      border-radius: 16px;
-      color: #ffffff;
-      background: var(--primary);
-      box-shadow: 0 12px 24px rgba(99, 102, 241, 0.14);
-    }
-
-    .waitlist-summary strong,
-    .waitlist-field span {
-      display: block;
-      color: var(--text);
-      font-weight: 900;
-    }
-
-    .waitlist-summary span {
-      display: block;
-      margin-top: 3px;
-      color: var(--muted);
-      line-height: 1.35;
-      font-size: 0.88rem;
-      font-weight: 700;
-    }
-
-    .waitlist-field {
-      display: grid;
-      gap: 8px;
-    }
-
-    .waitlist-field input,
-    .waitlist-field textarea {
-      width: 100%;
-      border: 1px solid rgba(99, 102, 241, 0.24);
-      border-radius: 18px;
-      color: var(--text);
-      background: var(--glass);
-      font: inherit;
-      font-weight: 800;
-      outline: none;
-    }
-
-    .waitlist-field input {
-      min-height: 52px;
-      padding: 0 14px;
-    }
-
-    .waitlist-field textarea {
-      resize: vertical;
-      min-height: 92px;
-      padding: 12px 14px;
-      line-height: 1.45;
-    }
-
-    .waitlist-field input:focus,
-    .waitlist-field textarea:focus {
-      border-color: rgba(99, 102, 241, 0.56);
-      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
-    }
-
-    .waitlist-options {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .waitlist-options.two {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .waitlist-options button {
-      min-height: 44px;
-      border: 1px solid rgba(99, 102, 241, 0.24);
-      border-radius: 999px;
-      color: var(--primary);
-      background: rgba(255, 255, 255, 0.78);
-      font-weight: 900;
-    }
-
-    .waitlist-options button.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: var(--primary);
-      box-shadow: 0 12px 24px rgba(99, 102, 241, 0.15);
-    }
-
-    .waitlist-error {
-      margin: 0;
-      padding: 10px 12px;
-      border: 1px solid rgba(239, 68, 68, 0.24);
-      border-radius: 14px;
-      color: #B91C1C;
-      background: rgba(254, 226, 226, 0.72);
-      font-size: 0.88rem;
-      font-weight: 800;
-    }
-
-    .close-button {
-      flex: 0 0 auto;
-      width: 42px;
-      height: 42px;
-      min-height: 42px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--text);
-      background: var(--surface);
-      font-size: 1.55rem;
-      line-height: 1;
-    }
-
-    .slot-state {
-      align-self: center;
-      padding: 26px 22px;
-      color: var(--muted);
-      text-align: center;
-      font-weight: 900;
-    }
-
-    .slot-state.error {
-      color: #EF4444;
-    }
-
-    .sheet-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      padding: 14px 18px;
-      border-top: 1px solid var(--border);
-      background: var(--glass);
-    }
-
     @media (hover: hover) and (pointer: fine) {
       .booking-card:hover {
         transform: translateY(-3px);
         box-shadow: var(--shadow-card);
-      }
-    }
-
-    @media (max-width: 599px) {
-      .booking-card {
-        grid-template-columns: 1fr;
-      }
-
-      .date-block {
-        min-height: 74px;
-        grid-template-columns: auto auto;
-        justify-content: start;
-        gap: 8px;
-        padding: 0 18px;
-      }
-
-      .sheet-actions {
-        gap: 6px;
-        padding: 10px 12px;
-        padding-bottom: max(10px, env(safe-area-inset-bottom));
-      }
-
-      .waitlist-options {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
 
@@ -687,38 +575,10 @@ type WaitlistDialog = {
         line-height: 1;
       }
 
-      .booking-command-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 6px;
-        margin-top: 2px;
-      }
-
-      .command-card {
-        min-height: 0;
-        justify-items: center;
-        align-content: center;
-        gap: 4px;
-        padding: 7px 3px 6px;
-        border-radius: 14px;
-        text-align: center;
-      }
-
-      .command-card ion-icon {
-        width: 28px;
-        height: 28px;
-        padding: 7px;
-        border-radius: 11px;
-      }
-
-      .command-card strong {
-        max-width: 100%;
-        font-size: 0.64rem;
-        line-height: 1.08;
-        overflow-wrap: anywhere;
-      }
-
-      .command-card span {
-        display: none;
+      .support-link {
+        min-height: 36px;
+        padding: 0 10px;
+        font-size: 0.74rem;
       }
 
       ion-segment {
@@ -730,162 +590,135 @@ type WaitlistDialog = {
         font-size: 0.74rem;
       }
 
-      .booking-stack {
-        gap: 8px;
-      }
-
-        .booking-card {
-          grid-template-columns: 54px minmax(0, 1fr);
-        align-items: stretch;
-        gap: 12px;
-          min-height: 104px;
-          padding: 10px 12px;
-          border-radius: 18px;
+      .booking-card {
+        grid-template-columns: 46px minmax(0, 1fr);
+        gap: 10px;
+        padding: 10px 12px 10px 8px;
+        border-radius: 16px;
       }
 
       .date-block {
-          width: 54px;
-          min-height: 84px;
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto;
-        justify-content: center;
-        gap: 2px;
-        padding: 8px 4px;
-          border-radius: 15px;
+        min-height: 72px;
+        border-radius: 14px;
       }
 
       .date-block span {
-        font-size: 0.72rem;
-        letter-spacing: 0.04em;
+        font-size: 0.66rem;
       }
 
       .date-block strong {
-          font-size: 1.48rem;
+        font-size: 1.38rem;
       }
 
-      .booking-content { display: grid; gap: 6px; min-width: 0; align-self: stretch; height: 100%; overflow: visible; }
-      .booking-title-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; margin: 0; }
-      .booking-content .status-pill { align-self: flex-start; margin-top: 0; min-height: 24px; padding: 3px 8px; font-size: 0.72rem; }
-      .booking-bottom-row { display: grid; gap: 6px; margin-top: 0; }
-      .view-details-btn { justify-self: start; min-height: 36px; padding: 0 12px; font-size: 0.78rem; gap: 4px; }
-      .view-details-btn ion-icon { font-size: 0.8rem; }
-
-      .booking-content h2 {
-        margin: 0;
-        overflow: hidden;
-        font-size: 1rem;
-        line-height: 1.18;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .booking-service {
+        font-size: 0.96rem;
       }
 
-      .booking-content p {
-        margin: 0 0 3px;
-        overflow: hidden;
-        font-size: 0.82rem;
-        line-height: 1.25;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      .salon-name {
+        margin-top: 2px;
+        font-size: 0.8rem;
       }
 
       .booking-meta {
-        gap: 5px;
-        min-width: 0;
-        font-size: 0.78rem;
-        line-height: 1.25;
-      }
-
-      .booking-meta span {
-        min-width: 0;
-        gap: 6px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .booking-meta ion-icon {
-        flex: 0 0 auto;
-        font-size: 0.86rem;
-      }
-
-      .actions {
-        display: none;
-        flex-wrap: nowrap;
         gap: 4px;
         margin-top: 6px;
-        padding: 1px 0 2px;
-        overflow-x: auto;
-        overscroll-behavior-inline: contain;
-        scrollbar-width: none;
+        font-size: 0.76rem;
       }
 
-      .actions::-webkit-scrollbar { display: none; }
-
-      .booking-card.expanded .actions {
-        display: flex;
+      .booking-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 8px;
       }
 
-      .booking-card.expanded {
-        min-height: 0;
+      .footer-actions {
+        gap: 6px;
       }
 
-      .booking-card {
-        cursor: pointer;
+      .card-action {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 0.68rem;
       }
 
-      .booking-card:focus-visible {
-        outline: 3px solid var(--focus);
-        outline-offset: 2px;
-      }
-
-      .actions ion-button {
-        flex: 0 0 auto;
-        min-height: 34px;
-        margin: 0;
-        font-size: 0.64rem;
-        --padding-start: 9px;
-        --padding-end: 9px;
+      .status-pill {
+        min-height: 22px;
+        padding: 2px 8px;
+        font-size: 0.68rem;
       }
     }
+
     @media (min-width: 1024px) {
       .booking-stack {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
       }
+    }
 
-      .booking-command-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+    @media (prefers-reduced-motion: reduce) {
+      .refresh-strip span {
+        animation: none;
+      }
+
+      .booking-card,
+      .card-action,
+      .status-pill,
+      .support-link {
+        transition: none;
       }
     }
   `]
 })
 export class BookingsPage implements OnDestroy, OnInit {
   readonly tab = signal<BookingTab>("upcoming");
-  readonly actionLoading = signal("");
-  readonly waitlistDialog = signal<WaitlistDialog | null>(null);
   readonly cancelDialog = signal<Booking | null>(null);
-  readonly filtered = computed(() => this.marketplace.bookings());
-  readonly waitlistTimeOptions: Array<{ value: WaitlistDialog["preferredTime"]; label: string }> = [
-    { value: "any", label: "Any time" },
-    { value: "morning", label: "Morning" },
-    { value: "afternoon", label: "Afternoon" },
-    { value: "evening", label: "Evening" }
-  ];
-  readonly bookingCommands = [
-    { label: "Rebooking", copy: "Repeat past visits faster", icon: "repeat-outline" },
-    { label: "Waitlist", copy: "Join auto-fill queues", icon: "hourglass-outline" },
-    { label: "Check-in", copy: "Arrival and consent ready", icon: "checkmark-circle-outline" },
-    { label: "Support", copy: "Chat and ticket handoff", icon: "chatbubbles-outline" }
-  ];
+  private readonly tabResults = signal<Record<BookingTab, Booking[]>>({ upcoming: [], past: [], cancelled: [] });
+  readonly tabLoaded = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
+  readonly tabBusy = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
+  readonly filtered = computed(() => this.tabResults()[this.tab()]);
+  readonly showTopProgress = computed(() => this.tabBusy()[this.tab()] && this.tabLoaded()[this.tab()]);
+  readonly groups = computed<BookingGroup[]>(() => {
+    const rows = this.filtered();
+    if (this.tab() !== "upcoming") {
+      return rows.length ? [{ key: "all", label: "", countLabel: "", items: rows }] : [];
+    }
+    const grouped = new Map<string, Booking[]>();
+    for (const booking of rows) {
+      const key = this.bookingDateKey(booking);
+      const list = grouped.get(key) ?? [];
+      list.push(booking);
+      grouped.set(key, list);
+    }
+    return [...grouped.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, items]) => {
+        const sorted = [...items].sort((a, b) => this.bookingTimeValue(a) - this.bookingTimeValue(b));
+        return { key, label: this.groupLabel(key), countLabel: sorted.length > 1 ? `${sorted.length} appointments` : "", items: sorted };
+      });
+  });
+  readonly emptyTitle = computed(() => {
+    switch (this.tab()) {
+      case "past": return "No past bookings yet";
+      case "cancelled": return "No cancelled bookings";
+      default: return "No upcoming bookings";
+    }
+  });
+  readonly emptyActionLabel = computed(() => this.tab() === "upcoming" ? "Find a place" : "Book a visit");
   private midnightRefreshId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly toasts: ToastController) {
-    addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
+    addIcons({ cardOutline, checkmarkCircleOutline, chevronForwardOutline, helpCircleOutline, locationOutline, repeatOutline, timeOutline });
   }
 
   ngOnInit() {
-    this.reload();
+    this.ensureTab("upcoming");
+    this.ensureTab("past");
+    this.ensureTab("cancelled");
     this.scheduleMidnightRefresh();
+  }
+
+  ionViewWillEnter() {
+    this.ensureTab(this.tab());
   }
 
   ngOnDestroy() {
@@ -893,15 +726,12 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   setTab(tab: BookingTab) {
+    if (this.tab() === tab) return;
     this.tab.set(tab);
-    this.reload();
+    this.ensureTab(tab);
   }
 
   openBooking(booking: Booking) {
-    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
-  }
-
-  openBookingDetails(booking: Booking) {
     void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
@@ -919,6 +749,10 @@ export class BookingsPage implements OnDestroy, OnInit {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
   }
 
+  supportLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+  }
+
   private bookingDetailUrl(id: string): string {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
   }
@@ -932,7 +766,39 @@ export class BookingsPage implements OnDestroy, OnInit {
       void this.router.navigateByUrl("/login");
       return;
     }
-    void this.marketplace.loadBookings(this.tab()).catch(() => undefined);
+    this.ensureTab(this.tab());
+  }
+
+  private ensureTab(tab: BookingTab) {
+    if (this.tabBusy()[tab]) return;
+    void this.loadTab(tab);
+  }
+
+  private async loadTab(tab: BookingTab) {
+    if (this.tabBusy()[tab]) return;
+    this.tabBusy.update((state) => ({ ...state, [tab]: true }));
+    try {
+      const rows = await this.marketplace.loadBookings(tab);
+      this.tabResults.update((state) => ({ ...state, [tab]: rows }));
+      this.tabLoaded.update((state) => ({ ...state, [tab]: true }));
+    } catch {
+      // The failure is surfaced through marketplace.error(); cached content, if any, stays visible.
+    } finally {
+      this.tabBusy.update((state) => ({ ...state, [tab]: false }));
+    }
+  }
+
+  async onPullRefresh(event: Event) {
+    const refresher = event.target as unknown as { complete(): Promise<void> };
+    try {
+      const rows = await this.marketplace.loadBookings(this.tab());
+      this.tabResults.update((state) => ({ ...state, [this.tab()]: rows }));
+      this.tabLoaded.update((state) => ({ ...state, [this.tab()]: true }));
+    } catch {
+      // handled through marketplace.error()
+    } finally {
+      await refresher.complete();
+    }
   }
 
   dateParts(booking: Booking) {
@@ -956,10 +822,68 @@ export class BookingsPage implements OnDestroy, OnInit {
     return booking.displayStartAt?.match(/\d{1,2}:\d{2}\s*[AP]M/i)?.[0].toUpperCase() || "Time to be confirmed";
   }
 
-  async cancel(event: Event, id: string) {
+  bookingDateTimeLabel(booking: Booking): string {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = raw ? new Date(raw) : null;
+    if (date && Number.isFinite(date.getTime())) {
+      try {
+        const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(date);
+        const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(date).toUpperCase();
+        return `${day} · ${time}`;
+      } catch {
+        return this.bookingTimeLabel(booking);
+      }
+    }
+    const label = String(booking.displayStartAt || "");
+    const timeMatch = label.match(/\d{1,2}:\d{2}\s*[AP]M/i)?.[0].toUpperCase();
+    if (label.toLowerCase().includes("today")) return timeMatch ? `Today · ${timeMatch}` : "Today";
+    return [label, timeMatch].filter(Boolean).join(" · ") || "Time to be confirmed";
+  }
+
+  serviceCount(booking: Booking): number {
+    const reference = booking.reference;
+    if (!reference) return 1;
+    const count = this.filtered().filter((row) => row.reference === reference).length;
+    return count > 1 ? count : 1;
+  }
+
+  statusLabel(status: Booking["status"]): string {
+    switch (status) {
+      case "pending": return "Pending";
+      case "confirmed": return "Confirmed";
+      case "completed": return "Completed";
+      case "cancelled": return "Cancelled";
+      default: return String(status || "").charAt(0).toUpperCase() + String(status || "").slice(1);
+    }
+  }
+
+  cardLabel(booking: Booking): string {
+    return `View details — ${booking.serviceName} at ${booking.businessName}, ${this.bookingDateTimeLabel(booking)}, status ${this.statusLabel(booking.status)}`;
+  }
+
+  paymentMetaLabel(booking: Booking): { label: string; tone: PaymentTone } | null {
+    const value = String(booking.paymentStatus || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (["paid", "payment_received", "success", "captured"].includes(value)) return { label: "Paid", tone: "paid" };
+    if (["refunded", "refund_completed", "refund_issued"].includes(value)) return { label: "Refunded", tone: "refunded" };
+    if (["pending", "unpaid", "due", "awaiting_payment"].includes(value)) return { label: "Payment pending", tone: "pending" };
+    if (booking.status === "cancelled" && (!value || value === "not_required" || value === "no_payment_required")) {
+      return { label: "No payment required", tone: "default" };
+    }
+    return null;
+  }
+
+  showCheckIn(booking: Booking): boolean {
+    return this.tab() === "upcoming" && booking.status !== "cancelled" && booking.status !== "completed" && this.isTodayBooking(booking);
+  }
+
+  showRebook(booking: Booking): boolean {
+    return booking.status === "completed";
+  }
+
+  checkIn(event: Event, booking: Booking) {
     event.preventDefault();
     event.stopPropagation();
-    this.cancelDialog.set(this.marketplace.bookings().find((booking) => booking.id === id) ?? null);
+    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
   closeCancelDialog(): void {
@@ -990,142 +914,51 @@ export class BookingsPage implements OnDestroy, OnInit {
     void this.router.navigateByUrl(this.discoverLink());
   }
 
-  canRebook(booking: Booking): boolean {
-    return this.tab() === "past" || booking.status === "completed" || booking.status === "cancelled";
+  private istDateKey(date: Date): string {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
   }
 
-  canManageUpcoming(booking: Booking): boolean {
-    return this.tab() === "upcoming" && booking.status !== "cancelled" && booking.status !== "completed";
+  private istTodayKey(): string {
+    return this.istDateKey(new Date());
   }
 
-  async joinWaitlist(event: Event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const booking = this.bookingFromEvent(event);
-    if (!booking) return;
-    this.waitlistDialog.set({
-      booking,
-      preferredDate: this.dateValue(booking),
-      preferredTime: "any",
-      priority: "normal",
-      reason: "",
-      error: ""
-    });
+  private tomorrowKey(): string {
+    const [year, month, day] = this.istTodayKey().split("-").map(Number);
+    return this.istDateKey(new Date(Date.UTC(year, month - 1, day + 1)));
   }
 
-  updateWaitlist(patch: Partial<Omit<WaitlistDialog, "booking">>) {
-    this.waitlistDialog.update((current) => current ? { ...current, ...patch, error: "" } : current);
+  private bookingDateKey(booking: Booking): string {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = raw ? new Date(raw) : null;
+    if (date && Number.isFinite(date.getTime())) return this.istDateKey(date);
+    return String(booking.displayStartAt || "").toLowerCase().includes("today") ? this.istTodayKey() : "9999-12-31";
   }
 
-  closeWaitlist() {
-    this.waitlistDialog.set(null);
+  private bookingTimeValue(booking: Booking): number {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = raw ? new Date(raw) : null;
+    return date && Number.isFinite(date.getTime()) ? date.getTime() : Number.MAX_SAFE_INTEGER;
   }
 
-  async submitWaitlist() {
-    const dialog = this.waitlistDialog();
-    if (!dialog) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dialog.preferredDate)) {
-      this.updateWaitlist({ error: "Choose a valid preferred date." });
-      return;
-    }
-    if (dialog.preferredDate < this.todayKey()) {
-      this.updateWaitlist({ error: "Preferred date cannot be in the past." });
-      return;
-    }
-    await this.joinWaitlistForBooking(dialog.booking, {
-      preferredDate: dialog.preferredDate,
-      preferredTime: dialog.preferredTime,
-      priority: dialog.priority,
-      reason: dialog.reason
-    });
-  }
-
-  async reschedule(event: Event, id: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const booking = this.marketplace.bookings().find((item) => item.id === id);
-    if (!booking) return;
-    if (!booking.businessId || !booking.serviceId) {
-      await this.presentToast("This booking cannot be rescheduled because service details are missing.", "danger");
-      return;
-    }
-    this.actionLoading.set(`reschedule:${booking.id}`);
+  private groupLabel(key: string): string {
+    if (key === this.istTodayKey()) return "Today";
+    if (key === this.tomorrowKey()) return "Tomorrow";
+    const [year, month, day] = key.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
     try {
-      const business = await this.marketplace.loadBusiness(booking.businessId);
-      await this.router.navigate([this.businessBookUrl(business.slug)], {
-        queryParams: {
-          serviceId: booking.serviceId,
-          staffId: booking.staffId || undefined,
-          date: this.dateValue(booking),
-          step: 1,
-          rescheduleBookingId: booking.id
-        }
-      });
+      return new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(date);
     } catch {
-      await this.presentToast(this.marketplace.error() || "Could not open rescheduling.", "danger");
-    } finally {
-      this.actionLoading.set("");
+      return key;
     }
   }
 
-  directions(event: Event, booking: Booking) {
-    event.preventDefault();
-    event.stopPropagation();
-    const hasCoordinates = booking.latitude !== undefined && booking.latitude !== null && booking.longitude !== undefined && booking.longitude !== null;
-    const query = hasCoordinates
-      ? `${booking.latitude},${booking.longitude}`
-      : encodeURIComponent([booking.businessName, booking.address].filter(Boolean).join(", "));
-    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, "_blank", "noopener,noreferrer");
-  }
-
-  private async joinWaitlistForBooking(booking: Booking, value: { preferredDate?: string; preferredTime?: WaitlistDialog["preferredTime"]; priority?: "normal" | "high"; reason?: string }) {
-    this.actionLoading.set(`waitlist:${booking.id}`);
-    try {
-      const timeNote = value.preferredTime && value.preferredTime !== "any" ? `Preferred time: ${value.preferredTime}.` : "Preferred time: any.";
-      const customerNote = String(value.reason || "").trim();
-      const result = await this.marketplace.joinBookingWaitlist(booking.id, {
-        preferredDate: value.preferredDate || this.dateValue(booking),
-        reason: [timeNote, customerNote || "Customer wants an earlier or backup slot"].join(" "),
-        priority: value.priority || "normal",
-        serviceId: booking.serviceId || undefined,
-        staffId: booking.staffId || undefined
-      });
-      const recommendation = result.recommendations[0]?.displayTime ? ` First suggestion: ${result.recommendations[0].displayTime}.` : "";
-      await this.presentToast(`Waitlist joined successfully.${recommendation}`, "success");
-      this.closeWaitlist();
-      await this.reload();
-    } catch {
-      const message = this.marketplace.error() || "Unable to join waitlist.";
-      this.updateWaitlist({ error: message });
-      await this.presentToast(message, "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
-  }
-
-  private bookingFromEvent(event: Event): Booking | null {
-    const element = event.currentTarget as HTMLElement | null;
-    const card = element?.closest("[data-booking-id]");
-    const id = card?.getAttribute("data-booking-id") || "";
-    return this.marketplace.bookings().find((booking) => booking.id === id) ?? null;
-  }
-
-  private dateValue(booking: Booking): string {
-    const source = booking.startAt || booking.startsAt || "";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(source)) return source;
-    const date = source ? new Date(source) : new Date();
-    return Number.isNaN(date.getTime()) ? this.localDateKey(new Date()) : this.localDateKey(date);
-  }
-
-  private localDateKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  todayKey(): string {
-    return this.localDateKey(new Date());
+  private isTodayBooking(booking: Booking): boolean {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = raw ? new Date(raw) : null;
+    if (date && Number.isFinite(date.getTime())) return this.istDateKey(date) === this.istTodayKey();
+    return String(booking.displayStartAt || "").toLowerCase().includes("today");
   }
 
   private scheduleMidnightRefresh() {
