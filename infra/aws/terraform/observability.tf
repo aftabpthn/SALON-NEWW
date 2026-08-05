@@ -19,8 +19,17 @@ resource "aws_sns_topic_policy" "alerts" {
         Sid       = "OwnerAccess"
         Effect    = "Allow"
         Principal = { AWS = data.aws_caller_identity.current.account_id }
-        Action    = "SNS:*"
-        Resource  = aws_sns_topic.alerts.arn
+        Action = [
+          "sns:AddPermission",
+          "sns:DeleteTopic",
+          "sns:GetTopicAttributes",
+          "sns:ListSubscriptionsByTopic",
+          "sns:Publish",
+          "sns:RemovePermission",
+          "sns:SetTopicAttributes",
+          "sns:Subscribe",
+        ]
+        Resource = aws_sns_topic.alerts.arn
       },
       {
         Sid       = "EventBridgePublish"
