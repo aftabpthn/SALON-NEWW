@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, helpCircleOutline, locationOutline, navigateOutline, repeatOutline, shareSocialOutline, storefrontOutline, timeOutline } from "ionicons/icons";
+import { addOutline, alertCircleOutline, calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, giftOutline, helpCircleOutline, locationOutline, navigateOutline, personOutline, repeatOutline, settingsOutline, shareSocialOutline, storefrontOutline, swapHorizontalOutline, timeOutline } from "ionicons/icons";
 import { Business } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-header.component";
@@ -15,32 +15,35 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     <ion-content>
       @if (booking(); as booking) {
         <main class="page-narrow detail-page">
+          @if (statusNote(); as note) {
+            <section class="status-note" role="status">{{ note }}</section>
+          }
+
           <section class="itinerary-card" aria-labelledby="booking-service">
-            <button type="button" class="download-booking" aria-label="Download booking details" (click)="downloadInvoice($event)">
-              <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
-            </button>
             <div class="summary-top">
-              <span class="booking-status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
+              <span class="booking-status-pill" [class.closed]="booking.status === 'cancelled'">{{ statusLabel() }}</span>
               <h1 id="booking-service">{{ booking.serviceName }}</h1>
               <p>{{ booking.businessName }}</p>
             </div>
 
             <div class="appointment-time">
               <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
-              <span>Appointment time</span>
-              <strong>{{ appointmentDisplay() }}</strong>
+              <div>
+                <span>Appointment time</span>
+                <strong>{{ appointmentDisplay() }}</strong>
+              </div>
             </div>
 
             <dl class="booking-facts">
-              <div class="venue-fact">
+              <div>
                 <dt><ion-icon name="location-outline" aria-hidden="true"></ion-icon>Venue</dt>
-                <dd>{{ booking.address }}</dd>
+                <dd>{{ booking.address || "Venue to be confirmed" }}</dd>
               </div>
               <div>
                 <dt><ion-icon name="card-outline" aria-hidden="true"></ion-icon>Payment</dt>
                 <dd>{{ paymentDisplay() }}</dd>
               </div>
-              <div>
+              <div class="reference-fact">
                 <dt><ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>Booking reference</dt>
                 <dd class="reference-value">
                   <span>{{ bookingReference() }}</span>
@@ -60,156 +63,212 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
 
           <span class="visually-hidden" aria-live="polite">{{ actionFeedback() }}</span>
 
-          <section class="detail-actions" aria-label="Booking actions">
-            @if (isActive()) {
-              <div class="utility-actions">
-                @if (directionsUrl(); as mapUrl) {
-                  <a class="utility-action" [href]="mapUrl" target="_blank" rel="noopener noreferrer" aria-label="Open venue directions in a new tab">
-                    <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
-                    <span>Directions</span>
-                  </a>
-                } @else {
-                  <button type="button" class="utility-action" disabled>
-                    <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
-                    <span>Directions</span>
-                  </button>
-                }
-                <button type="button" class="utility-action" [disabled]="!canAddToCalendar()" (click)="addToCalendar()">
+          @if (isActive()) {
+            <section class="primary-actions" aria-label="Booking actions">
+              @if (canReschedule()) {
+                <button type="button" class="primary-action reschedule" (click)="reschedule()">
                   <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
-                  <span>Add to calendar</span>
+                  <span>Reschedule</span>
                 </button>
-              </div>
-            } @else {
-              <ion-button expand="block" class="primary-gradient" (click)="rebook()">Book again</ion-button>
-            }
-            @if (!isActive()) {
-              <ion-button expand="block" fill="outline" class="secondary-button" (click)="downloadInvoice($event)">
-                <ion-icon name="download-outline" slot="start"></ion-icon>
-                Download invoice
-              </ion-button>
-            }
+              } @else {
+                <button type="button" class="primary-action reschedule" disabled title="Rescheduling is unavailable for this booking">
+                  <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                  <span>Reschedule unavailable</span>
+                </button>
+              }
 
-            @if (moreActionCount() >= 3) {
-              <details class="more-options">
-                <summary>More booking options</summary>
-                <div class="option-list">
-                  @if (isActive()) {
-                    <section class="action-section" aria-label="Manage appointment">
-                      <h2>Manage appointment</h2>
-                      <button type="button" class="option-row" (click)="reschedule()">
-                        <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
-                        <span>Edit appointment</span>
-                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                      </button>
-                      <button type="button" class="option-row" (click)="rebook()">
-                        <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
-                        <span>Book another appointment</span>
-                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                      </button>
-                    </section>
-                  }
-
-                  <section class="action-section" aria-label="Contact and support">
-                    <h2>Contact & support</h2>
-                    <details class="contact-options">
-                      <summary class="option-row">
-                        <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
-                        <span>Contact salon</span>
-                        <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                      </summary>
-                      <div class="contact-suboptions">
-                        <a class="option-row" [routerLink]="bookingChatLink(booking.id)">
-                          <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
-                          <span>Message salon</span>
-                          <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                        </a>
-                        @if (salonPhone(); as phone) {
-                          <a class="option-row" [href]="phone.href">
-                            <ion-icon name="call-outline" aria-hidden="true"></ion-icon>
-                            <span>Call salon</span>
-                            <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                          </a>
-                        }
-                      </div>
-                    </details>
-                    @if (salonRoute(); as salonLink) {
-                      <a class="option-row" [routerLink]="salonLink">
-                        <ion-icon name="storefront-outline" aria-hidden="true"></ion-icon>
-                        <span>View salon</span>
+              <div class="contact-wrap" [class.expanded]="contactExpanded()">
+                <button
+                  type="button"
+                  class="primary-action contact"
+                  [attr.aria-expanded]="contactExpanded()"
+                  (click)="toggleContact()"
+                >
+                  <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
+                  <span>Contact salon</span>
+                  <ion-icon class="contact-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                </button>
+                @if (contactExpanded()) {
+                  <div class="contact-panel" role="group" aria-label="Contact salon options">
+                    <a class="option-row" [routerLink]="bookingChatLink(booking.id)">
+                      <ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon>
+                      <span>Message salon</span>
+                      <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                    </a>
+                    @if (salonPhone(); as phone) {
+                      <a class="option-row" [href]="phone.href">
+                        <ion-icon name="call-outline" aria-hidden="true"></ion-icon>
+                        <span>Call salon · {{ phone.label }}</span>
                         <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                       </a>
                     }
-                    <button type="button" class="option-row" (click)="requestSupport()">
-                      <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
-                      <span>Request support</span>
-                      <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                    </button>
-                  </section>
+                  </div>
+                }
+              </div>
 
-                  <section class="action-section" aria-label="Records and sharing">
-                    <h2>Records & sharing</h2>
-                    <button type="button" class="option-row" (click)="shareBooking()">
-                      <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
-                      <span>Share booking</span>
-                    </button>
-                    @if (isActive()) {
-                      <button type="button" class="option-row" (click)="downloadInvoice($event)">
-                        <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
-                        <span>Download invoice</span>
-                      </button>
-                    }
-                  </section>
+              @if (directionsUrl(); as mapUrl) {
+                <a class="primary-action outline" [href]="mapUrl" target="_blank" rel="noopener noreferrer" aria-label="Open venue directions in a new tab">
+                  <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
+                  <span>Directions</span>
+                </a>
+              } @else {
+                <button type="button" class="primary-action outline" disabled>
+                  <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
+                  <span>Directions</span>
+                </button>
+              }
+            </section>
 
-                  @if (isActive()) {
-                    <section class="action-section danger-section" aria-label="Danger zone">
-                      <h2>Danger zone</h2>
-                      <button type="button" class="option-row destructive-action" (click)="cancel()">
-                        <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
-                        <span>Cancel booking</span>
-                      </button>
-                    </section>
-                  }
-                </div>
-              </details>
-            } @else {
-              <section class="direct-options" aria-label="More booking options">
-                <button type="button" class="option-row" (click)="shareBooking()">
-                  <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
-                  <span>Share booking</span>
-                </button>
-                <button type="button" class="option-row" (click)="requestSupport()">
-                  <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
-                  <span>Request support</span>
-                  <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                </button>
-              </section>
+            <button type="button" class="manage-row" (click)="openManageSheet()">
+              <ion-icon name="settings-outline" aria-hidden="true"></ion-icon>
+              <span>Manage booking</span>
+              <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+            </button>
+          }
+
+          <section class="utility-row" aria-label="Booking utilities">
+            <button type="button" class="utility-action" [disabled]="!canAddToCalendar()" (click)="addToCalendar()">
+              <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+              <span>Add to calendar</span>
+            </button>
+            <button type="button" class="utility-action" (click)="shareBooking()">
+              <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+              <span>Share booking</span>
+            </button>
+            @if (invoiceAvailable()) {
+              <button type="button" class="utility-action" (click)="downloadInvoice($event)">
+                <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
+                <span>Download invoice</span>
+              </button>
             }
+          </section>
+
+          @if (!isActive()) {
+            <section class="book-again-section" aria-labelledby="book-again-title">
+              <div class="book-again-copy">
+                <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
+                <div>
+                  <h2 id="book-again-title">Book again</h2>
+                  <p>{{ booking.status === "cancelled" ? "Ready for another visit? Start a fresh booking with this salon." : "Loved your visit? Book the same service or something new." }}</p>
+                </div>
+              </div>
+              <ion-button expand="block" class="primary-gradient" (click)="rebook()">Book another appointment</ion-button>
+            </section>
+          }
+
+          <section class="help-salon" aria-labelledby="help-salon-title">
+            <h2 id="help-salon-title">Help &amp; salon</h2>
+            @if (salonRoute(); as salonLink) {
+              <a class="option-row" [routerLink]="salonLink">
+                <ion-icon name="storefront-outline" aria-hidden="true"></ion-icon>
+                <span>View salon</span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            }
+            <button type="button" class="option-row" (click)="requestSupport()">
+              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Request support for this booking</span>
+              <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+            </button>
+            <a class="option-row" [routerLink]="helpRoute()" [queryParams]="supportQuery()">
+              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Help centre</span>
+              <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+            </a>
           </section>
 
           <details class="policy-strip">
             <summary>
               <span>Cancellation &amp; rescheduling policy</span>
-              <small>Review the policy for booking changes</small>
+              <small>Open the full policy for this booking</small>
             </summary>
             <p>{{ booking.cancellationPolicy || "The business policy will appear here when returned by the API." }}</p>
           </details>
-          <div class="help-centre">
-            <a class="help-link" [routerLink]="helpLink()">Help centre</a>
-            <small>General FAQs and account help</small>
-          </div>
+
+          @if (isActive()) {
+            <button type="button" class="cancel-link" (click)="cancel()">
+              <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Cancel booking</span>
+            </button>
+          }
         </main>
 
+        @if (manageSheetOpen()) {
+          <div class="sheet-backdrop" role="presentation" (click)="closeManageSheet()">
+            <section class="action-sheet" role="dialog" aria-modal="true" aria-labelledby="manage-sheet-title" (click)="$event.stopPropagation()">
+              <h2 id="manage-sheet-title">Manage booking</h2>
+              <p class="sheet-subtitle">Choose what you would like to change for this appointment.</p>
+              <button type="button" class="option-row" (click)="changeServices()">
+                <ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon>
+                <span>Change services</span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </button>
+              <button type="button" class="option-row" (click)="changeProfessional()">
+                <ion-icon name="person-outline" aria-hidden="true"></ion-icon>
+                <span>Change professional</span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </button>
+              <button type="button" class="option-row" (click)="rescheduleFromSheet()">
+                <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                <span>Reschedule</span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </button>
+              <button type="button" class="option-row" (click)="addService()">
+                <ion-icon name="add-outline" aria-hidden="true"></ion-icon>
+                <span>Add a service</span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </button>
+              <button type="button" class="option-row cancel-sheet-row" (click)="cancelFromSheet()">
+                <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+                <span>Cancel booking</span>
+              </button>
+            </section>
+          </div>
+        }
+
         @if (cancelSheetOpen()) {
-          <div class="cancel-sheet-backdrop" role="presentation" (click)="closeCancelSheet()">
-            <section class="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-sheet-title" (click)="$event.stopPropagation()">
-              <div class="cancel-sheet-copy">
-                <h2 id="cancel-sheet-title">Cancel this booking?</h2>
-                <p>This will cancel your appointment at {{ booking.businessName }}. The salon may apply its cancellation policy.</p>
-              </div>
-              <div class="cancel-sheet-actions">
-                <button type="button" class="neutral-action" (click)="closeCancelSheet()">Keep booking</button>
-                <button type="button" class="destructive-confirm" (click)="confirmCancelBooking(booking.id)">Cancel booking</button>
-              </div>
+          <div class="sheet-backdrop" role="presentation" (click)="closeCancelSheet()">
+            <section class="action-sheet cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-sheet-title" (click)="$event.stopPropagation()">
+              @if (cancelDone()) {
+                <div class="cancel-success" role="status">
+                  <ion-icon class="success-icon" name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
+                  <h2 id="cancel-sheet-title">Appointment cancelled</h2>
+                  <p class="cancel-summary-line">{{ booking.serviceName }} · {{ booking.businessName }} · {{ appointmentDisplay() }}</p>
+                  @if (cancelRefundLine(); as refund) {
+                    <p class="cancel-refund-note">{{ refund }}</p>
+                  }
+                  <ion-button expand="block" class="primary-gradient" (click)="closeCancelSheet()">Done</ion-button>
+                </div>
+              } @else {
+                <h2 id="cancel-sheet-title">Cancel this appointment?</h2>
+                <p class="cancel-summary-line">{{ booking.serviceName }} · {{ booking.businessName }} · {{ appointmentDisplay() }}</p>
+
+                <div class="impact-panel" aria-label="What happens after cancellation">
+                  <p class="impact-primary">This appointment will be cancelled.</p>
+                  @if (cancelRefundLine(); as refund) {
+                    <p class="impact-row"><ion-icon name="card-outline" aria-hidden="true"></ion-icon><span>{{ refund }}</span></p>
+                  }
+                  @if (cancelFeeLine(); as fee) {
+                    <p class="impact-row"><ion-icon name="alert-circle-outline" aria-hidden="true"></ion-icon><span>{{ fee }}</span></p>
+                  }
+                  @if (cancelCreditsLine(); as credits) {
+                    <p class="impact-row"><ion-icon name="gift-outline" aria-hidden="true"></ion-icon><span>{{ credits }}</span></p>
+                  }
+                </div>
+
+                @if (booking.cancellationPolicy) {
+                  <p class="policy-note">Policy: {{ booking.cancellationPolicy }}</p>
+                }
+
+                <div class="cancel-sheet-actions">
+                  <button type="button" class="neutral-action" (click)="closeCancelSheet()">Keep appointment</button>
+                  <button type="button" class="destructive-confirm" [disabled]="cancelSubmitting()" (click)="confirmCancelBooking(booking.id)">{{ cancelSubmitting() ? "Cancelling…" : "Yes, cancel appointment" }}</button>
+                </div>
+
+                @if (canReschedule()) {
+                  <button type="button" class="reschedule-offer" (click)="rescheduleInstead()">Would you prefer to reschedule instead?</button>
+                }
+              }
             </section>
           </div>
         }
@@ -228,8 +287,19 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .detail-header ion-toolbar { --min-height: 52px; }
     .detail-header ion-title { font-size: 1rem; font-weight: 850; letter-spacing: -0.015em; }
     .detail-page { display: grid; gap: 12px; max-width: 680px; }
+
+    .status-note {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.85rem;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
     .itinerary-card {
-      position: relative;
       min-width: 0;
       overflow: hidden;
       border: 1px solid rgba(11, 47, 85, 0.24);
@@ -238,171 +308,202 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       background: var(--brand-900);
       box-shadow: 0 14px 34px rgba(28, 28, 28, 0.15);
     }
-    .download-booking {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      z-index: 2;
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      border-radius: 13px;
-      color: #FFFFFF;
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(10px);
-      font-size: 1.08rem;
-      cursor: pointer;
-    }
-    .download-booking:active { transform: scale(0.97); }
-    .summary-top { padding: 16px 16px 12px; }
+    .summary-top { padding: 13px 16px 9px; }
     .booking-status-pill {
-      position: relative;
-      top: -16px;
       display: inline-flex;
       align-items: center;
-      gap: 3px;
       width: fit-content;
       min-height: 20px;
-      padding: 4px 6px;
+      padding: 4px 9px;
       color: #059669;
-      border-color: rgba(52, 211, 153, 0.38);
+      border: 1px solid rgba(52, 211, 153, 0.38);
       background: #D1FAE5;
       border-radius: 999px;
-      font-size: 0.58rem;
+      font-size: 0.62rem;
       font-weight: 900;
       line-height: 1;
       text-transform: capitalize;
-      box-shadow: none;
     }
-    .booking-status-pill.closed { color: var(--muted); background: var(--surface-soft); }
+    .booking-status-pill.closed { color: var(--muted); background: var(--surface-soft); border-color: transparent; }
     .summary-top h1 {
-      margin: 10px 0 3px;
+      margin: 8px 0 2px;
       color: #FFFFFF;
-      font-size: clamp(1.35rem, 6.2vw, 1.8rem);
+      font-size: clamp(1.12rem, 5.4vw, 1.35rem);
       font-weight: 900;
-      letter-spacing: -0.04em;
-      line-height: 1.08;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
       overflow-wrap: anywhere;
     }
-    .summary-top p { margin: 0; color: rgba(255, 255, 255, 0.76); font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
+    .summary-top p { margin: 0; color: rgba(255, 255, 255, 0.78); font-size: 0.86rem; font-weight: 700; overflow-wrap: anywhere; }
     .appointment-time {
       display: grid;
-      grid-template-columns: 22px minmax(0, 1fr);
-      gap: 1px 10px;
-      padding: 13px 16px;
+      grid-template-columns: 20px minmax(0, 1fr);
+      gap: 0 10px;
+      align-items: center;
+      padding: 9px 16px;
       border-block: 1px solid rgba(255, 255, 255, 0.11);
       background: rgba(255, 255, 255, 0.045);
     }
-    .appointment-time ion-icon { grid-row: 1 / span 2; align-self: center; color: #FFFFFF; font-size: 1.2rem; }
-    .appointment-time span { color: rgba(255, 255, 255, 0.82); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.035em; }
-    .appointment-time strong { color: #FFFFFF; font-size: clamp(1rem, 4.5vw, 1.2rem); line-height: 1.3; overflow-wrap: anywhere; }
-    .booking-facts { display: grid; margin: 0; background: rgba(99, 102, 241, 0.34); }
-    .booking-facts div { min-width: 0; padding: 11px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+    .appointment-time ion-icon { color: #FFFFFF; font-size: 1.05rem; }
+    .appointment-time span { display: block; color: rgba(255, 255, 255, 0.72); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .appointment-time strong { display: block; color: #FFFFFF; font-size: 0.95rem; line-height: 1.3; overflow-wrap: anywhere; }
+    .booking-facts { display: grid; margin: 0; }
+    .booking-facts div { min-width: 0; padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
     .booking-facts div:last-child { border-bottom: 0; }
-    .booking-facts dt { display: flex; align-items: center; gap: 7px; margin: 0 0 3px; color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 700; }
-    .booking-facts dt ion-icon { flex: 0 0 auto; font-size: 0.95rem; }
-    .booking-facts dd { margin: 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; word-break: break-word; }
+    .booking-facts dt { display: flex; align-items: center; gap: 7px; margin: 0 0 2px; color: rgba(255, 255, 255, 0.72); font-size: 0.66rem; font-weight: 750; }
+    .booking-facts dt ion-icon { flex: 0 0 auto; font-size: 0.88rem; }
+    .booking-facts dd { margin: 0; color: #FFFFFF; font-size: 0.86rem; font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; word-break: break-word; }
+    .reference-fact dd { font-size: 0.8rem; }
+    .reference-fact dt { color: rgba(255, 255, 255, 0.58); }
     .reference-value { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .reference-value > span { min-width: 0; color: #FFFFFF; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+    .reference-value > span { min-width: 0; color: rgba(255, 255, 255, 0.82); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
     .copy-reference {
       display: inline-flex;
       flex: 0 0 auto;
       align-items: center;
       justify-content: center;
-      gap: 5px;
-      min-height: 44px;
-      padding: 8px 6px;
+      gap: 4px;
+      min-height: 32px;
+      padding: 6px 8px;
       border: 0;
       border-radius: 8px;
-      color: #FFFFFF;
+      color: rgba(255, 255, 255, 0.9);
       background: transparent;
-      font-size: 0.78rem;
+      font-size: 0.7rem;
       font-weight: 800;
-      text-transform: none;
       cursor: pointer;
     }
-    .copy-reference:hover { background: rgba(255, 255, 255, 0.09); }
-    .detail-actions {
+    .copy-reference:hover { background: rgba(255, 255, 255, 0.1); }
+    .copy-reference:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+    .primary-actions {
       display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
-    .detail-actions ion-button {
-      min-height: 44px;
-      margin: 0;
-      text-transform: none;
+    .primary-actions .contact-wrap { grid-column: 1 / -1; display: grid; gap: 8px; }
+    .primary-action {
+      display: inline-flex;
+      min-width: 0;
+      min-height: 46px;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 900;
+      line-height: 1.15;
+      text-align: center;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform var(--motion-fast), box-shadow var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
     }
-    .utility-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .primary-action ion-icon { flex: 0 0 auto; font-size: 1rem; }
+    .primary-action span { min-width: 0; overflow-wrap: anywhere; }
+    .primary-action.reschedule {
+      color: #FFFFFF;
+      background: var(--primary);
+      box-shadow: 0 8px 18px rgba(99, 102, 241, 0.24);
+    }
+    .primary-action.contact, .primary-action.outline {
+      color: var(--primary);
+      border-color: var(--border-strong);
+      background: var(--surface);
+    }
+    .primary-action:hover { transform: translateY(-1px); }
+    .primary-action:disabled { color: var(--muted); border-color: var(--border); background: var(--surface-soft); cursor: not-allowed; opacity: 0.72; transform: none; box-shadow: none; }
+    .primary-action:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .contact-chevron { margin-left: auto; font-size: 0.9rem; transition: transform var(--motion-fast); }
+    .contact-wrap.expanded .contact-chevron { transform: rotate(90deg); }
+    .contact-wrap.expanded .primary-action.contact { border-color: var(--primary); background: var(--primary-soft); }
+    .contact-panel {
+      display: grid;
+      gap: 2px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--glass);
+    }
+
+    .manage-row {
+      width: 100%;
+      min-height: 46px;
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      color: var(--text);
+      background: var(--surface);
+      font-family: inherit;
+      font-size: 0.86rem;
+      font-weight: 850;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color var(--motion-fast), background var(--motion-fast);
+    }
+    .manage-row > ion-icon:first-child { color: var(--primary); font-size: 1.05rem; }
+    .manage-row:hover { border-color: var(--primary); background: var(--primary-soft); }
+    .manage-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+    .utility-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .utility-action {
       display: inline-flex;
       min-width: 0;
-      min-height: 44px;
+      min-height: 38px;
       align-items: center;
       justify-content: center;
       gap: 6px;
-      padding: 8px 9px;
+      padding: 6px 12px;
       border: 1px solid var(--border-strong);
       border-radius: 999px;
       color: var(--primary);
       background: var(--surface);
       font-family: inherit;
-      font-size: 0.82rem;
+      font-size: 0.78rem;
       font-weight: 850;
       line-height: 1.15;
-      text-align: center;
-      text-decoration: none;
-      text-transform: none;
       cursor: pointer;
       transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
     }
-    .utility-action ion-icon { flex: 0 0 auto; font-size: 1rem; }
-    .utility-action span { min-width: 0; color: inherit; overflow-wrap: anywhere; }
+    .utility-action ion-icon { flex: 0 0 auto; font-size: 0.95rem; }
     .utility-action:hover { border-color: var(--primary); background: var(--primary-soft); }
     .utility-action:disabled { color: var(--muted); border-color: var(--border); background: var(--surface-soft); cursor: not-allowed; opacity: 0.72; }
-    .destructive-action { --color: #B42318; color: #B42318; font-weight: 800; }
-    .more-options, .direct-options { border-top: 1px solid var(--border); }
-    .more-options > summary {
+    .utility-action:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+    .book-again-section {
       display: grid;
-      grid-template-columns: 14px auto;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      min-height: 44px;
-      padding: 10px 4px;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+    .book-again-copy { display: flex; align-items: flex-start; gap: 12px; }
+    .book-again-copy > ion-icon { flex: 0 0 auto; margin-top: 2px; color: var(--primary); font-size: 1.3rem; }
+    .book-again-copy h2 { margin: 0; font-size: 1rem; letter-spacing: -0.02em; }
+    .book-again-copy p { margin: 3px 0 0; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+    .book-again-section ion-button { min-height: 44px; margin: 0; text-transform: none; }
+
+    .help-salon {
+      display: grid;
+      gap: 2px;
+      padding: 6px 0 0;
+      border-top: 1px solid var(--border);
+    }
+    .help-salon h2 {
+      margin: 0 8px 4px;
       color: var(--muted);
-      list-style: none;
-      font-size: 0.82rem;
-      font-weight: 800;
-      line-height: 24px;
-      cursor: pointer;
+      font-size: 0.66rem;
+      font-weight: 950;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
-    .more-options > summary::-webkit-details-marker { display: none; }
-    .more-options > summary::before {
-      content: "›";
-      color: var(--primary);
-      font-size: 1.05rem;
-      font-weight: 900;
-      line-height: 1;
-      transform: rotate(0deg);
-      transition: transform var(--motion-fast);
-    }
-    .more-options[open] > summary::before { transform: rotate(90deg); }
-    .option-list, .direct-options, .contact-suboptions { display: grid; }
-    .option-list { gap: 10px; padding: 2px 0 6px; }
-    .action-section { display: grid; gap: 2px; padding: 10px 0 0; border-top: 1px solid var(--border); }
-    .action-section:first-child { border-top: 0; }
-    .action-section h2 { margin: 0 8px 4px; color: var(--muted); font-size: 0.68rem; font-weight: 950; letter-spacing: 0.08em; text-transform: uppercase; }
-    .danger-section { margin-top: 2px; padding: 10px 8px 8px; border: 1px solid rgba(180, 35, 24, 0.18); border-radius: 14px; background: rgba(255, 251, 250, 0.82); }
-    .danger-section h2 { margin-inline: 0; color: #B42318; }
-    .contact-options { min-width: 0; }
-    .contact-options > summary { list-style: none; }
-    .contact-options > summary::-webkit-details-marker { display: none; }
-    .contact-options > summary > span { overflow-wrap: normal; white-space: nowrap; }
-    .contact-options > summary .row-chevron { transition: transform var(--motion-fast); }
-    .contact-options[open] > summary .row-chevron { transform: rotate(90deg); }
-    .contact-suboptions { margin: 0 8px 4px 28px; padding-left: 6px; border-left: 2px solid var(--primary-soft); }
-    .contact-suboptions .option-row { font-size: 0.82rem; }
     .option-row {
       width: 100%;
       min-width: 0;
@@ -422,7 +523,6 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       line-height: 1.25;
       text-align: left;
       text-decoration: none;
-      text-transform: none;
       cursor: pointer;
     }
     .option-row:hover { background: var(--primary-soft); }
@@ -430,12 +530,9 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .option-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     .option-row > ion-icon:first-child { color: var(--primary); font-size: 1.05rem; }
     .option-row > span { min-width: 0; color: inherit; overflow-wrap: anywhere; }
-    .option-row .row-chevron { color: var(--muted); font-size: 0.95rem; }
-    .option-row.destructive-action > ion-icon:first-child { color: #B42318; }
-    .option-divider { height: 1px; margin: 4px 8px; background: var(--border); }
-    .more-options > summary:focus-visible, .policy-strip summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+    .row-chevron { color: var(--muted); font-size: 0.95rem; }
+
     .policy-strip {
-      margin-top: -4px;
       border-block: 1px solid var(--border);
       color: var(--text);
       background: var(--glass);
@@ -465,61 +562,104 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     }
     .policy-strip[open] summary::before { transform: rotate(90deg); }
     .policy-strip summary span { grid-column: 2; display: block; color: var(--text); font-size: 0.88rem; font-weight: 850; }
-    .policy-strip summary small { grid-column: 2; display: block; margin-top: 2px; color: #425A70; font-size: 0.75rem; font-weight: 650; }
-    .policy-strip p { margin: 0; padding: 0 4px 13px; color: var(--muted); font-size: 0.84rem; line-height: 1.45; overflow-wrap: anywhere; }
-    .help-centre { display: grid; gap: 0; width: fit-content; }
-    .help-link { width: fit-content; min-height: 44px; display: inline-flex; align-items: center; color: var(--primary); font-size: 0.85rem; font-weight: 800; text-decoration: none; }
-    .help-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-    .help-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-    .help-centre small { color: #425A70; font-size: 0.72rem; font-weight: 600; }
+    .policy-strip summary small { grid-column: 2; display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; font-weight: 650; }
+    .policy-strip p { margin: 0; padding: 0 4px 13px; color: var(--text); font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
+    .policy-strip summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+    .cancel-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 44px;
+      padding: 8px 14px;
+      border: 0;
+      border-radius: 10px;
+      color: #B42318;
+      background: transparent;
+      font-family: inherit;
+      font-size: 0.86rem;
+      font-weight: 850;
+      cursor: pointer;
+      justify-self: center;
+    }
+    .cancel-link ion-icon { font-size: 1rem; }
+    .cancel-link:hover { background: rgba(180, 35, 24, 0.07); }
+    .cancel-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
     .state-panel { padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-soft); }
     .state-panel h1 { margin: 0; font-size: 1.25rem; letter-spacing: -0.03em; }
     .state-panel p { margin: 8px 0 14px; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
 
-    .cancel-sheet-backdrop {
+    .sheet-backdrop {
       position: fixed;
       inset: 0;
       z-index: 1000;
       display: grid;
       align-items: end;
       padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
-      background: rgba(28, 28, 28, 0.34);
+      background: rgba(28, 28, 28, 0.42);
     }
-    .cancel-sheet {
+    .action-sheet {
       width: min(100%, 520px);
       display: grid;
-      gap: 16px;
+      gap: 2px;
       margin: 0 auto;
-      padding: 20px;
-      border: 1px solid rgba(180, 35, 24, 0.16);
+      padding: 18px 20px;
+      border: 1px solid var(--border);
       border-radius: 24px;
       background: var(--surface);
       box-shadow: 0 24px 60px rgba(28, 28, 28, 0.22);
     }
-    .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
-    .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
-    .cancel-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .action-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .action-sheet .sheet-subtitle { margin: 0 0 10px; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+    .action-sheet .option-row { border-radius: 10px; }
+    .cancel-sheet-row { color: #B42318 !important; margin-top: 6px; border-top: 1px solid var(--border); }
+    .cancel-sheet-row > ion-icon:first-child { color: #B42318; }
+    .cancel-sheet { gap: 12px; }
+    .cancel-summary-line { margin: 0; color: var(--text); font-size: 0.9rem; font-weight: 750; line-height: 1.45; overflow-wrap: anywhere; }
+    .impact-panel { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); }
+    .impact-primary { margin: 0; color: var(--text); font-size: 0.92rem; font-weight: 900; line-height: 1.4; }
+    .impact-row { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--muted); font-size: 0.84rem; font-weight: 650; line-height: 1.45; }
+    .impact-row ion-icon { flex: 0 0 auto; margin-top: 2px; color: var(--primary); font-size: 0.95rem; }
+    .policy-note { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.4; }
+    .reschedule-offer {
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      border-radius: 10px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-family: inherit;
+      font-size: 0.84rem;
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .reschedule-offer:hover { background: rgba(99, 102, 241, 0.16); }
+    .reschedule-offer:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .cancel-success { display: grid; gap: 10px; justify-items: center; padding: 8px 0 4px; text-align: center; }
+    .cancel-success .success-icon { font-size: 2.5rem; color: #059669; }
+    .cancel-success h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .cancel-refund-note { margin: 0; color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
+    .cancel-success ion-button { width: 100%; min-height: 48px; margin: 6px 0 0; text-transform: none; }
+    .cancel-sheet .cancel-sheet-actions { margin-top: 4px; }
+    .cancel-sheet-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .cancel-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
     .cancel-sheet-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
     .neutral-action { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
     .destructive-confirm { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
-    @media (min-width: 480px) {
-      .booking-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .booking-facts .venue-fact { grid-column: 1 / -1; }
-      .booking-facts div:nth-child(2) { border-right: 1px solid rgba(255, 255, 255, 0.1); border-bottom: 0; }
-      .booking-facts div:last-child { border-bottom: 0; }
-    }
-
-    @media (min-width: 900px) {
-      .summary-top { padding: 20px 22px 15px; }
-      .appointment-time { padding: 15px 22px; }
-      .booking-facts div { padding: 12px 22px; }
+    @media (min-width: 560px) {
+      .primary-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .primary-actions .contact-wrap { grid-column: auto; }
+      .itinerary-card .booking-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .itinerary-card .booking-facts .reference-fact { grid-column: 1 / -1; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .detail-page, .itinerary-card, .booking-status-pill, .detail-actions ion-button, .utility-action, .option-row, .contact-options > summary .row-chevron, .more-options > summary::before, .policy-strip summary::before, .cancel-sheet { animation: none; transition: none; }
-      .option-row:active { transform: none; }
+      .detail-page, .itinerary-card, .primary-action, .manage-row, .utility-action, .option-row, .cancel-link, .contact-chevron, .policy-strip summary::before { transition: none; }
+      .option-row:active, .primary-action:hover { transform: none; }
     }
   `]
 })
@@ -553,12 +693,50 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     const booking = this.booking();
     return !!booking && (booking.status === "pending" || booking.status === "confirmed");
   });
-  readonly moreActionCount = computed(() => (this.isActive() ? 7 : 3) + (this.salonRoute() ? 1 : 0));
+  readonly canReschedule = computed(() => {
+    const booking = this.booking();
+    if (!booking) return false;
+    const identity = this.resolvedBusiness()?.slug || booking.businessId;
+    return this.isActive() && !!identity && !!booking.serviceId;
+  });
+  readonly invoiceAvailable = computed(() => {
+    const booking = this.booking();
+    if (!booking) return false;
+    return booking.status === "completed" && (booking.paymentStatus === "paid" || booking.paymentStatus === "refunded");
+  });
+  readonly statusNote = computed<string | null>(() => {
+    const status = this.booking()?.status;
+    if (status === "cancelled") return "This booking was cancelled.";
+    if (status === "completed") return "This visit is complete.";
+    return null;
+  });
 
   readonly cancelSheetOpen = signal(false);
+  readonly manageSheetOpen = signal(false);
+  readonly contactExpanded = signal(false);
+  readonly cancelDone = signal(false);
+  readonly cancelSubmitting = signal(false);
+
+  readonly cancelRefundLine = computed<string | null>(() => {
+    const booking = this.booking();
+    if (!booking) return null;
+    const payment = String(booking.paymentStatus || "").toLowerCase();
+    if (["paid", "captured", "payment_received"].includes(payment)) return "Your payment will be refunded to your original payment method.";
+    if (["refunded"].includes(payment)) return "Your payment has already been refunded to your original payment method.";
+    return "No payment was taken for this appointment, so there is nothing to refund.";
+  });
+
+  readonly cancelFeeLine = computed<string | null>(() => {
+    const policy = String(this.booking()?.cancellationPolicy || "");
+    return /fee|charge|forfeit|deposit|penalty|%|percent/i.test(policy) ? policy : null;
+  });
+
+  // Bookings do not carry membership/package usage data today, so the credit
+  // consequence row is intentionally omitted until the API exposes that data.
+  readonly cancelCreditsLine = computed<string | null>(() => null);
 
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
-    addIcons({ calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, helpCircleOutline, locationOutline, navigateOutline, repeatOutline, shareSocialOutline, storefrontOutline, timeOutline });
+    addIcons({ addOutline, alertCircleOutline, calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, giftOutline, helpCircleOutline, locationOutline, navigateOutline, personOutline, repeatOutline, settingsOutline, shareSocialOutline, storefrontOutline, swapHorizontalOutline, timeOutline });
   }
 
   ngOnInit() {
@@ -573,12 +751,22 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings") : "/tabs/bookings";
   }
 
+  statusLabel(): string {
+    const status = this.booking()?.status || "";
+    return status ? status.charAt(0).toUpperCase() + status.slice(1) : "Booking";
+  }
+
   bookingChatLink(id: string): string {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id, "chat") : `/bookings/${encodeURIComponent(id)}/chat`;
   }
 
-  helpLink(): string {
-    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("help") : "/help";
+  helpRoute(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+  }
+
+  supportQuery(): { mode: string; bookingId: string } {
+    const id = this.booking()?.id;
+    return { mode: "booking", bookingId: id || "" };
   }
 
   private businessProfileUrl(slug: string): string {
@@ -655,7 +843,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   requestSupport() {
     const booking = this.booking();
     if (!booking) return;
-    void this.router.navigate([this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support"], { queryParams: { mode: "booking", bookingId: booking.id } });
+    void this.router.navigate([this.helpRoute()], { queryParams: this.supportQuery() });
   }
 
   addToCalendar() {
@@ -698,6 +886,75 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     anchor.click();
     anchor.remove();
     setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  toggleContact() {
+    this.contactExpanded.update((open) => !open);
+  }
+
+  openManageSheet() {
+    this.manageSheetOpen.set(true);
+  }
+
+  closeManageSheet(): void {
+    this.manageSheetOpen.set(false);
+  }
+
+  rescheduleFromSheet() {
+    this.closeManageSheet();
+    void this.reschedule();
+  }
+
+  cancelFromSheet() {
+    this.closeManageSheet();
+    this.cancelDone.set(false);
+    this.cancelSubmitting.set(false);
+    this.cancelSheetOpen.set(true);
+  }
+
+  changeServices() {
+    const booking = this.booking();
+    const identity = this.resolvedBusiness()?.slug || booking?.businessId;
+    if (!booking || !identity) {
+      this.setFeedback("This booking cannot be changed because the salon details are missing.");
+      return;
+    }
+    this.closeManageSheet();
+    void this.router.navigate([this.businessBookUrl(identity)], {
+      queryParams: { serviceId: booking.serviceId || undefined, staffId: booking.staffId || undefined, step: 1 }
+    });
+  }
+
+  changeProfessional() {
+    const booking = this.booking();
+    const identity = this.resolvedBusiness()?.slug || booking?.businessId;
+    if (!booking || !identity) {
+      this.setFeedback("This booking cannot be changed because the salon details are missing.");
+      return;
+    }
+    this.closeManageSheet();
+    void this.router.navigate([this.businessBookUrl(identity)], {
+      queryParams: {
+        serviceId: booking.serviceId || undefined,
+        staffId: booking.staffId || undefined,
+        date: this.localDateKey(this.parseDate(booking.startAt || booking.startsAt) || new Date()),
+        slotStartAt: booking.startAt || booking.startsAt || undefined,
+        step: 2
+      }
+    });
+  }
+
+  addService() {
+    const booking = this.booking();
+    const identity = this.resolvedBusiness()?.slug || booking?.businessId;
+    if (!booking || !identity) {
+      this.setFeedback("This booking cannot be changed because the salon details are missing.");
+      return;
+    }
+    this.closeManageSheet();
+    void this.router.navigate([this.businessBookUrl(identity)], {
+      queryParams: { serviceId: booking.serviceId || undefined, staffId: booking.staffId || undefined, step: 1 }
+    });
   }
 
   private resolveSalonPhone(business: Business | null): { label: string; href: string } | null {
@@ -788,10 +1045,14 @@ export class BookingDetailPage implements OnInit, OnDestroy {
 
   private paymentLabel(value: unknown): string {
     const raw = String(value || "").trim();
-    if (!raw) return "Pay at venue";
+    if (!raw) return "Pay at salon";
     const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_").replace(/[^a-z0-9_]/g, "");
-    if (["not_required", "no_payment_required"].includes(normalized)) return "No payment required";
-    if (["pay_at_venue", "pay_on_arrival", "pay_at_salon", "payment_at_venue", "cash_at_venue"].includes(normalized)) return "Pay at venue";
+    if (["paid", "payment_received", "success", "captured"].includes(normalized)) return "Paid online";
+    if (["refunded", "refund_completed", "refund_issued"].includes(normalized)) return "Refunded";
+    if (["not_required", "no_payment_required"].includes(normalized)) {
+      return this.booking()?.status === "completed" ? "No charge" : "Pay at salon";
+    }
+    if (["pay_at_venue", "pay_on_arrival", "pay_at_salon", "payment_at_venue", "cash_at_venue", "pending", "unpaid", "due"].includes(normalized)) return "Pay at salon";
     const readable = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
     return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : raw;
   }
@@ -925,16 +1186,32 @@ export class BookingDetailPage implements OnInit, OnDestroy {
 
   async cancel() {
     if (!this.booking()) return;
+    this.cancelDone.set(false);
+    this.cancelSubmitting.set(false);
     this.cancelSheetOpen.set(true);
   }
 
   closeCancelSheet(): void {
     this.cancelSheetOpen.set(false);
+    this.cancelDone.set(false);
+  }
+
+  rescheduleInstead() {
+    this.closeCancelSheet();
+    void this.reschedule();
   }
 
   async confirmCancelBooking(id: string) {
-    this.cancelSheetOpen.set(false);
-    await this.marketplace.cancelBooking(id).catch(() => undefined);
+    if (this.cancelSubmitting()) return;
+    this.cancelSubmitting.set(true);
+    try {
+      await this.marketplace.cancelBooking(id);
+      this.cancelDone.set(true);
+    } catch {
+      // The error is surfaced through marketplace.error(); keep the sheet open.
+    } finally {
+      this.cancelSubmitting.set(false);
+    }
   }
 
   async reschedule() {

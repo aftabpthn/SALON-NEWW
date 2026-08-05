@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonContent, IonIcon } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
-import { arrowBackOutline, arrowUpOutline, calendarOutline, chatbubbleEllipsesOutline, chevronDownOutline, refreshOutline } from "ionicons/icons";
+import { arrowBackOutline, arrowUpOutline, calendarOutline, chatbubbleEllipsesOutline, checkmarkDoneOutline, checkmarkOutline, chevronDownOutline, refreshOutline, timeOutline } from "ionicons/icons";
 import { Booking, CustomerBookingChatMessage, CustomerBookingChatThread } from "../../core/api.types";
 import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
@@ -33,11 +33,11 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
         </header>
 
         @if (loading()) {
-          <section class="message-scroll skeleton-thread" aria-label="Loading conversation">
-            <div class="context-skeleton"></div>
-            <div class="bubble-skeleton left"></div>
-            <div class="bubble-skeleton right"></div>
-            <div class="bubble-skeleton left short"></div>
+          <section class="message-scroll loading-state" aria-label="Loading conversation" aria-busy="true">
+            <div class="loading-indicator" role="status">
+              <span class="spinner" aria-hidden="true"></span>
+              <p>Opening conversation&hellip;</p>
+            </div>
           </section>
         } @else if (loadError() || !booking() || !thread()) {
           <section class="message-scroll state-wrap">
@@ -55,12 +55,18 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
             <details class="booking-context">
               <summary>
                 <span class="context-icon"><ion-icon name="calendar-outline" aria-hidden="true"></ion-icon></span>
-                <span><strong>{{ booking()!.serviceName }}</strong><small>Booking {{ bookingReference() }}</small></span>
+                <span class="context-copy">
+                  <strong>{{ booking()!.serviceName }}</strong>
+                  <small>{{ contextSummary() }}</small>
+                </span>
                 <ion-icon name="chevron-down-outline" aria-hidden="true"></ion-icon>
               </summary>
-              <div>
-                <p>{{ appointmentLabel() }}</p>
-                <a [routerLink]="bookingRoute()">View booking details</a>
+              <div class="context-body">
+                <p class="context-appointment">{{ appointmentLabel() }}</p>
+                <div class="context-row">
+                  <span class="context-reference">Booking #{{ bookingReference() }}</span>
+                  <a [routerLink]="bookingRoute()">View booking details</a>
+                </div>
               </div>
             </details>
 
@@ -71,7 +77,19 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
               </div>
             }
 
-            @for (message of messages(); track messageKey(message)) {
+            @if (showQuickPrompts()) {
+              <div class="quick-prompts" role="group" aria-label="Suggested messages">
+                <button type="button" class="quick-chip" (click)="usePrompt('I\u2019m running late')">I&rsquo;m running late</button>
+                <button type="button" class="quick-chip" (click)="usePrompt('Can I reschedule?')">Can I reschedule?</button>
+                <button type="button" class="quick-chip" (click)="usePrompt('Please share directions')">Please share directions</button>
+                <button type="button" class="quick-chip" (click)="usePrompt('I have a service question')">I have a service question</button>
+              </div>
+            }
+
+            @for (message of messages(); track messageKey(message); let i = $index) {
+              @if (dayLabel(message, i)) {
+                <div class="day-divider"><span>{{ dayLabel(message, i) }}</span></div>
+              }
               <article class="message-row" [class.customer]="message.senderType === 'customer'" [class.system]="message.senderType === 'system'">
                 <div class="message-bubble">
                   <span class="sender">{{ senderLabel(message) }}</span>
@@ -79,7 +97,16 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
                   <footer>
                     <time [attr.datetime]="message.createdAt">{{ timeLabel(message.createdAt) }}</time>
                     @if (message.senderType === "customer") {
-                      <span class="delivery" [class.failed]="message.deliveryState === 'failed'">{{ deliveryLabel(message) }}</span>
+                      @if (message.deliveryState === "failed") {
+                        <span class="delivery failed" role="status">Failed</span>
+                      } @else if (message.deliveryState === "sending") {
+                        <span class="delivery sending" role="status">Sending</span>
+                      } @else {
+                        <span class="delivery" [class.read]="message.staffReadAt">
+                          <ion-icon [name]="message.staffReadAt ? 'checkmark-done-outline' : 'checkmark-outline'" aria-hidden="true"></ion-icon>
+                          <span class="visually-hidden">{{ message.staffReadAt ? "Read" : "Sent" }}</span>
+                        </span>
+                      }
                     }
                   </footer>
                 </div>
@@ -90,8 +117,9 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
             } @empty {
               <section class="empty-chat">
                 <div class="empty-mark"><ion-icon name="chatbubble-ellipses-outline" aria-hidden="true"></ion-icon></div>
-                <h2>Start the conversation</h2>
-                <p>Ask the salon a question about this booking.</p>
+                <h2>Ask the salon about this appointment</h2>
+                <p>Questions about your service, timing, or directions? Drop a message below.</p>
+                <p class="response-note"><ion-icon name="time-outline" aria-hidden="true"></ion-icon>Usually replies within 15 minutes during business hours.</p>
               </section>
             }
 
@@ -108,6 +136,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
               <label for="booking-chat-message" class="visually-hidden">Message salon</label>
               <div class="composer-field">
                 <textarea
+                  #composerInput
                   id="booking-chat-message"
                   name="message"
                   rows="1"
@@ -134,7 +163,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     </ion-content>
   `,
   styles: [`
-    :host { display: block; height: 100%; background: #071E35; }
+    :host { display: block; height: 100%; background: var(--brand-950); }
     .chat-content { --background: var(--surface-soft); }
     .chat-shell {
       width: min(100%, 920px);
@@ -157,7 +186,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       min-height: 68px;
       padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
       color: #FFFFFF;
-      background: #082F53;
+      background: var(--brand-900);
       box-shadow: 0 6px 24px rgba(28, 28, 28, 0.16);
     }
     .back-button {
@@ -175,7 +204,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     }
     .back-button:hover { background: rgba(255, 255, 255, 0.12); }
     .back-button:focus-visible, button:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible {
-      outline: 3px solid #75BFFF;
+      outline: 3px solid var(--focus);
       outline-offset: 2px;
     }
     .header-copy { min-width: 0; display: grid; gap: 3px; }
@@ -217,50 +246,76 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       box-shadow: 0 4px 16px rgba(28, 28, 28, 0.05);
     }
     .booking-context summary {
-      min-height: 58px;
+      min-height: 52px;
       display: grid;
-      grid-template-columns: 38px minmax(0, 1fr) 20px;
+      grid-template-columns: 36px minmax(0, 1fr) 20px;
       gap: 10px;
       align-items: center;
-      padding: 8px 12px;
+      padding: 6px 10px;
       list-style: none;
       cursor: pointer;
     }
     .booking-context summary::-webkit-details-marker { display: none; }
-    .context-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; color: #FFFFFF; background: #6366F1; }
-    .booking-context summary > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
+    .context-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: #FFFFFF; background: var(--primary); }
+    .context-copy { min-width: 0; display: grid; gap: 2px; }
     .booking-context strong, .booking-context small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .booking-context strong { color: var(--text); font-size: 0.86rem; }
-    .booking-context small { color: var(--muted); font-size: 0.72rem; font-weight: 650; }
+    .booking-context small { color: var(--muted); font-size: 0.7rem; font-weight: 650; }
     .booking-context summary > ion-icon { color: var(--muted); transition: transform 180ms ease-out; }
     .booking-context[open] summary > ion-icon { transform: rotate(180deg); }
-    .booking-context > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--border); }
-    .booking-context p { min-width: 0; margin: 0; color: var(--muted); font-size: 0.76rem; font-weight: 650; overflow-wrap: anywhere; }
-    .booking-context a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; color: #6366F1; font-size: 0.76rem; font-weight: 800; }
+    .context-body { display: grid; gap: 8px; padding: 11px 14px 12px; border-top: 1px solid var(--border); }
+    .context-appointment { margin: 0; color: var(--text); font-size: 0.8rem; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
+    .context-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .context-reference { min-width: 0; color: var(--muted); font-size: 0.7rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .booking-context a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; color: var(--primary); font-size: 0.76rem; font-weight: 800; }
     .message-row { max-width: min(82%, 620px); align-self: flex-start; display: grid; gap: 5px; animation: message-in 320ms ease-out both; }
     .message-row.customer { align-self: flex-end; justify-items: end; }
     .message-row.system { max-width: min(92%, 680px); align-self: center; }
-    .message-bubble { min-width: 74px; padding: 9px 11px 7px; border: 1px solid var(--border); border-radius: 15px 15px 15px 4px; background: var(--surface); box-shadow: 0 3px 12px rgba(28, 28, 28, 0.05); }
-    .customer .message-bubble { color: #FFFFFF; border-color: #6366F1; border-radius: 15px 15px 4px 15px; background: #6366F1; box-shadow: 0 6px 18px rgba(28, 28, 28, 0.16); }
-    .system .message-bubble { padding: 7px 12px; border: 0; border-radius: 999px; color: var(--muted); background: var(--surface-elevated); box-shadow: none; text-align: center; }
+    .message-bubble { min-width: 74px; padding: 12px 14px 9px; border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; background: var(--surface); box-shadow: 0 3px 12px rgba(28, 28, 28, 0.05); }
+    .customer .message-bubble { color: #FFFFFF; border-color: var(--primary); border-radius: 16px 16px 4px 16px; background: var(--primary); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.2); }
+    .system .message-bubble { padding: 8px 14px; border: 0; border-radius: 999px; color: var(--muted); background: var(--surface-elevated); box-shadow: none; text-align: center; }
     .sender { display: block; margin-bottom: 3px; color: var(--muted); font-size: 0.65rem; font-weight: 850; letter-spacing: 0.025em; }
-    .customer .sender { color: #C9E4F8; }
+    .customer .sender { color: rgba(255, 255, 255, 0.82); }
     .system .sender { margin-bottom: 1px; color: var(--muted); font-size: 0.58rem; }
-    .message-bubble p { margin: 0; color: inherit; font-size: 0.9rem; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .message-bubble p { margin: 0; color: inherit; font-size: 0.95rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
     .system .message-bubble p { font-size: 0.75rem; font-weight: 700; }
-    .message-bubble footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 4px; color: var(--muted); font-size: 0.63rem; font-weight: 650; }
-    .customer .message-bubble footer { color: #C9DBEA; }
+    .message-bubble footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 5px; color: var(--muted); font-size: 0.63rem; font-weight: 650; }
+    .customer .message-bubble footer { color: rgba(255, 255, 255, 0.72); }
     .system .message-bubble footer { justify-content: center; margin-top: 2px; }
-    .delivery::before { content: "·"; margin-right: 7px; }
-    .delivery.failed { color: #FFD0D0; font-weight: 800; }
-    .message-retry { min-height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: #6366F1; background: var(--surface); font: inherit; font-size: 0.72rem; font-weight: 800; }
+    .delivery { display: inline-flex; align-items: center; gap: 1px; }
+    .delivery ion-icon { font-size: 0.82rem; }
+    .delivery.read { color: #FFFFFF; }
+    .delivery.read ion-icon { font-size: 0.88rem; }
+    .delivery.failed, .delivery.sending { font-weight: 800; }
+    .delivery.failed { color: #FFD0D0; }
+    .delivery.sending { color: rgba(255, 255, 255, 0.72); }
+    .message-retry { min-height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--primary); background: var(--surface); font: inherit; font-size: 0.72rem; font-weight: 800; }
     .message-retry:disabled { opacity: 0.55; }
     .sync-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid #E4C477; border-radius: 10px; color: var(--text); background: var(--gold-soft); font-size: 0.74rem; font-weight: 700; }
-    .sync-notice button { min-height: 36px; border: 0; color: #6366F1; background: transparent; font: inherit; font-weight: 850; }
-    .empty-chat { margin: auto; max-width: 320px; display: grid; justify-items: center; gap: 7px; padding: 32px 12px; text-align: center; }
-    .empty-mark, .state-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #FFFFFF; background: #6366F1; font-size: 1.35rem; }
+    .sync-notice button { min-height: 36px; border: 0; color: var(--primary); background: transparent; font: inherit; font-weight: 850; }
+    .day-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; color: var(--muted); font-size: 0.64rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+    .day-divider::before, .day-divider::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border); }
+    .quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; }
+    .quick-chip {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--surface);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 800;
+      transition: border-color 180ms ease-out, background 180ms ease-out, transform 180ms ease-out;
+    }
+    .quick-chip:hover { border-color: var(--primary); background: var(--primary-soft); }
+    .quick-chip:active { transform: scale(0.97); }
+    .empty-chat { margin: auto; max-width: 340px; display: grid; justify-items: center; gap: 7px; padding: 32px 12px; text-align: center; }
+    .empty-mark, .state-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #FFFFFF; background: var(--primary); font-size: 1.35rem; }
     .empty-chat h2, .state-card h2 { margin: 4px 0 0; color: var(--text); font-size: 1.05rem; }
     .empty-chat p, .state-card p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.5; }
+    .response-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: 0.72rem; font-weight: 650; line-height: 1.4; }
+    .response-note ion-icon { flex: 0 0 auto; font-size: 0.85rem; }
     .closed-notice { align-self: center; display: grid; gap: 3px; max-width: 420px; margin-top: 8px; padding: 10px 14px; border-radius: 10px; color: var(--muted); background: var(--surface-elevated); text-align: center; }
     .closed-notice strong { font-size: 0.8rem; }
     .closed-notice span { font-size: 0.72rem; line-height: 1.4; }
@@ -270,7 +325,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       grid-template-columns: minmax(0, 1fr) 48px;
       gap: 9px;
       align-items: end;
-      padding: 10px clamp(12px, 4vw, 20px) calc(10px + env(safe-area-inset-bottom));
+      padding: 10px clamp(12px, 4vw, 20px) calc(10px + env(safe-area-inset-bottom) + var(--keyboard-offset, 0px));
       border-top: 1px solid var(--border);
       background: var(--surface);
       box-shadow: 0 -8px 24px rgba(28, 28, 28, 0.06);
@@ -278,29 +333,41 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     .composer-field { position: relative; min-width: 0; }
     textarea { width: 100%; max-height: 128px; min-height: 48px; display: block; resize: none; overflow-y: auto; padding: 12px 48px 12px 14px; border: 1px solid var(--border); border-radius: 16px; outline: 0; color: var(--text); background: var(--surface-soft); font: inherit; font-size: 0.9rem; line-height: 1.45; }
     textarea::placeholder { color: var(--muted); opacity: 1; }
-    textarea:focus { border-color: #1672B8; box-shadow: 0 0 0 3px rgba(22, 114, 184, 0.13); }
+    textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
     textarea:disabled { color: var(--muted); background: var(--surface-soft); }
     .character-count { position: absolute; right: 11px; bottom: 7px; color: var(--muted); font-size: 0.62rem; font-weight: 750; }
     .character-count.at-limit { color: #B42318; }
-    .send-button { width: 48px; height: 48px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 15px; color: #FFFFFF; background: #6366F1; font-size: 1.25rem; box-shadow: 0 6px 16px rgba(28, 28, 28, 0.2); transition: background 180ms ease-out, opacity 180ms ease-out; }
-    .send-button:hover:not(:disabled) { background: #6366F1; }
-    .send-button:disabled { opacity: 0.42; box-shadow: none; }
+    .send-button {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 15px;
+      color: #FFFFFF;
+      background: var(--primary);
+      font-size: 1.25rem;
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.26);
+      transition: background 180ms ease-out, transform 180ms ease-out;
+    }
+    .send-button:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+    .send-button:active:not(:disabled) { transform: scale(0.96); }
+    .send-button:disabled { color: var(--muted); background: var(--surface-elevated); box-shadow: none; }
     .closed-composer { grid-template-columns: 1fr; min-height: calc(58px + env(safe-area-inset-bottom)); place-items: center; color: var(--muted); font-size: 0.8rem; font-weight: 750; }
     .state-wrap { justify-content: center; }
     .state-card { align-self: center; display: grid; justify-items: center; gap: 9px; max-width: 360px; margin: auto; padding: 28px 20px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); text-align: center; box-shadow: 0 12px 36px rgba(28, 28, 28, 0.09); }
-    .retry-button { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; border: 0; border-radius: 12px; color: #FFFFFF; background: #6366F1; font: inherit; font-weight: 800; }
-    .skeleton-thread { pointer-events: none; }
-    .context-skeleton, .bubble-skeleton { background: linear-gradient(100deg, var(--surface-elevated) 20%, var(--surface-soft) 45%, var(--surface-elevated) 70%); background-size: 240% 100%; animation: skeleton-shimmer 900ms ease-out 2; }
-    .context-skeleton { height: 60px; border-radius: 13px; }
-    .bubble-skeleton { width: 62%; height: 62px; border-radius: 15px; }
-    .bubble-skeleton.right { align-self: flex-end; width: 54%; }
-    .bubble-skeleton.short { width: 42%; height: 46px; }
+    .retry-button { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; border: 0; border-radius: 12px; color: #FFFFFF; background: var(--primary); font: inherit; font-weight: 800; }
+    .loading-state { justify-content: center; }
+    .loading-indicator { display: grid; justify-items: center; gap: 10px; margin: auto; color: var(--muted); text-align: center; }
+    .loading-indicator p { margin: 0; font-size: 0.84rem; font-weight: 700; }
+    .spinner { width: 34px; height: 34px; border: 3px solid var(--border-strong); border-top-color: var(--primary); border-radius: 50%; animation: spin 800ms linear infinite; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
     @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes skeleton-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 359px) {
       .message-row { max-width: 88%; }
-      .booking-context > div { align-items: flex-start; flex-direction: column; }
+      .booking-context .context-row { align-items: flex-start; flex-direction: column; }
     }
     @media (max-width: 699px) {
       .chat-header {
@@ -338,13 +405,14 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       .chat-header { padding-top: 8px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .message-row, .context-skeleton, .bubble-skeleton { animation: none; }
-      .back-button, .booking-context summary > ion-icon, .send-button { transition: none; }
+      .message-row, .spinner { animation: none; }
+      .back-button, .booking-context summary > ion-icon, .send-button, .quick-chip { transition: none; }
     }
   `]
 })
 export class BookingChatPage implements OnInit, OnDestroy {
   @ViewChild("messageList") private messageList?: ElementRef<HTMLElement>;
+  @ViewChild("composerInput") private composerInput?: ElementRef<HTMLTextAreaElement>;
 
   readonly booking = signal<Booking | null>(null);
   readonly thread = signal<CustomerBookingChatThread | null>(null);
@@ -359,7 +427,22 @@ export class BookingChatPage implements OnInit, OnDestroy {
   readonly sendError = signal("");
   readonly threadClosed = computed(() => this.thread()?.status === "resolved" || this.thread()?.status === "closed");
   readonly bookingReference = computed(() => String(this.booking()?.reference || this.booking()?.id || ""));
-  readonly bookingRoute = computed(() => this.booking()?.id ? this.bookingDetailUrl(this.booking()!.id) : this.bookingsUrl());
+  readonly bookingRoute = computed(() => this.booking()?.id ? `${this.bookingDetailUrl(this.booking()!.id)}?from=chat` : this.bookingsUrl());
+  readonly contextSummary = computed(() => {
+    const booking = this.booking();
+    const raw = booking?.displayStartAt || booking?.startsAt || booking?.startAt;
+    const parts: string[] = [];
+    if (raw) {
+      const date = new Date(raw);
+      if (Number.isFinite(date.getTime())) {
+        parts.push(new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true }).format(date));
+      }
+    }
+    const reference = this.bookingReference();
+    if (reference) parts.push(`#${reference}`);
+    return parts.join(" · ") || "Appointment details";
+  });
+  readonly showQuickPrompts = computed(() => !this.threadClosed() && !this.messages().some((message) => message.senderType === "customer"));
   readonly bookingContext = computed(() => {
     const booking = this.booking();
     if (!booking) return "Booking conversation";
@@ -399,7 +482,7 @@ export class BookingChatPage implements OnInit, OnDestroy {
     private readonly api: CustomerApiService,
     private readonly marketplace: MarketplaceService
   ) {
-    addIcons({ arrowBackOutline, arrowUpOutline, calendarOutline, chatbubbleEllipsesOutline, chevronDownOutline, refreshOutline });
+    addIcons({ arrowBackOutline, arrowUpOutline, calendarOutline, chatbubbleEllipsesOutline, checkmarkDoneOutline, checkmarkOutline, chevronDownOutline, refreshOutline, timeOutline });
   }
 
   goBack() {
@@ -547,14 +630,43 @@ export class BookingChatPage implements OnInit, OnDestroy {
     return message.senderName?.trim() || this.thread()?.salonName || "Salon team";
   }
 
-  deliveryLabel(message: ChatMessage): string {
-    if (message.deliveryState === "sending") return "Sending";
-    if (message.deliveryState === "failed") return "Failed";
-    return message.staffReadAt ? "Read" : "Sent";
+  usePrompt(text: string) {
+    this.draft = text;
+    this.sendError.set("");
+    this.composerInput?.nativeElement.focus();
+  }
+
+  dayLabel(message: ChatMessage, index: number): string | null {
+    const date = new Date(message.createdAt);
+    if (!Number.isFinite(date.getTime())) return null;
+    if (index > 0) {
+      const previous = this.messages()[index - 1];
+      const previousDate = new Date(previous.createdAt);
+      if (Number.isFinite(previousDate.getTime()) && this.sameDay(previousDate, date)) return null;
+    }
+    return this.dayGroupLabel(date);
   }
 
   messageKey(message: ChatMessage): string {
     return message.clientMessageId || message.id;
+  }
+
+  private sameDay(left: Date, right: Date): boolean {
+    return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+  }
+
+  private dayGroupLabel(date: Date): string {
+    const today = new Date();
+    if (this.sameDay(date, today)) return "Today";
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (this.sameDay(date, yesterday)) return "Yesterday";
+    return new Intl.DateTimeFormat("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined
+    }).format(date);
   }
 
   timeLabel(value: string): string {
