@@ -32,6 +32,8 @@ const PROVIDER_UNREACHABLE: &str = "unreachable";
 const PROVIDER_HTTP_ERROR: &str = "http_error";
 /// The AI service replied with a body this service could not use.
 const PROVIDER_INVALID_RESPONSE: &str = "invalid_response";
+/// The AI service answered with a model the tenant has not allow-listed.
+const PROVIDER_MODEL_NOT_ALLOWED: &str = "model_not_allowed";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1054,7 +1056,10 @@ async fn call_provider(
             "confidence":answer.confidence,
             "instruction":"These figures come from the CRM database and are authoritative. Explain and summarise them, keeping the branch, the date period, the current-vs-previous values, the stated reason, the confidence level and the recommended action. Never invent numbers, names, dates or causes that are not present here, and never state a cause more strongly than the stated confidence supports."
         })),
-        "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data}
+        // `model_allowlist` is a hint so the service can pick an approved model
+        // up front. It is not trusted: the reply is checked against the same
+        // list on the way back.
+        "governance":{"prompt_version":governance.prompt_version,"allowed_intents":["general","booking","handoff"],"require_booking_confirmation":true,"redact_sensitive_data":governance.redact_sensitive_data,"model_allowlist":governance.model_allowlist}
     });
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(
@@ -1103,6 +1108,19 @@ async fn call_provider(
         .await
         .map(provider_payload)
     {
+        // The tenant's allow-list is checked against what actually answered, so
+        // a provider that ignores the hint still cannot put an unapproved model
+        // in front of a user — it just falls back to the grounded CRM reply.
+        Ok(Some(data)) if !model_allowed(&governance.model_allowlist, &data.model) => {
+            tracing::warn!(
+                tenant_id,
+                branch_id,
+                model = %data.model,
+                channel = %session.channel,
+                "AI provider used a model outside the tenant allow-list; answering from CRM data"
+            );
+            (fallback, PROVIDER_MODEL_NOT_ALLOWED)
+        }
         Ok(Some(data)) => (data, PROVIDER_LIVE),
         Ok(None) => {
             tracing::warn!(
@@ -1127,6 +1145,31 @@ async fn call_provider(
 /// A provider payload is only usable when the envelope reports success and carries data.
 fn provider_payload(envelope: ProviderEnvelope<ProviderResponse>) -> Option<ProviderResponse> {
     envelope.success.then_some(envelope.data).flatten()
+}
+
+/// Whether the tenant permits an answer produced by this model.
+///
+/// An empty allow-list means no restriction, which is the shipped default: a
+/// tenant that has never opened the setting is not silently cut off from the
+/// provider. Naming even one model makes the list exhaustive, so anything else
+/// is treated as unusable rather than trusted.
+///
+/// The check is on the model the provider *reports having used*, not on the one
+/// it was asked for. The allow-list is also sent with the request, but that is a
+/// hint to the AI service; this is the enforcement, and it belongs on the Rust
+/// side because that is the only side of the call the tenant's settings govern.
+fn model_allowed(allowlist: &Value, model: &str) -> bool {
+    let Some(entries) = allowlist.as_array() else {
+        return true;
+    };
+    if entries.is_empty() {
+        return true;
+    }
+    let model = model.trim();
+    entries
+        .iter()
+        .filter_map(Value::as_str)
+        .any(|allowed| allowed.trim().eq_ignore_ascii_case(model))
 }
 
 /// States plainly that the answer exists but this role may not see it, rather
@@ -1621,11 +1664,52 @@ fn owner_claims() -> AuthClaims {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_governance, local_response, normalize_recording_consent, provider_payload, redact,
-        ProviderEnvelope, ProviderResponse,
+        default_governance, local_response, model_allowed, normalize_recording_consent,
+        provider_payload, redact, ProviderEnvelope, ProviderResponse,
     };
+    use serde_json::json;
 
     use crate::repositories::ai_concierge_repository::{AiOperationalContext, AiServiceCandidate};
+
+    #[test]
+    fn an_unset_allowlist_does_not_restrict_the_provider() {
+        // The shipped default. A tenant that never opened the setting keeps
+        // working rather than losing the provider silently.
+        assert!(model_allowed(&json!([]), "gpt-5.4-mini"));
+        assert!(model_allowed(
+            &default_governance().model_allowlist,
+            "any-model"
+        ));
+    }
+
+    #[test]
+    fn a_named_allowlist_is_exhaustive() {
+        let allowlist = json!(["gpt-5.4-mini", "claude-haiku-4-5-20251001"]);
+        assert!(model_allowed(&allowlist, "gpt-5.4-mini"));
+        assert!(model_allowed(&allowlist, "claude-haiku-4-5-20251001"));
+        // The point of the setting: anything not named is refused, including a
+        // more capable model the tenant did not approve.
+        assert!(!model_allowed(&allowlist, "gpt-5.4"));
+        assert!(!model_allowed(&allowlist, ""));
+    }
+
+    #[test]
+    fn allowlist_matching_ignores_case_and_padding() {
+        // Model names are typed into a settings field by hand.
+        let allowlist = json!(["  GPT-5.4-Mini  "]);
+        assert!(model_allowed(&allowlist, "gpt-5.4-mini"));
+        assert!(model_allowed(&allowlist, " gpt-5.4-mini "));
+        assert!(!model_allowed(&allowlist, "gpt-5.4-minis"));
+    }
+
+    #[test]
+    fn a_malformed_allowlist_does_not_lock_out_the_provider() {
+        // The column is JSON, so a non-array is reachable. Failing open here is
+        // deliberate: a corrupt setting should not take AI down for a tenant,
+        // and the value cannot widen access beyond what permissions already allow.
+        assert!(model_allowed(&json!("gpt-5.4-mini"), "gpt-5.4-mini"));
+        assert!(model_allowed(&json!(null), "anything"));
+    }
 
     fn provider_reply() -> ProviderResponse {
         ProviderResponse {

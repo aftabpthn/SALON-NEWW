@@ -262,6 +262,10 @@ class ConciergeGovernance(BaseModel):
     allowed_intents: list[str] = Field(default_factory=lambda: ["general", "booking", "handoff"], max_length=20)
     require_booking_confirmation: bool = True
     redact_sensitive_data: bool = True
+    # Models this tenant permits. Empty means unrestricted. The CRM re-checks the
+    # model on the reply, so skipping the call here saves a spend that would have
+    # been discarded anyway — it is not the enforcement point.
+    model_allowlist: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ConciergeOperationalContext(BaseModel):
@@ -774,6 +778,8 @@ async def concierge_respond(payload: ConciergeRequest):
     if not api_key:
         return envelope(fallback)
     model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
+    if not model_permitted(payload, model):
+        return envelope(fallback)
     request_body = {
         "model": model,
         "instructions": concierge_instructions(payload),
@@ -1170,11 +1176,28 @@ def concierge_context(payload: ConciergeRequest):
     }
 
 
+def model_permitted(payload: ConciergeRequest, model: str) -> bool:
+    """Whether the tenant's allow-list covers the model this service would call.
+
+    An empty allow-list means unrestricted. The CRM checks the same rule against
+    the model named on the reply, so this only avoids paying for an answer that
+    would be discarded on arrival. It is not the enforcement point.
+    """
+    allowed = [
+        item.strip().casefold()
+        for item in payload.governance.model_allowlist
+        if item.strip()
+    ]
+    return not allowed or model.strip().casefold() in allowed
+
+
 async def ollama_concierge_response(payload: ConciergeRequest, fallback: dict):
     # Transactional intent and action fields stay deterministic; the model supplies safe conversational text only.
     if fallback["intent"] != "general":
         return fallback
     model = os.getenv("OLLAMA_MODEL", "llama3.2:1b").strip() or "llama3.2:1b"
+    if not model_permitted(payload, model):
+        return fallback
     base_url = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=90.0) as client:
@@ -1210,6 +1233,8 @@ async def anthropic_concierge_response(payload: ConciergeRequest, fallback: dict
     if not api_key:
         return fallback
     model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip() or "claude-haiku-4-5-20251001"
+    if not model_permitted(payload, model):
+        return fallback
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
