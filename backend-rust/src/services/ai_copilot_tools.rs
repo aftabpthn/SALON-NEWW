@@ -984,6 +984,10 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
         &[
             "kam ho", "kam ha", "declin", "drop", "down", "falling", "weak", "poor", "low",
             "gir rah", "घट", "कम",
+            // "kam kyun ho rahi hai" puts the question word between the two,
+            // so the contiguous "kam ho" never matched the commonest way this
+            // is asked in Hinglish.
+            "kam kyun", "kam kyu", "kam q",
         ],
     );
 
@@ -1228,6 +1232,7 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
             "not returned",
             "not come back",
             "stopped coming",
+            "stop coming",
             "stopped visiting",
             "aana band",
             "havent visited",

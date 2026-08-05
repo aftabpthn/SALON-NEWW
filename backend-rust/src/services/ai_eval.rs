@@ -120,8 +120,11 @@ pub const GOLDEN_SET: &[EvalCase] = &[
     },
     EvalCase {
         question: "staff performance kam kyun ho raha hai",
-        expected: Some(CopilotTool::StaffPerformanceDecline),
-        note: "Hinglish with a cause word but no cross-module intent",
+        expected: Some(CopilotTool::StaffDeclineCause),
+        note: "asks why, and that is precisely what the cross-module tool \
+               answers — whether the decline is demand-led or performance-led. \
+               This case expected the single-module tool until 'kam kyun' \
+               started matching; the expectation was wrong, not the routing",
     },
     // ---- services ----
     EvalCase {
@@ -139,6 +142,12 @@ pub const GOLDEN_SET: &[EvalCase] = &[
         expected: Some(CopilotTool::ServiceOffer),
         note: "offer on a service, not to a person",
     },
+    EvalCase {
+        question: "service kam kyun ho rahi hai",
+        expected: Some(CopilotTool::ServiceDecline),
+        note: "found by the planner: the question word splits 'kam ho', which \
+               is the commonest Hinglish phrasing and matched nothing",
+    },
     // ---- clients ----
     EvalCase {
         question: "which clients have stopped coming",
@@ -149,6 +158,11 @@ pub const GOLDEN_SET: &[EvalCase] = &[
         question: "kaun se client ab nahi aa rahe",
         expected: Some(CopilotTool::LapsedClients),
         note: "Hinglish lapsed clients",
+    },
+    EvalCase {
+        question: "why did \"Anita Sharma\" stop coming",
+        expected: Some(CopilotTool::LapsedClients),
+        note: "found by the planner: the past tense matched, the present did not",
     },
     EvalCase {
         question: "who are my regular clients",

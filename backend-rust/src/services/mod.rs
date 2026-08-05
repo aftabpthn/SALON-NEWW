@@ -6,9 +6,13 @@ pub mod ai_concierge_service;
 pub mod ai_copilot_governance;
 pub mod ai_copilot_tools;
 pub mod ai_cross_module_tools;
+/// Scored routing evaluation. Test-only today: the golden set and scorer are
+/// the regression guard, and there is no eval job consuming them yet.
+#[cfg(test)]
 pub mod ai_eval;
 #[cfg(test)]
 mod ai_evaluation_tests;
+pub mod ai_planner;
 pub mod ai_prediction_service;
 pub mod ai_scope_service;
 pub mod ai_scoped_copilot_tools;

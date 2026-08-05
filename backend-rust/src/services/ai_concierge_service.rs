@@ -260,7 +260,13 @@ async fn run_copilot_tool(
     }
 
     match outcome {
-        Ok(answer) => CopilotOutcome::Answered(Box::new(answer)),
+        // A cause question gets the views that explain it folded in. The
+        // primary answer is already settled at this point, so planning can only
+        // add context to it, never change what it concluded.
+        Ok(answer) => CopilotOutcome::Answered(Box::new(
+            crate::services::ai_planner::augment(db, tenant_id, claims, &actor, message, answer)
+                .await,
+        )),
         Err(ai_copilot_tools::ToolRefusal::Forbidden(tool)) => {
             tracing::info!(
                 tool = tool.name(),
