@@ -160,7 +160,19 @@ jobs:
           PREVIOUS_TASK_DEF=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
           echo "previous_task_definition=$PREVIOUS_TASK_DEF" >> "$GITHUB_OUTPUT"
           aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" --task-definition "$TASK_DEF" --desired-count "$DESIRED_COUNT" --force-new-deployment >/dev/null
-          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          if ! aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"; then
+            aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].{Status:status,Desired:desiredCount,Running:runningCount,Pending:pendingCount,Deployments:deployments,Events:events[0:10]}'
+            TASKS=$(aws ecs list-tasks --cluster "$CLUSTER" --service-name "$SERVICE" --desired-status STOPPED --max-results 10 --query 'taskArns' --output text)
+            if [ -n "$TASKS" ] && [ "$TASKS" != "None" ]; then
+              aws ecs describe-tasks --cluster "$CLUSTER" --tasks $TASKS \
+                --query 'tasks[].{Task:taskArn,StoppedReason:stoppedReason,StopCode:stopCode,Containers:containers[].{Name:name,LastStatus:lastStatus,Reason:reason,ExitCode:exitCode,Health:healthStatus}}'
+            fi
+            for GROUP in api ai clamav otel; do
+              aws logs tail "/aurashine/${{ inputs.environment }}/$GROUP" --since 30m || true
+            done
+            exit 1
+          fi
           ACTIVE_TASK_DEF=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" --query 'services[0].taskDefinition' --output text)
           if [ "$ACTIVE_TASK_DEF" != "$TASK_DEF" ]; then
             echo "Deployment rolled back or did not reach the requested task definition."
