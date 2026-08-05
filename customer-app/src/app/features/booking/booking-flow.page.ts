@@ -693,7 +693,7 @@ type BookingFlowItem = {
               </span>
             </button>
             @if (currentBookingStep() < 4) {
-              <ion-button class="primary-gradient" [disabled]="!canContinue()" (click)="next()">Continue</ion-button>
+              <ion-button class="primary-gradient" [disabled]="!canContinue() || !!slotExpiredWarning()" (click)="next()">Continue</ion-button>
             } @else {
               <ion-button class="primary-gradient" [disabled]="!canConfirm() || marketplace.loading()" (click)="confirmBooking()">
                   @if (marketplace.loading()) { <span class="button-spinner" aria-hidden="true"></span> }
