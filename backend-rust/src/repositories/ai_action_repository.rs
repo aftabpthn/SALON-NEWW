@@ -44,7 +44,7 @@ pub async fn create_draft(
         r#"INSERT INTO ai_action_drafts(
               tenant_id,branch_id,action_type,summary,requires_confirmation,
               payload,refresh_targets,evidence_json,action_owner_user_id,source_refs,created_by
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
             RETURNING {COLUMNS}"#
     ))
     .bind(tenant_id)

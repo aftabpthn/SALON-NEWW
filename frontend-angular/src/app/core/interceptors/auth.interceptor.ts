@@ -1,20 +1,32 @@
-import { HttpErrorResponse, HttpHeaders, HttpInterceptorFn, HttpRequest } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders, HttpInterceptorFn, HttpRequest, HttpResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, switchMap, throwError } from 'rxjs';
+import { catchError, switchMap, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { authDeviceId, AuthService } from '../services/auth.service';
+import { BillingStateService } from '../services/billing-state.service';
+
+const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   if (!isCoreApiRequest(request.url)) return next(request);
 
   const auth = inject(AuthService);
   const router = inject(Router);
+  const billing = inject(BillingStateService);
   const contextualRequest = withRequestContext(request);
   const authenticatedRequest = withSession(contextualRequest, auth);
 
   return next(authenticatedRequest).pipe(
+    tap((event) => {
+      // A write that goes through is the only thing that proves the block is
+      // gone. Payment completes on the provider's site, so there is no callback
+      // to listen for and no point polling for one.
+      if (event instanceof HttpResponse && WRITE_METHODS.includes(request.method)) billing.clear();
+    }),
     catchError((error: HttpErrorResponse) => {
+      const block = subscriptionBlock(error);
+      if (block) billing.report(block);
       if (error.status !== 401 || isSessionEndpoint(request.url)) {
         return throwError(() => error);
       }
@@ -33,6 +45,25 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
     }),
   );
 };
+
+/**
+ * Reads a refusal the backend attributed to the subscription.
+ *
+ * `entitlement_service` is the only thing that answers with a
+ * `subscriptionStatus` detail, so its presence is what identifies these — not
+ * the status code, which 403 shares with ordinary permission denials.
+ */
+function subscriptionBlock(error: HttpErrorResponse): { status: string; readOnly: boolean; message: string } | null {
+  if (error.status !== 403) return null;
+  const details = error.error?.error?.details;
+  const status = typeof details?.subscriptionStatus === 'string' ? details.subscriptionStatus : '';
+  if (!status) return null;
+  return {
+    status,
+    readOnly: details?.readOnly === true,
+    message: typeof error.error?.error?.message === 'string' ? error.error.error.message : '',
+  };
+}
 
 function withRequestContext(request: HttpRequest<unknown>): HttpRequest<unknown> {
   let headers = request.headers;

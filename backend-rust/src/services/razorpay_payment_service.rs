@@ -102,30 +102,71 @@ pub async fn create_subscription_plan(
     })
 }
 
+/// What one billing cycle of a Razorpay plan actually costs.
+///
+/// Read back from Razorpay rather than from our own plan row. The two are
+/// created from the same number, but only one of them is the number that gets
+/// charged, and a quote built from the other is a quote that can drift.
+pub async fn fetch_subscription_plan_amount(
+    settings: &Settings,
+    provider_plan_id: &str,
+) -> Result<i64, AppError> {
+    if !provider_plan_id.starts_with("plan_") {
+        return Err(AppError::validation("invalid Razorpay plan reference"));
+    }
+    let payload = request_json(
+        settings,
+        Method::GET,
+        &format!("/plans/{provider_plan_id}"),
+        None,
+    )
+    .await?;
+    payload
+        .get("item")
+        .and_then(|item| item.get("amount"))
+        .and_then(Value::as_i64)
+        .filter(|amount| *amount > 0)
+        .ok_or_else(|| {
+            AppError::service_unavailable(
+                "PAYMENT_PROVIDER_UNAVAILABLE",
+                "Razorpay plan amount is unavailable",
+            )
+        })
+}
+
+/// Opens a Razorpay subscription, optionally under an Offer.
+///
+/// `offer_ref` is the whole of our coupon support. The discount is applied by
+/// Razorpay against the offer, not calculated here and sent as an amount —
+/// which is what keeps the price on the checkout screen and the amount on the
+/// card from ever being two different numbers.
 pub async fn create_subscription_checkout(
     settings: &Settings,
     provider_plan_id: &str,
     total_count: i32,
     tenant_id: &str,
+    offer_ref: Option<&str>,
 ) -> Result<SubscriptionCheckout, AppError> {
     if !provider_plan_id.starts_with("plan_") || !(1..=120).contains(&total_count) {
         return Err(AppError::validation(
             "invalid Razorpay subscription checkout",
         ));
     }
-    let payload = request_json(
-        settings,
-        Method::POST,
-        "/subscriptions",
-        Some(json!({
-            "plan_id": provider_plan_id,
-            "total_count": total_count,
-            "quantity": 1,
-            "customer_notify": 1,
-            "notes": {"saasTenantId": tenant_id}
-        })),
-    )
-    .await?;
+    let offer_ref = offer_ref.map(str::trim).filter(|value| !value.is_empty());
+    if offer_ref.is_some_and(|value| !value.starts_with("offer_")) {
+        return Err(AppError::validation("invalid Razorpay offer reference"));
+    }
+    let mut body = json!({
+        "plan_id": provider_plan_id,
+        "total_count": total_count,
+        "quantity": 1,
+        "customer_notify": 1,
+        "notes": {"saasTenantId": tenant_id}
+    });
+    if let Some(offer_ref) = offer_ref {
+        body["offer_id"] = json!(offer_ref);
+    }
+    let payload = request_json(settings, Method::POST, "/subscriptions", Some(body)).await?;
     subscription_checkout(payload)
 }
 

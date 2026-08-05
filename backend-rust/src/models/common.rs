@@ -124,6 +124,10 @@ impl AppError {
         Self::new(StatusCode::FORBIDDEN, "FORBIDDEN", message)
     }
 
+    pub fn forbidden_code(code: &'static str, message: impl Into<String>) -> Self {
+        Self::new(StatusCode::FORBIDDEN, code, message)
+    }
+
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, "NOT_FOUND", message)
     }
@@ -164,6 +168,15 @@ impl AppError {
 
     pub fn message(&self) -> &str {
         &self.message
+    }
+
+    /// The structured detail sent with the error, if any.
+    ///
+    /// Clients branch on this — the subscription banner reads
+    /// `subscriptionStatus` and `readOnly` from it — so it is part of the API
+    /// contract and worth asserting on in tests rather than matching messages.
+    pub fn details(&self) -> Option<&Value> {
+        self.details.as_ref()
     }
 
     fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {

@@ -1645,6 +1645,24 @@ pub async fn create_task_for_action(
     }
 }
 
+/// Reverses the task a copilot draft created.
+///
+/// The mirror of `create_task_for_action`, and it goes through the same
+/// repository for the same reason: the copilot must not grow its own idea of
+/// what cancelling a task means. Returns whether anything was still open to
+/// cancel, so an undo of a task someone had already finished is reported
+/// honestly rather than claimed as a reversal.
+pub async fn cancel_task_for_action(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    action_draft_id: &str,
+) -> Result<bool, AppError> {
+    repository::cancel_task_for_action(db, tenant_id, branch_id, action_draft_id)
+        .await
+        .map_err(internal("cancel staff task"))
+}
+
 pub async fn list_service_targets(
     db: &PgPool,
     tenant_id: &str,

@@ -235,6 +235,26 @@ pub struct RazorpayCheckoutInput {
     pub plan_id: String,
     pub idempotency_key: String,
     pub total_count: Option<i32>,
+    /// Optional coupon the salon typed. Resolved to a Razorpay Offer before the
+    /// subscription is opened; an unusable code fails the checkout rather than
+    /// being dropped, so nobody pays full price believing a discount applied.
+    #[serde(default)]
+    pub coupon_code: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CouponPreviewInput {
+    pub plan_id: String,
+    pub coupon_code: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CheckoutQuoteInput {
+    pub plan_id: String,
+    #[serde(default)]
+    pub coupon_code: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -872,6 +892,187 @@ pub async fn update_subscription(
     subscriptions(db, None).await
 }
 
+/// Turns a typed coupon code into the Razorpay Offer the checkout should use.
+///
+/// Returns `Ok(None)` only when no code was typed. A code that was typed but
+/// cannot be used is an error, never a silent `None`: a salon that entered a
+/// promotion and got charged full price without being told would be a billing
+/// complaint, and rightly so.
+///
+/// Every rejection says the same thing. Distinguishing "expired" from "unknown"
+/// from "not for this plan" would let anyone with a login enumerate which codes
+/// exist and when they run out.
+async fn resolve_checkout_coupon(
+    db: &PgPool,
+    tenant_id: &str,
+    plan_id: &str,
+    code: &str,
+) -> Result<Option<saas_repository::SubscriptionCoupon>, AppError> {
+    let code = code.trim();
+    if code.is_empty() {
+        return Ok(None);
+    }
+    if code.chars().count() > 40 {
+        return Err(AppError::validation("coupon code is not valid"));
+    }
+    let unusable = || AppError::validation("coupon code is not valid");
+    let coupon = saas_repository::subscription_coupon(db, code)
+        .await
+        .map_err(|_| AppError::internal("failed to load coupon"))?
+        .ok_or_else(unusable)?;
+    let (total, for_tenant) = saas_repository::coupon_redemption_counts(db, &coupon.id, tenant_id)
+        .await
+        .map_err(|_| AppError::internal("failed to count coupon redemptions"))?;
+    if !coupon_is_usable(&coupon, plan_id, total, for_tenant) {
+        return Err(unusable());
+    }
+    Ok(Some(coupon))
+}
+
+/// Whether a loaded coupon may be spent on this plan by this tenant.
+///
+/// Window and active state are already applied by the query that loaded it;
+/// what is left is plan eligibility and the two redemption limits. Kept
+/// separate from the database so the rules can be asserted directly.
+fn coupon_is_usable(
+    coupon: &saas_repository::SubscriptionCoupon,
+    plan_id: &str,
+    total_redemptions: i64,
+    tenant_redemptions: i64,
+) -> bool {
+    // An empty plan list means every plan; otherwise the code is restricted.
+    if !coupon.plan_ids.is_empty() && !coupon.plan_ids.iter().any(|id| id == plan_id) {
+        return false;
+    }
+    if coupon
+        .max_redemptions
+        .is_some_and(|limit| total_redemptions >= i64::from(limit))
+    {
+        return false;
+    }
+    tenant_redemptions < i64::from(coupon.max_redemptions_per_tenant)
+}
+
+/// GST on SaaS in India. Plans are priced tax-inclusive, so this splits a
+/// known total rather than being added to one.
+const GST_RATE_BPS: i64 = 1_800;
+
+/// Splits a tax-inclusive total into the amount and the GST inside it.
+///
+/// The total is the input, never the output. That is the whole point: the
+/// figure comes from the provider that will charge it, and this only says how
+/// much of it is tax. Computing a total by adding tax to a subtotal is how a
+/// checkout ends up showing one number while the card is charged another.
+///
+/// Tax is rounded to the paisa and the amount takes the remainder, so the two
+/// always add back to exactly the total.
+fn split_inclusive_gst(total_paise: i64) -> (i64, i64) {
+    if total_paise <= 0 {
+        return (0, 0);
+    }
+    let denominator = 10_000 + GST_RATE_BPS;
+    // Rounded half-up on the paisa.
+    let tax_paise = (total_paise * GST_RATE_BPS + denominator / 2) / denominator;
+    (total_paise - tax_paise, tax_paise)
+}
+
+/// What the salon will be charged, before it is sent to the provider to pay.
+///
+/// Every figure here is derived from the amount Razorpay reports for the plan,
+/// so the screen and the card cannot disagree. Nothing is computed from the
+/// local plan row unless Razorpay has no plan yet — which only happens before
+/// the first checkout, and is reported in `source` rather than hidden.
+///
+/// A coupon deliberately does not produce a discounted total. Razorpay applies
+/// the offer at payment and is the only thing that knows the result; inventing
+/// one here would reintroduce exactly the mismatch this endpoint exists to
+/// prevent. The coupon is returned as a named line instead, and the total
+/// stays a real number rather than going blank.
+pub async fn checkout_quote(
+    db: &PgPool,
+    settings: &Settings,
+    tenant_id: &str,
+    payload: CheckoutQuoteInput,
+) -> Result<Value, AppError> {
+    let plan = saas_repository::provider_plan_context(db, payload.plan_id.trim())
+        .await
+        .map_err(|_| AppError::internal("failed to load SaaS plan"))?
+        .ok_or_else(|| AppError::not_found("active SaaS plan was not found"))?;
+    let coupon = resolve_checkout_coupon(
+        db,
+        tenant_id,
+        &plan.id,
+        payload.coupon_code.as_deref().unwrap_or_default(),
+    )
+    .await?;
+
+    let provider_plan_ref = saas_repository::provider_plan_ref(db, &plan.id, plan.version)
+        .await
+        .map_err(|_| AppError::internal("failed to load Razorpay plan mapping"))?;
+    let (total_paise, source) = match provider_plan_ref.as_deref() {
+        Some(reference) => (
+            razorpay_payment_service::fetch_subscription_plan_amount(settings, reference).await?,
+            "razorpay_plan",
+        ),
+        // No Razorpay plan exists until the first checkout creates one. The
+        // local price is what that plan will be built from, so it is the right
+        // number — but it is named differently because nothing has confirmed it.
+        None => (plan.base_price_paise, "saas_plan"),
+    };
+    let (amount_paise, tax_paise) = split_inclusive_gst(total_paise);
+
+    Ok(json!({
+        "planId": plan.id,
+        "planName": plan.name,
+        "billingInterval": plan.billing_interval,
+        "currency": "INR",
+        "amountPaise": amount_paise,
+        "taxPaise": tax_paise,
+        "taxRateBps": GST_RATE_BPS,
+        "taxInclusive": true,
+        "totalPaise": total_paise,
+        "source": source,
+        "coupon": coupon.as_ref().map(|coupon| json!({
+            "code": coupon.code,
+            "description": coupon.description,
+            "discountHintBps": coupon.discount_hint_bps,
+            "discountHintPaise": coupon.discount_hint_paise,
+            // Said plainly so the screen does not print a discounted total of
+            // its own invention.
+            "appliedBy": "razorpay_offer"
+        })),
+    }))
+}
+
+/// Checks a code without spending it, so the checkout screen can confirm a
+/// coupon before the salon commits to paying.
+///
+/// This is the same resolution the checkout runs, which is the point: a code
+/// accepted here cannot be rejected a moment later. It reports the discount as
+/// a label only — the amount charged is Razorpay's to compute from the offer.
+pub async fn preview_checkout_coupon(
+    db: &PgPool,
+    tenant_id: &str,
+    payload: CouponPreviewInput,
+) -> Result<Value, AppError> {
+    let coupon = resolve_checkout_coupon(
+        db,
+        tenant_id,
+        payload.plan_id.trim(),
+        payload.coupon_code.trim(),
+    )
+    .await?
+    .ok_or_else(|| AppError::validation("coupon code is required"))?;
+    Ok(json!({
+        "code": coupon.code,
+        "description": coupon.description,
+        "discountHintBps": coupon.discount_hint_bps,
+        "discountHintPaise": coupon.discount_hint_paise,
+        // Stated plainly so the screen never prints a total of its own.
+        "appliedBy": "razorpay_offer"
+    }))
+}
+
 pub async fn create_razorpay_checkout(
     db: &PgPool,
     settings: &Settings,
@@ -918,6 +1119,15 @@ pub async fn create_razorpay_checkout(
             "subscription billing cycle count is invalid",
         ));
     }
+    // Resolved before the checkout is reserved, so a bad code fails cleanly
+    // instead of leaving a reservation behind for a checkout that never opens.
+    let coupon = resolve_checkout_coupon(
+        db,
+        tenant_id,
+        &plan.id,
+        payload.coupon_code.as_deref().unwrap_or_default(),
+    )
+    .await?;
     if !saas_repository::reserve_checkout(db, tenant_id, &plan.id, key, actor)
         .await
         .map_err(|_| AppError::internal("failed to reserve checkout"))?
@@ -958,11 +1168,23 @@ pub async fn create_razorpay_checkout(
                 .map_err(|_| AppError::internal("failed to save Razorpay plan mapping"))?
         }
     };
+    // The redemption is written before the provider call, so two checkouts
+    // racing for the last use of a limited code cannot both succeed: the unique
+    // index on (tenant_id, checkout_key) plus the count check above is what
+    // decides it, not the order the provider happens to answer in.
+    if let Some(coupon) = coupon.as_ref() {
+        saas_repository::record_coupon_redemption(db, coupon, tenant_id, &plan.id, key, actor)
+            .await
+            .map_err(|_| AppError::internal("failed to record coupon redemption"))?;
+    }
     let checkout = match razorpay_payment_service::create_subscription_checkout(
         settings,
         &provider_plan_ref,
         total_count,
         tenant_id,
+        coupon
+            .as_ref()
+            .map(|coupon| coupon.provider_offer_ref.as_str()),
     )
     .await
     {
@@ -971,6 +1193,7 @@ pub async fn create_razorpay_checkout(
             let _ =
                 saas_repository::fail_checkout(db, tenant_id, key, "provider checkout URL missing")
                     .await;
+            let _ = saas_repository::release_coupon_redemption(db, tenant_id, key).await;
             return Err(AppError::service_unavailable(
                 "PAYMENT_PROVIDER_UNAVAILABLE",
                 "Razorpay checkout response is incomplete",
@@ -984,9 +1207,19 @@ pub async fn create_razorpay_checkout(
                 "provider checkout creation failed",
             )
             .await;
+            let _ = saas_repository::release_coupon_redemption(db, tenant_id, key).await;
             return Err(error);
         }
     };
+    if coupon.is_some() {
+        let _ = saas_repository::attach_coupon_redemption_subscription(
+            db,
+            tenant_id,
+            key,
+            &checkout.provider_subscription_id,
+        )
+        .await;
+    }
     let start = DateTime::from_timestamp(checkout.current_start, 0).unwrap_or_else(Utc::now);
     let end = DateTime::from_timestamp(checkout.current_end, 0)
         .filter(|end| *end > start)
@@ -2253,11 +2486,110 @@ async fn tenant_audit(
 #[cfg(test)]
 mod tests {
     use super::{
-        add_sla_minutes, decode_ticket_attachments, extract_email, usage_charge, BillingContext,
-        TicketAttachmentInput, MANAGER_PERMISSION_CODES, STAFF_PERMISSION_CODES,
-        TENANT_PERMISSION_CATALOG,
+        add_sla_minutes, coupon_is_usable, decode_ticket_attachments, extract_email,
+        split_inclusive_gst, usage_charge, BillingContext, TicketAttachmentInput, GST_RATE_BPS,
+        MANAGER_PERMISSION_CODES, STAFF_PERMISSION_CODES, TENANT_PERMISSION_CATALOG,
     };
+    use crate::repositories::saas_repository::SubscriptionCoupon;
     use chrono::{TimeZone, Utc};
+
+    fn coupon() -> SubscriptionCoupon {
+        SubscriptionCoupon {
+            id: "coupon-1".into(),
+            code: "LAUNCH25".into(),
+            description: "Launch offer".into(),
+            provider_offer_ref: "offer_test".into(),
+            discount_hint_bps: Some(2500),
+            discount_hint_paise: None,
+            plan_ids: vec![],
+            max_redemptions: None,
+            max_redemptions_per_tenant: 1,
+        }
+    }
+
+    #[test]
+    fn the_gst_split_always_adds_back_to_the_charged_total() {
+        // The property that matters: the quote can never show a breakdown that
+        // sums to something other than what the card is charged.
+        for total in [
+            1, 99, 100, 12_345, 220_000, 400_000, 550_000, 1_980_000, 99_999_999,
+        ] {
+            let (amount, tax) = split_inclusive_gst(total);
+            assert_eq!(amount + tax, total, "breakdown must reconstruct {total}");
+            assert!(amount >= 0 && tax >= 0);
+        }
+    }
+
+    #[test]
+    fn gst_is_taken_out_of_the_total_not_added_to_it() {
+        // ₹2,200 inclusive of 18% is ₹1,864.41 + ₹335.59, not ₹2,200 + ₹396.
+        let (amount, tax) = split_inclusive_gst(220_000);
+        assert_eq!(tax, 33_559);
+        assert_eq!(amount, 186_441);
+        // Adding the rate back onto the exclusive amount returns the total,
+        // which is what makes the breakdown a real invoice line.
+        assert_eq!(amount + amount * GST_RATE_BPS / 10_000, 220_000);
+    }
+
+    #[test]
+    fn a_zero_or_absent_price_splits_to_nothing() {
+        assert_eq!(split_inclusive_gst(0), (0, 0));
+        // A negative total is not reachable through the plan checks, but the
+        // split must not invent tax if one ever arrives.
+        assert_eq!(split_inclusive_gst(-1), (0, 0));
+    }
+
+    #[test]
+    fn an_unrestricted_coupon_applies_to_any_plan() {
+        assert!(coupon_is_usable(&coupon(), "plan-annual", 0, 0));
+        assert!(coupon_is_usable(&coupon(), "plan-monthly", 0, 0));
+    }
+
+    #[test]
+    fn a_plan_restricted_coupon_is_refused_on_other_plans() {
+        // An annual-only promotion must not be spendable on a monthly plan.
+        let restricted = SubscriptionCoupon {
+            plan_ids: vec!["plan-annual".into()],
+            ..coupon()
+        };
+        assert!(coupon_is_usable(&restricted, "plan-annual", 0, 0));
+        assert!(!coupon_is_usable(&restricted, "plan-monthly", 0, 0));
+    }
+
+    #[test]
+    fn a_coupon_stops_at_its_global_limit() {
+        let limited = SubscriptionCoupon {
+            max_redemptions: Some(2),
+            ..coupon()
+        };
+        assert!(coupon_is_usable(&limited, "plan-annual", 1, 0));
+        // The limit is reached, not exceeded — the next checkout is the refused one.
+        assert!(!coupon_is_usable(&limited, "plan-annual", 2, 0));
+        assert!(!coupon_is_usable(&limited, "plan-annual", 5, 0));
+    }
+
+    #[test]
+    fn a_coupon_stops_at_its_per_tenant_limit() {
+        // Default is one use per salon, so a second checkout is refused even
+        // while the promotion has uses left overall.
+        assert!(!coupon_is_usable(&coupon(), "plan-annual", 0, 1));
+        let generous = SubscriptionCoupon {
+            max_redemptions_per_tenant: 3,
+            ..coupon()
+        };
+        assert!(coupon_is_usable(&generous, "plan-annual", 0, 2));
+        assert!(!coupon_is_usable(&generous, "plan-annual", 0, 3));
+    }
+
+    #[test]
+    fn an_unlimited_coupon_has_no_global_ceiling() {
+        let unlimited = SubscriptionCoupon {
+            max_redemptions: None,
+            max_redemptions_per_tenant: 100,
+            ..coupon()
+        };
+        assert!(coupon_is_usable(&unlimited, "plan-annual", 10_000, 0));
+    }
     #[test]
     fn onboarding_role_templates_are_registered_and_least_privilege() {
         for code in MANAGER_PERMISSION_CODES

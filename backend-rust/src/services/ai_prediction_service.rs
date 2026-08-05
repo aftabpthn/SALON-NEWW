@@ -35,6 +35,7 @@ use crate::{
         clients_repository, membership_lifecycle_repository,
     },
     services::{
+        ai_prediction_outcome_service,
         ai_scope_service::{self, ScopeRequest},
         ai_tool_dispatcher,
         auth_service::AuthClaims,
@@ -47,6 +48,10 @@ const HISTORY_DAYS: i32 = 90;
 const SUBJECT_LIMIT: i64 = 25;
 /// Version of the deterministic fallback, so a stored run says which produced it.
 const FALLBACK_MODEL_VERSION: &str = "rust-deterministic-v1";
+/// Why an unscored subject can never be checked against an outcome: it never
+/// made a claim in the first place.
+const INSUFFICIENT_HISTORY_REASON: &str =
+    "The subject had too little history to be scored, so there is no prediction to check.";
 
 /// What is being predicted. Adding a variant is the only way to widen this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,7 +98,7 @@ impl PredictionKind {
         .find(|kind| kind.name() == name)
     }
 
-    fn subject_kind(self) -> &'static str {
+    pub fn subject_kind(self) -> &'static str {
         match self {
             Self::ClientChurnRisk | Self::ClientReturnWindow | Self::NoShowRisk => "client",
             Self::ServiceDemand => "service",
@@ -104,7 +109,7 @@ impl PredictionKind {
         }
     }
 
-    fn unit(self) -> &'static str {
+    pub fn unit(self) -> &'static str {
         match self {
             Self::ClientChurnRisk | Self::NoShowRisk => "risk_score",
             Self::ClientReturnWindow => "days",
@@ -213,6 +218,27 @@ pub struct Prediction {
     pub data_sufficient: bool,
     /// Plain-language reasons, drawn from the features that drove it.
     pub signals: Vec<String>,
+    /// Whether this prediction has been checked against what happened yet:
+    /// `pending`, `resolved` or `unresolvable`. A freshly computed prediction is
+    /// always pending — its horizon is by definition still open.
+    #[serde(default = "pending_outcome")]
+    pub outcome_status: String,
+    /// True when the prediction turned out correct under its kind's rule, once
+    /// resolved. `None` while pending, so "not yet checked" is never rendered as
+    /// "was wrong".
+    #[serde(default)]
+    pub outcome_hit: Option<bool>,
+    /// What was actually observed, in the prediction's own unit.
+    #[serde(default)]
+    pub actual_value: Option<f64>,
+    /// The caveat on the observation, when it has one — for example that the
+    /// event still had not happened when the horizon expired.
+    #[serde(default)]
+    pub outcome_note: String,
+}
+
+fn pending_outcome() -> String {
+    "pending".into()
 }
 
 /// A completed run: what was predicted, by which model, from what window.
@@ -235,6 +261,10 @@ pub struct PredictionRun {
     /// Plain statement of which engine produced this, so a fallback result is
     /// never mistaken for a live model result.
     pub basis: String,
+    /// How this kind has actually performed on predictions that have already
+    /// been checked against what happened. Carried on the run so a range is
+    /// never shown without the track record of the thing that produced it.
+    pub accuracy: crate::services::ai_prediction_outcome_service::PredictionAccuracy,
     /// Every prediction here is a range from past behaviour, not a commitment.
     /// Carried on the payload so a client cannot render it without one.
     pub disclaimer: String,
@@ -381,9 +411,19 @@ pub async fn predict(
                 subject.sample_size,
                 kind.min_samples()
             )],
+            // A subject that was never scored made no claim, so there is
+            // nothing for the resolver to check later.
+            outcome_status: "unresolvable".into(),
+            outcome_hit: None,
+            actual_value: None,
+            outcome_note: INSUFFICIENT_HISTORY_REASON.into(),
         });
     }
 
+    // The horizon is fixed here, at write time, from the range as predicted.
+    // Deciding it later — when the outcome is already visible — would let a
+    // miss be turned into a hit by choosing a kinder window.
+    let predicted_on = features.history_end;
     let stored = predictions
         .iter()
         .map(|prediction| prediction_repository::NewPrediction {
@@ -397,6 +437,14 @@ pub async fn predict(
             sample_size: prediction.sample_size,
             data_sufficient: prediction.data_sufficient,
             signals: json!(prediction.signals),
+            horizon_end: prediction.data_sufficient.then(|| {
+                ai_prediction_outcome_service::horizon_for(
+                    kind,
+                    predicted_on,
+                    prediction.upper_value,
+                )
+            }),
+            unresolvable_reason: INSUFFICIENT_HISTORY_REASON.into(),
         })
         .collect::<Vec<_>>();
 
@@ -426,9 +474,27 @@ pub async fn predict(
         AppError::internal("failed to record the prediction run")
     })?;
 
+    // Read after the run is stored, so the pending count includes what was just
+    // predicted — the honest position is "these are unchecked too".
+    let accuracy =
+        ai_prediction_outcome_service::accuracy_for_branches(db, tenant_id, kind, &branch_ids)
+            .await?;
+
+    // Confidence stops being an assertion here. Whatever engine produced the
+    // range claimed a word for it; this narrows that claim to what the kind's
+    // own checked record supports. The stored row keeps the claim as made — the
+    // run is an audit record — while the caller is shown the supported one.
+    for prediction in &mut predictions {
+        prediction.confidence = ai_prediction_outcome_service::confidence_supported_by(
+            &prediction.confidence,
+            &accuracy,
+        );
+    }
+
     Ok(PredictionRun {
         run_id,
         kind: kind.name().into(),
+        accuracy,
         basis: basis_statement(computed_by, &model_version),
         model_version,
         computed_by: computed_by.into(),
@@ -471,9 +537,17 @@ pub async fn latest_run(
         .map_err(|_| AppError::internal("failed to load stored predictions"))?;
     let insufficient = rows.iter().filter(|row| !row.data_sufficient).count();
     let basis = basis_statement(&run.computed_by, &run.model_version);
+    let accuracy = ai_prediction_outcome_service::accuracy_for_branches(
+        db,
+        tenant_id,
+        kind,
+        &scope.branch_ids(),
+    )
+    .await?;
     Ok(Some(PredictionRun {
         run_id: run.id,
         kind: run.prediction_kind,
+        accuracy,
         basis,
         model_version: run.model_version,
         computed_by: run.computed_by,
@@ -502,6 +576,10 @@ pub async fn latest_run(
                             .collect()
                     })
                     .unwrap_or_default(),
+                outcome_status: row.outcome_status,
+                outcome_hit: row.outcome_hit,
+                actual_value: row.actual_value.and_then(|value| value.parse().ok()),
+                outcome_note: row.outcome_note,
             })
             .collect(),
         insufficient_subjects: insufficient,
@@ -915,6 +993,11 @@ async fn call_provider(
                 sample_size: subject.sample_size,
                 data_sufficient: true,
                 signals: row.signals,
+                // Freshly scored: its horizon has not opened, let alone passed.
+                outcome_status: pending_outcome(),
+                outcome_hit: None,
+                actual_value: None,
+                outcome_note: String::new(),
             })
         })
         .collect::<Vec<_>>();
@@ -1100,6 +1183,10 @@ fn fallback_predictions(kind: PredictionKind, scorable: &[&SubjectFeatures]) -> 
                 sample_size: subject.sample_size,
                 data_sufficient: true,
                 signals,
+                outcome_status: pending_outcome(),
+                outcome_hit: None,
+                actual_value: None,
+                outcome_note: String::new(),
             }
         })
         .collect()
@@ -1362,6 +1449,12 @@ mod phase3_prediction_tests {
                 sample_size: 8,
                 data_sufficient: true,
                 signals: json!(["Usual interval about 30 days."]),
+                horizon_end: Some(ai_prediction_outcome_service::horizon_for(
+                    PredictionKind::ClientReturnWindow,
+                    end,
+                    20.0,
+                )),
+                unresolvable_reason: INSUFFICIENT_HISTORY_REASON.into(),
             }],
         )
         .await

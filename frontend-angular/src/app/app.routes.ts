@@ -150,6 +150,8 @@ export const routes: Routes = [
   { path: 'memberships', loadComponent: () => import('./pages/memberships/memberships-page.component').then((m) => m.MembershipsPageComponent), canActivate: [authGuard] },
   { path: 'membership-status/:token', loadComponent: () => import('./pages/memberships/status/membership-status-page.component').then((m) => m.MembershipStatusPageComponent) },
   { path: 'packages', loadComponent: () => import('./pages/packages/packages-page.component').then((m) => m.PackagesPageComponent), canActivate: [authGuard] },
+  { path: 'fitness', loadComponent: () => import('./pages/fitness/fitness-page.component').then((m) => m.FitnessPageComponent), canActivate: [authGuard] },
+  { path: 'what-if', loadComponent: () => import('./pages/what-if/what-if-page.component').then((m) => m.WhatIfPageComponent), canActivate: [authGuard] },
   { path: 'reports/pending-packages', canActivate: [packageReportRedirect('pending')], children: [] },
   { path: 'reports/expired-packages', canActivate: [packageReportRedirect('expired')], children: [] },
   { path: 'reports/completed-packages', canActivate: [packageReportRedirect('completed')], children: [] },

@@ -1,0 +1,66 @@
+/* The --as-* palette is declared per component in this app, not globally.
+   Mirrors the SaaS admin page so both read as the same product. */
+:host{--as-ink:#071832;--as-muted:#5d6b82;--as-line:#d8e0ea;--as-soft-line:#e8edf4;--as-surface:#fff;--as-soft:#f6f9fc;--as-blue:#2563eb;--as-green:#0f7a4f;--as-red:#b42318;display:block;color:var(--as-ink);font-family:var(--font-sans);font-size:14px}
+*{box-sizing:border-box}
+.fitness-page{min-height:calc(100vh - 116px);padding:16px;background:var(--as-soft)}
+h1,h2,p{margin:0}h1{font-size:20px}h2{font-size:15px}
+.page-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.page-sub{margin-top:2px;color:var(--as-muted);font-size:12px}
+.tab-bar{display:flex;gap:4px;overflow-x:auto;padding:5px;margin-bottom:10px;border:1px solid var(--as-line);border-radius:9px;background:var(--as-surface)}
+.tab-bar button{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 13px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--as-muted);white-space:nowrap;font-weight:600}
+.tab-bar button.active{border-color:#c6d5e8;background:#edf5ff;color:#164e86}
+.panel{overflow:hidden;margin-bottom:10px;border:1px solid var(--as-line);border-radius:10px;background:var(--as-surface);box-shadow:0 7px 18px rgba(30,55,85,.05)}
+.panel-header{display:flex;align-items:center;justify-content:space-between;min-height:48px;gap:10px;padding:10px 12px;border-bottom:1px solid var(--as-soft-line)}
+.table-scroll{overflow:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--as-soft-line);white-space:nowrap}
+th{color:var(--as-muted);font-size:11px;background:#f8fafc}
+td{font-size:12px;vertical-align:middle}
+td small{display:block;margin-top:3px;color:var(--as-muted);font-size:11px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:0}
+.status-chip{display:inline-flex;align-items:center;min-height:23px;padding:2px 8px;border:1px solid #cad6e5;border-radius:999px;background:#f4f8fc;color:#2e4966;font-size:11px;font-weight:700}
+.status-chip[data-status="in_service"],.status-chip[data-status="active"],.status-chip[data-status="completed"]{border-color:#a6dec4;background:#ecfdf3;color:#087443}
+.status-chip[data-status="called"],.status-chip[data-status="waiting"],.status-chip[data-status="scheduled"]{border-color:#f1d08a;background:#fffaeb;color:#854d0e}
+.status-chip[data-status="cancelled"],.status-chip[data-status="no_show"]{border-color:#f2b8b2;background:#fff1f0;color:var(--as-red)}
+.move-buttons{display:flex;flex-wrap:wrap;gap:5px}
+.muted{color:var(--as-muted)}
+.fill{display:flex;align-items:center;gap:8px}
+.fill-bar{flex:1;min-width:60px;height:6px;overflow:hidden;border-radius:999px;background:#e6ecf4}
+.fill-bar span{display:block;height:100%;border-radius:999px;background:#2563eb}
+.fill-bar span.over{background:var(--as-red)}
+.fill-label{font-variant-numeric:tabular-nums;font-size:11px;white-space:nowrap}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:12px}
+.amenity-card{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border:1px solid var(--as-line);border-radius:9px;background:var(--as-surface)}
+.amenity-card small{display:block;margin-top:2px;color:var(--as-muted);font-size:11px}
+.usage-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--as-line)}
+.usage-list>div{display:flex;align-items:center;justify-content:space-between;padding:13px;background:var(--as-surface)}
+.usage-list span{color:var(--as-muted);font-size:12px}
+.usage-list strong{font-size:16px;font-variant-numeric:tabular-nums}
+.section-action{display:flex;align-items:flex-end;gap:8px;padding:12px}
+.section-action label{flex:0 1 180px}
+.empty-state,.loading-state{display:grid;place-items:center;min-height:150px;color:var(--as-muted);font-size:12px}
+.empty-state.compact{min-height:70px}
+.alert{margin-bottom:9px;padding:9px 11px;border-radius:7px;font-size:12px}
+.alert.error{border:1px solid #f2b8b2;background:#fff1f0;color:#9b1c14}
+.alert.success{border:1px solid #a6dec4;background:#ecfdf3;color:#087443}
+button,input,select,textarea{font:inherit}
+button,select{font-weight:600}
+input,select,textarea{width:100%;min-height:38px;padding:7px 9px;border:1px solid #c9d5e5;border-radius:7px;background:#fff;color:var(--as-ink);outline:none}
+textarea{resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--as-blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+button{cursor:pointer}
+.primary-button,.secondary-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:0 13px;border-radius:7px;white-space:nowrap}
+.primary-button{border:1px solid #1d55b7;background:linear-gradient(180deg,#3478ed,#2563eb);color:#fff}
+.secondary-button{border:1px solid #c9d5e5;background:#fff;color:#17324f}
+.secondary-button.small{min-height:28px;padding:0 9px;font-size:11px}
+.utility-button{display:inline-grid;place-items:center;width:36px;min-width:36px;height:36px;padding:0;border:1px solid #c9d5e5;border-radius:7px;background:#fff;color:#17324f}
+button:disabled{cursor:not-allowed;opacity:.55}
+label{display:grid;align-content:start;gap:5px;margin-bottom:9px;color:#3d526c;font-size:11px;font-weight:600}
+.hint{margin:0;color:#854d0e;font-size:11px}
+.drawer-backdrop{position:fixed;inset:0;z-index:80;border:0;background:rgba(7,24,50,.34)}
+.drawer{position:fixed;top:0;right:0;z-index:90;display:flex;flex-direction:column;width:min(520px,96vw);height:100vh;border-left:1px solid var(--as-line);background:var(--as-soft);box-shadow:-18px 0 42px rgba(17,42,72,.2)}
+.drawer-header{display:flex;align-items:center;justify-content:space-between;min-height:62px;gap:10px;padding:12px 15px;border-bottom:1px solid var(--as-line);background:#fff}
+.drawer-body{min-height:0;flex:1;overflow:auto;padding:12px}
+.drawer-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:11px 14px;border-top:1px solid var(--as-line);background:#fff}
+@media(max-width:620px){.section-action{align-items:stretch;flex-direction:column}.section-action label{flex:1}}
