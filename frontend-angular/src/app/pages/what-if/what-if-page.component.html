@@ -1,0 +1,115 @@
+<section class="whatif-page">
+  <header class="page-header">
+    <div>
+      <h1>What if…</h1>
+      <p class="page-sub">Projects an outcome without changing anything. Nothing here creates an offer, a campaign or a booking.</p>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="scenario-list" role="group" aria-label="Scenario">
+      @for (scenario of scenarios; track scenario.key) {
+        <button type="button" class="scenario-button" [class.selected]="selected.key === scenario.key" [attr.aria-pressed]="selected.key === scenario.key" (click)="select(scenario)">
+          <i class="bi" [ngClass]="scenario.icon" aria-hidden="true"></i>
+          <span><strong>{{ scenario.title }}</strong><small>{{ scenario.question }}</small></span>
+        </button>
+      }
+    </aside>
+
+    <div class="workspace">
+      <section class="panel">
+        <header class="panel-header"><h2>{{ selected.title }}</h2></header>
+        <div class="form-body">
+          @for (field of selected.fields; track field.key) {
+            <label>
+              {{ field.label }}@if (field.required) { <span class="req" aria-hidden="true">*</span> }
+              <input [type]="field.type" [(ngModel)]="field.value" [name]="field.key" />
+              @if (field.hint) { <small class="hint">{{ field.hint }}</small> }
+            </label>
+          }
+        </div>
+        <footer class="form-footer">
+          <button class="primary-button" type="button" [disabled]="busy || !ready" (click)="run()">
+            {{ busy ? 'Simulating…' : 'Run simulation' }}
+          </button>
+        </footer>
+      </section>
+
+      @if (error) { <p class="alert error" role="alert">{{ error }}</p> }
+
+      @if (result) {
+        <section class="panel result">
+          <header class="panel-header result-header">
+            <h2>{{ result.headline }}</h2>
+            <div class="chips">
+              <span class="chip governance" [attr.data-decision]="result.governanceDecision">{{ label(result.governanceDecision) }}</span>
+              <span class="chip confidence" [attr.data-confidence]="result.confidence">{{ label(result.confidence) }} confidence</span>
+            </div>
+          </header>
+
+          @if (!result.dataSufficient) {
+            <p class="alert warn" role="status">There is not enough history behind this to project from. Treat the figures below as indicative only.</p>
+          }
+
+          @if (result.warnings.length) {
+            <div class="warn-block" role="alert">
+              <h3><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Warnings</h3>
+              <ul>@for (warning of result.warnings; track warning) { <li>{{ warning }}</li> }</ul>
+            </div>
+          }
+
+          @if (result.impacts.length) {
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Projected effect</th><th class="num">Today</th><th class="num">Range</th><th>Unit</th></tr></thead>
+                <tbody>
+                  @for (impact of result.impacts; track impact.label) {
+                    <tr>
+                      <td><i class="bi" [ngClass]="directionIcon(impact.direction)" [attr.data-direction]="impact.direction" aria-hidden="true"></i> {{ impact.label }}</td>
+                      <td class="num">{{ impact.baseline }}</td>
+                      <td class="num range">{{ impact.lower }} – {{ impact.upper }}</td>
+                      <td>{{ impact.unit }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <p class="range-note">Every figure is a range. The data does not support a single number, so none is shown.</p>
+          }
+
+          @if (result.reason) { <p class="reason">{{ result.reason }}</p> }
+
+          <div class="evidence-split">
+            <div>
+              <h3>Read from the CRM</h3>
+              @if (!result.facts.length) { <p class="muted">Nothing recorded.</p> }
+              <ul>@for (fact of result.facts; track fact) { <li>{{ fact }}</li> }</ul>
+            </div>
+            <div>
+              <h3>Assumed</h3>
+              @if (!result.assumptions.length) { <p class="muted">Nothing assumed.</p> }
+              <ul class="assumed">@for (assumption of result.assumptions; track assumption) { <li>{{ assumption }}</li> }</ul>
+              <p class="muted small">These are the parts you are entitled to disagree with.</p>
+            </div>
+          </div>
+
+          @if (result.governanceReasons.length) {
+            <div class="governance-block">
+              <h3>Governance</h3>
+              <ul>@for (reason of result.governanceReasons; track reason) { <li>{{ reason }}</li> }</ul>
+            </div>
+          }
+
+          @if (result.nextStep) {
+            <footer class="next-step">
+              <div><strong>Next step</strong><span>{{ result.nextStep }}</span></div>
+              @if (result.nextStepLink) { <a class="primary-button" [href]="result.nextStepLink">Open the screen</a> }
+            </footer>
+          }
+
+          <p class="baseline-note">Projected from the last {{ result.baselinePeriodDays }} days. This simulation changed nothing.</p>
+        </section>
+      }
+    </div>
+  </div>
+</section>

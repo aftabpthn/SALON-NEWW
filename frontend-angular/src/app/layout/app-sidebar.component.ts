@@ -101,6 +101,7 @@ export class AppSidebarComponent {
       { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false },
       { label: 'Profit Intelligence', icon: 'bi-graph-up-arrow', route: '/reports/profit-intelligence', exact: false },
       { label: 'Invoice Reports', icon: 'bi-file-earmark-bar-graph', route: '/reports/invoices', exact: false },
+      { label: 'What If', icon: 'bi-shuffle', route: '/what-if', exact: false },
     ] },
     { label: 'Activity & Recovery', icon: 'bi-clock-history', route: '/activity-recovery', exact: false, links: [
       { label: 'Activity & Recovery', icon: 'bi-clock-history', route: '/activity-recovery', exact: false },
