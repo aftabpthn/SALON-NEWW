@@ -272,7 +272,7 @@ export class InventoryPageComponent implements OnInit {
       const references = needsTabReferences ? this.loadReferences(tab, requestId) : Promise.resolve();
       if (['products','suppliers','orders','grn','transfers'].includes(tab)) await references;
       else await this.loadOperationalTab(tab, requestId);
-      this.defer(tab === 'products'
+      this.defer(['products','suppliers','orders','grn','transfers'].includes(tab)
         ? this.loadOperationalTab(tab, requestId)
         : references);
     } catch (error) {

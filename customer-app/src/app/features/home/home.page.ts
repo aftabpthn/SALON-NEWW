@@ -11,7 +11,6 @@ import {
   chatbubblesOutline,
   chevronForwardOutline,
   locationOutline,
-  mapOutline,
   navigateOutline,
   notificationsOutline,
   optionsOutline,
@@ -20,7 +19,6 @@ import {
   ribbonOutline,
   searchOutline,
   sparklesOutline,
-  swapVerticalOutline,
   timeOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
@@ -103,17 +101,17 @@ interface ConsultationChatMessage {
                 }
               </div>
               <div class="home-control-row" aria-label="Home search controls">
-                <button type="button" class="home-control-button" aria-label="Filter salons and services" title="Filter" (click)="openDiscoverPanel('filter')">
+                <button type="button" class="home-control-button" aria-label="Search near your current area" [title]="areaLabel()" (click)="openMapSearch()">
+                  <ion-icon name="location-outline"></ion-icon>
+                  <span>{{ areaLabel() }}</span>
+                </button>
+                <button type="button" class="home-control-button" aria-label="Choose appointment time" title="Any time" (click)="openDiscoverPanel('filter')">
+                  <ion-icon name="time-outline"></ion-icon>
+                  <span>Any time</span>
+                </button>
+                <button type="button" class="home-control-button map" aria-label="More search filters" title="More filters" (click)="openDiscoverPanel('filter')">
                   <ion-icon name="options-outline"></ion-icon>
-                  <span>Filter</span>
-                </button>
-                <button type="button" class="home-control-button" aria-label="Sort search results" title="Sort" (click)="openDiscoverPanel('sort')">
-                  <ion-icon name="swap-vertical-outline"></ion-icon>
-                  <span>Sort</span>
-                </button>
-                <button type="button" class="home-control-button map" aria-label="Show salons on map" title="Show map" (click)="openMapSearch()">
-                  <ion-icon name="map-outline"></ion-icon>
-                  <span>Show map</span>
+                  <span>Filters</span>
                 </button>
               </div>
               <ion-button class="primary-gradient" (click)="search()">
@@ -1742,7 +1740,6 @@ export class HomePage implements OnInit {
       chatbubblesOutline,
       chevronForwardOutline,
       locationOutline,
-      mapOutline,
       navigateOutline,
       notificationsOutline,
       optionsOutline,
@@ -1751,7 +1748,6 @@ export class HomePage implements OnInit {
       ribbonOutline,
       searchOutline,
       sparklesOutline,
-      swapVerticalOutline,
       timeOutline
     });
   }

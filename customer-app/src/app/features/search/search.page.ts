@@ -83,19 +83,19 @@ interface ProfessionalResult {
           </section>
 
           <nav class="premium-chip-row" aria-label="Quick filters">
-            @for (chip of ['Nearby', 'Open Now', 'Offers', 'Premium', 'Women', 'Men', 'Spa', 'Hair', 'Facial', 'Massage', 'Nails']; track chip) {
-              <button type="button" [class.selected]="chip === 'Nearby'" (click)="toggleFilterPanel()">{{ chip }}</button>
+            @for (chip of ['Nearby', 'Open Now', 'Offers', 'Top Rated', 'Premium', 'Hair', 'Facial', 'Massage', 'Nails']; track chip) {
+              <button type="button" [class.selected]="quickChipSelected(chip)" (click)="applyQuickFilter(chip)">{{ chip }}</button>
             }
           </nav>
 
           <div class="premium-result-row">
             <div>
-              <strong>✨ {{ resultCount() }} salons near you</strong>
-              <span>Sorted by <button type="button" (click)="toggleSortPanel()">Distance</button></span>
+              <strong>✨ {{ resultCount() }} {{ resultNoun() }}</strong>
+              <span>Sorted by <button type="button" (click)="toggleSortPanel()">{{ sortButtonLabel() }}</button></span>
             </div>
             <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
               <ion-icon name="map-outline"></ion-icon>
-              Map View
+              {{ showMap() ? "List View" : "Map View" }}
             </button>
           </div>
 
@@ -2785,6 +2785,38 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       return;
     }
     void this.executeSearch();
+  }
+
+  applyQuickFilter(chip: string) {
+    const serviceQuery = ({ Hair: "hair", Facial: "facial", Massage: "massage", Nails: "nails" } as Record<string, string>)[chip];
+    if (serviceQuery) {
+      this.mode.set("services");
+      this.query.set(serviceQuery);
+      void this.executeSearch();
+      return;
+    }
+
+    const key = ({ Nearby: "nearest", "Open Now": "open", Offers: "deals", "Top Rated": "top", Premium: "premium" } as Record<string, FilterKey>)[chip];
+    if (!key) return;
+    const filters = this.activeFilters();
+    const next = filters.includes(key)
+      ? filters.filter((item) => item !== key)
+      : this.normalizedFilterList([...filters, key]);
+    if (key === "nearest" && !this.hasUsableLocation()) {
+      this.activeFilters.set(next.filter((item) => item !== "nearest"));
+      this.useLocation();
+      return;
+    }
+    this.activeFilters.set(next);
+    this.filter.set(next[0] || "open");
+    void this.executeSearch();
+  }
+
+  quickChipSelected(chip: string): boolean {
+    const serviceQuery = ({ Hair: "hair", Facial: "facial", Massage: "massage", Nails: "nails" } as Record<string, string>)[chip];
+    if (serviceQuery) return this.mode() === "services" && this.query().trim().toLowerCase() === serviceQuery;
+    const key = ({ Nearby: "nearest", "Open Now": "open", Offers: "deals", "Top Rated": "top", Premium: "premium" } as Record<string, FilterKey>)[chip];
+    return !!key && this.activeFilters().includes(key);
   }
 
   applySuggestion(suggestion: SearchSuggestion) {
