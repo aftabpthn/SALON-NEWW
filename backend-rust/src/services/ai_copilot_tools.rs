@@ -1194,6 +1194,12 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
                 "result",
                 "roi",
                 "effective",
+                // "are my offers actually making money" is the plainest way an
+                // owner asks whether a promotion paid for itself.
+                "making money",
+                "make money",
+                "paisa bana",
+                "worth it",
                 "best offer",
                 "kaunsa offer",
                 "konsa offer",
@@ -1221,6 +1227,9 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
             "not returning",
             "not returned",
             "not come back",
+            "stopped coming",
+            "stopped visiting",
+            "aana band",
             "havent visited",
             "haven't visited",
             "lapsed",
@@ -1229,6 +1238,9 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
             "win back",
             "winback",
             "नहीं आए",
+            // "नहीं आ रहे" / "नहीं आ रही" — the present-tense form, which is
+            // how the question is usually asked in Hindi.
+            "नहीं आ रह",
         ],
     ) {
         return Some(CopilotTool::LapsedClients);
@@ -1324,6 +1336,12 @@ fn detect_tool(text: &str) -> Option<CopilotTool> {
             "dashboard",
             "how are we",
             "how is business",
+            // The definite article is how most people actually type it, and
+            // without it the most natural phrasing of this question matched
+            // nothing at all.
+            "how is the business",
+            "how's business",
+            "business kaisa",
             "business status",
             "aaj ka",
             "aaj kaisa",
@@ -1372,6 +1390,10 @@ const SUBJECT_STOPWORDS: &[&str] = &[
     "din",
     "discount",
     "does",
+    // "which memberships are due for renewal" is the branch queue, but "due"
+    // surviving as a subject candidate made it look like a question about a
+    // person and routed it to one client's membership.
+    "due",
     "for",
     "from",
     "get",
@@ -1414,6 +1436,9 @@ const SUBJECT_STOPWORDS: &[&str] = &[
     "me",
     "mein",
     "membership",
+    // The plural is the branch queue — "which memberships are due" names no
+    // one, and treating the word itself as a subject made it look like it did.
+    "memberships",
     "much",
     "my",
     "nahi",

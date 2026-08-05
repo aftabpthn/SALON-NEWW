@@ -6,6 +6,7 @@ pub mod ai_concierge_service;
 pub mod ai_copilot_governance;
 pub mod ai_copilot_tools;
 pub mod ai_cross_module_tools;
+pub mod ai_eval;
 #[cfg(test)]
 mod ai_evaluation_tests;
 pub mod ai_prediction_service;
