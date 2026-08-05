@@ -575,12 +575,12 @@ type BookingFlowItem = {
                     <div class="visit-date-badge">
                       <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
                       <strong>{{ selectedDateLabel() }}</strong>
-                      @if (continuousVisitTimeRangeLabel()) { <span>· Visit Window: {{ continuousVisitTimeRangeLabel() }}</span> }
+                      @if (reviewVisitTimeRangeLabel()) { <span>· Visit Window: {{ reviewVisitTimeRangeLabel() }}</span> }
                     </div>
 
-                    @if (continuousTimelineItems().length) {
+                    @if (reviewTimelineItems().length) {
                       <div class="validated-timeline-sequence">
-                        @for (stepItem of continuousTimelineItems(); track stepItem.serviceId; let idx = $index) {
+                        @for (stepItem of reviewTimelineItems(); track stepItem.startIso; let idx = $index) {
                           <div class="validated-step">
                             <span class="step-num-badge">{{ idx + 1 }}</span>
                             <span class="step-time-window">{{ stepItem.startTimeLabel }}–{{ stepItem.endTimeLabel }}</span>
@@ -685,7 +685,7 @@ type BookingFlowItem = {
               </span>
               <span class="summary-row">
                 <small>Duration</small>
-                <strong>{{ durationLabel() }}</strong>
+                <strong>{{ currentBookingStep() === 4 ? reviewWindowDurationLabel() : durationLabel() }}</strong>
               </span>
               <span class="summary-row summary-total">
                 <small>Total</small>
@@ -1406,6 +1406,53 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     if (!items.length) return "";
     return `${items[0].startTimeLabel}–${items[items.length - 1].endTimeLabel}`;
   });
+
+  /** Review timeline: each service's OWN selected start time, sorted chronologically — correct for both continuous and separate booking modes. */
+  readonly reviewTimelineItems = computed(() => {
+    const rows: Array<{
+      serviceId: string;
+      serviceName: string;
+      staffName: string;
+      durationMinutes: number;
+      startIso: string;
+      endIso: string;
+      startTimeLabel: string;
+      endTimeLabel: string;
+    }> = [];
+    for (const item of this.bookingItems()) {
+      if (!item.slotStartAt) continue;
+      const start = new Date(item.slotStartAt);
+      if (!Number.isFinite(start.getTime())) continue;
+      const service = this.serviceById(item.serviceId);
+      const end = new Date(start.getTime() + ((service?.durationMinutes || 20) * 60000));
+      rows.push({
+        serviceId: item.serviceId,
+        serviceName: service ? this.formatServiceName(service.name) : "Service",
+        staffName: this.itemStaffName(item),
+        durationMinutes: service?.durationMinutes || 0,
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+        startTimeLabel: start.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+        endTimeLabel: end.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      });
+    }
+    return rows.sort((a, b) => (a.startIso < b.startIso ? -1 : 1));
+  });
+
+  readonly reviewVisitTimeRangeLabel = computed(() => {
+    const items = this.reviewTimelineItems();
+    if (!items.length) return "";
+    return `${items[0].startTimeLabel}–${items[items.length - 1].endTimeLabel}`;
+  });
+
+  reviewWindowDurationLabel(): string {
+    const items = this.reviewTimelineItems();
+    if (items.length < 2) return this.durationLabel();
+    const start = new Date(items[0].startIso).getTime();
+    const end = new Date(items[items.length - 1].endIso).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return this.durationLabel();
+    return `${Math.round((end - start) / 60000)} min`;
+  }
 
   visitWindowDurationLabel(): string {
     const items = this.continuousTimelineItems();
