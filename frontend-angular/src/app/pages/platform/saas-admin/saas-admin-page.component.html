@@ -62,7 +62,27 @@
       <span class="status-chip" [attr.data-status]="tenantSubscription.status">{{ label(tenantSubscription.status) }}</span>
     }</header>
     @if (!tenantSubscription) {
-      <div class="section-action"><select [(ngModel)]="checkoutPlanId" aria-label="Select subscription plan"><option value="">Select plan</option>@for (plan of plans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }} · {{ money(plan.basePricePaise) }}</option>}</select><button class="primary-button" type="button" [disabled]="busy || !checkoutPlanId" (click)="startCheckout()">Pay with Razorpay</button></div>
+      @if (hasBothIntervals) {
+        <div class="section-action billing-interval" role="group" aria-label="Billing interval">
+          @for (option of billingIntervals; track option) {
+            <button class="utility-button" type="button" [class.selected]="checkoutInterval === option" [attr.aria-pressed]="checkoutInterval === option" (click)="selectInterval(option)">{{ label(option) }}@if (option === 'annual' && annualSavingPercent > 0) { <small>Save {{ annualSavingPercent }}%</small> }</button>
+          }
+        </div>
+      }
+      <div class="section-action"><select [(ngModel)]="checkoutPlanId" aria-label="Select subscription plan"><option value="">Select plan</option>@for (plan of checkoutPlans; track plan.id) {<option [value]="plan.id" [disabled]="!plan.active">{{ plan.name }} · {{ money(plan.basePricePaise) }}</option>}</select><button class="primary-button" type="button" [disabled]="busy || !checkoutPlanId" (click)="startCheckout()">Pay with Razorpay</button></div>
+      <div class="section-action coupon-row">
+        <input type="text" [(ngModel)]="couponCode" placeholder="Coupon code" aria-label="Coupon code" autocomplete="off" [disabled]="!!appliedCoupon" (ngModelChange)="clearCoupon()" />
+        @if (!appliedCoupon) {
+          <button class="secondary-button" type="button" [disabled]="busy || !couponCode.trim() || !checkoutPlanId" (click)="applyCoupon()">Apply</button>
+        }
+        @if (appliedCoupon) {
+          <button class="utility-button" type="button" (click)="removeCoupon()" aria-label="Remove coupon">Remove</button>
+        }
+      </div>
+      @if (appliedCoupon) {
+        <p class="coupon-applied"><i class="bi bi-tag" aria-hidden="true"></i> <strong>{{ appliedCoupon.code }}</strong> applied{{ appliedCoupon.description ? ' · ' + appliedCoupon.description : '' }}{{ couponDiscountLabel ? ' · ' + couponDiscountLabel : '' }}. Razorpay shows the final amount before you pay.</p>
+      }
+      @if (couponError) { <p class="coupon-error" role="alert">{{ couponError }}</p> }
     }
     @if (tenantSubscription) {
       <dl class="detail-grid">

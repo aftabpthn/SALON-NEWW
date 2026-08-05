@@ -3,13 +3,14 @@ import { Component } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { AppHeaderComponent } from './layout/app-header.component';
 import { AppSidebarComponent } from './layout/app-sidebar.component';
+import { SubscriptionBannerComponent } from './layout/subscription-banner.component';
 import { TitleCaseInputsDirective } from './shared/directives/title-case-inputs.directive';
 import { TranslatePipe } from './shared/pipes/translate.pipe';
 
 @Component({
     selector: 'app-root',
     hostDirectives: [TitleCaseInputsDirective],
-    imports: [RouterOutlet, AppHeaderComponent, AppSidebarComponent, TranslatePipe],
+    imports: [RouterOutlet, AppHeaderComponent, AppSidebarComponent, SubscriptionBannerComponent, TranslatePipe],
     template: `
     @if (publicRoute) {
       <router-outlet />
@@ -25,6 +26,7 @@ import { TranslatePipe } from './shared/pipes/translate.pipe';
         ></button>
         <main class="main">
           <app-header [mobileNavOpen]="mobileNavOpen" (mobileNavToggle)="mobileNavOpen = !mobileNavOpen" />
+          <app-subscription-banner />
           <section class="page-frame">
             <router-outlet />
           </section>

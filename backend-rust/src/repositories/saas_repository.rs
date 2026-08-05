@@ -880,6 +880,137 @@ pub async fn provider_plan_context(
         .await
 }
 
+/// A coupon as the checkout needs it: the Razorpay offer to apply, and the
+/// numbers the screen may print next to the code.
+///
+/// The hint fields are display-only by construction — nothing in the checkout
+/// path multiplies them by anything. Razorpay applies the offer and decides the
+/// amount, so this row cannot make the screen disagree with the card.
+#[derive(Debug, Clone, FromRow)]
+pub struct SubscriptionCoupon {
+    pub id: String,
+    pub code: String,
+    pub description: String,
+    pub provider_offer_ref: String,
+    pub discount_hint_bps: Option<i32>,
+    pub discount_hint_paise: Option<i64>,
+    pub plan_ids: Vec<String>,
+    pub max_redemptions: Option<i32>,
+    pub max_redemptions_per_tenant: i32,
+}
+
+/// Looks a code up by what the user typed.
+///
+/// Only active codes inside their window are returned, so an expired code and
+/// an unknown one are indistinguishable to the caller — and therefore to the
+/// person at the keyboard, who should not be able to probe which codes exist.
+pub async fn subscription_coupon(
+    db: &PgPool,
+    code: &str,
+) -> Result<Option<SubscriptionCoupon>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT id,code,description,provider_offer_ref,discount_hint_bps,discount_hint_paise,
+                  plan_ids,max_redemptions,max_redemptions_per_tenant
+           FROM saas_subscription_coupons
+           WHERE UPPER(code)=UPPER($1) AND active=TRUE
+             AND (starts_at IS NULL OR starts_at<=NOW())
+             AND (ends_at IS NULL OR ends_at>NOW())"#,
+    )
+    .bind(code.trim())
+    .fetch_optional(db)
+    .await
+}
+
+/// Redemptions counted overall and for this tenant, in one read.
+pub async fn coupon_redemption_counts(
+    db: &PgPool,
+    coupon_id: &str,
+    tenant_id: &str,
+) -> Result<(i64, i64), sqlx::Error> {
+    let row: (i64, i64) = sqlx::query_as(
+        r#"SELECT COUNT(*)::BIGINT,
+                  COUNT(*) FILTER (WHERE tenant_id=$2)::BIGINT
+           FROM saas_coupon_redemptions WHERE coupon_id=$1"#,
+    )
+    .bind(coupon_id)
+    .bind(tenant_id)
+    .fetch_one(db)
+    .await?;
+    Ok(row)
+}
+
+/// Records that a checkout was opened with this code.
+///
+/// Keyed on the checkout idempotency key, so replaying a checkout returns the
+/// first result without spending a second redemption. `ON CONFLICT DO NOTHING`
+/// rather than an upsert: a replay must not overwrite what the first attempt
+/// recorded.
+pub async fn record_coupon_redemption(
+    db: &PgPool,
+    coupon: &SubscriptionCoupon,
+    tenant_id: &str,
+    plan_id: &str,
+    checkout_key: &str,
+    actor: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO saas_coupon_redemptions
+             (id,coupon_id,tenant_id,plan_id,checkout_key,provider_offer_ref,redeemed_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           ON CONFLICT (tenant_id,checkout_key) DO NOTHING"#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&coupon.id)
+    .bind(tenant_id)
+    .bind(plan_id)
+    .bind(checkout_key)
+    .bind(&coupon.provider_offer_ref)
+    .bind(actor)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Gives a redemption back when the checkout it was taken for never opened.
+///
+/// The redemption is claimed before the provider is called so a limited code
+/// cannot be over-spent by concurrent checkouts. That claim has to be returned
+/// when the provider refuses, or a failed attempt would quietly consume one of
+/// a promotion's uses.
+pub async fn release_coupon_redemption(
+    db: &PgPool,
+    tenant_id: &str,
+    checkout_key: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM saas_coupon_redemptions WHERE tenant_id=$1 AND checkout_key=$2 AND provider_subscription_ref=''",
+    )
+    .bind(tenant_id)
+    .bind(checkout_key)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Stamps the provider subscription onto an already-recorded redemption, so a
+/// redemption can be traced to the subscription it opened.
+pub async fn attach_coupon_redemption_subscription(
+    db: &PgPool,
+    tenant_id: &str,
+    checkout_key: &str,
+    provider_subscription_ref: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE saas_coupon_redemptions SET provider_subscription_ref=$3 WHERE tenant_id=$1 AND checkout_key=$2",
+    )
+    .bind(tenant_id)
+    .bind(checkout_key)
+    .bind(provider_subscription_ref)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 pub async fn provider_plan_ref(
     db: &PgPool,
     plan_id: &str,

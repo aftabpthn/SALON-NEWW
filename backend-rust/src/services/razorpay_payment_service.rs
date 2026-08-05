@@ -102,30 +102,39 @@ pub async fn create_subscription_plan(
     })
 }
 
+/// Opens a Razorpay subscription, optionally under an Offer.
+///
+/// `offer_ref` is the whole of our coupon support. The discount is applied by
+/// Razorpay against the offer, not calculated here and sent as an amount —
+/// which is what keeps the price on the checkout screen and the amount on the
+/// card from ever being two different numbers.
 pub async fn create_subscription_checkout(
     settings: &Settings,
     provider_plan_id: &str,
     total_count: i32,
     tenant_id: &str,
+    offer_ref: Option<&str>,
 ) -> Result<SubscriptionCheckout, AppError> {
     if !provider_plan_id.starts_with("plan_") || !(1..=120).contains(&total_count) {
         return Err(AppError::validation(
             "invalid Razorpay subscription checkout",
         ));
     }
-    let payload = request_json(
-        settings,
-        Method::POST,
-        "/subscriptions",
-        Some(json!({
-            "plan_id": provider_plan_id,
-            "total_count": total_count,
-            "quantity": 1,
-            "customer_notify": 1,
-            "notes": {"saasTenantId": tenant_id}
-        })),
-    )
-    .await?;
+    let offer_ref = offer_ref.map(str::trim).filter(|value| !value.is_empty());
+    if offer_ref.is_some_and(|value| !value.starts_with("offer_")) {
+        return Err(AppError::validation("invalid Razorpay offer reference"));
+    }
+    let mut body = json!({
+        "plan_id": provider_plan_id,
+        "total_count": total_count,
+        "quantity": 1,
+        "customer_notify": 1,
+        "notes": {"saasTenantId": tenant_id}
+    });
+    if let Some(offer_ref) = offer_ref {
+        body["offer_id"] = json!(offer_ref);
+    }
+    let payload = request_json(settings, Method::POST, "/subscriptions", Some(body)).await?;
     subscription_checkout(payload)
 }
 
