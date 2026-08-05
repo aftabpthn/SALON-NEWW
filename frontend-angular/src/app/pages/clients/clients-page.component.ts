@@ -1037,6 +1037,25 @@ export class ClientsPageComponent implements OnInit, OnDestroy {
     }
   }
 
+  /// Closes a client's dispute.
+  ///
+  /// `corrected` removes the note, because agreeing it is wrong and keeping it
+  /// anyway would be the worst of both. `upheld` puts it back in use but leaves
+  /// the dispute on the record.
+  async resolveMemoryDispute(noteId: string, outcome: 'corrected' | 'upheld') {
+    if (!this.selectedClient) return;
+    this.memoryError = '';
+    try {
+      const result = await firstValueFrom(
+        this.api.post<ApiEnvelope<any>>(`/ai/memory/notes/${noteId}/dispute`, { outcome }),
+      );
+      if (!result.success) throw new Error(result?.error?.message || 'Could not close that');
+      await this.loadClientMemory(this.selectedClient.id);
+    } catch (error) {
+      this.memoryError = error instanceof Error ? error.message : 'Could not close that';
+    }
+  }
+
   async forgetMemory(noteId: string) {
     if (!this.selectedClient) return;
     this.memoryError = '';

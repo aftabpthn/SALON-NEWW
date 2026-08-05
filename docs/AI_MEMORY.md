@@ -114,8 +114,11 @@ would be actively harmful. Those already expire on their own shorter clock.
 | `GET /api/v1/ai/memory/:subjectKind/:subjectId` | One subject's live notes |
 | `DELETE /api/v1/ai/memory/notes/:id` | Forget one note |
 | `DELETE /api/v1/ai/memory/clients/:id` | Forget everything about a client |
+| `GET /api/v1/ai/memory/disputes` | What clients have contested and nobody has reviewed |
+| `POST /api/v1/ai/memory/notes/:id/dispute` | Close a dispute as `corrected` or `upheld` |
 | `GET /api/v1/customer/me/memory` | What a signed-in customer sees is remembered about them |
 | `DELETE /api/v1/customer/me/memory` | A customer erasing their own memory |
+| `POST /api/v1/customer/me/memory/:id/dispute` | A customer saying a note is wrong |
 
 The record response includes a `retentionStatement` saying how long the note
 will actually last and when it will go, because the requested retention is
@@ -127,10 +130,34 @@ A signed-in customer reads and erases their own memory through the portal,
 scoped through `customer_account_clients` so an account reaches only the client
 records it is linked to.
 
-They can **see** and **erase**, but not **edit**. A memory a client could
-rewrite would stop being a record of what was said. Erasing is different:
+They can **see**, **dispute** and **erase**, but not **edit**. A memory a client
+could rewrite would stop being a record of what was said. Erasing is different:
 removing information about yourself is never the dangerous direction, and it is
 the reason this is a customer-facing capability at all.
+
+### Disputes
+
+Erasing stays the safe fallback, but a silent deletion teaches the salon
+nothing — they lose the note and never learn it was wrong, so whoever wrote it
+writes the same thing again next month. A dispute keeps the fact that something
+was contested.
+
+**A disputed note stops being recalled the instant the client says so**, before
+anybody reviews it. Waiting for a person would mean the assistant kept acting on
+something the client has just told us is wrong, for however long the queue
+takes. Withholding first and reviewing after is the only defensible order, and
+it is enforced in the recall query itself rather than by the review workflow.
+
+Resolution is two-valued:
+
+- **`corrected`** — the salon agreed, and the note is deleted. Agreeing it is
+  wrong and keeping it anyway would be the worst of both.
+- **`upheld`** — the salon is keeping it, and it returns to use. The dispute
+  stays on the row, so a note that was contested and kept is visibly different
+  from one nobody ever questioned.
+
+Disputes are scoped through `customer_account_clients` in the `WHERE` clause, so
+an account cannot contest a note about somebody else even by guessing its id.
 
 Sensitive notes are excluded from the portal read. A client is entitled to know
 what is held, but a self-service page is not where a health note a staff member
@@ -145,10 +172,20 @@ information. It lists live notes with their expiry, marks sensitive ones as
 never leaving the app, and offers a single text field to add one. The card says
 in as many words that the assistant never writes here itself.
 
+A contested note shows the client's own words in place of its expiry, along with
+the fact that it is not being used, and offers **They are right** or **Keep it**
+instead of the ordinary Forget button.
+
+The customer app carries the mirror of this on the profile tab: what is
+remembered, when each note goes, a **This is not right** action per note and a
+single **Erase all of it**. A disputed note tells the customer it has already
+stopped being used.
+
 ## 10. Future roadmap
 
-- Show a client's memory on the customer app's own account screen; the API is
-  live and only the front-end view is missing.
-- Let a client dispute rather than only erase — "that is not right" is more
-  useful to a salon than a silent deletion, but it needs a workflow for who
-  reviews it.
+- Notify the branch when a dispute is raised, rather than relying on someone
+  opening the queue. The notification pattern used for autonomous runs applies
+  directly.
+- Report how often notes are disputed per staff member who recorded them: a
+  person whose notes are routinely contested is worth a conversation, and the
+  data is already on the row.

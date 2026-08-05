@@ -53,6 +53,10 @@ pub fn router() -> Router<AppState> {
             "/customer/me/memory",
             get(customer_memory).delete(forget_customer_memory),
         )
+        .route(
+            "/customer/me/memory/:id/dispute",
+            post(dispute_customer_memory),
+        )
         .route("/customer/me/phone/request-otp", post(request_phone_change))
         .route("/customer/me/phone/verify", post(verify_phone_change))
         .route(
@@ -3744,6 +3748,39 @@ async fn forget_customer_memory(
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"forgotten": removed}),
     )))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryDisputeRequest {
+    #[serde(default)]
+    reason: String,
+}
+
+/// A customer telling the salon that something remembered about them is wrong.
+///
+/// The note stops being used immediately, before anybody reviews it — waiting
+/// would mean the assistant kept acting on something the client has just said
+/// is incorrect. They cannot rewrite it: a memory the subject could edit would
+/// stop being a record of what was said.
+async fn dispute_customer_memory(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(note_id): Path<String>,
+    Json(payload): Json<MemoryDisputeRequest>,
+) -> ApiResult<serde_json::Value> {
+    let claims = active_customer_claims(&state, &headers).await?;
+    crate::services::ai_memory_service::dispute_for_customer_account(
+        &state.db,
+        &claims.sub,
+        &note_id,
+        &payload.reason,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(serde_json::json!({
+        "disputed": true,
+        "message": "Thanks — we have stopped using that and the salon will review it."
+    }))))
 }
 
 async fn active_customer_claims(

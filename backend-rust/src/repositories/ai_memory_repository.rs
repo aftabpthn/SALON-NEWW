@@ -23,6 +23,14 @@ pub struct MemoryNote {
     pub recorded_by: String,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    /// Set when the client said this is wrong. While it is set and unresolved
+    /// the note is withheld from every recall path.
+    pub disputed_at: Option<DateTime<Utc>>,
+    pub dispute_reason: String,
+    pub dispute_resolved_at: Option<DateTime<Utc>>,
+    /// `corrected` when the salon agreed and removed it, `upheld` when they
+    /// kept it. Empty while a dispute is open or was never raised.
+    pub dispute_outcome: String,
 }
 
 /// Records a note, or extends the one that already says the same thing.
@@ -55,7 +63,8 @@ pub async fn upsert_note(
                   recorded_by=EXCLUDED.recorded_by,
                   updated_at=NOW()
             RETURNING id,subject_kind,subject_id,source,content,sensitive,
-                      recorded_by,expires_at,created_at"#,
+                      recorded_by,expires_at,created_at,disputed_at,dispute_reason,
+                      dispute_resolved_at,dispute_outcome"#,
     )
     .bind(tenant_id)
     .bind(branch_id)
@@ -86,12 +95,17 @@ pub async fn notes(
 ) -> Result<Vec<MemoryNote>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT id,subject_kind,subject_id,source,content,sensitive,
-                  recorded_by,expires_at,created_at
+                  recorded_by,expires_at,created_at,disputed_at,dispute_reason,
+                  dispute_resolved_at,dispute_outcome
              FROM ai_memory_notes
             WHERE tenant_id=$1 AND branch_id=$2
               AND subject_kind=$3 AND subject_id=$4
               AND expires_at > NOW()
               AND ($5 OR sensitive = FALSE)
+              -- A note the client has contested stops being recalled the moment
+              -- they say so, before anybody reviews it. Waiting would mean
+              -- acting on something we have just been told is wrong.
+              AND (disputed_at IS NULL OR dispute_resolved_at IS NOT NULL)
             ORDER BY created_at DESC
             LIMIT $6"#,
     )
@@ -199,7 +213,9 @@ pub async fn notes_for_account(
 ) -> Result<Vec<MemoryNote>, sqlx::Error> {
     sqlx::query_as(
         r#"SELECT note.id,note.subject_kind,note.subject_id,note.source,note.content,
-                  note.sensitive,note.recorded_by,note.expires_at,note.created_at
+                  note.sensitive,note.recorded_by,note.expires_at,note.created_at,
+                  note.disputed_at,note.dispute_reason,note.dispute_resolved_at,
+                  note.dispute_outcome
              FROM ai_memory_notes note
              JOIN customer_account_clients link
                ON link.tenant_id=note.tenant_id
@@ -237,6 +253,92 @@ pub async fn forget_for_account(db: &PgPool, account_id: &str) -> Result<u64, sq
     .execute(db)
     .await
     .map(|result| result.rows_affected())
+}
+
+/// Records a client's dispute, scoped through their own account link.
+///
+/// The scoping is in the `WHERE` clause rather than a prior read, so an account
+/// cannot dispute a note about somebody else even by guessing its id. Returns
+/// false when there was nothing of theirs to dispute, or a dispute was already
+/// open on it.
+pub async fn raise_dispute(
+    db: &PgPool,
+    account_id: &str,
+    note_id: &str,
+    reason: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE ai_memory_notes note
+              SET disputed_at=NOW(), dispute_reason=$3,
+                  dispute_resolved_at=NULL, dispute_resolved_by='', dispute_outcome='',
+                  updated_at=NOW()
+             FROM customer_account_clients link
+            WHERE link.account_id=$1
+              AND link.tenant_id=note.tenant_id
+              AND link.branch_id=note.branch_id
+              AND link.client_id=note.subject_id
+              AND note.id=$2
+              AND note.subject_kind='client'
+              AND note.disputed_at IS NULL"#,
+    )
+    .bind(account_id)
+    .bind(note_id)
+    .bind(reason)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected() == 1)
+}
+
+/// Disputes a branch has not looked at yet.
+pub async fn open_disputes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    limit: i64,
+) -> Result<Vec<MemoryNote>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT id,subject_kind,subject_id,source,content,sensitive,
+                  recorded_by,expires_at,created_at,disputed_at,dispute_reason,
+                  dispute_resolved_at,dispute_outcome
+             FROM ai_memory_notes
+            WHERE tenant_id=$1 AND branch_id=$2
+              AND disputed_at IS NOT NULL AND dispute_resolved_at IS NULL
+            ORDER BY disputed_at DESC
+            LIMIT $3"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(limit)
+    .fetch_all(db)
+    .await
+}
+
+/// Closes a dispute as upheld, returning the note to use.
+///
+/// The dispute stays on the row rather than being cleared: a note that was
+/// contested and kept is visibly different from one nobody ever questioned, and
+/// that difference is worth keeping.
+pub async fn uphold_dispute(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    note_id: &str,
+    resolved_by: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query(
+        r#"UPDATE ai_memory_notes
+              SET dispute_resolved_at=NOW(), dispute_resolved_by=$4,
+                  dispute_outcome='upheld', updated_at=NOW()
+            WHERE tenant_id=$1 AND branch_id=$2 AND id=$3
+              AND disputed_at IS NOT NULL AND dispute_resolved_at IS NULL"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(note_id)
+    .bind(resolved_by)
+    .execute(db)
+    .await
+    .map(|result| result.rows_affected() == 1)
 }
 
 /// Removes ordinary notes nobody has needed in a long time.

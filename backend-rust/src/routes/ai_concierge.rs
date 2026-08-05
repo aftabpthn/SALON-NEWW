@@ -25,7 +25,7 @@ use crate::{
             self, ConciergeMessageRequest, ConciergeResponse, GovernanceRequest, OpenSessionRequest,
         },
         ai_copilot_tools,
-        ai_memory_service::{self, RecordNoteRequest, RecordedNote},
+        ai_memory_service::{self, RecordNoteRequest, RecordedNote, ResolveDisputeRequest},
         ai_prediction_outcome_service::{self, PredictionAccuracy},
         ai_prediction_service::{self, PredictionKind, PredictionRun},
         ai_scope_service::ScopeRequest,
@@ -72,6 +72,8 @@ pub fn router() -> Router<AppState> {
         .route("/ai/memory", post(record_memory))
         .route("/ai/memory/:subjectKind/:subjectId", get(recall_memory))
         .route("/ai/memory/notes/:id", axum::routing::delete(forget_memory))
+        .route("/ai/memory/disputes", get(list_memory_disputes))
+        .route("/ai/memory/notes/:id/dispute", post(resolve_memory_dispute))
         .route(
             "/ai/memory/clients/:id",
             axum::routing::delete(forget_client_memory),
@@ -442,6 +444,37 @@ async fn forget_client_memory(
     Ok(Json(ApiResponse::ok(
         serde_json::json!({"forgotten": removed}),
     )))
+}
+
+/// What clients have said is wrong and nobody has reviewed yet.
+async fn list_memory_disputes(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_memory_repository::MemoryNote>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::open_disputes(&state.db, &tenant_id, &branch_id, &claims).await?,
+    )))
+}
+
+/// Closes a dispute: `corrected` removes the note, `upheld` returns it to use
+/// while leaving the dispute on the record.
+async fn resolve_memory_dispute(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Path(note_id): Path<String>,
+    Json(payload): Json<ResolveDisputeRequest>,
+) -> ApiResult<Value> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    ai_memory_service::resolve_dispute(
+        &state.db, &tenant_id, &branch_id, &claims, &note_id, payload,
+    )
+    .await?;
+    Ok(Json(ApiResponse::ok(serde_json::json!({"resolved": true}))))
 }
 
 /// Where each action kind stands on running without confirmation.

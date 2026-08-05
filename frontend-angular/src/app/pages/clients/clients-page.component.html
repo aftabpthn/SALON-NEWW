@@ -383,7 +383,14 @@
     <article class="wide-card"><header><strong>What the assistant remembers</strong><small class="memory-hint">Only what someone typed here. The assistant never adds to this itself.</small></header>
       @if (memoryNotes.length) {
         <div class="record-list">@for (note of memoryNotes; track note.id) {
-          <div><span><b>{{ note.content }}</b><small>@if (note.sensitive) { Sensitive · never sent over WhatsApp or voice · } Kept until {{ formatDateTime(note.expiresAt) }}</small></span><button type="button" [disabled]="!canManageClients" (click)="forgetMemory(note.id)">Forget</button></div>
+          <div><span><b>{{ note.content }}</b><small>@if (note.disputedAt && !note.disputeResolvedAt) { <b class="memory-disputed">Client says this is wrong{{ note.disputeReason ? ': ' + note.disputeReason : '' }} · not being used</b> } @else { @if (note.sensitive) { Sensitive · never sent over WhatsApp or voice · } @if (note.disputeOutcome === 'upheld') { Contested and kept · } Kept until {{ formatDateTime(note.expiresAt) }} }</small></span>
+            @if (note.disputedAt && !note.disputeResolvedAt) {
+              <button type="button" [disabled]="!canManageClients" (click)="resolveMemoryDispute(note.id, 'corrected')">They are right</button>
+              <button type="button" [disabled]="!canManageClients" (click)="resolveMemoryDispute(note.id, 'upheld')">Keep it</button>
+            } @else {
+              <button type="button" [disabled]="!canManageClients" (click)="forgetMemory(note.id)">Forget</button>
+            }
+          </div>
         }</div>
       } @else {
         <div class="small-empty">Nothing remembered yet</div>

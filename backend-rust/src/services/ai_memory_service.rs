@@ -371,6 +371,101 @@ pub async fn forget_for_customer_account(db: &PgPool, account_id: &str) -> Resul
     Ok(removed)
 }
 
+/// A client saying a remembered fact is wrong.
+///
+/// Erasing was already available and stays the safe fallback, but a silent
+/// deletion teaches the salon nothing — they lose the note and never learn it
+/// was wrong, so whoever wrote it writes the same thing again next month. A
+/// dispute keeps the fact that something was contested, which is the part worth
+/// having. The note stops being recalled immediately, before anyone reviews it.
+pub async fn dispute_for_customer_account(
+    db: &PgPool,
+    account_id: &str,
+    note_id: &str,
+    reason: &str,
+) -> Result<(), AppError> {
+    let reason: String = reason.trim().chars().take(500).collect();
+    let raised = repository::raise_dispute(db, account_id.trim(), note_id.trim(), &reason)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to record a memory dispute");
+            AppError::internal("failed to record that")
+        })?;
+    if !raised {
+        return Err(AppError::not_found(
+            "that note was not found, or you have already told us about it",
+        ));
+    }
+    tracing::info!("a customer disputed something remembered about them");
+    Ok(())
+}
+
+/// What clients have contested and nobody has reviewed yet.
+pub async fn open_disputes(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    claims: &AuthClaims,
+) -> Result<Vec<MemoryNote>, AppError> {
+    ai_scope_service::require_domain(claims, AiDomain::Clients)?;
+    repository::open_disputes(db, tenant_id, branch_id, MAX_NOTES_PER_SUBJECT)
+        .await
+        .map_err(|_| AppError::internal("failed to read disputed memory"))
+}
+
+/// What the salon decided about a contested note.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveDisputeRequest {
+    /// `corrected` when the client was right and the note goes; `upheld` when
+    /// the salon is keeping it. Deliberately only two: "leave it open" is not a
+    /// resolution, it is the state it is already in.
+    pub outcome: String,
+}
+
+/// Closes a dispute.
+///
+/// `corrected` deletes the note, because agreeing it is wrong and keeping it
+/// anyway would be the worst of both. `upheld` returns it to use but leaves the
+/// dispute on the record, so a note that was contested and kept stays visibly
+/// different from one nobody questioned.
+pub async fn resolve_dispute(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    claims: &AuthClaims,
+    note_id: &str,
+    request: ResolveDisputeRequest,
+) -> Result<(), AppError> {
+    ai_scope_service::require_domain(claims, AiDomain::Clients)?;
+    match request.outcome.trim() {
+        "corrected" => {
+            let removed = repository::delete_note(db, tenant_id, branch_id, note_id.trim())
+                .await
+                .map_err(|_| AppError::internal("failed to remove that memory"))?;
+            if !removed {
+                return Err(AppError::not_found("that memory note was not found"));
+            }
+            Ok(())
+        }
+        "upheld" => {
+            let closed =
+                repository::uphold_dispute(db, tenant_id, branch_id, note_id.trim(), &claims.sub)
+                    .await
+                    .map_err(|_| AppError::internal("failed to close that dispute"))?;
+            if !closed {
+                return Err(AppError::not_found(
+                    "that note has no open dispute to close",
+                ));
+            }
+            Ok(())
+        }
+        _ => Err(AppError::validation(
+            "a dispute is resolved as corrected or upheld",
+        )),
+    }
+}
+
 /// Deletes expired notes and notes about clients the CRM no longer holds.
 ///
 /// Runs on the existing AI retention cycle, alongside transcript purging: it is
@@ -942,6 +1037,226 @@ mod memory_tests {
                 .await
                 .expect("count reads");
         assert_eq!(remaining, 0);
+    }
+
+    /// The rule that matters most: a disputed note stops being used the moment
+    /// the client says so, before anybody reviews it.
+    #[tokio::test]
+    async fn a_disputed_note_stops_being_recalled_immediately() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+
+        dispute_for_customer_account(&db, &account, &note_id, "I never said that")
+            .await
+            .expect("dispute is recorded");
+
+        assert!(
+            for_channel(&db, &tenant, branch, &client, "web")
+                .await
+                .is_empty(),
+            "a contested note must not reach the assistant while it is open"
+        );
+        assert!(
+            repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+                .await
+                .expect("recall runs")
+                .is_empty(),
+            "nor any other recall path"
+        );
+    }
+
+    /// The salon agreeing removes it; a note cannot be agreed-wrong and kept.
+    #[tokio::test]
+    async fn a_corrected_dispute_removes_the_note() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+        dispute_for_customer_account(&db, &account, &note_id, "")
+            .await
+            .expect("dispute is recorded");
+
+        let claims = claims("owner", &["clients.read"]);
+        resolve_dispute(
+            &db,
+            &tenant,
+            branch,
+            &claims,
+            &note_id,
+            ResolveDisputeRequest {
+                outcome: "corrected".into(),
+            },
+        )
+        .await
+        .expect("dispute is resolved");
+
+        let remaining: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM ai_memory_notes WHERE tenant_id=$1")
+                .bind(&tenant)
+                .fetch_one(&db)
+                .await
+                .expect("count reads");
+        assert_eq!(remaining, 0);
+    }
+
+    /// Upholding returns the note to use but keeps the dispute on the record: a
+    /// note that was contested and kept is not the same as one nobody queried.
+    #[tokio::test]
+    async fn an_upheld_dispute_restores_the_note_but_keeps_the_record() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+        dispute_for_customer_account(&db, &account, &note_id, "not mine")
+            .await
+            .expect("dispute is recorded");
+
+        let claims = claims("owner", &["clients.read"]);
+        resolve_dispute(
+            &db,
+            &tenant,
+            branch,
+            &claims,
+            &note_id,
+            ResolveDisputeRequest {
+                outcome: "upheld".into(),
+            },
+        )
+        .await
+        .expect("dispute is resolved");
+
+        let notes = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs");
+        assert_eq!(notes.len(), 1, "an upheld note is usable again");
+        assert_eq!(notes[0].dispute_outcome, "upheld");
+        assert_eq!(
+            notes[0].dispute_reason, "not mine",
+            "the client's words stay on the record"
+        );
+    }
+
+    /// A dispute is scoped through the account's own link, so guessing an id
+    /// belonging to somebody else does nothing.
+    #[tokio::test]
+    async fn a_customer_cannot_dispute_another_customers_note() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let mine = seed_client(&db, &tenant, "branch1").await;
+        let theirs = seed_client(&db, &tenant, "branch2").await;
+        write_note(
+            &db,
+            &tenant,
+            "branch2",
+            &theirs,
+            "Their preference",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, "branch1", &mine).await;
+        let note_id = repository::notes(&db, &tenant, "branch2", "client", &theirs, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+
+        let refused = dispute_for_customer_account(&db, &account, &note_id, "").await;
+        assert!(refused.is_err());
+        assert_eq!(
+            repository::notes(&db, &tenant, "branch2", "client", &theirs, true, 10)
+                .await
+                .expect("recall runs")
+                .len(),
+            1,
+            "it is still usable, because nothing happened to it"
+        );
+    }
+
+    /// An open dispute reaches the staff queue with the client's own words.
+    #[tokio::test]
+    async fn an_open_dispute_appears_in_the_staff_queue() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+        dispute_for_customer_account(&db, &account, &note_id, "I asked for Sundays")
+            .await
+            .expect("dispute is recorded");
+
+        let claims = claims("owner", &["clients.read"]);
+        let queue = open_disputes(&db, &tenant, branch, &claims)
+            .await
+            .expect("queue reads");
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].dispute_reason, "I asked for Sundays");
+        assert!(queue[0].dispute_resolved_at.is_none());
     }
 
     #[test]
