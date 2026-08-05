@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
@@ -373,7 +373,7 @@ type BookingFlowItem = {
                     <div>
                       <span class="timeline-badge">Complete Visit Timeline</span>
                       <strong>{{ continuousVisitTimeRangeLabel() }}</strong>
-                      <small>Sequence total: {{ durationLabel() }} (incl. preparation/buffer)</small>
+                      <small>Sequence total: {{ visitWindowDurationLabel() }} (incl. preparation/buffer)</small>
                     </div>
                     @if (slotHoldSeconds(); as seconds) {
                       <span class="hold-timer-badge" role="status">
@@ -414,7 +414,7 @@ type BookingFlowItem = {
               </div>
 
               <!-- Alternatives Panel when continuous time is constrained -->
-              @if (showAlternativesPanel()) {
+              @if (showAlternativesPanel() || showContinuousConflict()) {
                 <div class="alternatives-card premium-card">
                   <h4>Looking for continuous timing?</h4>
                   <p class="muted">Selected staff members are not continuously available at some slots.</p>
@@ -427,6 +427,16 @@ type BookingFlowItem = {
                       <strong>Later continuous time</strong>
                       <small>Jump to earliest continuous slot with current staff</small>
                     </button>
+                    <button type="button" class="alt-btn" (click)="selectNextAvailableDate()">
+                      <strong>Another date</strong>
+                      <small>Jump to the next date with a valid continuous slot</small>
+                    </button>
+                    @if (otherBranches().length) {
+                      <a class="alt-btn" [routerLink]="branchBookLink(otherBranches()[0])">
+                        <strong>Another branch</strong>
+                        <small>{{ otherBranches().length }} more branch{{ otherBranches().length === 1 ? "" : "es" }} nearby</small>
+                      </a>
+                    }
                     <label class="gap-toggle-label">
                       <input type="checkbox" [checked]="allowShortGap()" (change)="toggleAllowShortGap()" />
                       <span>Allow a short gap (10–15 min between services)</span>
@@ -937,7 +947,7 @@ type BookingFlowItem = {
     .slot.skeleton-slot { min-height: 45px; border-color: transparent; background: linear-gradient(90deg, rgba(232, 232, 232, 0.92), rgba(244, 244, 242, 0.98), rgba(232, 232, 232, 0.92)); background-size: 220% 100%; animation: booking-skeleton 1.15s ease-in-out infinite; pointer-events: none; }
     .slot.selected { position: relative; color: #FFFFFF; border-color: transparent; background: var(--primary); box-shadow: 0 14px 28px rgba(99, 102, 241, 0.22); text-decoration: none; opacity: 1; }
     .slot.selected::after { content: none; }
-    .slot:disabled:not(.selected) { color: rgba(105, 105, 105, 0.45); border-color: rgba(232, 232, 232, 0.9); background: var(--surface-soft); text-decoration: none; box-shadow: none; }
+    .slot:disabled:not(.selected) { color: rgba(71, 85, 105, 0.8); border-color: rgba(148, 163, 184, 0.6); border-style: dashed; background: var(--surface-soft); text-decoration: line-through; text-decoration-thickness: 1.5px; text-decoration-color: rgba(148, 163, 184, 0.65); box-shadow: none; cursor: not-allowed; }
     .confirm-grid { display: grid; gap: 12px; }
     .confirm-card, .trust-card { padding: 16px; }
     .confirm-card h2, .trust-card h3 { margin: 0 0 10px; letter-spacing: -0.04em; }
@@ -1228,7 +1238,7 @@ type BookingFlowItem = {
     .alternatives-card { display: grid; gap: 10px; padding: 14px; border-color: rgba(245, 158, 11, 0.4); background: #FFFBEB; }
     .alternatives-card h4 { margin: 0; color: #92400E; font-size: 0.92rem; font-weight: 950; }
     .alternatives-grid { display: grid; gap: 8px; }
-    .alt-btn { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; }
+    .alt-btn { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; text-decoration: none; }
     .alt-btn strong { font-size: 0.84rem; color: var(--primary); }
     .alt-btn small { font-size: 0.74rem; color: var(--muted); }
     .gap-toggle-label { display: inline-flex; align-items: center; gap: 8px; font-size: 0.78rem; font-weight: 850; color: #92400E; cursor: pointer; margin-top: 4px; }
@@ -1335,7 +1345,7 @@ type BookingFlowItem = {
     @keyframes button-spin { to { transform: rotate(360deg); } }
   `]
 })
-export class BookingFlowPage implements OnInit {
+export class BookingFlowPage implements OnInit, OnDestroy {
   readonly customerNote = signal("");
   readonly couponCode = signal("");
   readonly couponSuccessMsg = signal("");
@@ -1365,7 +1375,7 @@ export class BookingFlowPage implements OnInit {
     if (!firstSlot) return [];
     let currentMs = new Date(firstSlot).getTime();
     if (!Number.isFinite(currentMs)) return [];
-    const bufferMs = 5 * 60000;
+    const bufferMs = (this.allowShortGap() ? 15 : 5) * 60000;
 
     return items.map((item, idx) => {
       const service = this.serviceById(item.serviceId);
@@ -1396,6 +1406,16 @@ export class BookingFlowPage implements OnInit {
     if (!items.length) return "";
     return `${items[0].startTimeLabel}–${items[items.length - 1].endTimeLabel}`;
   });
+
+  visitWindowDurationLabel(): string {
+    const items = this.continuousTimelineItems();
+    if (items.length < 2) return this.durationLabel();
+    const start = new Date(items[0].startIso).getTime();
+    const end = new Date(items[items.length - 1].endIso).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return this.durationLabel();
+    const minutes = Math.round((end - start) / 60000);
+    return `${minutes} min`;
+  }
 
   readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.initialServiceIds().length ? 2 : 1)));
   readonly bookingItems = signal<BookingFlowItem[]>(this.initialServiceIds().map((serviceId) => ({
@@ -1568,6 +1588,13 @@ export class BookingFlowPage implements OnInit {
 
   ngOnInit() {
     this.reload();
+  }
+
+  ngOnDestroy() {
+    if (this.holdTimerInterval) {
+      clearInterval(this.holdTimerInterval);
+      this.holdTimerInterval = null;
+    }
   }
 
   async reload() {
@@ -2122,6 +2149,30 @@ export class BookingFlowPage implements OnInit {
 
   showAlternativesPanel(): boolean {
     return this.continuousVisitMode() && this.bookingItems().length > 1 && !this.allSlotsSelected() && this.hasNoSlotsOnSelectedDate();
+  }
+
+  /** True when slots exist but none form a valid continuous sequence with current staff — the audit's "professionals not continuously available" case. */
+  showContinuousConflict(): boolean {
+    if (!this.continuousVisitMode() || this.bookingItems().length < 2 || this.allSlotsSelected() || this.hasNoSlotsOnSelectedDate()) {
+      return false;
+    }
+    return !this.slotGroups().some((group) => group.slots.some((slot) => slot.available && this.isSlotSelectable(slot)));
+  }
+
+  selectNextAvailableDate() {
+    const current = this.activeItem()?.date || "";
+    for (const day of this.availabilityDays()) {
+      if (day.date === current) continue;
+      for (const period of day.periods) {
+        const slot = period.slots.find((s) => s.available && this.isSlotSelectable(s));
+        if (slot) {
+          this.setDate(day.date);
+          this.selectActiveSlot(slot);
+          return;
+        }
+      }
+    }
+    this.flowWarning.set("No other dates with continuously available times were found in this window. Try another day or branch.");
   }
 
   formatHoldTimer(seconds: number): string {
