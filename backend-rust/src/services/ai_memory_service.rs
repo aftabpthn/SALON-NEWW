@@ -396,8 +396,56 @@ pub async fn dispute_for_customer_account(
             "that note was not found, or you have already told us about it",
         ));
     }
+
+    // Tell the branch. The note is already out of use, so the sooner somebody
+    // looks the sooner it is either corrected or back in service — a queue
+    // nobody opens is a queue that does not exist. A failed notice is loud but
+    // never fails the dispute, which has already landed.
+    if let Ok(Some((tenant_id, branch_id, content))) =
+        repository::note_scope(db, note_id.trim()).await
+    {
+        let metadata = serde_json::json!({
+            "noteId": note_id.trim(),
+            "reason": reason,
+            "resolveRoute": format!("/api/v1/ai/memory/notes/{}/dispute", note_id.trim()),
+        });
+        let body = if reason.is_empty() {
+            format!("\"{content}\"\n\nWe have stopped using it. Check whether it is right and either correct it or keep it.")
+        } else {
+            format!("\"{content}\"\n\nThey said: {reason}\n\nWe have stopped using it. Check whether it is right and either correct it or keep it.")
+        };
+        if let Err(error) = repository::deliver_dispute_notice(
+            db,
+            &tenant_id,
+            &branch_id,
+            "A client says something we remember is wrong",
+            &body,
+            &metadata,
+        )
+        .await
+        {
+            tracing::error!(%error, "memory dispute recorded but the branch was not notified");
+        }
+    }
     tracing::info!("a customer disputed something remembered about them");
     Ok(())
+}
+
+/// How often each person's recorded notes get contested.
+///
+/// Only people with at least one dispute appear, and their total is shown
+/// alongside: three disputes out of four hundred notes is a different story
+/// from three out of five, and a bare count would read the same either way.
+pub async fn dispute_rates_by_recorder(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    claims: &AuthClaims,
+) -> Result<Vec<repository::RecorderDisputeRate>, AppError> {
+    ai_scope_service::require_domain(claims, AiDomain::Clients)?;
+    repository::dispute_rates_by_recorder(db, tenant_id, branch_id)
+        .await
+        .map_err(|_| AppError::internal("failed to read dispute rates"))
 }
 
 /// What clients have contested and nobody has reviewed yet.
@@ -1257,6 +1305,109 @@ mod memory_tests {
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].dispute_reason, "I asked for Sundays");
         assert!(queue[0].dispute_resolved_at.is_none());
+    }
+
+    /// A dispute queue nobody opens is a queue that does not exist.
+    #[tokio::test]
+    async fn a_dispute_tells_the_branch_it_happened() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(
+            &db,
+            &tenant,
+            branch,
+            &client,
+            "Prefers Saturday",
+            false,
+            300,
+        )
+        .await;
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+
+        dispute_for_customer_account(&db, &account, &note_id, "I asked for Sundays")
+            .await
+            .expect("dispute is recorded");
+
+        let (body, note_ref): (String, Option<String>) = sqlx::query_as(
+            r#"SELECT body, metadata_json->>'noteId'
+                 FROM notifications
+                WHERE tenant_id=$1 AND notification_type='ai_memory_dispute'"#,
+        )
+        .bind(&tenant)
+        .fetch_one(&db)
+        .await
+        .expect("the branch was notified");
+        assert_eq!(note_ref.as_deref(), Some(note_id.as_str()));
+        assert!(
+            body.contains("I asked for Sundays"),
+            "their words travel with it"
+        );
+        assert!(body.contains("stopped using it"));
+    }
+
+    /// A bare count would read the same for three disputes out of four hundred
+    /// as for three out of five, so the total travels with it.
+    #[tokio::test]
+    async fn dispute_rates_report_the_total_alongside_the_disputes() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        for index in 0..4 {
+            write_note(
+                &db,
+                &tenant,
+                branch,
+                &client,
+                &format!("Fact {index}"),
+                false,
+                300,
+            )
+            .await;
+        }
+        let account = link_account(&db, &tenant, branch, &client).await;
+        let note_id = repository::notes(&db, &tenant, branch, "client", &client, true, 10)
+            .await
+            .expect("recall runs")[0]
+            .id
+            .clone();
+        dispute_for_customer_account(&db, &account, &note_id, "")
+            .await
+            .expect("dispute is recorded");
+
+        let claims = claims("owner", &["clients.read"]);
+        let rates = dispute_rates_by_recorder(&db, &tenant, branch, &claims)
+            .await
+            .expect("rates read");
+        assert_eq!(rates.len(), 1, "only recorders with a dispute appear");
+        assert_eq!(rates[0].recorded_by, "staff-1");
+        assert_eq!(rates[0].recorded, 4);
+        assert_eq!(rates[0].disputed, 1);
+        assert_eq!(rates[0].corrected, 0);
+    }
+
+    /// Nobody with a clean record appears at all, so the list is a queue rather
+    /// than a leaderboard everyone is on.
+    #[tokio::test]
+    async fn a_recorder_with_no_disputes_is_absent_from_the_rates() {
+        let Some(db) = connect().await else { return };
+        let tenant = format!("memory_{}", Uuid::new_v4().simple());
+        let branch = "branch1";
+        let client = seed_client(&db, &tenant, branch).await;
+        write_note(&db, &tenant, branch, &client, "Never contested", false, 300).await;
+
+        let claims = claims("owner", &["clients.read"]);
+        assert!(dispute_rates_by_recorder(&db, &tenant, branch, &claims)
+            .await
+            .expect("rates read")
+            .is_empty());
     }
 
     #[test]

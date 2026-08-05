@@ -191,10 +191,26 @@ read, so it cannot become a side channel onto another branch's performance.
 The Command Center forecast cards render `forecastAccuracy()` beneath the model
 line, with the full statement as the tooltip.
 
-## 8. Future roadmap
+## 8. Confidence is now a measurement
 
-- Feed measured accuracy back into the confidence label, so `high` means a
-  measured hit rate rather than a sample-size heuristic.
+`confidence` used to be an assertion by whichever engine produced the range,
+with nothing in the system able to contradict it. Every returned prediction now
+has its claim narrowed to what the kind's own checked record supports:
+
+| Measured hit rate | Effect on the claim |
+| --- | --- |
+| Not measured yet | `high` is capped to `medium` |
+| Below 50% | everything floors at `low` |
+| 50–80% | `high` is capped to `medium` |
+| 80% or above | the claim stands as made |
+
+It never *raises* a claim. A model that called its own answer `low` knows
+something about that particular subject the aggregate does not. The stored run
+keeps the claim exactly as it was made — the run is an audit record of what was
+asserted — while the caller is shown the supported one.
+
+## 9. Future roadmap
+
 - Use per-kind accuracy to decide which kinds are worth surfacing proactively in
   the briefing, rather than surfacing all of them at a fixed confidence floor.
 - Extend the same outcome discipline to `ai_action_service` drafts: record

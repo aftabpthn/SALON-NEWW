@@ -251,6 +251,39 @@ pub async fn search(
     .await
 }
 
+/// Whether retrieval actually helped, from votes people already cast.
+///
+/// Feedback is attributed server-side from what the reply was built from, so
+/// this is a measurement rather than a label a caller chose for its own votes.
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct RetrievalFeedback {
+    pub rated: i64,
+    pub helpful: i64,
+}
+
+pub async fn retrieval_feedback(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_ids: &[String],
+    lookback_days: i32,
+) -> Result<RetrievalFeedback, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT COUNT(*)::BIGINT AS rated,
+                  COUNT(*) FILTER (WHERE helpful)::BIGINT AS helpful
+             FROM ai_copilot_feedback
+            WHERE tenant_id=$1 AND branch_id=ANY($2::TEXT[])
+              AND tool=$3
+              AND created_at >= NOW() - MAKE_INTERVAL(days => $4)"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_ids)
+    .bind(crate::services::ai_concierge_service::RETRIEVAL_FEEDBACK_TOOL)
+    .bind(lookback_days)
+    .fetch_one(db)
+    .await
+}
+
 /// How much of the corpus is indexed, for the worker's log line and for an
 /// operator asking whether retrieval is actually live.
 #[derive(Debug, Clone, Serialize, FromRow)]

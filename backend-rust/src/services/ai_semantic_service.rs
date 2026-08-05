@@ -495,6 +495,67 @@ pub async fn search(
     }
 }
 
+/// How far back the retrieval helpfulness figure looks, matching the window the
+/// prediction accuracy uses so the two read on the same terms.
+pub const FEEDBACK_LOOKBACK_DAYS: i32 = 180;
+
+/// Ratings needed before a helpfulness rate is stated, for the same reason a
+/// prediction hit rate is withheld on a thin sample.
+pub const MIN_RATINGS_FOR_RATE: i64 = 20;
+
+/// Whether retrieval is actually helping, as a number rather than an impression.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetrievalHelpfulness {
+    pub rated: i64,
+    pub helpful: i64,
+    /// `None` below the rating floor.
+    pub helpful_percent: Option<f64>,
+    pub lookback_days: i32,
+    /// The whole position in one sentence, so the number cannot be rendered
+    /// without what it counts.
+    pub statement: String,
+}
+
+/// Measured helpfulness of retrieval-backed replies.
+///
+/// Counts only replies the semantic layer contributed to, attributed
+/// server-side from what the reply was actually built from — a rate anyone can
+/// label their own votes with is not a measurement.
+pub async fn helpfulness(
+    db: &PgPool,
+    tenant_id: &str,
+    claims: &AuthClaims,
+    scope_request: &ScopeRequest,
+) -> Result<RetrievalHelpfulness, AppError> {
+    let scope = ai_tool_dispatcher::resolve(db, tenant_id, claims, scope_request).await?;
+    let branch_ids = scope.branch_ids();
+    let record = repository::retrieval_feedback(db, tenant_id, &branch_ids, FEEDBACK_LOOKBACK_DAYS)
+        .await
+        .map_err(|_| AppError::internal("failed to read retrieval feedback"))?;
+
+    let rate = (record.rated >= MIN_RATINGS_FOR_RATE)
+        .then(|| (record.helpful as f64 / record.rated as f64) * 100.0);
+    let statement = match rate {
+        Some(percent) => format!(
+            "{percent:.0}% of {} rated answers that used stored CRM text were marked helpful over the last {FEEDBACK_LOOKBACK_DAYS} days.",
+            record.rated
+        ),
+        None => format!(
+            "Not enough answers have been rated to say whether retrieval helps: {} of the {MIN_RATINGS_FOR_RATE} needed.",
+            record.rated
+        ),
+    };
+
+    Ok(RetrievalHelpfulness {
+        rated: record.rated,
+        helpful: record.helpful,
+        helpful_percent: rate,
+        lookback_days: FEEDBACK_LOOKBACK_DAYS,
+        statement,
+    })
+}
+
 /// How much of the corpus is embedded, for operators.
 pub async fn index_status(db: &PgPool) -> Result<repository::IndexStatus, AppError> {
     repository::index_status(db)

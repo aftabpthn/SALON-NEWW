@@ -181,11 +181,24 @@ remembered, when each note goes, a **This is not right** action per note and a
 single **Erase all of it**. A disputed note tells the customer it has already
 stopped being used.
 
-## 10. Future roadmap
+## 10. When a dispute is raised
 
-- Notify the branch when a dispute is raised, rather than relying on someone
-  opening the queue. The notification pattern used for autonomous runs applies
-  directly.
-- Report how often notes are disputed per staff member who recorded them: a
-  person whose notes are routinely contested is worth a conversation, and the
-  data is already on the row.
+The branch is notified at once, in the ordinary `notifications` table under
+`ai_memory_dispute`, carrying the note id, the client's own words and the route
+to resolve it. The note is already out of use by then, so the sooner somebody
+looks the sooner it is either corrected or back in service — a queue nobody
+opens is a queue that does not exist. A failed notice is logged loudly but never
+fails the dispute, which has already landed.
+
+`GET /api/v1/ai/memory/disputes/by-recorder` reports how often each person's
+notes get contested. Only people with at least one dispute appear, so it is a
+queue rather than a leaderboard everyone is on, and the total they recorded
+travels with the count: three disputes out of four hundred notes is a different
+story from three out of five, and a bare count reads the same either way.
+
+## 11. Future roadmap
+
+- Let a client correct a note by proposing replacement text for staff to accept,
+  rather than only flagging it. That is a bigger change than it sounds: the
+  proposal has to be stored apart from the note until accepted, or the record of
+  what was originally said is lost the moment somebody disputes it.

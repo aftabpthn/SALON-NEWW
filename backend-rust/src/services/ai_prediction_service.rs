@@ -480,6 +480,17 @@ pub async fn predict(
         ai_prediction_outcome_service::accuracy_for_branches(db, tenant_id, kind, &branch_ids)
             .await?;
 
+    // Confidence stops being an assertion here. Whatever engine produced the
+    // range claimed a word for it; this narrows that claim to what the kind's
+    // own checked record supports. The stored row keeps the claim as made — the
+    // run is an audit record — while the caller is shown the supported one.
+    for prediction in &mut predictions {
+        prediction.confidence = ai_prediction_outcome_service::confidence_supported_by(
+            &prediction.confidence,
+            &accuracy,
+        );
+    }
+
     Ok(PredictionRun {
         run_id,
         kind: kind.name().into(),

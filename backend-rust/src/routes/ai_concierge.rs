@@ -69,10 +69,12 @@ pub fn router() -> Router<AppState> {
             get(get_action_autonomy).put(set_action_autonomy),
         )
         .route("/ai/actions/autonomy/undoable", get(list_undoable_runs))
+        .route("/ai/retrieval/helpfulness", get(retrieval_helpfulness))
         .route("/ai/memory", post(record_memory))
         .route("/ai/memory/:subjectKind/:subjectId", get(recall_memory))
         .route("/ai/memory/notes/:id", axum::routing::delete(forget_memory))
         .route("/ai/memory/disputes", get(list_memory_disputes))
+        .route("/ai/memory/disputes/by-recorder", get(memory_dispute_rates))
         .route("/ai/memory/notes/:id/dispute", post(resolve_memory_dispute))
         .route(
             "/ai/memory/clients/:id",
@@ -446,6 +448,25 @@ async fn forget_client_memory(
     )))
 }
 
+/// Whether retrieval is actually helping, from votes already cast.
+async fn retrieval_helpfulness(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<crate::services::ai_semantic_service::RetrievalHelpfulness> {
+    require_ai_read(&claims)?;
+    let (tenant_id, _) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        crate::services::ai_semantic_service::helpfulness(
+            &state.db,
+            &tenant_id,
+            &claims,
+            &ScopeRequest::default(),
+        )
+        .await?,
+    )))
+}
+
 /// What clients have said is wrong and nobody has reviewed yet.
 async fn list_memory_disputes(
     State(state): State<AppState>,
@@ -456,6 +477,20 @@ async fn list_memory_disputes(
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
         ai_memory_service::open_disputes(&state.db, &tenant_id, &branch_id, &claims).await?,
+    )))
+}
+
+/// How often each person's recorded notes get contested.
+async fn memory_dispute_rates(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+) -> ApiResult<Vec<crate::repositories::ai_memory_repository::RecorderDisputeRate>> {
+    require_ai_read(&claims)?;
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        ai_memory_service::dispute_rates_by_recorder(&state.db, &tenant_id, &branch_id, &claims)
+            .await?,
     )))
 }
 

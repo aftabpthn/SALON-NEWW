@@ -289,6 +289,84 @@ pub async fn raise_dispute(
     .map(|result| result.rows_affected() == 1)
 }
 
+/// Tells the branch a client has contested something remembered about them.
+///
+/// Filed in the same `notifications` table as everything else, under its own
+/// resource type. A dispute queue nobody opens is a queue that does not exist,
+/// and the note is already out of use — so the sooner somebody looks, the
+/// sooner it is either corrected or back in service.
+pub async fn deliver_dispute_notice(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    title: &str,
+    body: &str,
+    metadata: &serde_json::Value,
+) -> Result<String, sqlx::Error> {
+    sqlx::query_scalar(
+        r#"INSERT INTO notifications(
+              tenant_id,branch_id,created_by,notification_type,title,body,
+              resource_type,metadata_json
+            ) VALUES ($1,$2,'system','ai_memory_dispute',$3,$4,'ai_memory_note',$5)
+            RETURNING id"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(title)
+    .bind(body)
+    .bind(metadata)
+    .fetch_one(db)
+    .await
+}
+
+/// Where a disputed note lives, so the notice reaches the right branch.
+pub async fn note_scope(
+    db: &PgPool,
+    note_id: &str,
+) -> Result<Option<(String, String, String)>, sqlx::Error> {
+    sqlx::query_as("SELECT tenant_id, branch_id, content FROM ai_memory_notes WHERE id=$1")
+        .bind(note_id)
+        .fetch_optional(db)
+        .await
+}
+
+/// How often each person's recorded notes get contested.
+///
+/// A staff member whose notes are routinely disputed is worth a conversation,
+/// and the data is already on the row. Counts every note they recorded, not only
+/// the disputed ones, because three disputes out of four hundred is a different
+/// story from three out of five.
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct RecorderDisputeRate {
+    pub recorded_by: String,
+    pub recorded: i64,
+    pub disputed: i64,
+    pub corrected: i64,
+}
+
+pub async fn dispute_rates_by_recorder(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+) -> Result<Vec<RecorderDisputeRate>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT recorded_by,
+                  COUNT(*)::BIGINT AS recorded,
+                  COUNT(*) FILTER (WHERE disputed_at IS NOT NULL)::BIGINT AS disputed,
+                  COUNT(*) FILTER (WHERE dispute_outcome='corrected')::BIGINT AS corrected
+             FROM ai_memory_notes
+            WHERE tenant_id=$1 AND branch_id=$2 AND subject_kind='client'
+            GROUP BY recorded_by
+           HAVING COUNT(*) FILTER (WHERE disputed_at IS NOT NULL) > 0
+            ORDER BY COUNT(*) FILTER (WHERE disputed_at IS NOT NULL) DESC, recorded_by"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .fetch_all(db)
+    .await
+}
+
 /// Disputes a branch has not looked at yet.
 pub async fn open_disputes(
     db: &PgPool,

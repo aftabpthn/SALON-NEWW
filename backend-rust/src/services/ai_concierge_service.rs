@@ -564,6 +564,16 @@ pub async fn process_external_message(
     .await
 }
 
+/// Marks a reply the semantic layer contributed to.
+///
+/// Appended to the model name rather than stored in a column of its own,
+/// because the transcript already carries the model per message and a second
+/// place to record the same thing is a second place for the two to disagree.
+pub const RETRIEVAL_MODEL_SUFFIX: &str = "+retrieval";
+
+/// The `tool` recorded against feedback on a retrieval-backed reply.
+pub const RETRIEVAL_FEEDBACK_TOOL: &str = "semantic_retrieval";
+
 /// The only two settings the message pipeline needs to reach the AI provider.
 ///
 /// Taking these instead of the whole `Settings` keeps the pipeline callable from
@@ -723,6 +733,16 @@ async fn process_message(
         )
         .await
     };
+    // Mark a reply that was built from retrieved passages, so feedback about it
+    // can be attributed to retrieval rather than to whichever model wrote the
+    // sentence. Derived here rather than taken from the client, because a
+    // measurement the caller can assert is not a measurement.
+    let mut provider = provider;
+    if !retrieved.is_empty() && !provider.model.starts_with("crm-tool:") {
+        provider.model = format!("{}{RETRIEVAL_MODEL_SUFFIX}", provider.model);
+    }
+    let provider = provider;
+
     let safe_service = services.iter().find(|item| item.id == provider.service_id);
     let (action_type, action_payload) = if provider.handoff_required || provider.intent == "handoff"
     {
@@ -1831,6 +1851,13 @@ pub async fn record_feedback(
     if tool.chars().count() > 80 {
         return Err(AppError::validation("feedback tool is invalid"));
     }
+    // What the reply was actually built from is a server-side fact. A client
+    // could otherwise label its own votes, and a hit rate anyone can assert is
+    // not a measurement.
+    let tool = match repository::message_model_name(db, tenant_id, branch_id, &message_id).await {
+        Ok(Some(model)) if model.ends_with(RETRIEVAL_MODEL_SUFFIX) => RETRIEVAL_FEEDBACK_TOOL,
+        _ => tool,
+    };
     repository::save_feedback(
         db,
         tenant_id,

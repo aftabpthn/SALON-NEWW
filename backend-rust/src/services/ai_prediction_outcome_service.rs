@@ -506,6 +506,45 @@ fn hit_rate(resolved: i64, hits: i64) -> Option<f64> {
     Some((hits as f64 / resolved as f64) * 100.0)
 }
 
+/// Hit rate above which a kind may claim high confidence.
+///
+/// A model that is right four times in five has earned the word. Below it,
+/// "high" would be the code asserting something the record does not support.
+pub const HIGH_CONFIDENCE_HIT_RATE: f64 = 80.0;
+
+/// Hit rate below which nothing from this kind may claim better than low.
+///
+/// At worse than a coin flip the range is not evidence, however sure the model
+/// that produced it sounds.
+pub const LOW_CONFIDENCE_HIT_RATE: f64 = 50.0;
+
+/// Adjusts a claimed confidence to what the kind's record actually supports.
+///
+/// Confidence used to be an assertion by whichever engine produced the range —
+/// nothing in the system could contradict it. This makes it a measurement:
+///
+/// * With no measured record, `high` is capped to `medium`. A model with no
+///   track record cannot claim the strongest word in the vocabulary; it can
+///   still say `medium`, because the sample-size heuristic behind it is real.
+/// * A measured hit rate at or above the bar leaves the claim alone.
+/// * A measured hit rate below half floors everything at `low`.
+///
+/// It never *raises* a claim. A model that called its own answer `low` knows
+/// something about that particular subject the aggregate does not.
+pub fn confidence_supported_by(claimed: &str, accuracy: &PredictionAccuracy) -> String {
+    let claimed = claimed.trim().to_ascii_lowercase();
+    match accuracy.hit_rate_percent {
+        Some(rate) if rate < LOW_CONFIDENCE_HIT_RATE => "low".to_string(),
+        Some(rate) if rate >= HIGH_CONFIDENCE_HIT_RATE => claimed,
+        // Measured, but not well enough to support the strongest word.
+        Some(_) if claimed == "high" => "medium".to_string(),
+        Some(_) => claimed,
+        // Not measured yet.
+        None if claimed == "high" => "medium".to_string(),
+        None => claimed,
+    }
+}
+
 /// Measured accuracy for one kind, over the branches this login may read.
 ///
 /// The scope chain runs first and unchanged: an accuracy figure is built from
@@ -825,6 +864,57 @@ mod outcome_tests {
         );
         assert_eq!(summary.by_model[0].hit_rate_percent, Some(80.0));
         assert!(summary.by_model[1].hit_rate_percent.is_none());
+    }
+
+    fn accuracy_with(resolved: i64, hits: i64) -> PredictionAccuracy {
+        summarize(
+            PredictionKind::ServiceDemand,
+            vec![record(resolved, hits, 0, 0)],
+        )
+    }
+
+    /// A model with no checked record cannot claim the strongest word. It can
+    /// still say medium, because the sample-size heuristic behind that is real.
+    #[test]
+    fn an_unmeasured_kind_cannot_claim_high_confidence() {
+        let none = accuracy_with(0, 0);
+        assert_eq!(confidence_supported_by("high", &none), "medium");
+        assert_eq!(confidence_supported_by("medium", &none), "medium");
+        assert_eq!(confidence_supported_by("low", &none), "low");
+    }
+
+    /// A measured record at or above the bar leaves the claim as made.
+    #[test]
+    fn a_strong_record_supports_the_claim_it_was_given() {
+        let strong = accuracy_with(100, 85);
+        assert_eq!(confidence_supported_by("high", &strong), "high");
+        assert_eq!(confidence_supported_by("medium", &strong), "medium");
+    }
+
+    /// Measured, but not well enough for the strongest word.
+    #[test]
+    fn a_middling_record_caps_high_at_medium() {
+        let middling = accuracy_with(100, 70);
+        assert_eq!(confidence_supported_by("high", &middling), "medium");
+        assert_eq!(confidence_supported_by("medium", &middling), "medium");
+    }
+
+    /// Worse than a coin flip floors everything, however sure the model sounded.
+    #[test]
+    fn a_failing_record_floors_every_claim_at_low() {
+        let failing = accuracy_with(100, 30);
+        assert_eq!(confidence_supported_by("high", &failing), "low");
+        assert_eq!(confidence_supported_by("medium", &failing), "low");
+    }
+
+    /// It never raises a claim: a model that called its own answer low knows
+    /// something about that subject the aggregate does not.
+    #[test]
+    fn measured_accuracy_never_raises_a_modest_claim() {
+        assert_eq!(
+            confidence_supported_by("low", &accuracy_with(100, 99)),
+            "low"
+        );
     }
 
     #[test]

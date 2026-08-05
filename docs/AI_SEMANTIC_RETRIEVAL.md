@@ -147,6 +147,17 @@ problem from similarity search over a derived index.
 
 - Index appointment and treatment history summaries once there is a derived,
   non-clinical form of them that carries no retention obligation.
-- Feed retrieval hit rate into the same measured-accuracy discipline the
-  prediction outcomes use, so "retrieval helped" is a number rather than an
-  impression.
+Whether retrieval helps is now measured rather than assumed. A reply the
+semantic layer contributed to is marked in its stored model name
+(`…+retrieval`), and feedback on that message is labelled `semantic_retrieval`
+**server-side** — a rate a caller can label its own votes with is not a
+measurement. `GET /api/v1/ai/retrieval/helpfulness` reports it over the same
+180-day window the prediction accuracy uses, and withholds the percentage below
+20 ratings for the same reason.
+
+Still open:
+
+- Index appointment and treatment history summaries once there is a derived,
+  non-clinical form of them that carries no retention obligation. Deliberately
+  not started: without that form, indexing them would recreate exactly the
+  problem that keeps Scribe transcripts out of the corpus.
