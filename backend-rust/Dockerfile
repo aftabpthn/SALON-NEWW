@@ -6,7 +6,10 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 WORKDIR /app
-RUN useradd --system --no-create-home --uid 10001 appuser
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --no-create-home --uid 10001 appuser
 COPY --from=builder /app/target/release/aura-shine-backend /usr/local/bin/aura-shine-backend
 USER appuser
 EXPOSE 8080
