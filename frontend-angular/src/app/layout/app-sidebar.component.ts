@@ -94,6 +94,9 @@ export class AppSidebarComponent {
     { label: 'Memberships', icon: 'bi-gem', route: '/memberships', exact: false, links: [
       { label: 'Memberships', icon: 'bi-gem', route: '/memberships', exact: false },
     ] },
+    { label: 'Fitness & Studio', icon: 'bi-activity', route: '/fitness', exact: false, links: [
+      { label: 'Fitness & Studio', icon: 'bi-activity', route: '/fitness', exact: false },
+    ] },
     { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false, links: [
       { label: 'Reports', icon: 'bi-bar-chart-line', route: '/reports', exact: false },
       { label: 'Profit Intelligence', icon: 'bi-graph-up-arrow', route: '/reports/profit-intelligence', exact: false },
