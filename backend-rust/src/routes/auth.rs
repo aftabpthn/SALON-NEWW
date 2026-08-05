@@ -304,7 +304,7 @@ pub async fn start_sso(
         .await
         .map_err(|_| AppError::internal("failed to resolve salon workspace"))?
         .ok_or_else(|| AppError::not_found("salon workspace was not found"))?;
-    entitlement_service::ensure_can_login(&state.db, &tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &tenant_id).await?;
     let url = sso_service::begin(&state, &tenant_id, provider, query.return_uri.trim()).await?;
     Ok(Redirect::temporary(&url))
 }
@@ -346,7 +346,7 @@ pub async fn exchange_sso(
     .await
     .map_err(|_| AppError::internal("failed to validate SSO handoff"))?
     .ok_or_else(|| AppError::unauthenticated("invalid or expired SSO handoff"))?;
-    entitlement_service::ensure_can_login(&state.db, &handoff.tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &handoff.tenant_id).await?;
     let user = auth_repository::find_user_by_id(&state.db, &handoff.tenant_id, &handoff.user_id)
         .await
         .map_err(|_| AppError::internal("failed to load SSO user"))?
@@ -441,7 +441,7 @@ pub async fn login(
     }
 
     let tenant_id = resolve_tenant_id(&state, &headers).await?;
-    entitlement_service::ensure_can_login(&state.db, &tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &tenant_id).await?;
     enforce_login_rate_limit(&state, &tenant_id, identity, &headers).await?;
     let client = ClientContext::from_headers(&headers);
     let user = auth_repository::find_user_by_identity(&state.db, &tenant_id, identity)
@@ -595,7 +595,7 @@ pub async fn begin_passkey_login(
         return Err(AppError::validation("loginId is required"));
     }
     let tenant_id = resolve_tenant_id(&state, &headers).await?;
-    entitlement_service::ensure_can_login(&state.db, &tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &tenant_id).await?;
     enforce_login_rate_limit(&state, &tenant_id, identity, &headers).await?;
     let user = auth_repository::find_user_by_identity(&state.db, &tenant_id, identity)
         .await
@@ -622,7 +622,7 @@ pub async fn finish_passkey_login(
     Json(payload): Json<PasskeyLoginFinishRequest>,
 ) -> AuthApiResult<LoginResponse> {
     let expected_tenant_id = resolve_tenant_id(&state, &headers).await?;
-    entitlement_service::ensure_can_login(&state.db, &expected_tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &expected_tenant_id).await?;
     let (tenant_id, user_id) = webauthn_service::finish_authentication(
         &state.db,
         &state.settings,
@@ -1294,7 +1294,7 @@ async fn current_user(
     state: &AppState,
     claims: &auth_service::AuthClaims,
 ) -> Result<AuthUser, AppError> {
-    entitlement_service::ensure_can_login(&state.db, &claims.tenant_id).await?;
+    entitlement_service::ensure_can_authenticate(&state.db, &claims.tenant_id).await?;
     auth_repository::find_user_by_id(&state.db, &claims.tenant_id, &claims.sub)
         .await
         .map_err(|_| AppError::internal("failed to load user"))?

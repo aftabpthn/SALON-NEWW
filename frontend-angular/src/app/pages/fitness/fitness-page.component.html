@@ -1,0 +1,275 @@
+<section class="fitness-page">
+  <header class="page-header">
+    <div>
+      <h1>Fitness &amp; studio</h1>
+      <p class="page-sub">Walk-in queue, classes, amenities and challenges for this branch.</p>
+    </div>
+    <button class="secondary-button" type="button" [disabled]="loading || busy" (click)="reload()">
+      <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh
+    </button>
+  </header>
+
+  @if (error) { <p class="alert error" role="alert">{{ error }}</p> }
+  @if (message) { <p class="alert success" role="status">{{ message }}</p> }
+
+  <nav class="tab-bar" aria-label="Fitness sections">
+    @for (item of tabs; track item.key) {
+      <button type="button" [class.active]="tab === item.key" [attr.aria-pressed]="tab === item.key" (click)="tab = item.key">
+        <i class="bi" [ngClass]="item.icon" aria-hidden="true"></i> {{ item.label }}
+      </button>
+    }
+  </nav>
+
+  @if (loading) { <div class="loading-state">Loading the workspace…</div> }
+
+  @if (!loading && tab === 'queue') {
+    <section class="panel">
+      <header class="panel-header">
+        <h2>Walk-in queue</h2>
+        <button class="primary-button" type="button" (click)="openQueue()">Add walk-in</button>
+      </header>
+      @if (!summary.queue.length) { <div class="empty-state">Nobody is waiting.</div> }
+      @if (summary.queue.length) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Client</th><th>Status</th><th>Priority</th><th>Checked in</th><th>Est. start</th><th>Move to</th></tr></thead>
+            <tbody>
+              @for (entry of summary.queue; track entry.id) {
+                <tr>
+                  <td><strong>{{ entry.clientName || entry.clientId }}</strong><small>{{ entry.durationMinutes }} min</small></td>
+                  <td><span class="status-chip" [attr.data-status]="entry.status">{{ label(entry.status) }}</span></td>
+                  <td class="num">{{ entry.priority }}</td>
+                  <td>{{ time(entry.checkedInAt) }}</td>
+                  <td>{{ time(entry.estimatedStartAt) }}</td>
+                  <td>
+                    <div class="move-buttons">
+                      @for (move of movesFor(entry.status); track move) {
+                        <button class="secondary-button small" type="button" [disabled]="busy" (click)="moveQueue(entry, move)">{{ label(move) }}</button>
+                      }
+                      @if (!movesFor(entry.status).length) { <span class="muted">—</span> }
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  @if (!loading && tab === 'classes') {
+    <section class="panel">
+      <header class="panel-header">
+        <h2>Class templates</h2>
+        <button class="primary-button" type="button" (click)="openTemplate()">New template</button>
+      </header>
+      @if (!summary.classTemplates.length) { <div class="empty-state compact">No class templates yet.</div> }
+      @if (summary.classTemplates.length) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Name</th><th>Duration</th><th>Capacity</th><th>Waitlist</th></tr></thead>
+            <tbody>
+              @for (template of summary.classTemplates; track template.id) {
+                <tr><td><strong>{{ template.name }}</strong></td><td>{{ template.durationMinutes }} min</td><td class="num">{{ template.capacity }}</td><td class="num">{{ template.waitlistCapacity }}</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+    <section class="panel">
+      <header class="panel-header">
+        <h2>Upcoming sessions</h2>
+        <button class="primary-button" type="button" [disabled]="!summary.classTemplates.length" (click)="openSession()">Schedule sessions</button>
+      </header>
+      @if (!summary.classSessions.length) { <div class="empty-state compact">No sessions scheduled.</div> }
+      @if (summary.classSessions.length) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Class</th><th>Starts</th><th>Instructor</th><th>Booked</th><th>Waitlist</th><th></th></tr></thead>
+            <tbody>
+              @for (session of summary.classSessions; track session.id) {
+                <tr>
+                  <td><strong>{{ session.name }}</strong><small>{{ label(session.status) }}</small></td>
+                  <td>{{ time(session.startsAt) }}</td>
+                  <td>{{ session.instructorName || '—' }}</td>
+                  <td>
+                    <div class="fill"><div class="fill-bar"><span [style.width.%]="fillPercent(session) > 100 ? 100 : fillPercent(session)" [class.over]="fillPercent(session) > 100"></span></div>
+                    <span class="fill-label">{{ session.bookedCount }}/{{ session.capacity }}</span></div>
+                  </td>
+                  <td class="num">{{ session.waitlistCount }}</td>
+                  <td><button class="secondary-button small" type="button" (click)="openRegister(session)">Register</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  @if (!loading && tab === 'amenities') {
+    <section class="panel">
+      <header class="panel-header">
+        <h2>Amenities &amp; lockers</h2>
+        <button class="primary-button" type="button" (click)="openAmenity()">New amenity</button>
+      </header>
+      @if (!summary.amenities.length) { <div class="empty-state">No amenities configured.</div> }
+      @if (summary.amenities.length) {
+        <div class="card-grid">
+          @for (amenity of summary.amenities; track amenity.id) {
+            <article class="amenity-card">
+              <div><strong>{{ amenity.name }}</strong><small>{{ label(amenity.kind) }}</small></div>
+              @if (amenity.kind === 'locker') {
+                <button class="secondary-button small" type="button" [disabled]="busy" (click)="assignLocker(amenity)">Assign</button>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
+
+  @if (!loading && tab === 'challenges') {
+    <section class="panel">
+      <header class="panel-header">
+        <h2>Challenges</h2>
+        <button class="primary-button" type="button" (click)="openChallenge()">New challenge</button>
+      </header>
+      @if (!summary.challenges.length) { <div class="empty-state">No challenges running.</div> }
+      @if (summary.challenges.length) {
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Challenge</th><th>Runs</th><th>Target</th><th>Participants</th><th></th></tr></thead>
+            <tbody>
+              @for (challenge of summary.challenges; track challenge.id) {
+                <tr>
+                  <td><strong>{{ challenge.name }}</strong><small><span class="status-chip" [attr.data-status]="challenge.status">{{ label(challenge.status) }}</span></small></td>
+                  <td>{{ date(challenge.startsOn) }} → {{ date(challenge.endsOn) }}</td>
+                  <td class="num">{{ challenge.targetValue }} {{ label(challenge.metric) }}</td>
+                  <td class="num">{{ challenge.participants }}</td>
+                  <td><button class="secondary-button small" type="button" [disabled]="busy" (click)="joinChallenge(challenge)">Add client</button></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+
+  @if (!loading && tab === 'utilization') {
+    <section class="panel">
+      <header class="panel-header"><h2>Utilization</h2></header>
+      <div class="section-action">
+        <label>From<input type="date" [(ngModel)]="reportRange.from" name="reportFrom" /></label>
+        <label>To<input type="date" [(ngModel)]="reportRange.to" name="reportTo" /></label>
+        <button class="primary-button" type="button" [disabled]="busy" (click)="loadUtilization()">Run report</button>
+      </div>
+      @if (utilization) {
+        <div class="usage-list">
+          <div><span>Walk-ins</span><strong>{{ utilization.queue.total }}</strong></div>
+          <div><span>Completed</span><strong>{{ utilization.queue.completed }}</strong></div>
+          <div><span>Average wait</span><strong>{{ utilization.queue.averageWaitMinutes }} min</strong></div>
+        </div>
+        @if (!utilization.classes.length) { <div class="empty-state compact">No class sessions in this range.</div> }
+        @if (utilization.classes.length) {
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Class</th><th>Starts</th><th>Capacity</th><th>Booked</th><th>Attended</th><th>Utilization</th></tr></thead>
+              <tbody>
+                @for (row of utilization.classes; track row.id) {
+                  <tr>
+                    <td><strong>{{ row.name }}</strong></td>
+                    <td>{{ time(row.starts_at) }}</td>
+                    <td class="num">{{ row.capacity }}</td>
+                    <td class="num">{{ row.booked_count }}</td>
+                    <td class="num">{{ row.attended_count }}</td>
+                    <td class="num">{{ row.utilization_percent === null ? '—' : row.utilization_percent + '%' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    </section>
+  }
+</section>
+
+@if (drawer) {
+  <button class="drawer-backdrop" type="button" aria-label="Close" (click)="closeDrawer()"></button>
+  <aside class="drawer narrow" role="dialog" aria-modal="true">
+    <header class="drawer-header">
+      <h2>
+        @switch (drawer) {
+          @case ('queue') { Add walk-in }
+          @case ('template') { New class template }
+          @case ('session') { Schedule sessions }
+          @case ('amenity') { New amenity }
+          @case ('challenge') { New challenge }
+          @case ('register') { Register for {{ selectedSession?.name }} }
+        }
+      </h2>
+      <button class="utility-button" type="button" aria-label="Close" (click)="closeDrawer()"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </header>
+    <div class="drawer-body">
+      @if (drawer === 'queue') {
+        <label>Client id<input type="text" [(ngModel)]="queueDraft.clientId" name="queueClient" /></label>
+        <label>Service ids<input type="text" [(ngModel)]="queueDraft.serviceIds" name="queueServices" placeholder="comma separated" /></label>
+        <label>Requested staff id (optional)<input type="text" [(ngModel)]="queueDraft.requestedStaffId" name="queueStaff" /></label>
+        <label>Priority<input type="number" [(ngModel)]="queueDraft.priority" name="queuePriority" /></label>
+        <label>Notes<textarea rows="2" [(ngModel)]="queueDraft.notes" name="queueNotes"></textarea></label>
+      }
+      @if (drawer === 'template') {
+        <label>Name<input type="text" [(ngModel)]="templateDraft.name" name="templateName" /></label>
+        <label>Service id<input type="text" [(ngModel)]="templateDraft.serviceId" name="templateService" /></label>
+        <label>Duration (minutes)<input type="number" [(ngModel)]="templateDraft.durationMinutes" name="templateDuration" /></label>
+        <label>Capacity<input type="number" [(ngModel)]="templateDraft.capacity" name="templateCapacity" /></label>
+        <label>Waitlist capacity<input type="number" [(ngModel)]="templateDraft.waitlistCapacity" name="templateWaitlist" /></label>
+        <label>Room resource id (optional)<input type="text" [(ngModel)]="templateDraft.roomResourceId" name="templateRoom" /></label>
+      }
+      @if (drawer === 'session') {
+        <label>Template<select [(ngModel)]="sessionDraft.templateId" name="sessionTemplate"><option value="">Select template</option>@for (template of summary.classTemplates; track template.id) {<option [value]="template.id">{{ template.name }}</option>}</select></label>
+        <label>Instructor staff id<input type="text" [(ngModel)]="sessionDraft.instructorStaffId" name="sessionInstructor" /></label>
+        <label>Starts at<input type="datetime-local" [(ngModel)]="sessionDraft.startsAt" name="sessionStart" /></label>
+        <label>Repeat<select [(ngModel)]="sessionDraft.frequency" name="sessionFrequency"><option value="none">Once</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+        @if (sessionDraft.frequency !== 'none') {
+          <label>How many<input type="number" [(ngModel)]="sessionDraft.count" name="sessionCount" /></label>
+        }
+        <label>Room resource id (optional)<input type="text" [(ngModel)]="sessionDraft.roomResourceId" name="sessionRoom" /></label>
+      }
+      @if (drawer === 'amenity') {
+        <label>Name<input type="text" [(ngModel)]="amenityDraft.name" name="amenityName" /></label>
+        <label>Kind<select [(ngModel)]="amenityDraft.kind" name="amenityKind"><option value="locker">Locker</option><option value="shower">Shower</option><option value="sauna">Sauna</option><option value="towel">Towel</option></select></label>
+      }
+      @if (drawer === 'challenge') {
+        <label>Name<input type="text" [(ngModel)]="challengeDraft.name" name="challengeName" /></label>
+        <label>Starts on<input type="date" [(ngModel)]="challengeDraft.startsOn" name="challengeStart" /></label>
+        <label>Ends on<input type="date" [(ngModel)]="challengeDraft.endsOn" name="challengeEnd" /></label>
+        <label>Target<input type="number" [(ngModel)]="challengeDraft.targetValue" name="challengeTarget" /></label>
+        <label>Metric<select [(ngModel)]="challengeDraft.metric" name="challengeMetric"><option value="visits">Visits</option><option value="classes">Classes</option><option value="minutes">Minutes</option></select></label>
+      }
+      @if (drawer === 'register') {
+        <label>Client id<input type="text" [(ngModel)]="registerDraft.clientId" name="registerClient" /></label>
+        <label>Notes<textarea rows="2" [(ngModel)]="registerDraft.notes" name="registerNotes"></textarea></label>
+        @if (selectedSession && selectedSession.bookedCount >= selectedSession.capacity) {
+          <p class="hint">This class is full. The registration will go onto the waitlist.</p>
+        }
+      }
+    </div>
+    <footer class="drawer-footer">
+      <button class="secondary-button" type="button" (click)="closeDrawer()">Cancel</button>
+      @switch (drawer) {
+        @case ('queue') { <button class="primary-button" type="button" [disabled]="busy" (click)="addToQueue()">Add</button> }
+        @case ('template') { <button class="primary-button" type="button" [disabled]="busy" (click)="saveTemplate()">Create</button> }
+        @case ('session') { <button class="primary-button" type="button" [disabled]="busy || !sessionDraft.templateId" (click)="saveSession()">Schedule</button> }
+        @case ('amenity') { <button class="primary-button" type="button" [disabled]="busy" (click)="saveAmenity()">Create</button> }
+        @case ('challenge') { <button class="primary-button" type="button" [disabled]="busy" (click)="saveChallenge()">Create</button> }
+        @case ('register') { <button class="primary-button" type="button" [disabled]="busy" (click)="register()">Register</button> }
+      }
+    </footer>
+  </aside>
+}

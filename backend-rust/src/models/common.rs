@@ -170,6 +170,15 @@ impl AppError {
         &self.message
     }
 
+    /// The structured detail sent with the error, if any.
+    ///
+    /// Clients branch on this — the subscription banner reads
+    /// `subscriptionStatus` and `readOnly` from it — so it is part of the API
+    /// contract and worth asserting on in tests rather than matching messages.
+    pub fn details(&self) -> Option<&Value> {
+        self.details.as_ref()
+    }
+
     fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
         Self {
             status,

@@ -23,6 +23,10 @@ type DraftAttachment = { fileName: string; contentType: string; dataBase64: stri
 type Message = { id: string; authorId: string; authorType: string; visibility: string; body: string; source: string; senderEmail?: string; attachments: TicketAttachment[]; createdAt: string };
 type TicketDetail = { ticket: Ticket; messages: Message[]; events: Array<{ id: string; eventType: string; fromStatus: string; toStatus: string; actorId: string; createdAt: string }> };
 type TenantContext = { subscription?: Subscription; usage?: Usage; invoices: Invoice[]; tickets: Ticket[]; plans: Plan[] };
+/** A coupon the API confirmed. The discount fields are labels — Razorpay charges the amount. */
+type AppliedCoupon = { code: string; description: string; discountHintBps?: number | null; discountHintPaise?: number | null };
+/** The server's breakdown of what will be charged. Every figure comes from the API; none is computed here. */
+type CheckoutQuote = { planName: string; billingInterval: string; amountPaise: number; taxPaise: number; taxRateBps: number; taxInclusive: boolean; totalPaise: number; source: string; coupon?: AppliedCoupon | null };
 type TenantAdmin = { id: string; fullName: string; loginId: string; email: string; active: boolean; mustChangePassword: boolean; branchCount: number; createdAt: string };
 type TenantControl = {
   tenant: { id: string; name: string; status: string; businessType: string; gracePeriodEndsAt?: string; lifecycleReason: string; lifecycleVersion: number };
@@ -61,6 +65,10 @@ export class SaasAdminPageComponent implements OnInit {
   paymentDraft = { amountRupees: '', paymentMethod: 'bank', reference: '' };
   refundDraft = { amountRupees: '', reason: '' };
   checkoutPlanId = ''; planChangeId = ''; planChangeEffective = 'cycle_end';
+  readonly billingIntervals = ['monthly', 'annual'] as const;
+  checkoutInterval: 'monthly' | 'annual' = 'monthly';
+  couponCode = ''; couponError = ''; appliedCoupon?: AppliedCoupon;
+  quote?: CheckoutQuote; quoteError = ''; quoteLoading = false;
   ticketDraft: { subject: string; category: string; severity: string; priority: string; message: string; attachments: DraftAttachment[] } = this.emptyTicket();
   onboardingDraft = this.emptyOnboarding();
   tenantAdminDraft = { fullName: '', loginId: '', email: '', initialPassword: '' };
@@ -163,9 +171,82 @@ export class SaasAdminPageComponent implements OnInit {
   async runBilling() { await this.mutate(this.api.post('/platform/saas/invoices/run',{taxBps:Math.round(Number(this.billingRunDraft.taxPercent||0)*100),dueDays:Number(this.billingRunDraft.dueDays)}),'Due billing completed'); }
   openPayment(invoice: Invoice) { this.selectedInvoice=invoice; this.paymentDraft={amountRupees:'',paymentMethod:'bank',reference:''}; this.drawer='payment'; }
   async recordPayment() { if(!this.selectedInvoice)return; await this.mutate(this.api.post(`/platform/saas/invoices/${this.selectedInvoice.id}/payments`,{amountPaise:this.toPaise(this.paymentDraft.amountRupees),paymentMethod:this.paymentDraft.paymentMethod,reference:this.paymentDraft.reference,idempotencyKey:crypto.randomUUID()}),'Payment recorded'); }
+  /** Plans on the selected billing interval. Plans with no interval set stay visible. */
+  get checkoutPlans() { return this.plans.filter((plan)=>!plan.billingInterval||plan.billingInterval===this.checkoutInterval); }
+  /** The toggle only earns its space when there is something to switch between. */
+  get hasBothIntervals() { return this.billingIntervals.every((interval)=>this.plans.some((plan)=>plan.active&&plan.billingInterval===interval)); }
+  /**
+   * What annual saves against twelve months of the cheapest monthly plan.
+   *
+   * Rounded down, and only shown when it is a real saving, so the badge never
+   * promises more than the plans deliver.
+   */
+  get annualSavingPercent() {
+    const cheapest=(interval:string)=>this.plans.filter((plan)=>plan.active&&plan.billingInterval===interval&&plan.basePricePaise>0).map((plan)=>plan.basePricePaise).sort((a,b)=>a-b)[0];
+    const monthly=cheapest('monthly'); const annual=cheapest('annual');
+    if(!monthly||!annual)return 0;
+    const yearOfMonthly=monthly*12;
+    if(annual>=yearOfMonthly)return 0;
+    return Math.floor(((yearOfMonthly-annual)/yearOfMonthly)*100);
+  }
+  selectInterval(interval:'monthly'|'annual') {
+    if(this.checkoutInterval===interval)return;
+    this.checkoutInterval=interval;
+    // The chosen plan and any applied coupon belong to the old interval; a
+    // coupon may be restricted to plans that are no longer on screen.
+    this.checkoutPlanId=''; this.removeCoupon(); this.quote=undefined; this.quoteError='';
+  }
+  /** A typed-over code is no longer the one the API confirmed. */
+  clearCoupon() { if(this.appliedCoupon){this.appliedCoupon=undefined;} this.couponError=''; }
+  removeCoupon() { this.appliedCoupon=undefined; this.couponCode=''; this.couponError=''; void this.loadQuote(); }
+  async applyCoupon() {
+    const code=this.couponCode.trim();
+    if(!code||!this.checkoutPlanId)return;
+    this.couponError='';
+    try {
+      this.appliedCoupon=await this.post<AppliedCoupon>('/saas/subscriptions/coupon-preview',{planId:this.checkoutPlanId,couponCode:code});
+      await this.loadQuote();
+    } catch(error) {
+      this.appliedCoupon=undefined;
+      this.couponError=this.errorMessage(error,'Coupon code is not valid');
+    }
+  }
+  /**
+   * Asks the server what this plan costs.
+   *
+   * Nothing on this screen derives a price. The amount, the GST inside it and
+   * the total all arrive computed, from the figure Razorpay reports for the
+   * plan — so what is shown here and what the card is charged come from one
+   * source. A failure blanks the quote and says so rather than falling back to
+   * the plan list's price, because a stale figure next to a Pay button is worse
+   * than no figure.
+   */
+  async loadQuote() {
+    if(!this.checkoutPlanId){this.quote=undefined;this.quoteError='';return;}
+    this.quoteLoading=true; this.quoteError='';
+    try {
+      this.quote=await this.post<CheckoutQuote>('/saas/subscriptions/quote',{planId:this.checkoutPlanId,...(this.appliedCoupon?{couponCode:this.appliedCoupon.code}:{})});
+    } catch(error) {
+      this.quote=undefined;
+      this.quoteError=this.errorMessage(error,'Price could not be confirmed. Try again before paying.');
+    } finally { this.quoteLoading=false; }
+  }
+  onCheckoutPlanChange() { this.removeCoupon(); void this.loadQuote(); }
+  taxPercentLabel(bps:number) { return `${bps/100}%`; }
+  /** Label only. Never used to compute a payable amount — Razorpay does that. */
+  get couponDiscountLabel() {
+    const coupon=this.appliedCoupon;
+    if(!coupon)return '';
+    if(coupon.discountHintBps)return `${coupon.discountHintBps/100}% off`;
+    if(coupon.discountHintPaise)return `${this.money(coupon.discountHintPaise)} off`;
+    return '';
+  }
   async startCheckout() {
     if(!this.checkoutPlanId)return;
-    await this.run(async()=>{const result=await this.post<{checkoutUrl:string}>('/saas/subscriptions/checkout',{planId:this.checkoutPlanId,idempotencyKey:crypto.randomUUID()});if(!result.checkoutUrl)throw new Error('Checkout URL missing');window.location.assign(result.checkoutUrl);},'Razorpay checkout could not be created');
+    // Only a confirmed code is sent. Passing raw text would let a typo fail the
+    // checkout at the provider instead of at the Apply button.
+    const couponCode=this.appliedCoupon?.code;
+    await this.run(async()=>{const result=await this.post<{checkoutUrl:string}>('/saas/subscriptions/checkout',{planId:this.checkoutPlanId,idempotencyKey:crypto.randomUUID(),...(couponCode?{couponCode}:{})});if(!result.checkoutUrl)throw new Error('Checkout URL missing');window.location.assign(result.checkoutUrl);},'Razorpay checkout could not be created');
   }
   continueCheckout() { if(this.tenantSubscription?.checkoutUrl)window.location.assign(this.tenantSubscription.checkoutUrl); }
   async runSubscriptionAction(action:'pause'|'resume'|'cancel',cancelAtCycleEnd=false) {

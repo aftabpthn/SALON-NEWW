@@ -108,6 +108,8 @@ export default {
   'nav.Enterprise POS Controls': 'एंटरप्राइज़ POS नियंत्रण',
   'nav.Face Punch': 'फेस पंच',
   'nav.Finance': 'वित्त',
+  'nav.Fitness & Studio': 'फिटनेस और स्टूडियो',
+  'nav.What If': 'क्या हो अगर',
   'nav.Fines & Deductions': 'जुर्माना और कटौती',
   'nav.GL Reconciliation': 'GL मिलान',
   'nav.Happy Hours': 'हैप्पी आवर्स',

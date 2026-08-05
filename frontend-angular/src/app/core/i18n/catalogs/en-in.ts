@@ -115,6 +115,8 @@ export default {
   'nav.Enterprise POS Controls': 'Enterprise POS Controls',
   'nav.Face Punch': 'Face Punch',
   'nav.Finance': 'Finance',
+  'nav.Fitness & Studio': 'Fitness & Studio',
+  'nav.What If': 'What If',
   'nav.Fines & Deductions': 'Fines & Deductions',
   'nav.GL Reconciliation': 'GL Reconciliation',
   'nav.Happy Hours': 'Happy Hours',
