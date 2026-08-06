@@ -1102,7 +1102,7 @@ type BookingFlowItem = {
     .selections-drawer { position: fixed; left: 50%; z-index: 45; bottom: calc(var(--booking-footer-height) + 16px + env(safe-area-inset-bottom)); width: min(560px, calc(100% - 20px)); max-height: 55vh; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28); transform: translateX(-50%); }
     .drawer-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
     .drawer-header h2 { margin: 0; font-size: 1rem; letter-spacing: -0.03em; }
-    .drawer-done { min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.84rem; font-weight: 950; }
+    .drawer-done { min-height: 44px; padding: 0 14px; border: 0; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.84rem; font-weight: 950; }
     .drawer-list { display: grid; align-content: start; gap: 2px; overflow-y: auto; margin: 0; padding: 8px; list-style: none; }
     .drawer-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 8px; border-radius: 14px; }
     .drawer-item-copy { min-width: 0; display: grid; gap: 3px; }
@@ -1195,7 +1195,7 @@ type BookingFlowItem = {
     .calendar-container { display: grid; gap: 10px; padding: 14px; }
     .month-selector-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .month-title { color: var(--text); font-size: 0.95rem; font-weight: 950; letter-spacing: -0.02em; }
-    .month-nav-btn { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: var(--surface); font-size: 1rem; cursor: pointer; }
+    .month-nav-btn { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: var(--surface); font-size: 1rem; cursor: pointer; }
     .month-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     
     .date-row.seven-days-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; overflow: visible; }
@@ -1249,7 +1249,7 @@ type BookingFlowItem = {
     .scheduled-service-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
     .scheduled-service-row strong { font-size: 0.84rem; color: var(--text); }
     .scheduled-service-row small { font-size: 0.76rem; color: var(--muted); }
-    .primary-gradient-btn { min-height: 42px; padding: 0 16px; border: 0; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.84rem; font-weight: 950; cursor: pointer; }
+    .primary-gradient-btn { min-height: 44px; padding: 0 16px; border: 0; border-radius: 999px; color: #FFFFFF; background: var(--primary); font-size: 0.84rem; font-weight: 950; cursor: pointer; }
     /* Step 4 Review Screen Styling */
     .confirm-card-header h2 { margin: 0 0 14px; font-size: 1.25rem; font-weight: 950; letter-spacing: -0.03em; }
     .review-salon-strip { padding: 12px 14px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-soft); margin-bottom: 12px; }

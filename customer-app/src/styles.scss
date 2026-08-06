@@ -364,6 +364,7 @@ ion-tab-button ion-label {
   --color-activated: #FFFFFF;
   --box-shadow: 0 10px 22px rgba(99, 102, 241, 0.22);
   --border-radius: 999px;
+  --min-height: 44px;
   font-weight: 900;
   letter-spacing: 0;
   position: relative;
@@ -380,6 +381,7 @@ ion-tab-button ion-label {
   --background-activated: var(--primary-soft);
   --background-focused: var(--primary-soft);
   --background-hover: var(--primary-soft);
+  --min-height: 44px;
   font-weight: 900;
   transition: transform var(--motion-fast), filter var(--motion-fast);
 }

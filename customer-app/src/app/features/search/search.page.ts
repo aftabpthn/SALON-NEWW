@@ -342,7 +342,7 @@ interface QuickFilterChip {
                       }
                     </div>
                   } @else if (!mapPins().length) {
-                    <div class="map-state"><strong>No mapped venues</strong><span>Try changing filters or search terms.</span></div>
+                    <div class="map-state"><strong>No salons in this area</strong><span>Try changing filters or search terms.</span></div>
                   }
                 </div>
 

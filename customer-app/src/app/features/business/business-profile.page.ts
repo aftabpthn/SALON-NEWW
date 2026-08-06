@@ -288,7 +288,7 @@ import { Subscription } from "rxjs";
                     <div class="empty-icon"><ion-icon name="search-outline" aria-hidden="true"></ion-icon></div>
                     <h3>No services found</h3>
                     <p>No services match "{{ serviceQuery() }}"{{ selectedCategory() ? ' in ' + categoryLabel(selectedCategory()) : '' }}.</p>
-                    <button type="button" class="primary-gradient reset-search-btn" (click)="clearServiceFilters()">Clear search</button>
+                    <button type="button" class="reset-search-btn" (click)="clearServiceFilters()">Clear search</button>
                   </section>
                 }
               </div>
@@ -1106,10 +1106,12 @@ import { Subscription } from "rxjs";
 
     .reset-search-btn {
       margin-top: 6px;
+      min-height: 44px;
       padding: 8px 16px;
-      border: 0;
+      border: 1px solid rgba(124, 58, 237, 0.3);
       border-radius: 999px;
-      color: #fff;
+      color: var(--primary);
+      background: transparent;
       font-weight: 800;
       font-size: 0.78rem;
       cursor: pointer;
@@ -1501,6 +1503,7 @@ import { Subscription } from "rxjs";
 
     .staff-card ion-button {
       margin-top: 6px;
+      min-height: 44px;
     }
 
     .review-card {

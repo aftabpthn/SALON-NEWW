@@ -117,8 +117,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
                       }
 
                       <div class="saved-actions">
-                        <a class="card-action primary" [routerLink]="businessBookLink(business)">Book</a>
-                        <a class="card-action secondary" [routerLink]="businessProfileLink(business)">View</a>
+                        <a class="card-action primary" [routerLink]="businessBookLink(business)">Book now</a>
+                        <a class="card-action secondary" [routerLink]="businessProfileLink(business)">View salon</a>
                       </div>
                     </div>
                   </article>
@@ -441,14 +441,14 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .card-action {
-      min-height: 28px;
+      min-height: 44px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 0 10px;
+      padding: 0 14px;
       border: 1px solid transparent;
-      border-radius: 8px;
-      font-size: 0.7rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
       font-weight: 850;
       line-height: 1;
       text-decoration: none;
