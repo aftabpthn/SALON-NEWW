@@ -267,9 +267,9 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 
     .set-primary-btn,
     .remove-primary-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
       border: 1px solid rgba(99, 102, 241, 0.2);
       background: var(--glass);
       color: var(--text);

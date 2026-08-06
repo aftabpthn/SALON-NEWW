@@ -83,7 +83,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         </div>
         <div class="footer-row">
           <span>{{ business.nextAvailableSlot || business.hoursLabel || "Availability updating" }}</span>
-          <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
+          <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book now</ion-button>
         </div>
       </div>
     </article>
@@ -502,13 +502,13 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row ion-button {
-        min-width: 70px;
-        min-height: 40px;
-        height: 40px;
+        min-width: 84px;
+        height: 44px;
+        min-height: 44px;
       }
 
       .business-card.variant-rail {
-        grid-template-columns: 68px minmax(0, 1fr) 36px;
+        grid-template-columns: 68px minmax(0, 1fr) 44px;
         grid-template-rows: auto auto auto;
         gap: 3px 8px;
         align-items: center;
@@ -578,10 +578,10 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-card.variant-rail .footer-row ion-button {
-        width: 36px;
-        min-width: 36px;
-        height: 36px;
-        min-height: 36px;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
         --padding-start: 0;
         --padding-end: 0;
         font-size: 0;
@@ -632,10 +632,10 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .favorite,
       .save-salon {
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
       }
 
       .content {
@@ -697,7 +697,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .footer-row ion-button {
         width: auto;
         min-width: 76px;
-        min-height: 32px;
+        min-height: 44px;
         margin: 0;
       }
 
@@ -829,8 +829,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-rail .footer-row ion-button {
         width: 68px;
         min-width: 68px;
-        height: 36px;
-        min-height: 36px;
+        height: 44px;
+        min-height: 44px;
         margin: 0;
         --padding-start: 9px;
         --padding-end: 9px;

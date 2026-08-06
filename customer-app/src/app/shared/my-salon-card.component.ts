@@ -131,8 +131,8 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .change-salon {
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
       border-radius: 12px;
       border: 1px solid rgba(99, 102, 241, 0.24);
       background: var(--glass);
@@ -250,8 +250,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .change-salon {
-        width: 36px;
-        height: 36px;
+        width: 44px;
+        height: 44px;
         border-radius: 12px;
       }
 
@@ -262,6 +262,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .action-pill {
         min-width: 0;
+        min-height: 44px;
         gap: 4px;
         padding: 8px 6px;
         border-radius: 12px;
@@ -300,8 +301,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .prompt-actions ion-button {
-        min-height: 34px;
-        font-size: 0.68rem;
+        min-height: 44px;
+        font-size: 0.78rem;
         --padding-start: 10px;
         --padding-end: 10px;
       }

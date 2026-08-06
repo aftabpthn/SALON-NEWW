@@ -362,7 +362,7 @@ interface QuickFilterChip {
             }
 
             @if (marketplace.loading()) {
-              <section class="empty premium-card"><h2>Searching live marketplace</h2></section>
+              <section class="empty premium-card"><h2>Searching salons</h2></section>
             }
             @if (marketplace.error()) {
               <section class="empty premium-card error"><h2>Search failed</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="executeSearch()">Retry</ion-button></section>
@@ -376,22 +376,22 @@ interface QuickFilterChip {
                     </button>
                     <img [src]="professional.staff.image || professional.business.coverImage || 'assets/icons/icon.svg'" [alt]="professional.staff.name" />
                     <div class="professional-copy">
-                      <span class="rating-pill">Star {{ professionalRatingText(professional) }} · {{ professional.business.ratingCount || 0 }} reviews</span>
+                      <span class="rating-pill">{{ professionalRatingText(professional) }} · {{ professional.business.ratingCount || 0 }} reviews</span>
                       <h3>{{ professional.staff.name }}</h3>
                       <p>{{ professional.staff.specialty || professional.staff.title || "Professional" }}</p>
                       <small>{{ professional.business.businessName }}</small>
                       <div class="professional-meta">
                         <span>{{ professionalDistanceLabel(professional.business) }}</span>
-                        <span>{{ professional.staff.nextAvailable || professional.business.nextAvailableSlot || "Next slot updating" }}</span>
+                        <span>{{ professional.staff.nextAvailable || professional.business.nextAvailableSlot || "Checking availability" }}</span>
                         <strong>from {{ money(professional.pricePaise) }}</strong>
                       </div>
                     </div>
-                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', professional.business.slug, 'book']" [queryParams]="{ staffId: professional.staff.id }" (click)="$event.stopPropagation()">Book</ion-button>
+                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', professional.business.slug, 'book']" [queryParams]="{ staffId: professional.staff.id }" (click)="$event.stopPropagation()">Book now</ion-button>
                   </article>
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No professionals yet</h2>
-                    <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
+                    <ion-button fill="outline" (click)="reset()">Reset search</ion-button>
                   </section>
                 }
               } @else {
@@ -407,7 +407,7 @@ interface QuickFilterChip {
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No matches yet</h2>
-                    <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
+                    <ion-button fill="outline" (click)="reset()">Reset search</ion-button>
                   </section>
                 }
               }
@@ -2003,8 +2003,8 @@ interface QuickFilterChip {
       right: 12px;
       display: grid;
       place-items: center;
-      width: 40px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
@@ -2262,7 +2262,7 @@ interface QuickFilterChip {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      min-height: 36px;
+      min-height: 44px;
       padding: 0 12px;
       border: 1px solid rgba(124, 58, 237, 0.18);
       border-radius: 999px;
