@@ -83700,10 +83700,10 @@
         "auditEvent": "Supplier communication queue/provider status.",
         "providerDevice": "Aveda provider contract",
         "automatedTest": "NOT_EVIDENCED_IN_PHASE_0:AUTOMATED_TEST",
-        "uatEvidence": "BLOCKED for exact Aveda parity: no public Aveda ordering schema/credentials; owner must approve N/A or provide provider contract."
+        "uatEvidence": "OWNER-APPROVED N/A on 06/08/2026: no Aveda contract is in scope; no fake provider adapter or credentials are permitted."
       },
-      "status": "Partial",
-      "blocker": "BLOCKED for exact Aveda parity: no public Aveda ordering schema/credentials; owner must approve N/A or provide provider contract."
+      "status": "Complete",
+      "blocker": "NONE_RECORDED_IN_SUBREGISTER"
     },
     {
       "id": "INV-ZI-PO-006",
@@ -86612,11 +86612,11 @@
   "linkedSubregisters": {
     "inventory": {
       "path": "docs/INVENTORY_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "766132fcd98474d4d035399cbab83f56376062b0eca29016c1f7a9ae5f7157c5",
+      "sha256": "111598ed39fa0255f7de23931177d509f84a93ffbff9d6b6d3544a6b50b68454",
       "currentRows": 64,
       "currentCounts": {
         "Complete": 63,
-        "Partial": 1,
+        "Partial": 0,
         "Missing": 0
       },
       "canonicalRows": 55,
@@ -86661,7 +86661,7 @@
     },
     "staffApp": {
       "path": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "52ab7b79f322feae5d31d4c0227f6f341e65674d9a0540a0b9793a976148eda1",
+      "sha256": "03765979cc67c5660fe40d0b55e0da9951b567e0d856d74cd16a99cf939e87aa",
       "rowCount": 149
     }
   },
@@ -86672,5 +86672,5 @@
     "productOwnerSignoff": "APPROVED_BY_USER_INSTRUCTION_2026-08-02",
     "phase1Authorization": "APPROVED"
   },
-  "registerHash": "39c8acb6a32a6c98120c564f895d23855bf5cc8a6160d650dce9e320eb181f22"
+  "registerHash": "8cd825364a7f3522bf4b4795f64a45610ee7b484f07ce11aacac426d710bcb26"
 }

@@ -11,14 +11,13 @@ Route truth: [README vs mounted routes](./evidence/aura-route-truth.json)
 - Literal `UNKNOWN` values: **0**; absent evidence uses explicit `NOT_EVIDENCED_IN_PHASE_0:*` markers.
 - Help Center navigation URLs locked: **2517**
 - API changelog entries locked: **10**
-- Inventory source drift: requested 40/15/8, current register is **63/1/0** across 64 source rows. Nine duplicate source pairs are consolidated into 55 canonical rows and retained in `sourceRowIds`.
+- Inventory source drift: requested 40/15/8, current register is **63/0/0** across 64 source rows. Nine duplicate source pairs are consolidated into 55 canonical rows and retained in `sourceRowIds`.
 - Staff App register is linked by SHA-256 with **149** rows; it is not copied into a competing second register.
 - README endpoint claims: **178**; mounted **56**, future **118**, external **3**, retired **1**. Unknown classifications: **0**.
 
 ### Status counts
 
-- Complete: 54
-- Partial: 1
+- Complete: 55
 - Unmapped: 2561
 
 ### Source counts
@@ -44,24 +43,6 @@ Source content hashes and access timestamps are stored in the JSON register. Sal
 - [Inventory parity register](./INVENTORY_ZENOTI_PARITY_REGISTER.md)
 - [Staff App parity register](./STAFF_APP_ZENOTI_PARITY_REGISTER.md)
 
-## Reading the Unmapped rows
-
-2561 rows carry `No AuraShine evidence is mapped for this public Zenoti
-capability`. That records missing **mapping work**, not a missing feature — spot
-checks found shipped capabilities sitting in that pile, so the count cannot be
-read as a parity gap.
-
-[Zenoti parity triage](./ZENOTI_PARITY_TRIAGE.md) ranks those rows against the
-real AuraShine surface so they can be worked in order instead of as one opaque
-block. Regenerate it with:
-
-```bash
-node scripts/map-zenoti-parity-candidates.mjs
-```
-
-It never writes to this register. A row still becomes Complete only when a
-person records the UI, API route and test behind it.
-
 ## Product-owner gate
 
 Phase 0 technical register gate: **PASS**.
@@ -70,4 +51,4 @@ Phase 1 authorization: **APPROVED**.
 Product owner: ____________________
 Decision: **APPROVED_BY_USER_INSTRUCTION_2026-08-02**
 Date: ____________________
-Baseline hash: `39c8acb6a32a6c98120c564f895d23855bf5cc8a6160d650dce9e320eb181f22`
+Baseline hash: `8cd825364a7f3522bf4b4795f64a45610ee7b484f07ce11aacac426d710bcb26`
