@@ -117,11 +117,23 @@ export class CustomerApiService {
 
   getAvailability(slug: string, params: AvailabilityQuery): Observable<AvailabilityDay[]> {
     return this.http.get<ApiResponse<AvailabilityDay[] | ApiList<AvailabilityDay> | { date?: string; slots?: unknown[] }>>(`${this.baseUrl}/marketplace/businesses/${encodeURIComponent(slug)}/availability`, {
-      params: this.toParams({ serviceId: params.serviceId, date: params.date, count: 48 })
+      params: this.toParams({
+        serviceId: params.serviceId,
+        serviceIds: params.serviceIds?.join(","),
+        staffId: params.staffId,
+        date: params.date,
+        days: params.days,
+        durationMinutes: params.durationMinutes,
+        participants: params.participants,
+        count: 48
+      })
     }).pipe(
       map((response) => {
         const value = this.unwrap<AvailabilityDay[] | ApiList<AvailabilityDay> | { date?: string; slots?: unknown[] }>(response);
-        if (Array.isArray(value)) return value;
+        if (Array.isArray(value)) return value.map((day) => {
+          const record = day as unknown as { date?: string; slots?: unknown[] };
+          return Array.isArray(record.slots) ? this.marketplaceAvailabilityDay(record) : day;
+        });
         const record = value as ApiList<AvailabilityDay> & { date?: string; slots?: unknown[] };
         if (Array.isArray(record.slots)) return [this.marketplaceAvailabilityDay(record)];
         return record.rows ?? record.items ?? record.data ?? [];
@@ -758,27 +770,30 @@ export class CustomerApiService {
   private marketplaceAvailabilityDay(value: { date?: string; slots?: unknown[] }): AvailabilityDay {
     const date = String(value.date || new Date().toISOString().slice(0, 10));
     const parsed = new Date(`${date}T00:00:00`);
-    const label = Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+    const label = Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" });
     const dayLabel = Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString("en-IN", { weekday: "short" });
+    const slots = (value.slots || []).map((slot) => {
+      const item = slot as Record<string, unknown>;
+      const startAt = String(item["startAt"] || "");
+      const startsAt = new Date(startAt);
+      return {
+        startAt,
+        endAt: String(item["endAt"] || ""),
+        displayTime: Number.isNaN(startsAt.getTime()) ? startAt : startsAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }),
+        available: true,
+        staffId: Array.isArray(item["availableStaffIds"]) ? String(item["availableStaffIds"][0] || "") : undefined
+      };
+    });
+    const periods = [
+      { label: "Morning", slots: slots.filter((slot) => new Date(slot.startAt).getHours() < 12) },
+      { label: "Afternoon", slots: slots.filter((slot) => { const hour = new Date(slot.startAt).getHours(); return hour >= 12 && hour < 17; }) },
+      { label: "Evening", slots: slots.filter((slot) => new Date(slot.startAt).getHours() >= 17) }
+    ].filter((period) => period.slots.length);
     return {
       date,
       label,
       dayLabel,
-      periods: [{
-        label: "Available",
-        slots: (value.slots || []).map((slot) => {
-          const item = slot as Record<string, unknown>;
-          const startAt = String(item["startAt"] || "");
-          const startsAt = new Date(startAt);
-          return {
-            startAt,
-            endAt: String(item["endAt"] || ""),
-            displayTime: Number.isNaN(startsAt.getTime()) ? startAt : startsAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }),
-            available: true,
-            staffId: Array.isArray(item["availableStaffIds"]) ? String(item["availableStaffIds"][0] || "") : undefined
-          };
-        })
-      }]
+      periods
     };
   }
 

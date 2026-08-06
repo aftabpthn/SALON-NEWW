@@ -334,8 +334,13 @@ struct MarketplaceOfferEventRequest {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AvailabilityQuery {
-    service_id: String,
+    service_id: Option<String>,
+    service_ids: Option<String>,
+    staff_id: Option<String>,
     date: Option<String>,
+    days: Option<i64>,
+    duration_minutes: Option<i64>,
+    participants: Option<i64>,
     count: Option<i64>,
 }
 
@@ -2232,11 +2237,25 @@ async fn business_availability(
     Path(id): Path<String>,
     Query(query): Query<AvailabilityQuery>,
 ) -> Result<Json<Value>, appointments::ApiError> {
+    let service_ids = query
+        .service_ids
+        .as_deref()
+        .unwrap_or_default()
+        .split(',')
+        .chain(query.service_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
     booking_portal_v2::marketplace_availability(
         &state,
         &id,
-        &query.service_id,
+        &service_ids,
+        query.staff_id.as_deref(),
         query.date.as_deref(),
+        query.days,
+        query.duration_minutes,
+        query.participants,
         query.count,
     )
     .await

@@ -25,6 +25,7 @@ import {
   ReorderForecast,
 } from '../../../features/inventory/backbar-control.service';
 import { DigitalScaleService } from '../../../features/inventory/digital-scale.service';
+import { ActionDialogService } from '../../../shared/services/action-dialog.service';
 
 type BackbarTab = 'usage' | 'daily' | 'staff' | 'automation' | 'variance' | 'approvals' | 'audit';
 
@@ -41,6 +42,7 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   private readonly backbar = inject(BackbarControlService);
   private readonly scale = inject(DigitalScaleService);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(ActionDialogService);
   items: Item[] = [];
   services: Service[] = [];
   staff: Staff[] = [];
@@ -296,7 +298,7 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   }
 
   async review(row: Usage, decision: 'approve' | 'reject') {
-    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote = decision === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision === 'reject' && !reviewNote) return;
     this.saving = true; this.clearFeedback();
     try {
@@ -307,7 +309,7 @@ export class BackbarConsumptionPageComponent implements OnInit, OnDestroy {
   }
 
   async reverse(row: Usage) {
-    const reason = window.prompt('Reversal reason')?.trim();
+    const reason = await this.dialogs.prompt('Reversal reason', { required:true, multiline:true });
     if (!reason) return;
     this.saving = true; this.clearFeedback();
     try { await this.backbar.reverseUsage(row.id, reason); await this.load(); this.notice = 'Usage reversed'; }

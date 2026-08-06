@@ -62,13 +62,18 @@ td small { display:block; margin-top:3px; color:var(--muted); font-size:11px; }
 .trust-warning { display:block; margin-top:4px; color:#b42318; font-weight:700; }
 .empty-state,.loading { padding:28px 16px; color:var(--muted); text-align:center; }
 .message { border-radius:8px; padding:9px 12px; }
-.message.error { border:1px solid #fecaca; background:#fef2f2; color:#991b1b; }
+.message.error { display:flex; align-items:center; justify-content:space-between; gap:10px; border:1px solid #fecaca; background:#fef2f2; color:#991b1b; }
+.message.error button { flex:0 0 auto; border-color:#fca5a5; background:#fff; color:#991b1b; }
 .message.success { border:1px solid #bbf7d0; background:#f0fdf4; color:#166534; }
 .drawer-backdrop { position:fixed; inset:0; z-index:80; background:rgba(7,24,50,.34); }
 .drawer { position:fixed; z-index:81; top:0; right:0; display:grid; grid-template-rows:auto 1fr auto; width:min(680px,100vw); height:100vh; border-left:1px solid var(--line); background:#fff; box-shadow:-16px 0 38px rgba(7,24,50,.2); }
 .drawer>header,.drawer>footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); }
 .drawer>footer { justify-content:flex-end; border-top:1px solid var(--line); border-bottom:0; }
 .drawer-body { overflow:auto; padding:16px; }
+.drawer.full-page { position:static; z-index:auto; width:100%; height:auto; min-height:0; margin-top:10px; border:1px solid var(--line); border-radius:12px; box-shadow:0 6px 18px rgba(15,35,65,.05); }
+.drawer.full-page>header { display:none; }
+.drawer.full-page>.drawer-body { overflow:visible; padding:18px; }
+.drawer.full-page>footer { position:sticky; bottom:0; background:#fff; }
 .product-360 { display:grid; gap:12px; }
 .product-summary { min-height:82px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px; border:1px dashed #cbd8e8; border-radius:10px; background:#fbfdff; }
 .product-summary>div { display:grid; gap:5px; }.product-summary strong { font-size:17px; }.product-summary span { color:var(--muted); font-size:12px; }
@@ -82,6 +87,8 @@ td small { display:block; margin-top:3px; color:var(--muted); font-size:11px; }
 .stocktake-form button { min-height:38px; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 label { display:grid; gap:6px; color:#31425d; font-size:12px; font-weight:600; }
+.check-row { grid-template-columns:18px minmax(0,1fr); align-items:center; gap:8px; }
+.check-row input { width:18px; min-height:18px; margin:0; }
 input,select,textarea { width:100%; min-height:38px; border:1px solid #c9d5e5; border-radius:8px; background:#fff; padding:8px 10px; color:var(--ink); font:inherit; }
 input:focus,select:focus,textarea:focus { border-color:var(--blue); outline:2px solid #dbeafe; }
 textarea { min-height:72px; resize:vertical; }
@@ -130,6 +137,10 @@ as-date-picker { display:block; }
   .drawer {
     width: 100vw;
     max-width: none;
+  }
+
+  .drawer.full-page {
+    width: 100%;
   }
 
   /* ponytail: inventory registers retain exact accounting columns and use native horizontal scrolling. */

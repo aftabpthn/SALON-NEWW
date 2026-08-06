@@ -21,6 +21,7 @@ type PendingBookingIntent = {
   staffId: string | null;
   date: string;
   slotStartAt: string;
+  paymentMode?: "pay_at_venue" | "online";
   cardGuaranteeAccepted?: boolean;
   step: number;
   savedAt: number;
@@ -59,8 +60,8 @@ function localDate(): string {
           <section class="booking-hero premium-card">
             <img [src]="business.coverImage || 'assets/icons/icon.svg'" [alt]="business.businessName" />
             <div>
-              <h1 class="page-title">Book your visit</h1>
-              <p class="muted">{{ business.businessName }} · {{ business.area }} · {{ business.ratingAverage }} rating</p>
+              <h1>{{ business.businessName }}</h1>
+              <p class="muted">{{ business.category }} @if (business.area) { · {{ business.area }} } @if (business.ratingCount) { · {{ business.ratingAverage }} rating }</p>
             </div>
           </section>
 
@@ -79,14 +80,14 @@ function localDate(): string {
 
           @if (step() === 1) {
             <section class="panel">
-              <div class="section-heading"><div><h2 class="section-title">Choose a service</h2></div></div>
+              <div class="section-heading"><div><h2 class="section-title">Select services</h2></div></div>
               @if (selectedServices().length) {
                 <article class="service-cart premium-card">
                   <div>
                     <span>{{ selectedServices().length }} selected</span>
                     <strong>{{ bookingTotalLabel() }} · {{ bookingDurationMinutes() }} min</strong>
                   </div>
-                  <small>{{ selectedAddons().length ? selectedAddons().length + " add-on selected" : "First selected service controls slot availability." }}</small>
+                  <small>{{ selectedAddons().length ? selectedAddons().length + " add-on selected" : "Availability includes all selected services." }}</small>
                 </article>
               }
               @if (selectedServicesWithAddons().length) {
@@ -139,6 +140,20 @@ function localDate(): string {
                   </article>
                 }
               </div>
+              @if (groupProfiles().length) {
+                <fieldset class="group-profiles">
+                  <legend>Add family profiles</legend>
+                  @if (!groupBookingAvailable()) {
+                    <small>Choose one service to add family profiles.</small>
+                  }
+                  @for (profile of groupProfiles(); track profile.id) {
+                    <label>
+                      <input type="checkbox" [disabled]="!groupBookingAvailable()" [checked]="additionalClientIds().includes(profile.bookingClientId || '')" (change)="toggleGroupProfile(profile.bookingClientId || '', $any($event.target).checked)" />
+                      <span>{{ profile.title }} · {{ profile.relationshipType || "family" }}</span>
+                    </label>
+                  }
+                </fieldset>
+              }
             </section>
           }
 
@@ -210,17 +225,6 @@ function localDate(): string {
                   <div><dt>Time</dt><dd>{{ selectedSlotLabel() || "Not selected" }}</dd></div>
                   <div><dt>Payment</dt><dd>{{ paymentModeLabel() }}</dd></div>
                 </dl>
-                @if (groupProfiles().length) {
-                  <fieldset class="group-profiles">
-                    <legend>Add family profiles</legend>
-                    @for (profile of groupProfiles(); track profile.id) {
-                      <label>
-                        <input type="checkbox" [checked]="additionalClientIds().includes(profile.bookingClientId || '')" (change)="toggleGroupProfile(profile.bookingClientId || '', $any($event.target).checked)" />
-                        <span>{{ profile.title }} · {{ profile.relationshipType || "family" }}</span>
-                      </label>
-                    }
-                  </fieldset>
-                }
                 @if (onlinePaymentAvailable()) {
                   <div class="payment-options" aria-label="Payment method">
                     <button type="button" [class.active]="paymentMode() === 'online'" (click)="setPaymentMode('online')">Pay deposit online</button>
@@ -258,7 +262,7 @@ function localDate(): string {
                 }
                 @if (paymentMode() === "online") {
                   <small>Card guarantee</small>
-                  <p>Deposit {{ depositAmountLabel() }} is requested through the secure payment link. Final payment stays with the salon.</p>
+                  <p>Deposit {{ depositAmountLabel() }}{{ participantCount() > 1 ? " per guest" : "" }} is requested through the secure payment link. Final payment stays with the salon.</p>
                 }
               </article>
             </section>
@@ -292,77 +296,85 @@ function localDate(): string {
     </ion-content>
   `,
   styles: [`
+    ion-content { --background: var(--app-bg); }
+    ion-toolbar { --background: var(--surface); --color: var(--text); }
     .booking-page { max-width: 980px; padding-bottom: 14px; }
+    .booking-page .premium-card, .booking-page .service-choice, .booking-page .staff-choice, .booking-page .date-card, .booking-page .slot, .bottom-action-card { border-color: var(--border) !important; background: var(--surface) !important; box-shadow: var(--shadow-soft) !important; }
+    .booking-page .service-cart, .booking-page .selected-staff-card { border-color: var(--control-border) !important; background: var(--accent-2) !important; }
+    .booking-page .service-choice.selected, .booking-page .staff-choice.selected, .booking-page .date-card.selected, .booking-page .slot.selected { color: var(--text) !important; border-color: var(--primary) !important; background: var(--accent-2) !important; box-shadow: 0 16px 34px rgba(11, 79, 138, 0.14) !important; }
+    .booking-page .offer-pill { color: var(--primary) !important; border-color: var(--control-border) !important; background: var(--accent-2) !important; }
+    ion-button.primary-gradient { --background: linear-gradient(135deg, var(--primary), var(--accent)) !important; --background-hover: linear-gradient(135deg, var(--primary-2), var(--primary)) !important; --background-focused: linear-gradient(135deg, var(--primary), var(--accent)) !important; --background-activated: var(--primary-2) !important; --color: #fff !important; --color-activated: #fff !important; --box-shadow: 0 14px 30px rgba(11, 79, 138, 0.22) !important; }
     .booking-cta { width: min(980px, calc(100% - 32px)); margin: 14px auto calc(24px + env(safe-area-inset-bottom)); }
-    .booking-hero { display: grid; gap: 18px; align-items: center; padding: 14px; }
-    .booking-hero img { width: 100%; aspect-ratio: 16 / 10; height: auto; border-radius: 24px; object-fit: cover; }
-    .booking-hero .page-title { font-size: clamp(2rem, 5vw, 3.6rem); }
+    .booking-hero { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px; }
+    .booking-hero img { width: 58px; height: 58px; border-radius: 16px; object-fit: cover; }
+    .booking-hero h1 { margin: 0; font-size: 1.08rem; letter-spacing: -0.02em; }
+    .booking-hero p { margin: 4px 0 0; }
     .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 20px 0 8px; }
-    .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: rgba(255, 249, 236, 0.9); font-weight: 900; }
-    .stepper button.active, .stepper button.done { color: #120D05; border-color: transparent; background: linear-gradient(135deg, #F4D58D, #D6A94A); box-shadow: 0 14px 30px rgba(214, 169, 74, 0.2); }
+    .stepper button { display: grid; justify-items: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--border); border-radius: 18px; color: var(--muted); background: var(--surface); font-weight: 900; }
+    .stepper button.active, .stepper button.done { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--primary), var(--accent)); box-shadow: 0 14px 30px rgba(11, 79, 138, 0.2); }
     .stepper ion-icon { font-size: 1.15rem; }
     .payment-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
     .payment-options button { min-height: 44px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: #fff; font-weight: 900; }
-    .payment-options button.active { border-color: rgba(214, 169, 74, 0.54); background: var(--gold-soft); color: var(--primary-2); }
-    .guarantee-check { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 12px; padding: 12px; border: 1px solid rgba(214, 169, 74, 0.24); border-radius: 16px; background: rgba(255, 249, 236, 0.8); color: var(--text); font-weight: 850; line-height: 1.35; }
+    .payment-options button.active { border-color: var(--primary); background: var(--accent-2); color: var(--primary-2); }
+    .guarantee-check { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 12px; padding: 12px; border: 1px solid var(--control-border); border-radius: 16px; background: var(--accent-2); color: var(--text); font-weight: 850; line-height: 1.35; }
     .guarantee-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--primary); }
     .policy-note { display: grid; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
     .policy-note strong, .trust-card small { color: var(--text); font-weight: 900; }
     .policy-note p { margin: 0; color: var(--muted); line-height: 1.45; }
     .booking-intent-row, .resource-grid, .time-mode-row { display: grid; gap: 10px; margin-bottom: 14px; }
     .booking-intent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: rgba(255, 249, 236, 0.92); box-shadow: var(--shadow-soft); font-weight: 900; }
+    .booking-intent-row button, .resource-grid button, .time-mode-row button { border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); box-shadow: var(--shadow-soft); font-weight: 900; }
     .booking-intent-row button { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; align-items: center; padding: 14px; text-align: left; }
-    .booking-intent-row button.active, .resource-grid button.active, .time-mode-row button.active, .addon-grid button.active { color: #120D05; border-color: transparent; background: linear-gradient(135deg, #F4D58D, #D6A94A); }
+    .booking-intent-row button.active, .resource-grid button.active, .time-mode-row button.active, .addon-grid button.active { color: #fff; border-color: transparent; background: linear-gradient(135deg, var(--primary), var(--accent)); }
     .booking-intent-row button:disabled, .resource-grid button:disabled, .time-mode-row button:disabled, .addon-grid button:disabled { cursor: not-allowed; opacity: 0.58; }
     .booking-intent-row ion-icon { grid-row: span 2; font-size: 1.25rem; }
     .booking-intent-row small, .resource-grid small { color: inherit; opacity: 0.72; line-height: 1.35; }
     .readiness-note, .addon-panel, .resource-panel { display: grid; gap: 8px; padding: 16px; margin-bottom: 14px; }
-    .readiness-note { border-color: rgba(214, 169, 74, 0.22); background: var(--aura-gold-soft); }
+    .readiness-note { border-color: var(--control-border); background: var(--accent-2); }
     .readiness-note strong, .readiness-note span, .addon-panel small, .resource-panel small { line-height: 1.45; }
     .readiness-note span, .addon-panel small, .resource-panel small { color: var(--muted); }
     .addon-panel h3, .resource-panel h3 { margin: 0; letter-spacing: 0; }
     .addon-grid { display: grid; gap: 8px; }
-    .addon-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: rgba(255, 249, 236, 0.92); font-weight: 900; }
+    .addon-grid button { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface); font-weight: 900; }
     .addon-grid button strong { color: inherit; }
     .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .resource-grid button { display: grid; gap: 4px; justify-items: start; padding: 13px; text-align: left; }
     .resource-grid ion-icon { font-size: 1.25rem; }
     .time-mode-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .time-mode-row button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; padding: 10px; }
-    .service-cart { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; padding: 14px 16px; border-color: rgba(214, 169, 74, 0.28); background: var(--aura-gold-soft); }
+    .service-cart { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; padding: 14px 16px; border-color: var(--control-border); background: var(--accent-2); }
     .service-cart span, .service-cart small { display: block; color: var(--muted); font-weight: 850; line-height: 1.35; }
     .service-cart strong { display: block; margin-top: 3px; color: var(--text); font-weight: 950; }
     .service-cart small { text-align: right; }
     .service-list, .staff-list, .slot-sections { display: grid; gap: 12px; }
     .service-choice, .staff-choice { width: 100%; display: grid; gap: 12px; align-items: center; padding: 16px; border-color: var(--border); color: var(--text); text-align: left; }
     .service-choice { grid-template-columns: minmax(0, 1fr) auto; }
-    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: rgba(214, 169, 74, 0.48); background: var(--gold-soft); box-shadow: 0 16px 34px rgba(214, 169, 74, 0.14); }
+    .service-choice.selected, .staff-choice.selected, .date-card.selected, .slot.selected { border-color: var(--primary); background: var(--accent-2); box-shadow: 0 16px 34px rgba(11, 79, 138, 0.14); }
     .service-choice h3 { margin: 0 0 6px; font-size: 1.12rem; letter-spacing: -0.035em; }
     .service-choice p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
     .service-choice strong { color: var(--primary-2); }
     .staff-choice { grid-template-columns: auto minmax(0, 1fr) auto; }
     .staff-choice img, .any-avatar { width: 62px; height: 62px; border-radius: 22px; object-fit: cover; }
-    .any-avatar { display: grid; place-items: center; color: #120D05; background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22); font-size: 1.35rem; }
+    .any-avatar { display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, var(--primary), var(--accent)); font-size: 1.35rem; }
     .staff-choice span, .staff-choice em { display: block; color: var(--muted); font-style: normal; line-height: 1.35; }
     .staff-choice em { color: var(--primary-2); font-weight: 900; text-align: right; }
-    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid rgba(214, 169, 74, 0.32); border-radius: 999px; color: var(--primary); background: rgba(255, 249, 236, 0.94); font-weight: 900; white-space: nowrap; }
-    .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--gold-soft); }
-    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: rgba(214, 169, 74, 0.28); background: var(--aura-gold-soft); }
+    .check-slots-button { justify-self: end; min-height: 42px; padding: 0 14px; border: 1px solid var(--control-border); border-radius: 999px; color: var(--primary); background: var(--surface); font-weight: 900; white-space: nowrap; }
+    .check-slots-button:hover, .check-slots-button:focus-visible { background: var(--accent-2); border-color: var(--primary); }
+    .selected-staff-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; margin-bottom: 14px; padding: 14px 16px; border-color: var(--control-border); background: var(--accent-2); }
     .selected-staff-card span, .selected-staff-card small { display: block; color: var(--muted); line-height: 1.35; }
     .selected-staff-card span { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
     .selected-staff-card strong { display: block; margin-top: 3px; color: var(--text); font-size: 1.02rem; font-weight: 900; }
     .selected-staff-card small { margin-top: 2px; font-weight: 800; }
     .date-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(112px, 1fr); gap: 10px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
     .date-row::-webkit-scrollbar { display: none; }
-    .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: rgba(255, 249, 236, 0.94); color: var(--text); font-weight: 900; }
+    .date-card, .slot { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); font-weight: 900; }
     .date-card { position: relative; display: grid; gap: 5px; justify-items: center; padding: 14px 10px; overflow: hidden; }
-    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: rgba(125, 89, 32, 0.18); }
-    .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36); background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), rgba(255, 249, 236, 0.96)); }
+    .date-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--border); }
+    .booking-page .date-card.availability-many { border-color: rgba(29, 151, 76, 0.36) !important; background: linear-gradient(145deg, rgba(232, 250, 239, 0.98), var(--surface)) !important; }
     .date-card.availability-many::before { background: #21a657; }
-    .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42); background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), rgba(255, 249, 236, 0.96)); }
+    .booking-page .date-card.availability-partial { border-color: rgba(236, 145, 28, 0.42) !important; background: linear-gradient(145deg, rgba(255, 242, 220, 0.98), var(--surface)) !important; }
     .date-card.availability-partial::before { background: #f09a22; }
-    .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38); background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), rgba(255, 249, 236, 0.96)); }
+    .booking-page .date-card.availability-full { border-color: rgba(212, 62, 62, 0.38) !important; background: linear-gradient(145deg, rgba(255, 232, 232, 0.98), var(--surface)) !important; }
     .date-card.availability-full::before { background: #d94141; }
     .date-card span { color: var(--muted); font-size: 0.86rem; }
     .date-card em { color: var(--muted); font-size: 0.72rem; font-style: normal; font-weight: 950; text-transform: uppercase; }
@@ -374,7 +386,7 @@ function localDate(): string {
     .state-card.error p { color: #EF4444; }
     .slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     .slot { padding: 12px 8px; }
-    .slot:disabled { color: rgba(126, 110, 85, 0.42); background: rgba(125, 89, 32, 0.06); text-decoration: line-through; }
+    .booking-page .slot:disabled { color: rgba(107, 114, 128, 0.52) !important; background: var(--surface-elevated) !important; text-decoration: line-through; }
     .confirm-grid { display: grid; gap: 14px; }
     .confirm-card, .trust-card { padding: 20px; }
     .confirm-card h2, .trust-card h3 { margin: 0 0 10px; letter-spacing: -0.04em; }
@@ -386,6 +398,7 @@ function localDate(): string {
     .trust-card p { margin: 0; color: var(--muted); line-height: 1.5; }
     .group-profiles { display: grid; gap: 8px; margin: 18px 0; padding: 14px; border: 1px solid var(--border); border-radius: 16px; }
     .group-profiles legend { padding: 0 6px; font-weight: 900; }
+    .group-profiles small { color: var(--muted); }
     .group-profiles label { display: flex; align-items: center; gap: 9px; font-weight: 800; }
       .sticky-cta { bottom: calc(24px + env(safe-area-inset-bottom)); }
       .sticky-cta--confirm { bottom: calc(8px + env(safe-area-inset-bottom)); }
@@ -411,7 +424,9 @@ function localDate(): string {
         min-width: 112px;
       }
 
-      .stepper button span { display: none; }
+      .stepper { gap: 6px; }
+      .stepper button { padding: 10px 4px; font-size: 0.7rem; }
+      .stepper button span { display: block; }
       .booking-intent-row, .resource-grid, .time-mode-row { grid-template-columns: 1fr; }
       .service-cart { align-items: flex-start; flex-direction: column; }
       .service-cart small { text-align: left; }
@@ -421,7 +436,6 @@ function localDate(): string {
       .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (min-width: 768px) {
-      .booking-hero { grid-template-columns: 260px minmax(0, 1fr); }
       .confirm-grid { grid-template-columns: minmax(0, 1fr) 260px; }
       .addon-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -471,12 +485,15 @@ export class BookingFlowPage implements OnInit {
   readonly availabilityDays = computed(() => this.marketplace.availability());
   readonly selectedAvailabilityDay = computed(() => this.availabilityDays().find((day) => day.date === this.selectedDate()) ?? this.availabilityDays()[0] ?? null);
   readonly slotGroups = computed(() => this.selectedAvailabilityDay()?.periods ?? []);
+  readonly selectedSlot = computed(() => this.slotGroups().flatMap((group) => group.slots).find((slot) => slot.startAt === this.selectedSlotStartAt()) ?? null);
   readonly selectedSlotLabel = computed(() => this.slotGroups().flatMap((group) => group.slots).find((slot) => slot.startAt === this.selectedSlotStartAt())?.displayTime ?? "");
   readonly onlinePaymentAvailable = computed(() => this.business()?.paymentModes?.includes("online") ?? false);
+  readonly groupBookingAvailable = computed(() => this.selectedServices().length === 1);
+  readonly participantCount = computed(() => this.additionalClientIds().length + 1);
   readonly bookingDurationMinutes = computed(() => this.selectedServices().reduce((total, service) => total + service.durationMinutes, 0) + this.selectedAddons().reduce((total, addon) => total + addon.durationMinutes, 0));
   readonly bookingTotalPaise = computed(() => this.selectedServices().reduce((total, service) => total + service.pricePaise, 0) + this.selectedAddons().reduce((total, addon) => total + addon.pricePaise, 0));
   readonly depositAmountPaise = computed(() => Math.ceil(this.bookingTotalPaise() * (this.business()?.bookingDepositPercent || 0) / 100));
-  readonly paymentModeLabel = computed(() => this.paymentMode() === "online" ? `Online deposit ${this.depositAmountLabel()} (${this.business()?.bookingDepositPercent || 0}%)` : "Pay at salon");
+  readonly paymentModeLabel = computed(() => this.paymentMode() === "online" ? `Online deposit ${this.depositAmountLabel()}${this.participantCount() > 1 ? " per guest" : ""} (${this.business()?.bookingDepositPercent || 0}%)` : "Pay at salon");
 
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly api: CustomerApiService) {
     addIcons({ calendarOutline, checkmarkCircleOutline, personOutline, sparklesOutline });
@@ -497,7 +514,6 @@ export class BookingFlowPage implements OnInit {
     const slug = this.slug();
     if (!slug) return;
     await this.marketplace.loadBusiness(slug).catch(() => undefined);
-    this.paymentMode.set(this.onlinePaymentAvailable() ? "online" : "pay_at_venue");
     this.restorePendingIntent();
     this.ensureServiceSelection();
     if (this.step() < 1 || this.step() > 4) this.step.set(1);
@@ -515,6 +531,7 @@ export class BookingFlowPage implements OnInit {
       ? ids.length > 1 ? ids.filter((id) => id !== serviceId) : ids
       : [...ids, serviceId];
     this.selectedServiceIds.set(next);
+    if (next.length > 1) this.additionalClientIds.set([]);
     this.selectedAddonIds.update((rows) => Object.fromEntries(Object.entries(rows).filter(([id]) => next.includes(id))));
     this.selectedServiceId.set(next[0] || serviceId);
     this.selectedSlotStartAt.set("");
@@ -564,7 +581,6 @@ export class BookingFlowPage implements OnInit {
   setDate(date: string) {
     this.selectedDate.set(date);
     this.selectedSlotStartAt.set("");
-    void this.reloadAvailability();
   }
 
   dateAvailabilityClass(day: AvailabilityDay): "full" | "many" | "partial" {
@@ -595,6 +611,8 @@ export class BookingFlowPage implements OnInit {
     return !!this.business()
       && this.selectedServices().length > 0
       && !!this.selectedSlotStartAt()
+      && !!(this.selectedStaffId() || this.selectedSlot()?.staffId)
+      && (this.additionalClientIds().length === 0 || this.groupBookingAvailable())
       && (this.paymentMode() !== "online" || this.cardGuaranteeAccepted());
   }
 
@@ -603,7 +621,7 @@ export class BookingFlowPage implements OnInit {
   }
 
   bookingTotalLabel(): string {
-    return this.bookingTotalPaise() > 0 ? this.money(this.bookingTotalPaise()) : "";
+    return this.bookingTotalPaise() > 0 ? `${this.money(this.bookingTotalPaise())}${this.participantCount() > 1 ? " per guest" : ""}` : "";
   }
 
   depositAmountLabel(): string {
@@ -643,7 +661,7 @@ export class BookingFlowPage implements OnInit {
     const startAt = this.selectedSlotStartAt();
     const durationMinutes = this.bookingDurationMinutes() || services[0].durationMinutes;
     const endAt = new Date(new Date(startAt).getTime() + durationMinutes * 60_000).toISOString();
-    await this.marketplace.createBooking({
+    const booking = await this.marketplace.createBooking({
       tenantId: business.tenantId || "",
       branchId: business.branchId || business.id,
       serviceIds: services.map((service) => service.id),
@@ -654,7 +672,7 @@ export class BookingFlowPage implements OnInit {
       clientId: this.selectedClientId() || undefined,
       additionalClientIds: this.additionalClientIds(),
       packageCreditId: this.selectedPackageCreditId() || undefined,
-      staffId: this.selectedStaffId() || undefined,
+      staffId: this.selectedStaffId() || this.selectedSlot()?.staffId || undefined,
       startAt,
       endAt,
       rebookFromBookingId: this.rebookFromBookingId() || undefined,
@@ -662,14 +680,15 @@ export class BookingFlowPage implements OnInit {
       offerCode: this.route.snapshot.queryParamMap.get("offer") || undefined,
       paymentMode: this.onlinePaymentAvailable() ? this.paymentMode() : "pay_at_venue",
       cardGuaranteeAccepted: this.paymentMode() === "online" && this.cardGuaranteeAccepted()
-    });
+    }).catch(() => null);
+    if (!booking) return;
     this.clearPendingIntent();
-    this.router.navigateByUrl("/booking/success");
+    this.router.navigate(["/booking/success"], { queryParams: { id: booking.id } });
   }
 
   private async revalidateSelectedSlot(): Promise<boolean> {
     const slot = this.selectedSlotStartAt();
-    await this.reloadAvailability();
+    if (!await this.reloadAvailability()) return false;
     const available = this.marketplace.availability()
       .flatMap((day) => day.periods)
       .flatMap((period) => period.slots)
@@ -682,18 +701,24 @@ export class BookingFlowPage implements OnInit {
     return available;
   }
 
-  private async reloadAvailability() {
+  private async reloadAvailability(): Promise<boolean> {
     const business = this.business();
-    const service = this.selectedService();
-    if (!business || !service) return;
+    const services = this.selectedServices();
+    if (!business || !services.length) return false;
     const queryDate = this.selectedDate() || localDate();
     const days = await this.marketplace.loadAvailability(business.slug, {
-      serviceId: service.id,
+      serviceId: services[0].id,
+      serviceIds: services.map((service) => service.id),
       staffId: this.selectedStaffId() || undefined,
       date: queryDate,
+      days: 7,
+      durationMinutes: this.bookingDurationMinutes(),
+      participants: this.groupBookingAvailable() ? this.participantCount() : 1,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    }).catch(() => []);
+    }).catch(() => null);
+    if (!days) return false;
     if (!this.selectedDate() && days[0]) this.selectedDate.set(days[0].date);
+    return true;
   }
 
   private initialServiceIds(): string[] {
@@ -713,6 +738,7 @@ export class BookingFlowPage implements OnInit {
     if (!selectedIds.length && business.services[0]) selectedIds.push(business.services[0].id);
     this.selectedServiceIds.set(selectedIds);
     this.selectedServiceId.set(selectedIds[0] || "");
+    if (selectedIds.length > 1) this.additionalClientIds.set([]);
   }
 
   private savePendingIntent() {
@@ -729,6 +755,7 @@ export class BookingFlowPage implements OnInit {
       staffId: this.selectedStaffId(),
       date: this.selectedDate(),
       slotStartAt: this.selectedSlotStartAt(),
+      paymentMode: this.paymentMode(),
       cardGuaranteeAccepted: this.cardGuaranteeAccepted(),
       step: this.step(),
       savedAt: Date.now()
@@ -762,7 +789,9 @@ export class BookingFlowPage implements OnInit {
       this.selectedStaffId.set(intent.staffId || null);
       if (intent.date) this.selectedDate.set(intent.date);
       if (intent.slotStartAt) this.selectedSlotStartAt.set(intent.slotStartAt);
-      this.cardGuaranteeAccepted.set(Boolean(intent.cardGuaranteeAccepted));
+      const online = intent.paymentMode === "online" && this.onlinePaymentAvailable();
+      this.paymentMode.set(online ? "online" : "pay_at_venue");
+      this.cardGuaranteeAccepted.set(online && Boolean(intent.cardGuaranteeAccepted));
       if (intent.step >= 1 && intent.step <= 4) this.step.set(intent.step);
     } catch {
       this.clearPendingIntent();
@@ -783,6 +812,7 @@ export class BookingFlowPage implements OnInit {
     this.additionalClientIds.update((ids) => checked
       ? ids.includes(clientId) || ids.length >= 5 ? ids : [...ids, clientId]
       : ids.filter((id) => id !== clientId));
+    this.selectedSlotStartAt.set("");
   }
 
   private profileComplete(customer: { profileComplete?: boolean; firstName?: string; lastName?: string; email?: string; phone?: string }): boolean {

@@ -3,7 +3,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     Json, Router,
 };
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use rand_core::{OsRng, RngCore};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -521,6 +521,8 @@ pub(crate) async fn booking_portal_v2_slots(
         service_ids,
         count,
         duration,
+        None,
+        1,
     )
     .await?;
     Ok(Json(json!({
@@ -623,6 +625,8 @@ async fn booking_portal_v2_nearby_alternatives(
             mapped_service_ids.clone(),
             count,
             duration,
+            None,
+            1,
         )
         .await?;
         if slots.is_empty() {
@@ -1682,8 +1686,12 @@ fn ordered_service_mapping(
 pub(crate) async fn marketplace_availability(
     state: &AppState,
     branch_id: &str,
-    service_id: &str,
+    service_ids: &[String],
+    staff_id: Option<&str>,
     date: Option<&str>,
+    days: Option<i64>,
+    duration_minutes: Option<i64>,
+    participants: Option<i64>,
     count: Option<i64>,
 ) -> Result<Value, ApiError> {
     let row = sqlx::query(
@@ -1696,29 +1704,66 @@ pub(crate) async fn marketplace_availability(
     .ok_or_else(|| ApiError::not_found("marketplace business was not found"))?;
     let tenant_id = row.try_get::<String, _>("tenant_id").unwrap_or_default();
     let branch_id = row.try_get::<String, _>("branch_id").unwrap_or_default();
-    let services = vec![service_id.trim().to_string()];
-    if services[0].is_empty() {
-        return Err(ApiError::bad_request("serviceId is required"));
+    let mut services = Vec::new();
+    for service_id in service_ids {
+        let service_id = service_id.trim();
+        if !service_id.is_empty() && !services.iter().any(|existing| existing == service_id) {
+            services.push(service_id.to_string());
+        }
     }
-    let duration = real_booking_duration_minutes(state, &tenant_id, &branch_id, &services)
+    if services.is_empty() {
+        return Err(ApiError::bad_request("serviceId or serviceIds is required"));
+    }
+    if services.len() > 12 {
+        return Err(ApiError::bad_request("at most 12 services can be checked"));
+    }
+    let base_duration = real_booking_duration_minutes(state, &tenant_id, &branch_id, &services)
         .await?
-        .ok_or_else(|| ApiError::not_found("service is not available for online booking"))?;
+        .ok_or_else(|| {
+            ApiError::not_found("one or more services are not available for online booking")
+        })?;
+    if base_duration > 24 * 60 {
+        return Err(ApiError::bad_request(
+            "selected services exceed one booking day",
+        ));
+    }
+    let duration = duration_minutes
+        .unwrap_or(base_duration)
+        .max(base_duration)
+        .min(24 * 60);
     let date = date
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(str::to_string)
         .unwrap_or_else(|| Utc::now().format("%Y-%m-%d").to_string());
-    let slots = generate_slots(
-        state,
-        &tenant_id,
-        &date,
-        branch_id.clone(),
-        services,
-        count.unwrap_or(DEFAULT_SLOT_COUNT).clamp(1, 48),
-        duration,
-    )
-    .await?;
-    Ok(json!({"tenantId":tenant_id,"branchId":branch_id,"date":date,"slots":slots}))
+    let start_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
+        .map_err(|_| ApiError::bad_request("date must be YYYY-MM-DD"))?;
+    let requested_days = days.unwrap_or(1).clamp(1, 7);
+    let mut availability = Vec::with_capacity(requested_days as usize);
+    for offset in 0..requested_days {
+        let day = (start_date + Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string();
+        let slots = generate_slots(
+            state,
+            &tenant_id,
+            &day,
+            branch_id.clone(),
+            services.clone(),
+            count.unwrap_or(DEFAULT_SLOT_COUNT).clamp(1, 48),
+            duration,
+            staff_id,
+            participants.unwrap_or(1).clamp(1, 6),
+        )
+        .await?;
+        availability
+            .push(json!({"tenantId":tenant_id,"branchId":branch_id,"date":day,"slots":slots}));
+    }
+    Ok(if requested_days == 1 {
+        availability.remove(0)
+    } else {
+        Value::Array(availability)
+    })
 }
 
 async fn generate_slots(
@@ -1729,6 +1774,8 @@ async fn generate_slots(
     service_ids: Vec<String>,
     count: i64,
     duration_minutes: i64,
+    staff_id: Option<&str>,
+    required_staff_count: i64,
 ) -> Result<Vec<Value>, ApiError> {
     let booking_date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map_err(|_| ApiError::bad_request("date must be YYYY-MM-DD"))?;
@@ -1808,7 +1855,11 @@ async fn generate_slots(
                 Err(error) => return Err(error),
             }
         }
-        if available_staff.is_empty() {
+        let requested_staff = staff_id.unwrap_or_default().trim();
+        if available_staff.len() < required_staff_count as usize
+            || (!requested_staff.is_empty()
+                && !available_staff.iter().any(|id| id == requested_staff))
+        {
             continue;
         }
         slots.push(json!({

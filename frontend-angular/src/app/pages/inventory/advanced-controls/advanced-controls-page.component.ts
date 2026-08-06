@@ -8,6 +8,7 @@ import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
 import { AuthService } from '../../../core/services/auth.service';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
+import { ActionDialogService } from '../../../shared/services/action-dialog.service';
 
 type Tab = 'exceptions' | 'approvals' | 'locks' | 'expiry' | 'dead-stock' | 'policy' | 'master-data' | 'operations';
 type NegativeStockRequest = { id:string; productName:string; requestedStockQuantity:number; reason:string; status:string; requestedBy:string; requestedAt:string };
@@ -50,6 +51,7 @@ export class AdvancedControlsPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(ActionDialogService);
 
   readonly tabs: Array<{ id: Tab; label: string }> = [
     { id: 'exceptions', label: 'Exceptions' },
@@ -202,7 +204,7 @@ export class AdvancedControlsPageComponent implements OnInit {
   }
 
   async reviewNegativeStock(row: NegativeStockRequest, decision: 'approve' | 'reject') {
-    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote = decision === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision === 'reject' && !reviewNote) return;
     this.savingPolicy = true; this.error = ''; try { await firstValueFrom(this.api.post(`/inventory/negative-stock-requests/${row.id}/review`, { decision, reviewNote: reviewNote || '' })); await this.reload(); this.notice = `Negative stock request ${decision}d`; } catch (error: any) { this.error = error?.error?.error?.message ?? error?.message ?? 'Request could not be reviewed'; } finally { this.savingPolicy = false; }
   }
@@ -212,8 +214,8 @@ export class AdvancedControlsPageComponent implements OnInit {
     void this.router.navigateByUrl(row.route);
   }
   async createApprovalRule() {
-    const control = window.prompt('Approval control key', 'negativeStock')?.trim();
-    const role = window.prompt('Required role', this.policy.approvalMatrix[control || ''] || 'owner')?.trim();
+    const control = await this.dialogs.prompt('Approval control key', { defaultValue:'negativeStock', required:true });
+    const role = await this.dialogs.prompt('Required role', { defaultValue:this.policy.approvalMatrix[control || ''] || 'owner', required:true });
     if (!control || !role) return;
     this.policy.approvalMatrix = { ...this.policy.approvalMatrix, [control]: role };
     await this.savePolicy();
@@ -268,7 +270,7 @@ export class AdvancedControlsPageComponent implements OnInit {
       .map(([category, amount]) => ({ category:this.titleCase(category), amountRupees:Number(amount) / 100 }));
   }
   async runAutomation() {
-    if (!window.confirm('Run autonomous inventory checks now?')) return;
+    if (!await this.dialogs.confirm('Run autonomous inventory checks now?')) return;
     this.automationBusy = true; this.error = ''; this.notice = '';
     try {
       const response = await firstValueFrom(this.api.post<ApiEnvelope<AutonomousOperations>>('/inventory/autonomous-operations/run', {}));
@@ -278,9 +280,9 @@ export class AdvancedControlsPageComponent implements OnInit {
     finally { this.automationBusy = false; }
   }
   async reviewAutomation(row: AutomationAction, decision: 'approve' | 'reject') {
-    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote = decision === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision === 'reject' && !reviewNote) return;
-    if (!window.confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} ${row.title}?`)) return;
+    if (!await this.dialogs.confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} ${row.title}?`)) return;
     this.automationBusy = true; this.error = ''; this.notice = '';
     try {
       await firstValueFrom(this.api.post(`/inventory/autonomous-operations/actions/${row.id}/review`, { decision, reviewNote: reviewNote || '' }));

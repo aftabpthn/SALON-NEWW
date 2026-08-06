@@ -7,6 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { BackbarControlService } from '../../../features/inventory/backbar-control.service';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
+import { ActionDialogService } from '../../../shared/services/action-dialog.service';
 
 type RecipeLine = {
   productId?: string;
@@ -46,6 +47,7 @@ export class ServiceRecipesPageComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly backbar = inject(BackbarControlService);
   private readonly api = inject(ApiService);
+  private readonly dialogs = inject(ActionDialogService);
   services: Service[] = [];
   items: Item[] = [];
   usage: Usage[] = [];
@@ -172,7 +174,7 @@ export class ServiceRecipesPageComponent implements OnInit {
   approvalThreshold(row: Usage) { return Number(row.approvalThresholdPercent || 0); }
 
   async review(row: Usage, decision: 'approve' | 'reject') {
-    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote = decision === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision === 'reject' && !reviewNote) return;
     this.saving = true; this.clearFeedback();
     try {
@@ -190,7 +192,7 @@ export class ServiceRecipesPageComponent implements OnInit {
     if (this.lines.some((line) => !line.productId || !Number.isInteger(Number(line.standardQty)) || Number(line.standardQty) <= 0)) { this.error = this.language.text('inventory.message.4ac5f19264'); return; }
     if (this.lines.some((line) => this.number(line.minQty) > Number(line.standardQty) || (this.number(line.maxQty) > 0 && Number(line.standardQty) > this.number(line.maxQty)))) { this.error = 'Usage range must follow minimum ≤ target ≤ maximum'; return; }
     if (new Set(productIds).size !== productIds.length) { this.error = this.language.text('inventory.message.387a7a34b0'); return; }
-    if (!this.lines.length && this.originalLineCount && !confirm(this.language.text('inventory.message.34da7a31a7'))) return;
+    if (!this.lines.length && this.originalLineCount && !await this.dialogs.confirm(this.language.text('inventory.message.34da7a31a7'))) return;
     const payload = this.lines.map((line) => ({
       productId: line.productId, productName: line.productName, unit: line.unit,
       usageProfile: line.usageProfile,

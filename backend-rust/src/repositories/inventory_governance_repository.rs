@@ -1472,11 +1472,11 @@ pub async fn fifo_valuation(
       SELECT i.id,(i.stock_quantity::BIGINT-COALESCE(SUM(l.quantity_delta::BIGINT) FILTER(WHERE l.created_at>=($3::DATE+INTERVAL '1 day')),0))::BIGINT AS store_quantity_as_of
       FROM inventory_items i LEFT JOIN inventory_stock_ledger l ON l.tenant_id=i.tenant_id AND l.branch_id=i.branch_id AND l.inventory_item_id=i.id
       WHERE i.tenant_id=$1 AND i.branch_id=$2 AND i.created_at<($3::DATE+INTERVAL '1 day') GROUP BY i.id
-    ) SELECT i.id inventory_item_id,i.name product_name,i.category,(q.store_quantity_as_of+COALESCE(c.quantity_as_of,0)) stock_quantity,
-      CASE WHEN (q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))<>0 THEN
+    ) SELECT i.id inventory_item_id,i.name product_name,i.category,(q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))::BIGINT stock_quantity,
+      (CASE WHEN (q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))<>0 THEN
         (CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.store_quantity_as_of*i.unit_cost_paise END+COALESCE(c.value_as_of,0))/(q.store_quantity_as_of+COALESCE(c.quantity_as_of,0))
-        ELSE i.unit_cost_paise END unit_cost_paise,
-      CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.store_quantity_as_of*i.unit_cost_paise END+COALESCE(c.value_as_of,0) stock_value_paise,i.reorder_point
+        ELSE i.unit_cost_paise END)::BIGINT unit_cost_paise,
+      (CASE WHEN i.batch_tracked THEN COALESCE(l.value_as_of,0) ELSE q.store_quantity_as_of*i.unit_cost_paise END+COALESCE(c.value_as_of,0))::BIGINT stock_value_paise,i.reorder_point
       FROM inventory_items i JOIN ledger_qty q ON q.id=i.id LEFT JOIN layers l ON l.inventory_item_id=i.id LEFT JOIN open_containers c ON c.inventory_item_id=i.id
       WHERE i.tenant_id=$1 AND i.branch_id=$2 ORDER BY i.name"#).bind(tenant).bind(branch).bind(as_of).fetch_all(db).await
 }

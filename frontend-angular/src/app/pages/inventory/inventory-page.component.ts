@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { LanguageService } from '../../core/i18n/language.service';
 import { TranslatePipe } from '../../shared/pipes/translate.pipe';
 import { ApiEnvelope, ApiService } from '../../shared/services/api.service';
+import { ActionDialogService } from '../../shared/services/action-dialog.service';
 import { AuthBranchAccess, AuthService } from '../../core/services/auth.service';
 import { BranchNamePipe } from '../../shared/pipes/branch-name.pipe';
 import { filterPurchaseOrders, openPurchaseOrderValue, PurchaseOrderStage } from './purchase-order-register';
@@ -101,6 +102,8 @@ export class InventoryPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly dialogs = inject(ActionDialogService);
   readonly language = inject(LanguageService);
   get canApproveBackdatedGrn() { return this.auth.hasRole('owner', 'superadmin', 'super-admin'); }
   get canManageTransfers() { return this.auth.hasAccess(['owner','admin','manager','inventory_manager'], ['inventory.manage','inventory.write']); }
@@ -118,6 +121,7 @@ export class InventoryPageComponent implements OnInit {
   ];
   tab: Tab = 'products';
   standaloneOrders = false;
+  standaloneGrn = false;
   pageTitle = '';
   drawer: Drawer = null;
   loading = true;
@@ -126,7 +130,6 @@ export class InventoryPageComponent implements OnInit {
   notice = '';
   suppliers: Supplier[] = [];
   inventoryPolicy: InventoryPolicy = { valuationMethod: 'weighted_average', negativeStockRule: 'block', purchaseOrderSettings:{ bulkRaiseEnabled:true }, labelSettings:{ priceCaption:'MRP', showName:true, showPrice:true, showSku:true, showBatch:true, showExpiry:true, widthMm:76, heightMm:32, columns:5 } };
-  private readonly inventoryPageSize = 50;
   private reloadRequestId = 0;
   private readonly referenceCacheMs = 30_000;
   private readonly referenceCache = new Map<string, { data: unknown; loadedAt: number }>();
@@ -240,6 +243,7 @@ export class InventoryPageComponent implements OnInit {
   grnScanCode = '';
   grnScanBusy = false;
   private grnScanStarted = false;
+  showGrnAssociationAction = false;
   returnDraft = { receiptId: '', returnDate: '', creditNoteNumber: '', creditNoteDate: '', evidenceReference: '', reason: '', lines: [] as EntryLine[] };
   selectedQuarantine: ReceivingQuarantine | null = null;
   quarantineDraft = { action: 'release' as 'release'|'return'|'discard', quantity: null as number|null, reason: '', evidenceReference: '', creditNoteNumber: '' };
@@ -253,12 +257,19 @@ export class InventoryPageComponent implements OnInit {
     void firstValueFrom(this.auth.loadProfile()).then((profile) => { this.branches = profile.branches; }).catch(() => undefined);
     const data = this.route.snapshot.data;
     this.standaloneOrders = this.route.snapshot.routeConfig?.path === 'purchase-orders';
+    this.standaloneGrn = this.route.snapshot.routeConfig?.path === 'purchase-bill-entry';
     this.tab = data['inventoryTab'] ?? this.tab; this.pageTitle = data['inventoryTitle'] ?? '';
     const requestedTab = this.route.snapshot.queryParamMap.get('tab') as Tab | null;
-    if (!this.standaloneOrders && requestedTab && this.tabs.some((item) => item.id === requestedTab)) this.tab = requestedTab;
+    if (!this.standaloneOrders && !this.standaloneGrn && requestedTab && this.tabs.some((item) => item.id === requestedTab)) this.tab = requestedTab;
     const requestedReport = this.route.snapshot.queryParamMap.get('report') as ReportView | null;
+    const requestedSupplierId = this.route.snapshot.queryParamMap.get('supplierId')?.trim() ?? '';
     if (requestedReport && ['ageing', 'expiry', 'traceability', 'variance', 'suppliers'].includes(requestedReport)) this.reportView = requestedReport;
     await this.reload();
+    if (this.tab === 'suppliers' && requestedSupplierId) {
+      await this.loadOperationalTab('suppliers', this.reloadRequestId);
+      const supplier = this.suppliers.find((row) => row.id === requestedSupplierId);
+      if (supplier) this.openSupplier(supplier);
+    }
     if (data['inventoryDrawer'] === 'grn') await this.openGrn();
   }
 
@@ -313,18 +324,10 @@ export class InventoryPageComponent implements OnInit {
   }
   private async loadInventoryRows(tab: Tab, requestId: number) {
     const requestIdSnapshot = requestId;
-    const pageSize = tab === 'reports' ? 200 : this.inventoryPageSize;
-    const params = new URLSearchParams({
-      page: '1',
-      pageSize: String(pageSize),
-      withCount: 'false',
-    });
+    const params = new URLSearchParams();
     const query = tab === 'products' ? this.productQuery.trim() : '';
     if (query) params.set('q', query);
-    const rows = await this.get<Item[]>(`/inventory?` + params.toString());
-    if (tab === 'reports') {
-      for (let page=2, batch=rows; batch.length === pageSize; page++) { params.set('page',String(page)); batch=await this.get<Item[]>(`/inventory?${params}`); rows.push(...batch); }
-    }
+    const rows = await this.getAllPages<Item>(`/inventory?${params}`);
     if (this.isCurrentLoad(requestIdSnapshot)) {
       this.items = rows;
       this.rebuildItemLookup();
@@ -493,7 +496,7 @@ export class InventoryPageComponent implements OnInit {
       }
       if (tab === 'orders') {
         const [orders, suppliers] = await Promise.all([
-          this.getCached<Order[]>('inventory.orders', () => this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')),
+          this.getCached<Order[]>('inventory.orders', () => this.getAllPages<Order>('/purchases/orders')),
           this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
         ]);
         if (this.isCurrentLoad(requestId)) {
@@ -504,9 +507,9 @@ export class InventoryPageComponent implements OnInit {
       }
       if (tab === 'grn') {
         const [receipts, suppliers, orders, priceUpdates, quarantines] = await Promise.all([
-          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+          this.getCached<Receipt[]>('inventory.receipts', () => this.getAllPages<Receipt>('/purchases/grn')),
           this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
-          this.getCached<Order[]>('inventory.orders', () => this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')),
+          this.getCached<Order[]>('inventory.orders', () => this.getAllPages<Order>('/purchases/orders')),
           this.get<PriceUpdateRequest[]>('/purchases/price-update-requests?status=pending'),
           this.get<ReceivingQuarantine[]>('/purchases/quarantine'),
         ]);
@@ -522,8 +525,8 @@ export class InventoryPageComponent implements OnInit {
       }
       if (tab === 'returns') {
         const [rows, receipts, quarantines] = await Promise.all([
-          this.getCached<PurchaseReturn[]>('inventory.returns', () => this.get<PurchaseReturn[]>('/purchases/returns?page=1&pageSize=50&withCount=false')),
-          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+          this.getCached<PurchaseReturn[]>('inventory.returns', () => this.getAllPages<PurchaseReturn>('/purchases/returns')),
+          this.getCached<Receipt[]>('inventory.receipts', () => this.getAllPages<Receipt>('/purchases/grn')),
           this.get<ReceivingQuarantine[]>('/purchases/quarantine'),
         ]);
         if (this.isCurrentLoad(requestId)) {
@@ -535,8 +538,8 @@ export class InventoryPageComponent implements OnInit {
       }
       if (tab === 'payables') {
         const [rows, receipts] = await Promise.all([
-          this.getCached<Payable[]>('inventory.payables', () => this.get<Payable[]>('/purchases/payables?page=1&pageSize=50&withCount=false')),
-          this.getCached<Receipt[]>('inventory.receipts', () => this.get<Receipt[]>('/purchases/grn?page=1&pageSize=50&withCount=false')),
+          this.getCached<Payable[]>('inventory.payables', () => this.getAllPages<Payable>('/purchases/payables')),
+          this.getCached<Receipt[]>('inventory.receipts', () => this.getAllPages<Receipt>('/purchases/grn')),
         ]);
         if (this.isCurrentLoad(requestId)) {
           this.payables = rows;
@@ -557,7 +560,7 @@ export class InventoryPageComponent implements OnInit {
     if (this.ledgerTo) query.set('to', this.ledgerTo);
     if (this.ledgerMovement) query.set('movement', this.ledgerMovement);
     if (this.ledgerQuery.trim()) query.set('q', this.ledgerQuery.trim());
-    const rows = await this.get<LedgerRow[]>(`/inventory/ledger?${query}`);
+    const rows = await this.getAllLedger(query);
     if (this.isCurrentLoad(requestId)) {
       this.ledgerRows = rows;
       this.recomputeLedgerViews();
@@ -565,10 +568,9 @@ export class InventoryPageComponent implements OnInit {
   }
 
   private async loadInventoryReports(requestId: number) {
-    // ponytail: existing ledger endpoint caps at 2,000 rows; add server-side report pagination when a branch outgrows this window.
     const [batches, ledger, governance, suppliers, audits] = await Promise.all([
       this.get<Batch[]>('/inventory/batches'),
-      this.get<LedgerRow[]>('/inventory/ledger?limit=2000'),
+      this.getAllLedger(),
       this.getCached<SupplierGovernance>('inventory.supplierGovernance', () => this.get<SupplierGovernance>('/inventory/supplier-governance')),
       this.getCached<Supplier[]>('inventory.suppliers', () => this.get<Supplier[]>('/purchases/suppliers')),
       this.get<Array<AuditDetails['session']>>('/inventory/stock-audits'),
@@ -840,15 +842,15 @@ export class InventoryPageComponent implements OnInit {
 
   async bulkUpdateProducts(centerAvailable:boolean) {
     const ids = [...this.selectedProductIds];
-    if (!ids.length || !confirm(`${centerAvailable ? 'Enable' : 'Disable'} ${ids.length} selected products at this center?`)) return;
+    if (!ids.length || !await this.dialogs.confirm(`${centerAvailable ? 'Enable' : 'Disable'} ${ids.length} selected products at this center?`)) return;
     await this.mutate(this.api.patch('/inventory/bulk', { ids, centerAvailable }), 'Products updated', false);
     this.selectedProductIds.clear();
   }
 
   async cloneProduct() {
     const product = this.productDetail?.product; if (!product) return;
-    const sku = prompt('New product SKU', `${product.sku}-COPY`)?.trim(); if (!sku) return;
-    const name = prompt('New product name', `${product.name} Copy`)?.trim(); if (!name) return;
+    const sku = await this.dialogs.prompt('New product SKU', { title:'Clone product', defaultValue:`${product.sku}-COPY`, required:true }); if (!sku) return;
+    const name = await this.dialogs.prompt('New product name', { title:'Clone product', defaultValue:`${product.name} Copy`, required:true }); if (!name) return;
     this.saving = true; this.clearFeedback();
     try { const response = await firstValueFrom(this.api.post<ApiEnvelope<Item>>(`/inventory/${product.id}/clone`, { sku, name })); await this.reload(); if (response.data) await this.loadProduct(response.data.id); this.notice='Product cloned'; }
     catch (error) { this.error=this.message(error,'Product could not be cloned'); } finally { this.saving=false; }
@@ -856,16 +858,16 @@ export class InventoryPageComponent implements OnInit {
 
   async changeProductLifecycle(action:'discontinue'|'reactivate') {
     const product=this.productDetail?.product; if (!product) return;
-    const reason=prompt(`${action === 'discontinue' ? 'Discontinuation' : 'Reactivation'} reason`)?.trim(); if (!reason) return;
+    const reason=await this.dialogs.prompt(`${action === 'discontinue' ? 'Discontinuation' : 'Reactivation'} reason`, { required:true, multiline:true }); if (!reason) return;
     let replacementInventoryItemId:string|null=null;
-    if (action === 'discontinue') { replacementInventoryItemId=prompt('Replacement product ID (optional)')?.trim() || null; }
+    if (action === 'discontinue') { replacementInventoryItemId=await this.dialogs.prompt('Replacement product ID (optional)') || null; }
     await this.mutate(this.api.post(`/inventory/${product.id}/${action}`, { reason, replacementInventoryItemId }), `Product ${action === 'discontinue' ? 'discontinued' : 'reactivated'}`, false);
     await this.loadProduct(product.id);
   }
 
   async bulkRaiseOrders() {
     const ids=[...this.selectedOrderIds];
-    if (!ids.length || !confirm(`Raise ${ids.length} selected draft purchase orders?`)) return;
+    if (!ids.length || !await this.dialogs.confirm(`Raise ${ids.length} selected draft purchase orders?`)) return;
     await this.mutate(this.api.post('/purchases/orders/bulk-raise', { ids, note:'' }), 'Purchase orders raised', false);
     this.selectedOrderIds.clear();
   }
@@ -1022,7 +1024,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async reviewAdjustment(row: InventoryAdjustment, decision: 'approve'|'reject') {
-    const reviewNote = window.prompt(decision === 'reject' ? 'Rejection reason' : 'Approval note (optional)', '') ?? '';
+    const reviewNote = await this.dialogs.prompt(decision === 'reject' ? 'Rejection reason' : 'Approval note (optional)', { required:decision === 'reject', multiline:true }) ?? '';
     if (decision === 'reject' && !reviewNote.trim()) return;
     this.saving = true; this.clearFeedback();
     try {
@@ -1104,9 +1106,9 @@ export class InventoryPageComponent implements OnInit {
 
   async reviewPriceUpdate(row:PriceUpdateRequest, approve:boolean) {
     if (!this.canViewInventoryCost) { this.error = 'Product cost visibility permission is required'; return; }
-    const note = approve ? '' : prompt(`Reason for rejecting the master price update for ${row.productName}`)?.trim();
+    const note = approve ? '' : await this.dialogs.prompt(`Reason for rejecting the master price update for ${row.productName}`, { required:true, multiline:true });
     if (!approve && !note) return;
-    if (approve && !confirm(`Approve master price update for ${row.productName}?`)) return;
+    if (approve && !await this.dialogs.confirm(`Approve master price update for ${row.productName}?`)) return;
     await this.mutate(this.api.post(`/purchases/price-update-requests/${row.id}/review`, { approve, note }), `Master price update ${approve ? 'approved' : 'rejected'}`, false);
   }
 
@@ -1439,7 +1441,7 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async orderAction(order: Order, action: 'submit' | 'approve' | 'reject' | 'send' | 'close' | 'cancel' | 'reopen') {
-    if (['reject', 'close', 'cancel', 'reopen'].includes(action) && !confirm(`${action[0].toUpperCase()}${action.slice(1)} purchase order ${order.orderNumber}?`)) return;
+    if (['reject', 'close', 'cancel', 'reopen'].includes(action) && !await this.dialogs.confirm(`${action[0].toUpperCase()}${action.slice(1)} purchase order ${order.orderNumber}?`)) return;
     const labels: Record<string, string> = { submit: 'submitted', approve: 'approved', reject: 'rejected', send: 'sent', close: 'closed', cancel: 'cancelled', reopen: 'reopened' };
     await this.mutate(this.api.post(`/purchases/orders/${order.id}/${action}`, { note: '' }), `Purchase order ${labels[action]}`, false);
   }
@@ -1459,7 +1461,13 @@ export class InventoryPageComponent implements OnInit {
     const supplier = this.suppliers.find((row) => row.id === this.grnDraft.supplierId);
     const lines = this.validLines(this.grnDraft.lines, true);
     if (!supplier || !this.grnDraft.invoiceNumber.trim() || !this.grnDraft.invoiceDate || !lines.length) { this.error = this.language.text('inventory.message.d2dbbb62ba'); return; }
-    await this.mutate(this.api.post('/purchases/grn', { supplierId: supplier.id, purchaseOrderId: this.grnDraft.purchaseOrderId || null, supplierName: supplier.name, supplierGstin: supplier.gstin, supplierInvoiceNumber: this.grnDraft.invoiceNumber.trim(), supplierInvoiceDate: this.grnDraft.invoiceDate, receivedDate: this.grnDraft.receivedDate || null, dueDate: this.grnDraft.dueDate || null, challanNumber: this.grnDraft.challanNumber.trim(), deliveryReference: this.grnDraft.deliveryReference.trim(), shippingPaise: this.toPaise(this.grnDraft.shippingRupees), handlingPaise: this.toPaise(this.grnDraft.handlingRupees), backdatedOperationalApproval: this.grnDraft.backdatedOperationalApproval, acceptExcess:this.grnDraft.acceptExcess, requestMasterPriceUpdates:this.grnDraft.lines.filter(line => line.requestMasterPriceUpdate).map(line => line.inventoryItemId), idempotencyKey: crypto.randomUUID(), lines }), 'GRN posted');
+    if (!await this.validateGrnSupplierTerms(supplier.id, lines.map((line) => line.inventoryItemId))) return;
+    await this.mutate(this.api.post('/purchases/grn', { supplierId: supplier.id, purchaseOrderId: this.grnDraft.purchaseOrderId || null, supplierName: supplier.name, supplierGstin: supplier.gstin, supplierInvoiceNumber: this.grnDraft.invoiceNumber.trim(), supplierInvoiceDate: this.grnDraft.invoiceDate, receivedDate: this.grnDraft.receivedDate || null, dueDate: this.grnDraft.dueDate || null, challanNumber: this.grnDraft.challanNumber.trim(), deliveryReference: this.grnDraft.deliveryReference.trim(), shippingPaise: this.toPaise(this.grnDraft.shippingRupees), handlingPaise: this.toPaise(this.grnDraft.handlingRupees), backdatedOperationalApproval: this.grnDraft.backdatedOperationalApproval, acceptExcess:this.grnDraft.acceptExcess, requestMasterPriceUpdates:this.grnDraft.lines.filter(line => line.requestMasterPriceUpdate).map(line => line.inventoryItemId), idempotencyKey: crypto.randomUUID(), lines }), 'GRN posted', !this.standaloneGrn);
+    if (this.standaloneGrn && !this.error) {
+      const notice = this.notice;
+      await this.openGrn();
+      this.notice = notice;
+    }
   }
 
   async saveReturn() {
@@ -1525,9 +1533,9 @@ export class InventoryPageComponent implements OnInit {
   }
 
   async transferAction(row: Transfer, action: 'raise'|'approve'|'reject'|'cancel') {
-    const note = action === 'reject' ? prompt('Rejection reason') : action === 'cancel' ? prompt('Cancellation note') ?? '' : '';
+    const note = action === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : action === 'cancel' ? await this.dialogs.prompt('Cancellation note', { multiline:true }) ?? '' : '';
     if (action === 'reject' && !note?.trim()) return;
-    if (!['reject','cancel'].includes(action) && !confirm(`${action[0].toUpperCase()}${action.slice(1)} ${row.transferNumber}?`)) return;
+    if (!['reject','cancel'].includes(action) && !await this.dialogs.confirm(`${action[0].toUpperCase()}${action.slice(1)} ${row.transferNumber}?`)) return;
     const completed = ({ raise:'raised', approve:'approved', reject:'rejected', cancel:'cancelled' } as const)[action];
     await this.mutate(this.api.post(`/inventory/transfers/${row.id}/${action}`, action === 'reject' || action === 'cancel' ? { notes:note } : {}), `Transfer ${completed}`, false);
   }
@@ -1557,7 +1565,7 @@ export class InventoryPageComponent implements OnInit {
   async shipNextTransferShipment(row: Transfer) {
     const detail = await this.loadTransfer(row.id); const shipment = detail?.shipments.find((item) => item.status === 'dispatched');
     if (!shipment) { this.error = 'No dispatched shipment is waiting to ship'; return; }
-    if (!confirm(`Move shipment ${shipment.shipmentNumber} in transit?`)) return;
+    if (!await this.dialogs.confirm(`Move shipment ${shipment.shipmentNumber} in transit?`)) return;
     await this.mutate(this.api.post(`/inventory/transfers/${row.id}/shipments/${shipment.id}/ship`, {}), 'Transfer shipment is in transit', false);
   }
 
@@ -1646,6 +1654,46 @@ export class InventoryPageComponent implements OnInit {
     }
   }
   private async get<T>(path: string) { const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
+  private async getAllPages<T>(path: string, pageSize = 200) {
+    const [base, rawQuery = ''] = path.split('?', 2);
+    const params = new URLSearchParams(rawQuery);
+    const rows: T[] = [];
+    for (let page = 1; ; page++) {
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      params.set('withCount', 'false');
+      const batch = await this.get<T[]>(`${base}?${params}`);
+      rows.push(...batch);
+      if (batch.length < pageSize) return rows;
+    }
+  }
+  private async getAllLedger(filters = new URLSearchParams()) {
+    const rows: LedgerRow[] = [];
+    const limit = 2000;
+    for (let offset = 0; ; offset += limit) {
+      const params = new URLSearchParams(filters);
+      params.set('limit', String(limit));
+      params.set('offset', String(offset));
+      const batch = await this.get<LedgerRow[]>(`/inventory/ledger?${params}`);
+      rows.push(...batch);
+      if (batch.length < limit) return rows;
+    }
+  }
+  private async validateGrnSupplierTerms(supplierId: string, inventoryItemIds: string[]) {
+    const governance = await this.getCached<SupplierGovernance>('inventory.supplierGovernance', () => this.get<SupplierGovernance>('/inventory/supplier-governance'));
+    const available = new Set(governance.terms.filter((row) => row.supplierId === supplierId && row.centerAvailable).map((row) => row.inventoryItemId));
+    const missing = [...new Set(inventoryItemIds)].filter((id) => !available.has(id));
+    if (!missing.length) return true;
+    const names = missing.map((id) => this.itemById.get(id)?.name ?? id);
+    this.error = `Configure supplier-product association before posting: ${names.join(', ')}`;
+    this.showGrnAssociationAction = true;
+    return false;
+  }
+  async configureGrnSupplierProducts() {
+    const supplierId = this.grnDraft.supplierId;
+    if (!supplierId) return;
+    await this.router.navigate(['/inventory'], { queryParams: { tab: 'suppliers', supplierId } });
+  }
   private async loadProduct(id: string) {
     this.productLoading = true; this.productDetail = null;
     try {
@@ -1658,7 +1706,7 @@ export class InventoryPageComponent implements OnInit {
     finally { this.productLoading = false; }
   }
   private message(error: any, fallback: string) { return error?.error?.error?.message ?? error?.error?.message ?? error?.message ?? fallback; }
-  private clearFeedback() { this.error = ''; this.notice = ''; }
+  private clearFeedback() { this.error = ''; this.notice = ''; this.showGrnAssociationAction = false; }
   private code39Svg(code: string) {
     let x = 0; const bars: string[] = [];
     for (const char of `*${code}*`) {

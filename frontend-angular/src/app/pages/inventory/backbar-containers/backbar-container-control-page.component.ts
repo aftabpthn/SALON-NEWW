@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { TitleCaseInputsDirective } from '../../../shared/directives/title-case-inputs.directive';
 import { AuthService } from '../../../core/services/auth.service';
+import { ActionDialogService } from '../../../shared/services/action-dialog.service';
 import {
   BackbarContainer,
   BackbarContainerEvent,
@@ -30,6 +31,7 @@ type LifecycleRow = BackbarContainerEvent & { containerId: string; productName: 
 export class BackbarContainerControlPageComponent implements OnInit {
   private readonly backbar = inject(BackbarControlService);
   private readonly auth = inject(AuthService);
+  private readonly dialogs = inject(ActionDialogService);
 
   items: BackbarItem[] = [];
   containers: BackbarContainer[] = [];
@@ -135,10 +137,10 @@ export class BackbarContainerControlPageComponent implements OnInit {
   }
 
   async requestOverride(row: BackbarContainer) {
-    const value = window.prompt(`Correct remaining quantity (0-${row.capacityQuantity})`, String(row.remainingQuantity));
+    const value = await this.dialogs.prompt(`Correct remaining quantity (0-${row.capacityQuantity})`, { defaultValue:String(row.remainingQuantity), required:true });
     if (value === null) return;
     const requestedRemaining = Number(value);
-    const reason = window.prompt('Override reason')?.trim();
+    const reason = await this.dialogs.prompt('Override reason', { required:true, multiline:true });
     if (!Number.isInteger(requestedRemaining) || requestedRemaining < 0 || requestedRemaining > row.capacityQuantity || !reason) return;
     await this.action(() => this.backbar.requestOverride(row.id, requestedRemaining, reason), 'Override sent for owner approval');
   }
@@ -156,7 +158,7 @@ export class BackbarContainerControlPageComponent implements OnInit {
 
   async reviewOverride(row: BackbarContainer, decision: 'approve' | 'reject') {
     if (!row.pendingOverrideId) return;
-    const reviewNote = decision === 'reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote = decision === 'reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision === 'reject' && !reviewNote) return;
     await this.action(() => this.backbar.reviewOverride(row.pendingOverrideId!, decision, reviewNote || ''), `Override ${decision}d`);
   }
@@ -186,7 +188,7 @@ export class BackbarContainerControlPageComponent implements OnInit {
   }
 
   async reverseMovement(id:string) {
-    const comment=window.prompt('Reversal reason')?.trim();
+    const comment=await this.dialogs.prompt('Reversal reason', { required:true, multiline:true });
     if (!comment) return;
     await this.action(() => this.backbar.reverseMovement(id,comment), 'Operational movement reversed');
   }
@@ -210,7 +212,7 @@ export class BackbarContainerControlPageComponent implements OnInit {
   }
 
   async reviewFloorClosing(row:FloorClosing,decision:'approve'|'reject') {
-    const reviewNote=decision==='reject' ? window.prompt('Rejection reason')?.trim() : '';
+    const reviewNote=decision==='reject' ? await this.dialogs.prompt('Rejection reason', { required:true, multiline:true }) : '';
     if (decision==='reject' && !reviewNote) return;
     await this.action(() => this.backbar.reviewFloorClosing(row.id,{decision,reviewNote:reviewNote||'',idempotencyKey:crypto.randomUUID()}),`Floor closing ${decision}d`);
   }

@@ -93,6 +93,27 @@ b {
   border-top: 1px solid var(--line);
 }
 
+.app-action-dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 24px 60px rgb(15 35 65 / 24%);
+}
+
+.app-action-dialog::backdrop { background: rgb(15 35 65 / 42%); }
+.app-action-dialog form { display: grid; gap: 16px; padding: 18px; }
+.app-action-dialog h2 { margin: 0; font-size: 18px; }
+.app-action-dialog label { display: grid; gap: 8px; font-weight: 600; }
+.app-action-dialog input,
+.app-action-dialog textarea { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: inherit; background: #fff; font: inherit; }
+.app-action-dialog textarea { min-height: 92px; resize: vertical; }
+.app-action-dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; }
+.app-action-dialog button { min-height: 38px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); background: #fff; font: inherit; font-weight: 600; }
+.app-action-dialog button.primary { border-color: var(--brand); color: #fff; background: var(--brand); }
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;

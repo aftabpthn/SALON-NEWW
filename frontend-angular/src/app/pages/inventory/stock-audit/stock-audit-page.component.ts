@@ -46,7 +46,7 @@ export class StockAuditPageComponent implements OnInit {
 
   async loadSetup() {
     try {
-      const [items,policy]=await Promise.all([this.get<InventoryOption[]>('/inventory?page=1&pageSize=200&withCount=false'),this.get<{allowZeroUnauditedAudit?:boolean}>('/inventory/policy')]);
+      const [items,policy]=await Promise.all([this.getAllInventoryItems(),this.get<{allowZeroUnauditedAudit?:boolean}>('/inventory/policy')]);
       this.inventoryItems=items.filter((item)=>item.active);
       this.allowZeroUnauditedAudit=policy.allowZeroUnauditedAudit===true;
     } catch (error) { this.error=this.message(error,'Failed to load audit setup'); }
@@ -252,6 +252,15 @@ export class StockAuditPageComponent implements OnInit {
   canUseZeroPolicy(){return this.allowZeroUnauditedAudit && this.auth.hasAccess(['owner','admin'],['inventory.approve']);}
   money(paise: number | null | undefined) { return paise == null ? '—' : this.language.formatCurrency(paise / 100); }
   private async get<T>(path: string) { const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
+  private async getAllInventoryItems() {
+    const rows: InventoryOption[] = [];
+    const pageSize = 200;
+    for (let page = 1; ; page++) {
+      const batch = await this.get<InventoryOption[]>(`/inventory?page=${page}&pageSize=${pageSize}&withCount=false`);
+      rows.push(...batch);
+      if (batch.length < pageSize) return rows;
+    }
+  }
   private async post<T>(path: string, body: unknown) { const response = await firstValueFrom(this.api.post<ApiEnvelope<T>>(path, body)); if (response.data === undefined) throw new Error('API response did not contain data'); return response.data; }
   private clearFeedback() { this.error = ''; this.notice = ''; }
   private today(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
