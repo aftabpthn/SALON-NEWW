@@ -341,6 +341,7 @@ function rowToStaff(row) {
     pincode: row.pincode,
     notes: row.notes,
     version: row.version,
+    isServiceStaff: row.is_service_staff === undefined ? 1 : Number(row.is_service_staff),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -385,6 +386,7 @@ function rowToLegacyStaff(row) {
     pincode: "",
     notes: "",
     version: 1,
+    isServiceStaff: row.isServiceStaff === undefined ? 1 : Number(row.isServiceStaff),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     employeeDetails: null
@@ -1411,11 +1413,13 @@ export class StaffOsService {
     access = normalizeAccess(access);
     const row = db.prepare(`SELECT sm.*, sc.id AS staff_category_id, sc.name AS staff_category_name, sc.scope AS staff_category_scope,
         tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
-        tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set
+        tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set,
+        sst.isServiceStaff AS is_service_staff
       FROM staff_master sm
       LEFT JOIN staff_category_assignments sca ON sca.tenant_id = sm.tenant_id AND sca.staff_id = sm.id AND sca.status = 'active'
       LEFT JOIN staff_categories sc ON sc.tenant_id = sm.tenant_id AND sc.id = sca.category_id
       LEFT JOIN tenant_users tu ON tu.tenantId = sm.tenant_id AND tu.staffId = sm.id
+      LEFT JOIN staff sst ON sst.id = sm.id
       WHERE sm.id = ? AND sm.tenant_id = ?`).get(id, access.tenantId);
     if (!row) {
       const legacy = db.prepare(`SELECT s.*, tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
@@ -1489,6 +1493,9 @@ export class StaffOsService {
       if (hasCategoryPatch) this.assignStaffCategory(id, staffCategoryId, nextBranchId, access);
       if (hasEmployeeDetailsPayload(payload)) this.upsertStaffEmployeeDetails(id, nextBranchId, payload, access);
       const staffIdentity = staffIdentityForLogin(next);
+      if (payload.isServiceStaff !== undefined && payload.isServiceStaff !== null) {
+        staffIdentity.isServiceStaff = Number(payload.isServiceStaff);
+      }
       staffLoginService.syncCoreStaffFromStaffMaster(staffIdentity, access);
       if (hasStaffLoginPayload(payload)) staffLoginService.upsertStaffLogin(staffIdentity, buildStaffLoginPayload(payload), access);
       else staffLoginService.ensureStaffLogin(staffIdentity, access);

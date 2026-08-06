@@ -267,6 +267,7 @@ function staffRows(tenantId, branchId, serviceId = "") {
   `).all(params);
   if (!serviceId) return rows;
   return rows.filter((person) => {
+    if (Number(person.isServiceStaff) === 0) return false;
     const assigned = parseJson(person.assignedServices, []);
     return !assigned.length || assigned.includes(serviceId);
   });
@@ -307,6 +308,7 @@ function serviceItem(service, businessId = "") {
 function staffMember(person, serviceIds = []) {
   const performance = parseJson(person.performance, {});
   const assigned = parseJson(person.assignedServices, []);
+  const isServiceStaff = Number(person.isServiceStaff) !== 0;
   return {
     id: person.id,
     businessId: person.branchId || "",
@@ -316,7 +318,7 @@ function staffMember(person, serviceIds = []) {
     specialty: assigned.length ? assigned.join(", ") : person.role || "",
     image: person.image || "",
     nextAvailable: "",
-    bookableServiceIds: assigned.length ? assigned : serviceIds
+    bookableServiceIds: isServiceStaff ? (assigned.length ? assigned : serviceIds) : []
   };
 }
 

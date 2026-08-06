@@ -321,6 +321,7 @@ export class StaffLoginService {
       shift: "",
       status: staff.status || "active",
       assignedServices: "[]",
+      isServiceStaff: staff.isServiceStaff !== undefined && staff.isServiceStaff !== null ? Number(staff.isServiceStaff) : (existing?.isServiceStaff ?? 1),
       commissionRule: "{}",
       attendance: "[]",
       performance: "{}",
@@ -330,15 +331,15 @@ export class StaffLoginService {
     if (existing) {
       db.prepare(`UPDATE staff
         SET name = @name, role = @role, phone = @phone, email = @email, branchId = @branchId,
-            image = @image, status = @status, updatedAt = @updatedAt
+            image = @image, status = @status, isServiceStaff = @isServiceStaff, updatedAt = @updatedAt
         WHERE id = @id`).run(row);
     } else {
       db.prepare(`INSERT INTO staff (
         id, name, role, phone, email, branchId, image, shift, status, assignedServices,
-        commissionRule, attendance, performance, createdAt, updatedAt
+        isServiceStaff, commissionRule, attendance, performance, createdAt, updatedAt
       ) VALUES (
         @id, @name, @role, @phone, @email, @branchId, @image, @shift, @status, @assignedServices,
-        @commissionRule, @attendance, @performance, @createdAt, @updatedAt
+        @isServiceStaff, @commissionRule, @attendance, @performance, @createdAt, @updatedAt
       )`).run(row);
     }
     return row;
