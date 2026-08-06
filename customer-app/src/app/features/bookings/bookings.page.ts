@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { IonBackButton, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { cardOutline, checkmarkCircleOutline, chevronForwardOutline, helpCircleOutline, locationOutline, repeatOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
@@ -12,7 +12,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonBackButton, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton],
+  imports: [RouterLink, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton],
   template: `
     <ion-content>
       <ion-refresher slot="fixed" (ionRefresh)="onPullRefresh($event)">
@@ -20,13 +20,14 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       </ion-refresher>
       <main class="page bookings-page">
         <section class="bookings-hero">
-          <div class="content-title-row">
-            <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
-            <h1 class="page-title">My bookings</h1>
+          <div class="header-actions-row">
             <a class="support-link" [routerLink]="supportLink()" aria-label="Open booking support">
               <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
               <span>Support</span>
             </a>
+          </div>
+          <div class="content-title-row">
+            <h1 class="page-title">My bookings</h1>
           </div>
         </section>
 
@@ -149,32 +150,32 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
   styles: [`
     .bookings-page {
       max-width: 1180px;
+      padding-top: 0;
+      scroll-padding-top: calc(112px + env(safe-area-inset-top));
     }
 
     .bookings-hero {
+      position: sticky;
+      top: 0;
+      z-index: 20;
       display: grid;
       gap: 10px;
-      margin-bottom: 18px;
+      margin: 0 calc(var(--page-x, 0px) * -1) 18px;
+      padding: calc(12px + env(safe-area-inset-top)) var(--page-x, 0px) 12px;
+      background: linear-gradient(180deg, rgba(255, 250, 246, 0.98), rgba(255, 250, 246, 0.94));
+      backdrop-filter: blur(18px);
+    }
+
+    .header-actions-row {
+      display: flex;
+      justify-content: flex-end;
+      min-height: 44px;
     }
 
     .content-title-row {
       display: flex;
       align-items: center;
       gap: 10px;
-    }
-
-    .content-back-button {
-      width: 38px;
-      height: 38px;
-      min-width: 38px;
-      margin-left: -8px;
-      --color: var(--brand-950);
-      --icon-font-size: 25px;
-      --background: transparent;
-      --border-radius: 12px;
-      --padding-start: 0;
-      --padding-end: 0;
-      filter: drop-shadow(0.45px 0 0 var(--brand-950));
     }
 
     .content-title-row .page-title {
@@ -185,22 +186,25 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       margin-left: auto;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
-      min-height: 38px;
-      padding: 0 12px;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0 14px;
       border: 1px solid var(--border);
       border-radius: 999px;
-      color: var(--muted);
+      color: var(--text);
       background: var(--surface);
-      font-size: 0.84rem;
-      font-weight: 850;
+      font-size: 0.9rem;
+      font-weight: 900;
       text-decoration: none;
       white-space: nowrap;
       transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
     }
 
     .support-link ion-icon {
-      font-size: 1rem;
+      flex: 0 0 auto;
+      font-size: 1.1rem;
     }
 
     .support-link:hover {
@@ -561,12 +565,14 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
     @media (max-width: 599px) {
       .bookings-page {
-        padding-top: 4px;
+        --page-x: 16px;
+        padding-top: 0;
       }
 
       .bookings-hero {
-        gap: 6px;
-        margin-bottom: 10px;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
       }
 
       .bookings-hero .page-title {
@@ -576,9 +582,9 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       }
 
       .support-link {
-        min-height: 36px;
-        padding: 0 10px;
-        font-size: 0.82rem;
+        min-height: 44px;
+        padding: 0 14px;
+        font-size: 0.9rem;
       }
 
       ion-segment {
