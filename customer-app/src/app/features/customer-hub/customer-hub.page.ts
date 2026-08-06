@@ -303,7 +303,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your wallet balance and transaction history are private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wallet' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading() && !cachedModule()) {
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading your wallet</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -469,7 +469,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your invoices and payment records are private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/invoices' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading() && !cachedModule()) {
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading invoices</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -633,7 +633,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your payment history is private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/payments' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading() && !cachedModule()) {
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading your payments</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -867,7 +867,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   </a>
                 </aside>
               </div>
-            } @else if (marketplace.loading() && !cachedModule()) {
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -923,7 +923,7 @@ const hubConfigs: Record<string, HubConfig> = {
               </p>
             }
 
-            @if (marketplace.loading() && !cachedModule()) {
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -1338,7 +1338,7 @@ const hubConfigs: Record<string, HubConfig> = {
               </p>
             }
 
-            @if (marketplace.loading() && !cachedModule()) {
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -1620,7 +1620,7 @@ const hubConfigs: Record<string, HubConfig> = {
               </p>
             }
 
-            @if (marketplace.loading() && !cachedModule()) {
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>

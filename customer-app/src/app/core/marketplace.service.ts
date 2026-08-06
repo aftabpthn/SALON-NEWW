@@ -37,6 +37,18 @@ export type SalonModeContext = { tenantId: string; branchId: string; businessId?
 export class MarketplaceService {
   private readonly loadingCount = signal(0);
   readonly loading = computed(() => this.loadingCount() > 0);
+  private readonly skeletonTick = signal(0);
+  private skeletonTimer: ReturnType<typeof setTimeout> | null = null;
+  private loadingStartedAt = 0;
+  private static readonly SKELETON_DELAY_MS = 300;
+  /**
+   * Loading flag that only turns on once a request has persisted past a short
+   * delay, so very fast responses never flash a skeleton loader.
+   */
+  readonly loadingForSkeleton = computed(() => {
+    void this.skeletonTick();
+    return this.loadingCount() > 0 && Date.now() - this.loadingStartedAt >= MarketplaceService.SKELETON_DELAY_MS;
+  });
   readonly error = signal("");
   readonly businesses = signal<Business[]>([]);
   readonly categories = signal<Category[]>([]);
@@ -616,8 +628,12 @@ export class MarketplaceService {
   private async run<T>(fallback: string, action: () => Promise<T>): Promise<T> {
     // Clear the error only when starting a fresh batch (no other request in flight),
     // and track loading with a counter so parallel calls don't flip it off early.
-    if (this.loadingCount() === 0) this.error.set("");
+    if (this.loadingCount() === 0) {
+      this.error.set("");
+      this.loadingStartedAt = Date.now();
+    }
     this.loadingCount.update((count) => count + 1);
+    this.startSkeletonTimer();
     try {
       return await action();
     } catch (error) {
@@ -626,6 +642,22 @@ export class MarketplaceService {
       throw error;
     } finally {
       this.loadingCount.update((count) => Math.max(0, count - 1));
+      if (this.loadingCount() === 0) this.clearSkeletonTimer();
+    }
+  }
+
+  private startSkeletonTimer(): void {
+    if (this.skeletonTimer) return;
+    this.skeletonTimer = setTimeout(() => {
+      this.skeletonTimer = null;
+      this.skeletonTick.update((value) => value + 1);
+    }, MarketplaceService.SKELETON_DELAY_MS);
+  }
+
+  private clearSkeletonTimer(): void {
+    if (this.skeletonTimer) {
+      clearTimeout(this.skeletonTimer);
+      this.skeletonTimer = null;
     }
   }
 
