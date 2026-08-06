@@ -3,7 +3,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from "@angular/ro
 import { filter } from "rxjs";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, cloudOfflineOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
@@ -44,7 +44,13 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </div>
       </header>
     }
-    <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive()" aria-label="Customer app quick header">
+    @if (marketplace.offline() && !salonModeActive()) {
+      <aside class="offline-banner" role="status" aria-live="polite">
+        <ion-icon name="cloud-offline-outline" aria-hidden="true"></ion-icon>
+        <span>You're offline — some features may be unavailable.</span>
+      </aside>
+    }
+    <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app quick header">
       <a class="mobile-brand" routerLink="/tabs/home" (click)="closeMenu()">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span>
@@ -111,7 +117,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </nav>
       </section>
     }
-    <nav class="web-nav" [class.salon-mode-hidden]="salonModeActive()" aria-label="Customer app navigation">
+    <nav class="web-nav" [class.salon-mode-hidden]="salonModeActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app navigation">
       <a class="brand" routerLink="/tabs/home">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span class="brand-copy">
@@ -151,7 +157,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </a>
       </div>
     </nav>
-    <ion-tabs [class.salon-mode-active]="salonModeActive()">
+    <ion-tabs [class.salon-mode-active]="salonModeActive()" [class.offline-active]="marketplace.offline()">
       @if (!salonModeActive()) {
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="search" href="/tabs/search">
@@ -291,6 +297,39 @@ import { MarketplaceService } from "../../core/marketplace.service";
       background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.92));
       border-bottom: 1px solid rgba(99, 102, 241, 0.14);
       backdrop-filter: blur(18px);
+    }
+
+    .offline-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 55;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 12px;
+      color: #FFFFFF;
+      background: #B91C1C;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .offline-banner ion-icon {
+      font-size: 1.05rem;
+      flex: 0 0 auto;
+    }
+
+    .mobile-topbar.offline-active,
+    .web-nav.offline-active {
+      top: 34px;
+    }
+
+    ion-tabs.offline-active {
+      padding-top: 94px;
     }
 
     ion-tabs {
@@ -840,8 +879,8 @@ export class TabsPage implements OnInit {
   private swipeStartRoute = "";
   private swipeTracking = false;
 
-  constructor(readonly auth: AuthService, private readonly router: Router, private readonly marketplace: MarketplaceService) {
-    addIcons({ compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+  constructor(readonly auth: AuthService, private readonly router: Router, readonly marketplace: MarketplaceService) {
+    addIcons({ compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline, cloudOfflineOutline });
   }
 
   ngOnInit(): void {

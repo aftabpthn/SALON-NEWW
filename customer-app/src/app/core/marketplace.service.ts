@@ -37,6 +37,8 @@ export type SalonModeContext = { tenantId: string; branchId: string; businessId?
 export class MarketplaceService {
   private readonly loadingCount = signal(0);
   readonly loading = computed(() => this.loadingCount() > 0);
+  readonly offline = signal(false);
+  private static readonly OFFLINE_MSG = "You're offline. Check your connection and try again.";
   private readonly skeletonTick = signal(0);
   private skeletonTimer: ReturnType<typeof setTimeout> | null = null;
   private loadingStartedAt = 0;
@@ -92,6 +94,18 @@ export class MarketplaceService {
       this.salonModeStore.set(false);
       this.salonModeContextStore.set(null);
     }
+    this.initOfflineTracking();
+  }
+
+  private initOfflineTracking(): void {
+    if (typeof window === "undefined" || !("onLine" in navigator)) return;
+    const apply = (online: boolean) => {
+      this.offline.set(!online);
+      if (online && this.error() === MarketplaceService.OFFLINE_MSG) this.error.set("");
+    };
+    apply(navigator.onLine);
+    window.addEventListener("online", () => apply(true));
+    window.addEventListener("offline", () => apply(false));
   }
 
   enterSalonMode(context?: SalonModeContext | null): void {
@@ -662,6 +676,7 @@ export class MarketplaceService {
   }
 
   private message(error: unknown, fallback: string): string {
+    if (this.offline()) return MarketplaceService.OFFLINE_MSG;
     if (error instanceof Error) return this.cleanErrorMessage(error.message, fallback);
     if (typeof error === "object" && error) {
       const status = "status" in error ? Number((error as { status?: unknown }).status) : null;
