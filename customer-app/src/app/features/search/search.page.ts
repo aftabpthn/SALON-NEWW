@@ -136,7 +136,7 @@ interface QuickFilterChip {
             </div>
             <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
               <ion-icon name="map-outline"></ion-icon>
-              Map View
+              Map view
             </button>
           </div>
 
@@ -166,7 +166,7 @@ interface QuickFilterChip {
                   </div>
                 </section>
 
-                @for (section of filterSections; track section.title) {
+                @for (section of filterSections(); track section.title) {
                   <section class="sheet-section">
                     <h3>{{ section.title }}</h3>
                     <div class="option-grid">
@@ -189,12 +189,12 @@ interface QuickFilterChip {
                         <small class="location-hint">Enable location for distance filtering, or use custom radius.</small>
                       }
                     </div>
-                    <input type="range" min="3" max="50" step="1" [value]="draftRadiusKm()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
+                    <input type="range" min="1" max="50" step="1" [value]="draftRadiusKm()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
                   </label>
                 </section>
 
                 <section class="sheet-section">
-                  <h3>Custom price range <small style="font-weight:800;opacity:0.7">(₹ INR)</small></h3>
+                  <h3>Custom price range</h3>
                   <div class="price-inputs">
                     <label>
                       <span>Min price</span>
@@ -262,6 +262,16 @@ interface QuickFilterChip {
                 <span>{{ filterLabel() }} · {{ modeLabel() }}</span>
               </div>
             </div>
+
+            @if (activeFilterChips().length) {
+              <div class="active-filter-chips" aria-label="Active filters">
+                @for (chip of activeFilterChips(); track $index) {
+                  <button type="button" class="active-filter-chip" (click)="removeActiveFilter(chip.key)" [attr.aria-label]="'Remove ' + chip.label">
+                    <span>{{ chip.label }}</span><span class="chip-remove" aria-hidden="true">×</span>
+                  </button>
+                }
+              </div>
+            }
 
             @if (showMap()) {
               <section class="aura-map-card premium-card" [class.fullscreen-map]="mapFullscreen()" aria-label="Live salon map">
@@ -407,7 +417,14 @@ interface QuickFilterChip {
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No matches yet</h2>
-                    <ion-button fill="outline" (click)="reset()">Reset search</ion-button>
+                    <p>{{ emptyStateNote() }}</p>
+                    @if (activeFilterCount() > 0 || location()) {
+                      <ion-button fill="outline" (click)="clearFilters()">Clear filters</ion-button>
+                    }
+                    @if (query().trim()) {
+                      <ion-button fill="outline" (click)="clearQuery()">Clear search</ion-button>
+                    }
+                    <ion-button class="primary-gradient" (click)="reset()">See all salons</ion-button>
                   </section>
                 }
               }
@@ -1193,6 +1210,43 @@ interface QuickFilterChip {
       letter-spacing: -0.04em;
     }
 
+    .empty p {
+      max-width: 340px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .active-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 6px 2px 10px;
+    }
+
+    .active-filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .active-filter-chip .chip-remove {
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
     @media (min-width: 768px) {
       .sticky-search {
         grid-template-columns: minmax(0, 1fr) auto auto;
@@ -1273,9 +1327,9 @@ interface QuickFilterChip {
       }
 
       .premium-chip-row button.selected {
-        color: var(--primary);
-        border-color: rgba(99, 102, 241, 0.26);
-        background: var(--primary-soft);
+        color: #FFFFFF;
+        border-color: var(--primary);
+        background: var(--primary);
       }
 
       .result-meta {
@@ -1937,6 +1991,7 @@ interface QuickFilterChip {
     .sheet-footer {
       bottom: 0;
       border-top: 1px solid rgba(99, 102, 241, 0.18);
+      padding-bottom: calc(14px + env(safe-area-inset-bottom));
     }
 
     .apply-button {
@@ -2601,7 +2656,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "services", label: "Treatments", copy: "Search by service menu" },
     { key: "staff", label: "Professionals", copy: "Find stylists or therapists" }
   ];
-  readonly filterSections: { title: string; options: { key: FilterKey; label: string; description: string; disabled?: boolean }[] }[] = [
+  private readonly baseFilterSections: { title: string; options: { key: FilterKey; label: string; description: string; disabled?: boolean }[] }[] = [
     {
       title: "Date filter",
       options: [
@@ -2665,10 +2720,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       title: "Staff preference",
       options: [
         { key: "female", label: "Female", description: "When staff includes gender data" },
-        { key: "male", label: "Male", description: "When staff includes gender data", disabled: true }
+        { key: "male", label: "Male", description: "When staff includes gender data" }
       ]
     }
   ];
+  readonly filterSections = computed(() => this.baseFilterSections.map((section) => ({
+    title: section.title,
+    options: section.options.map((option) =>
+      option.key === "female" || option.key === "male"
+        ? { ...option, disabled: !this.hasGenderDataAvailable() }
+        : option
+    )
+  })));
   readonly sortOptions: { key: SortKey; label: string }[] = [
     { key: "recommended", label: "Best match" },
     { key: "distance", label: "Nearest" },
@@ -2693,7 +2756,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { label: "Massage", query: "Massage", mode: "services" },
     { label: "Nails", query: "Nail", mode: "services" }
   ];
-  readonly flatFilterOptions = computed(() => this.filterSections.flatMap((section) => section.options));
+  readonly flatFilterOptions = computed(() => this.filterSections().flatMap((section) => section.options));
   readonly activeFilterCount = computed(() => {
     let count = this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0) + (this.draftRadiusKm() !== 25 ? 1 : 0) + (this.hasRatingFilter() ? 1 : 0) + (this.hasInstantBookingFilter() ? 1 : 0) + (this.hasHomeServiceFilter() ? 1 : 0) + (this.hasGenderFilter() ? 1 : 0);
     if (this.hasDateFilter() || this.hasTimeFilter() || this.hasAvailabilityFilter()) count += 1;
@@ -2815,6 +2878,10 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       this.draftFilters.update((filters) => filters.filter((item) => !this.isTimeFilterKey(item)));
       return;
     }
+    if (value === "within2km" || value === "within5km" || value === "within10km") {
+      this.draftRadiusKm.set(value === "within2km" ? 2 : value === "within5km" ? 5 : 10);
+    }
+    if (value === "customRadius") this.draftRadiusKm.set(this.radiusKm());
     this.draftFilters.update((filters) => {
       const next = filters.includes(value) ? filters.filter((item) => item !== value) : [...filters, value];
       return this.normalizedFilterList(next);
@@ -2840,6 +2907,29 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.draftMaxPrice.set("");
     this.draftRadiusKm.set(25);
     this.filterPanelOpen.set(false);
+    void this.executeSearch();
+  }
+
+  removeActiveFilter(key: string) {
+    if (key === "priceRange") {
+      this.minPrice.set("");
+      this.maxPrice.set("");
+    } else if (key === "location") {
+      this.clearSelectedArea();
+      return;
+    } else {
+      this.activeFilters.update((filters) => filters.filter((item) => item !== key));
+      if (key === "within2km" || key === "within5km" || key === "within10km" || key === "customRadius" || key === "nearest") {
+        this.radiusKm.set(25);
+        this.draftRadiusKm.set(25);
+      }
+    }
+    this.draftFilters.set([...this.activeFilters()]);
+    void this.executeSearch();
+  }
+
+  clearQuery() {
+    this.query.set("");
     void this.executeSearch();
   }
 
@@ -3091,6 +3181,8 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       if (filters.includes("top") && business.ratingAverage < 4.5) return false;
       if (filters.includes("reviewed") && Number(business.ratingCount || 0) < 10) return false;
       if ((filters.includes("deals") || filters.includes("offpeak") || filters.includes("lastminute")) && !business.hasOffer) return false;
+      if (filters.includes("rating4") && Number(business.ratingAverage || 0) < 4) return false;
+      if (filters.includes("rating4.5") && Number(business.ratingAverage || 0) < 4.5) return false;
       if (filters.includes("nearest") && !this.isUsableDistance(business)) return false;
       if (this.location()) {
         const distanceKm = this.businessDistance(business);
@@ -3153,6 +3245,16 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   });
   readonly resultCount = computed(() => this.mode() === "staff" ? this.professionalResults().length : this.filtered().length);
   readonly filterLabel = computed(() => this.activeFilterSummary().join(", ") || "all filters");
+  readonly emptyStateNote = computed(() => {
+    const reasons: string[] = [];
+    if (this.activeFilterCount() > 0) reasons.push("your filters");
+    if (this.query().trim()) reasons.push("your search");
+    if (this.location()) reasons.push("this area");
+    if (reasons.length) {
+      return `No salons match ${reasons.join(" and ")}. Try removing filters, widening the radius or checking another area.`;
+    }
+    return "No salons are available right now. Try another area or check back later.";
+  });
   readonly showMap = computed(() => this.mapPanelOpen() || this.mapPickMode() || this.mapFullscreen());
 
   constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute, private readonly browserLocation: Location) {
