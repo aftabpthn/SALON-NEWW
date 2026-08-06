@@ -1,11 +1,12 @@
 import { Routes } from "@angular/router";
-import { staffAuthGuard, staffPermissionGuard } from "./core/staff-auth.guard";
+import { rootRedirectGuard, staffAuthGuard, staffGuestGuard, staffPermissionGuard } from "./core/staff-auth.guard";
 import { ownerAuthGuard, ownerGuestGuard } from "./features/owner/owner-auth.guard";
 
 export const routes: Routes = [
-  { path: "", redirectTo: "staff/login", pathMatch: "full" },
+  { path: "", canActivate: [rootRedirectGuard], children: [] },
   {
     path: "staff/login",
+    canActivate: [staffGuestGuard],
     loadComponent: () => import("./features/staff/staff-login.page").then((m) => m.StaffLoginPage)
   },
   {
@@ -69,5 +70,5 @@ export const routes: Routes = [
       { path: "permission-denied", loadComponent: () => import("./features/staff/staff-permission-denied.page").then((m) => m.StaffPermissionDeniedPage) }
     ]
   },
-  { path: "**", redirectTo: "staff/login" }
+  { path: "**", canActivate: [rootRedirectGuard], children: [] }
 ];

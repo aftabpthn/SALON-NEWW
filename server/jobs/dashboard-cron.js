@@ -2,14 +2,16 @@ import { dashboardAggregationService } from "../services/dashboard-aggregation.s
 import { anomalyDetectionService } from "../services/anomaly-detection.service.js";
 import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { withRetry } from "../utils/db-retry.js";
 
 let started = false;
+let hourlyDailyRunning = false;
 
 function activeTenants() {
-  return db
-    .prepare("SELECT id FROM tenants WHERE COALESCE(status, 'active') NOT IN ('deleted', 'suspended')")
-    .all()
-    .map((row) => row.id);
+  return withRetry(() => db
+      .prepare("SELECT id FROM tenants WHERE COALESCE(status, 'active') NOT IN ('deleted', 'suspended')")
+      .all()
+      .map((row) => row.id), { maxAttempts: 5, delayMs: 250 });
 }
 
 function guarded(name, fn) {
@@ -21,12 +23,17 @@ function guarded(name, fn) {
 }
 
 function runHourlyAndDaily() {
+  if (hourlyDailyRunning) return;
+  hourlyDailyRunning = true;
   guarded("dashboard-hourly-daily", () => {
     for (const tenantId of activeTenants()) {
-      dashboardAggregationService.refreshHourlySummary(tenantId);
-      dashboardAggregationService.refreshDailySummary(tenantId);
+      withRetry(() => {
+        dashboardAggregationService.refreshHourlySummary(tenantId);
+        dashboardAggregationService.refreshDailySummary(tenantId);
+      }, { maxAttempts: 5, delayMs: 250 });
     }
   });
+  hourlyDailyRunning = false;
 }
 
 function runFullRefresh() {

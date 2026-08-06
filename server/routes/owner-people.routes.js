@@ -26,6 +26,7 @@ ownerPeopleRouter.post("/owner-console/people/commissions/:id/approve", writeSta
 ownerPeopleRouter.get("/owner-console/people/attendance", readStaff, asyncHandler((req, res) => res.json(ownerPeopleService.attendance(req.access, req.query))));
 ownerPeopleRouter.get("/owner-console/people/attendance/:id", readStaff, asyncHandler((req, res) => res.json(ownerPeopleService.attendanceDetail(req.params.id, req.access))));
 ownerPeopleRouter.post("/owner-console/people/attendance/:id/corrections", writeStaff, asyncHandler((req, res) => res.status(201).json(ownerPeopleService.correctAttendance(req.params.id, req.body, req.access))));
+ownerPeopleRouter.post("/owner-console/people/attendance/:id/reset", writeStaff, asyncHandler((req, res) => res.json(ownerPeopleService.resetAttendance(req.params.id, req.body, req.access))));
 ownerPeopleRouter.get("/owner-console/people/leaves", readStaff, asyncHandler((req, res) => res.json(ownerPeopleService.leaves(req.access, req.query))));
 ownerPeopleRouter.get("/owner-console/people/leaves/:id", readStaff, asyncHandler((req, res) => res.json(ownerPeopleService.leaveDetail(req.params.id, req.access))));
 ownerPeopleRouter.patch("/owner-console/people/leaves/:id/approve", writeStaff, asyncHandler((req, res) => res.json(ownerPeopleService.decideLeave(req.params.id, "approved", req.body, req.access))));

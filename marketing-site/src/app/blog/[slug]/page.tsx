@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BLOG_POSTS } from "@/lib/constants";
 import { breadcrumbJsonLd } from "@/lib/seo";
 import { BlogPostContent } from "./BlogPostContent";
+import { SITE_URL } from "@/lib/site";
 
 export function generateStaticParams() {
   return BLOG_POSTS.map((post) => ({ slug: post.slug }));
@@ -12,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const post = BLOG_POSTS.find((p) => p.slug === slug);
   if (!post) return { title: "Post Not Found" };
 
-  const url = `https://aura.example.com/blog/${post.slug}`;
+  const url = `${SITE_URL}/blog/${post.slug}`;
 
   return {
     title: post.title,
@@ -59,20 +60,20 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         headline: post.title,
         description: post.excerpt,
         datePublished: post.date,
-        url: `https://aura.example.com/blog/${post.slug}`,
+        url: `${SITE_URL}/blog/${post.slug}`,
         author: {
           "@type": "Organization",
           name: "Aura Salon CRM/POS",
-          url: "https://aura.example.com",
+          url: SITE_URL,
         },
         publisher: {
           "@type": "Organization",
           name: "Aura Salon CRM/POS",
-          url: "https://aura.example.com",
+          url: SITE_URL,
         },
         mainEntityOfPage: {
           "@type": "WebPage",
-          "@id": `https://aura.example.com/blog/${post.slug}`,
+          "@id": `${SITE_URL}/blog/${post.slug}`,
         },
       }
     : null;

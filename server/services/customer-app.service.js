@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { columnsFor, db, insertRow, tableHasColumn, updateRow } from "../db.js";
 import { badRequest, notFound, unauthorized } from "../utils/app-error.js";
 import { customerMarketplaceService } from "./customer-marketplace.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 
 const now = () => new Date().toISOString();
 const id = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
+const IST_TIME_ZONE = "Asia/Kolkata";
 
 function tableExists(table) {
   return Boolean(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = @table").get({ table }));
@@ -55,6 +57,18 @@ function ensureSchema() {
       UNIQUE(tenantId, customerId, businessId)
     );
     CREATE INDEX IF NOT EXISTS idx_customerFavorites_customer ON customerFavorites(tenantId, customerId, createdAt);
+
+    CREATE TABLE IF NOT EXISTS customerSavedSalons (
+      id TEXT PRIMARY KEY,
+      tenantId TEXT NOT NULL,
+      branchId TEXT NOT NULL DEFAULT '',
+      customerId TEXT NOT NULL,
+      businessId TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(tenantId, customerId, businessId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_customerSavedSalons_customer ON customerSavedSalons(tenantId, customerId, createdAt);
 
     CREATE TABLE IF NOT EXISTS customerWaitlistEntries (
       id TEXT PRIMARY KEY,
@@ -121,12 +135,13 @@ function staffById(staffId) {
 function businessForBranch(branchId) {
   const branch = branchById(branchId);
   if (!branch.id) return null;
-  const slug = branch.slug || `${String(branch.name || branch.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${branch.id}`;
+  const slug = branch.slug || branch.id;
   try {
     return customerMarketplaceService.business(slug);
   } catch {
     return {
       id: branch.id,
+      slug: branch.slug || branch.id,
       branchId: branch.id,
       businessName: branch.name || "Aura Salon",
       address: branch.address || branch.city || "",
@@ -159,7 +174,7 @@ function mapBooking(row = {}) {
     staffName: staff.name || "Professional",
     startAt,
     startsAt: startAt,
-    displayStartAt: startAt ? new Date(startAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "",
+    displayStartAt: startAt ? new Date(startAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: IST_TIME_ZONE }) : "",
     endAt: row.endAt || "",
     endsAt: row.endAt || "",
     durationMinutes: Number(service.durationMinutes || 0),
@@ -207,6 +222,20 @@ function addMinutesIso(startAt, minutes) {
   return date.toISOString();
 }
 
+function appointmentEndTime(row = {}) {
+  const start = new Date(row.startAt || "");
+  if (!Number.isFinite(start.getTime())) return 0;
+  const explicitEnd = new Date(row.endAt || "");
+  if (Number.isFinite(explicitEnd.getTime()) && explicitEnd.getTime() > start.getTime()) return explicitEnd.getTime();
+  return start.getTime() + 60 * 60_000;
+}
+
+function assertBookingActionAllowed(row = {}, action = "update") {
+  const status = String(row.status || "").toLowerCase();
+  if (["cancelled", "completed", "no_show"].includes(status)) throw badRequest(`This booking cannot be ${action}.`);
+  if (appointmentEndTime(row) <= Date.now()) throw badRequest(`Past bookings cannot be ${action}.`);
+}
+
 function createBooking(access, payload = {}) {
   client(access);
   const business = customerMarketplaceService.business(payload.businessSlug || payload.businessId || "");
@@ -231,26 +260,35 @@ function createBooking(access, payload = {}) {
     notes: payload.notes || "",
     billable: 1
   });
+  customerNotificationService.safeNotifyAppointmentCreated(created, true);
   return mapBooking(created);
 }
 
 function cancelBooking(access, bookingId, payload = {}) {
   const row = bookingById(access, bookingId);
+  assertBookingActionAllowed(row, "cancelled");
   const updated = updateRow("appointments", row.id, { status: "cancelled", notes: [row.notes, payload.reason ? `Customer cancel reason: ${payload.reason}` : "Customer cancelled from app"].filter(Boolean).join("\n") }, { tenantId: access.tenantId });
+  customerNotificationService.safeNotifyAppointmentChanged(row, updated);
   return mapBooking(updated);
 }
 
 function rescheduleBooking(access, bookingId, payload = {}) {
   const row = bookingById(access, bookingId);
+  assertBookingActionAllowed(row, "rescheduled");
   if (!payload.startAt) throw badRequest("startAt is required");
-  const serviceId = serviceIds(row)[0] || "";
-  const service = serviceId ? db.prepare("SELECT * FROM services WHERE id = @serviceId LIMIT 1").get({ serviceId }) || {} : {};
+  if (new Date(payload.startAt).getTime() <= Date.now()) throw badRequest("Reschedule time must be in the future");
+  const serviceId = payload.serviceId || serviceIds(row)[0] || "";
+  const business = businessForBranch(row.branchId);
+  const service = serviceById(serviceId, business?.slug || business?.id || row.branchId);
+  if (!service) throw badRequest("Selected service is not available for this salon");
   const updated = updateRow("appointments", row.id, {
     startAt: payload.startAt,
     endAt: addMinutesIso(payload.startAt, service.durationMinutes || 60),
+    serviceIds: [service.id],
     staffId: payload.staffId || row.staffId,
     status: "booked"
   }, { tenantId: access.tenantId });
+  customerNotificationService.safeNotifyAppointmentChanged(row, updated);
   return mapBooking(updated);
 }
 
@@ -278,6 +316,20 @@ function waitlist(access, bookingId, payload = {}) {
     updatedAt: now()
   };
   db.prepare(`INSERT INTO customerWaitlistEntries (${Object.keys(entry).join(", ")}) VALUES (${Object.keys(entry).map((key) => `@${key}`).join(", ")})`).run(entry);
+  customerNotificationService.safeCreate({
+    tenantId: entry.tenantId,
+    branchId: entry.branchId,
+    customerId: entry.customerId,
+    type: "waitlist_joined",
+    category: "bookings",
+    title: "Waitlist joined",
+    body: "You are on the waitlist. We will alert you as soon as a suitable slot opens.",
+    data: { waitlistId: entry.id, appointmentId: entry.bookingId },
+    deepLink: `/bookings/${entry.bookingId}`,
+    sourceType: "waitlist",
+    sourceId: entry.id,
+    eventKey: `waitlist:${entry.id}:joined`
+  });
   return {
     id: entry.id,
     bookingId: row.id,
@@ -353,6 +405,40 @@ function addFavorite(access, businessId) {
 function removeFavorite(access, businessId) {
   client(access);
   db.prepare(`DELETE FROM customerFavorites WHERE tenantId = @tenantId AND customerId = @customerId AND businessId = @businessId`).run({ tenantId: access.tenantId, customerId: access.userId, businessId });
+}
+
+function savedSalonRows(access) {
+  client(access);
+  return db.prepare(`SELECT * FROM customerSavedSalons WHERE tenantId = @tenantId AND customerId = @customerId ORDER BY datetime(createdAt) DESC`).all({ tenantId: access.tenantId, customerId: access.userId });
+}
+
+function listSavedSalons(access) {
+  return savedSalonRows(access).map(favoriteDto);
+}
+
+function saveSalon(access, businessId) {
+  client(access);
+  const business = businessForBranch(businessId) || customerMarketplaceService.business(businessId);
+  const row = {
+    id: id("save"),
+    tenantId: access.tenantId,
+    branchId: business.branchId || business.id || businessId,
+    customerId: access.userId,
+    businessId: business.branchId || business.id || businessId,
+    createdAt: now(),
+    updatedAt: now()
+  };
+  db.prepare(`
+    INSERT INTO customerSavedSalons (${Object.keys(row).join(", ")})
+    VALUES (${Object.keys(row).map((key) => `@${key}`).join(", ")})
+    ON CONFLICT(tenantId, customerId, businessId) DO UPDATE SET updatedAt = excluded.updatedAt
+  `).run(row);
+  return favoriteDto(row);
+}
+
+function removeSavedSalon(access, businessId) {
+  client(access);
+  db.prepare(`DELETE FROM customerSavedSalons WHERE tenantId = @tenantId AND customerId = @customerId AND businessId = @businessId`).run({ tenantId: access.tenantId, customerId: access.userId, businessId });
 }
 
 function rewards(access) {
@@ -437,7 +523,8 @@ function packages(access) {
     creditsRemaining: 0,
     status: item.status || "active",
     createdAt: item.createdAt || "",
-    updatedAt: item.updatedAt || ""
+    updatedAt: item.updatedAt || "",
+    serviceIds: JSON.parse(item.serviceIds || "[]")
   }));
 }
 
@@ -583,12 +670,22 @@ function logoutDevice(access, sessionId) {
   client(access);
   if (!tableExists("refresh_tokens")) return;
   db.prepare(`UPDATE refresh_tokens SET revokedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND role = 'customer' AND deviceId = @deviceId`).run({ revokedAt: now(), tenantId: access.tenantId, userId: access.userId, deviceId: sessionId });
+  if (tableExists("mobile_devices")) {
+    db.prepare(`UPDATE mobile_devices SET status = 'inactive', deviceToken = '', updatedAt = @updatedAt
+      WHERE tenantId = @tenantId AND userId = @userId AND json_extract(capabilities, '$.clientDeviceId') = @deviceId`)
+      .run({ updatedAt: now(), tenantId: access.tenantId, userId: access.userId, deviceId: sessionId });
+  }
 }
 
 function logoutAllDevices(access) {
   client(access);
   if (!tableExists("refresh_tokens")) return;
   db.prepare(`UPDATE refresh_tokens SET revokedAt = @revokedAt WHERE tenantId = @tenantId AND userId = @userId AND role = 'customer'`).run({ revokedAt: now(), tenantId: access.tenantId, userId: access.userId });
+  if (tableExists("mobile_devices")) {
+    db.prepare(`UPDATE mobile_devices SET status = 'inactive', deviceToken = '', updatedAt = @updatedAt
+      WHERE tenantId = @tenantId AND userId = @userId`)
+      .run({ updatedAt: now(), tenantId: access.tenantId, userId: access.userId });
+  }
 }
 
 function deleteMe(access) {
@@ -611,6 +708,9 @@ export const customerAppService = {
   listFavorites,
   addFavorite,
   removeFavorite,
+  listSavedSalons,
+  saveSalon,
+  removeSavedSalon,
   rewards,
   wallet,
   memberships,

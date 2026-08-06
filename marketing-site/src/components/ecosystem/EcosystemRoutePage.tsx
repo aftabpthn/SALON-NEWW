@@ -25,7 +25,7 @@ export function EcosystemRoutePage({ route }: { route: EcosystemRoute }) {
   return (
     <>
       <section className="relative overflow-hidden bg-aura-bg pb-20">
-        <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(104,31,55,.05)_1px,transparent_1px),linear-gradient(90deg,rgba(104,31,55,.05)_1px,transparent_1px)] [background-size:72px_72px]" aria-hidden="true" />
+        <div className="absolute inset-0 opacity-50 [background-image:linear-gradient(rgba(18,63,92,.055)_1px,transparent_1px),linear-gradient(90deg,rgba(18,63,92,.055)_1px,transparent_1px)] [background-size:72px_72px]" aria-hidden="true" />
         <Container size="wide" className="relative z-10">
           <div className="grid items-center gap-10 lg:grid-cols-[.78fr_1.22fr] lg:gap-14">
             <div><p className="text-[11px] font-bold uppercase tracking-[.2em] text-aura-burgundy">{page.eyebrow}</p><h1 className="mt-5 font-display text-[clamp(3.2rem,7vw,7rem)] leading-[1.02] tracking-[-.04em] text-aura-text">{page.title}</h1><p className="mt-7 max-w-xl text-base leading-8 text-aura-text-secondary md:text-lg">{page.body}</p><div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href={CTA_LINKS.demo} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-aura-burgundy px-6 text-sm font-semibold text-white">{copy.common.demo}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link><Link href="/workflows" className="inline-flex min-h-12 items-center justify-center rounded-full border border-aura-border-strong bg-white/60 px-6 text-sm font-semibold text-aura-text">{copy.ecosystem.roles.flow.label}</Link></div></div>

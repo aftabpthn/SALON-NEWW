@@ -23,56 +23,56 @@ export const FEATURES: Feature[] = [
     title: "Smart Booking",
     description: "Slot guidance, online booking, waitlist management and QR check-ins.",
     href: "/features/appointments",
-    color: "#681F37",
+    color: "#123F5C",
   },
   {
     icon: "credit-card",
     title: "POS & Billing",
     description: "GST-ready invoicing, split payments (UPI/card/cash/wallet), thermal printing, and daily closing.",
     href: "/features/billing",
-    color: "#B87343",
+    color: "#397F99",
   },
   {
     icon: "users",
     title: "Customer 360",
     description: "Client profiles, purchase history, loyalty, wallet, WhatsApp history and follow-up context.",
     href: "/features/client-crm",
-    color: "#526D68",
+    color: "#2F7895",
   },
   {
     icon: "user-check",
     title: "Staff OS",
     description: "Attendance (face/biometric), shift scheduling, commissions, payroll, and performance dashboards.",
     href: "/features/staff-management",
-    color: "#567565",
+    color: "#427F8C",
   },
   {
     icon: "package",
     title: "Inventory Brain",
     description: "Batch tracking, FIFO, expiry alerts, usage-based reorder guidance, suppliers and waste records.",
     href: "/features/inventory",
-    color: "#9B7445",
+    color: "#526F84",
   },
   {
     icon: "megaphone",
     title: "Marketing Workflows",
     description: "Birthday campaigns, WhatsApp sequences, SMS campaigns, lead follow-up and performance tracking.",
     href: "/features/marketing-ai",
-    color: "#A44D5E",
+    color: "#286883",
   },
   {
     icon: "trending-up",
     title: "Finance Engine",
     description: "Daily closing, cash drawer, expenses, balance sheet, profit intelligence, and GST reports.",
     href: "/features/finance",
-    color: "#8A5C3F",
+    color: "#315C75",
   },
   {
     icon: "shield-check",
     title: "Compliance",
     description: "PF, ESI, TDS, professional tax, gratuity and bonus calculation and record workflows.",
     href: "/features/compliance",
-    color: "#4F3D4C",
+    color: "#203F55",
   },
 ];
 
@@ -83,16 +83,16 @@ export const FEATURES_OVERVIEW: Feature[] = [
     title: "White Label",
     description: "Custom branding, domain, logo for multi-location salon chains and franchises.",
     href: "/features/white-label",
-    color: "#916B79",
+    color: "#5A8798",
   },
 ];
 
 /* ===== LANDING PAGE STATS ===== */
 export const STATS = [
-  { value: 10000, suffix: "+", label: "Appointments Booked" },
-  { value: 500, suffix: "+", label: "Salons Trust Aura" },
-  { value: 50, suffix: "Cr+", prefix: "₹", label: "Transactions Processed" },
-  { value: 99.9, suffix: "%", label: "Uptime Guarantee" },
+  { value: 0, suffix: "", label: "Approved appointments metric pending" },
+  { value: 0, suffix: "", label: "Approved customer count pending" },
+  { value: 0, suffix: "", prefix: "", label: "Approved transaction metric pending" },
+  { value: 0, suffix: "", label: "Service commitment confirmed in proposal" },
 ];
 
 /* ===== HOW IT WORKS ===== */
@@ -131,7 +131,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "WhatsApp Notifications",
       "Email Support",
     ],
-    cta: "Start Free Trial",
+    cta: "Discuss Trial Access",
   },
   {
     name: "Growth",
@@ -151,7 +151,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "API Access",
     ],
     highlighted: true,
-    cta: "Start Free Trial",
+    cta: "Discuss Trial Access",
   },
   {
     name: "Enterprise",
@@ -176,12 +176,12 @@ export const PRICING_TIERS: PricingTier[] = [
 
 export const PRICING_FAQ = [
   {
-    question: "Is there a free trial?",
-    answer: "Yes! Every plan comes with a 14-day free trial. No credit card required. You get full access to all features in your chosen plan.",
+    question: "Can we evaluate Aura before committing?",
+    answer: "Yes. Request a demo and discuss trial access for your salon. Trial scope, duration and included modules are confirmed in the proposal rather than promised as a universal instant trial.",
   },
   {
     question: "Can I switch plans later?",
-    answer: "Absolutely. You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate the difference.",
+    answer: "Plan changes can be discussed as your operation evolves. Timing, migration between tiers and any billing adjustment are confirmed in your proposal.",
   },
   {
     question: "How does multi-branch pricing work?",
@@ -189,17 +189,20 @@ export const PRICING_FAQ = [
   },
   {
     question: "Do you offer annual discounts?",
-    answer: "Yes! Annual billing saves you 20% compared to monthly billing. That's 2 months free every year.",
+    answer: "The published monthly and annual-equivalent prices show the current plan structure. Final billing terms and any annual saving are confirmed in the proposal.",
   },
   {
     question: "What payment methods do you accept?",
-    answer: "We accept UPI, credit/debit cards, net banking, and bank transfers. All payments are processed through Razorpay with bank-grade security.",
+    answer: "Subscription payment methods and payment-provider details are confirmed in the proposal. Customer bookings shown on this site use the current pay-at-salon flow.",
   },
   {
     question: "Is my data secure?",
-    answer: "Absolutely. We use enterprise-grade encryption, regular backups, and SOC 2 compliant infrastructure. Your data is always yours.",
+    answer: "Aura is designed around tenant and branch isolation, role-based access and audit trails. Hosting, backup, retention and security commitments are confirmed in the proposal and data-processing terms.",
   },
 ];
+
+/** Canonical plan collection used by pricing pages and previews. */
+export const PRICING_PLANS = PRICING_TIERS;
 
 /* ===== TESTIMONIALS ===== */
 export const TESTIMONIALS: Testimonial[] = [

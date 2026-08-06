@@ -113,14 +113,27 @@ export function getPrimarySalonByTenant(customerId, tenantId) {
 export function setPrimarySalon({ customerId, tenantId, branchId, businessId, businessName, reason }) {
   const id = `cps_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const now = new Date().toISOString();
+  const payload = { id, customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now };
 
-  // Delete existing primary for THIS TENANT ONLY (scoped delete)
-  db.prepare(`DELETE FROM customerPrimarySalons WHERE customerId = @customerId AND tenantId = @tenantId`).run({ customerId, tenantId });
+  const existing = getPrimarySalon(customerId);
+  if (existing) {
+    db.prepare(`
+      UPDATE customerPrimarySalons
+      SET tenantId = @tenantId,
+          branchId = @branchId,
+          businessId = @businessId,
+          businessName = @businessName,
+          reason = @reason,
+          setAt = @now
+      WHERE customerId = @customerId
+    `).run(payload);
+    return getPrimarySalon(customerId);
+  }
 
   db.prepare(`
     INSERT INTO customerPrimarySalons (id, customerId, tenantId, branchId, businessId, businessName, reason, setAt)
     VALUES (@id, @customerId, @tenantId, @branchId, @businessId, @businessName, @reason, @now)
-  `).run({ id, customerId, tenantId, branchId: branchId || '', businessId: businessId || '', businessName: businessName || '', reason: reason || 'manual', now });
+  `).run(payload);
 
   return db.prepare(`SELECT * FROM customerPrimarySalons WHERE id = @id`).get({ id });
 }

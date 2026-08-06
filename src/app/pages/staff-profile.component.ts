@@ -43,6 +43,7 @@ type RosterView = 'day' | 'week' | 'month';
                 <span class="badge">{{ profile.staff.status || 'active' }}</span>
                 <span class="badge">{{ profile.staff.joiningDate || 'joining date not set' }}</span>
                 <span class="badge">{{ asArray(profile.staff.assignedServices).length }} service(s)</span>
+                <button class="badge clickable" type="button" (click)="toggleServiceStaff()" [disabled]="saving()" [title]="serviceStaffLabel(profile.staff)">{{ serviceStaffLabel(profile.staff) }}</button>
                 <span class="badge" [class.warning]="profile.optimizer?.burnoutRisk === 'medium'" [class.danger]="profile.optimizer?.burnoutRisk === 'high'">Burnout {{ profile.optimizer?.burnoutRisk }}</span>
               </div>
             </div>
@@ -987,6 +988,28 @@ export class StaffProfileComponent implements OnInit {
       },
       error: (error) => {
         this.error.set(error?.error?.error || 'Unable to save staff workflow');
+        this.saving.set(false);
+      }
+    });
+  }
+
+  serviceStaffLabel(staff: ApiRecord): string {
+    return Number(staff.isServiceStaff ?? 1) === 0 ? 'Support staff' : 'Service professional';
+  }
+
+  toggleServiceStaff(): void {
+    const staff = this.staff();
+    if (!staff) return;
+    const next = Number(staff.isServiceStaff ?? 1) === 0 ? 1 : 0;
+    this.saving.set(true);
+    this.error.set('');
+    this.api.patch<ApiRecord>(`staff-management/staff/${staff.id}/service-staff`, { isServiceStaff: next }).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.load();
+      },
+      error: (error) => {
+        this.error.set(error?.error?.error || 'Unable to update service staff flag');
         this.saving.set(false);
       }
     });

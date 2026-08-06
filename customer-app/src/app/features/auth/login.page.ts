@@ -284,9 +284,9 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       place-items: center;
       padding: 28px 16px;
       background:
-        radial-gradient(circle at top left, rgba(214, 169, 74, 0.18), transparent 32%),
-        radial-gradient(circle at bottom right, rgba(244, 213, 141, 0.2), transparent 34%),
-        linear-gradient(180deg, #FFF9EC, #FBF1DE 58%, #F5E3C4);
+        radial-gradient(circle at top left, rgba(99, 102, 241, 0.14), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 34%),
+        linear-gradient(180deg, var(--surface), var(--surface) 58%, var(--surface-soft));
     }
 
     .auth-card {
@@ -294,12 +294,12 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       display: grid;
       gap: 18px;
       padding: clamp(24px, 6vw, 34px);
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(255, 249, 236, 0.96) 44%, rgba(246, 228, 193, 0.9)),
-        #FFF9EC;
-      box-shadow: 0 30px 80px rgba(92, 65, 28, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        linear-gradient(145deg, var(--glass-strong), var(--surface) 44%, var(--surface-soft)),
+        var(--surface);
+      box-shadow: 0 30px 80px rgba(28, 28, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.35);
     }
 
     .brand-mark {
@@ -310,8 +310,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       margin: 0 auto 4px;
       border-radius: 20px;
       color: var(--primary);
-      background: rgba(214, 169, 74, 0.14);
-      box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.22), 0 18px 34px rgba(92, 65, 28, 0.12);
+      background: rgba(99, 102, 241, 0.12);
+      box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 18px 34px rgba(28, 28, 28, 0.1);
       font-size: 1.55rem;
     }
 
@@ -326,8 +326,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .auth-kicker {
       margin: -6px 0 -10px;
-      color: #9B6B22;
-      font-size: 0.72rem;
+      color: var(--primary);
+      font-size: 0.80rem;
       font-weight: 950;
       letter-spacing: 0.14em;
       text-align: center;
@@ -347,11 +347,11 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       align-items: center;
       min-height: 30px;
       padding: 0 11px;
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 999px;
-      color: #7A5019;
-      background: rgba(244, 213, 141, 0.16);
-      font-size: 0.76rem;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-size: 0.84rem;
       font-weight: 950;
     }
 
@@ -393,9 +393,9 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       margin: 0;
       padding: 0;
       overflow: hidden;
-      border: 1px solid rgba(126, 110, 85, 0.28);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
     }
 
     ion-item {
@@ -404,14 +404,14 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       --inner-padding-end: 14px;
       --highlight-color-focused: var(--primary);
       --highlight-color-valid: var(--primary);
-      --highlight-color-invalid: #B45309;
+      --highlight-color-invalid: #D97706;
       --color-focused: var(--primary-2);
     }
 
     ion-input {
       --highlight-color-focused: var(--primary);
       --highlight-color-valid: var(--primary);
-      --highlight-color-invalid: #B45309;
+      --highlight-color-invalid: #D97706;
       --color-focused: var(--primary-2);
       --caret-color: var(--primary-2);
     }
@@ -426,18 +426,18 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       width: 100%;
       min-height: 54px;
       padding: 0 14px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.88);
+      background: var(--glass);
       font: inherit;
       font-weight: 800;
       outline: none;
     }
 
     .plain-input:focus {
-      border-color: rgba(214, 169, 74, 0.52);
-      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
+      border-color: rgba(99, 102, 241, 0.52);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
     }
 
     .phone-grid {
@@ -447,13 +447,13 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     }
 
     .choice-button {
-      --border-color: rgba(126, 110, 85, 0.28);
+      --border-color: var(--border);
       --border-radius: 999px;
       --color: var(--text);
       --color-activated: var(--text);
-      --background: rgba(255, 255, 255, 0.94);
-      --background-activated: rgba(214, 169, 74, 0.12);
-      --background-hover: rgba(255, 249, 236, 0.98);
+      --background: var(--glass);
+      --background-activated: var(--primary-soft);
+      --background-hover: var(--surface-soft);
       min-height: 50px;
       font-weight: 900;
       letter-spacing: 0;
@@ -478,8 +478,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     .choice-button.demo-login-button {
       --border-color: rgba(16, 185, 129, 0.45);
       --background: rgba(16, 185, 129, 0.06);
-      --color: #047857;
-      --color-activated: #047857;
+      --color: #059669;
+      --color-activated: #059669;
       --background-activated: rgba(16, 185, 129, 0.14);
     }
 
@@ -488,12 +488,12 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     }
 
     .dark-continue-button {
-      --background: linear-gradient(135deg, #F4D58D, #D6A94A);
-      --background-hover: linear-gradient(135deg, #FFE4A2, #C99632);
-      --background-activated: linear-gradient(135deg, #D6A94A, #9B6B22);
+      --background: var(--primary);
+      --background-hover: var(--primary-hover);
+      --background-activated: var(--primary-active);
       --border-radius: 999px;
-      --box-shadow: 0 16px 34px rgba(92, 65, 28, 0.18);
-      --color: #120D05;
+      --box-shadow: 0 16px 34px rgba(99, 102, 241, 0.2);
+      --color: #FFFFFF;
       min-height: 50px;
       margin-top: 12px;
       font-weight: 900;
@@ -509,9 +509,9 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       margin-top: 10px;
       border: 0;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
-      box-shadow: 0 16px 34px rgba(92, 65, 28, 0.18);
+      color: #FFFFFF;
+      background: var(--primary);
+      box-shadow: 0 16px 34px rgba(99, 102, 241, 0.2);
       font: inherit;
       font-size: 1rem;
       font-weight: 950;
@@ -526,7 +526,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     .guest-button {
       --color: var(--primary);
       --color-activated: var(--primary-2);
-      --background-activated: rgba(214, 169, 74, 0.1);
+      --background-activated: var(--primary-soft);
       margin-top: 2px;
       font-weight: 900;
     }
@@ -538,16 +538,16 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       margin: -2px auto 0;
       --padding-start: 14px;
       --padding-end: 14px;
-      --border-color: rgba(184, 123, 27, 0.42);
+      --border-color: rgba(99, 102, 241, 0.42);
       --border-radius: 999px;
       --border-width: 1px;
       --border-style: solid;
-      --color: #7A5019;
+      --color: var(--primary);
       --color-activated: var(--primary);
-      --background: rgba(255, 249, 236, 0.94);
-      --background-hover: rgba(214, 169, 74, 0.16);
-      --background-activated: rgba(214, 169, 74, 0.22);
-      --box-shadow: 0 8px 18px rgba(122, 80, 25, 0.08);
+      --background: var(--glass);
+      --background-hover: var(--primary-soft);
+      --background-activated: rgba(99, 102, 241, 0.16);
+      --box-shadow: 0 8px 18px rgba(28, 28, 28, 0.08);
       font-size: 0.82rem;
       font-weight: 900;
       letter-spacing: 0;
@@ -559,8 +559,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .resend-otp-button.button-disabled {
       opacity: 1;
-      --color: rgba(122, 80, 25, 0.72);
-      --background: rgba(214, 169, 74, 0.16);
+      --color: rgba(99, 102, 241, 0.72);
+      --background: var(--primary-soft);
     }
 
     .divider {
@@ -570,13 +570,13 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       gap: 14px;
       margin: 10px 0 2px;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
     }
 
     .divider span {
       height: 1px;
-      background: rgba(126, 110, 85, 0.2);
+      background: rgba(82, 101, 121, 0.2);
     }
 
     .notice-text,
@@ -590,17 +590,17 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .notice-text {
       color: var(--primary-2);
-      background: rgba(214, 169, 74, 0.12);
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      background: var(--primary-soft);
+      border: 1px solid rgba(99, 102, 241, 0.26);
     }
 
     .success-text {
       margin: 0;
       padding: 11px 13px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 14px;
-      color: #7A5019;
-      background: rgba(214, 169, 74, 0.12);
+      color: var(--primary);
+      background: var(--primary-soft);
       font-size: 0.86rem;
       font-weight: 900;
     }
@@ -653,7 +653,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       display: grid;
       gap: 16px;
       padding: 20px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 24px;
       background: rgba(255, 252, 245, 0.98);
       box-shadow: 0 28px 80px rgba(35, 25, 13, 0.28);
@@ -670,7 +670,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     .modal-eyebrow {
       margin: 0 0 4px;
       color: var(--primary-2);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-transform: uppercase;
     }
@@ -685,7 +685,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
     .modal-close {
       --color: var(--text);
-      --background-activated: rgba(214, 169, 74, 0.12);
+      --background-activated: var(--primary-soft);
       min-width: 42px;
       min-height: 42px;
       margin: -6px -8px 0 0;
@@ -715,7 +715,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       padding: 0;
       border: 1px solid rgba(126, 110, 85, 0.28);
       border-radius: 14px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       color: var(--text);
       font-size: 1.24rem;
       font-weight: 900;
@@ -724,8 +724,8 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     }
 
     .otp-preview input:focus {
-      border-color: rgba(214, 169, 74, 0.58);
-      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
+      border-color: rgba(99, 102, 241, 0.58);
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
     }
 
     @media (max-width: 599px) {
@@ -764,10 +764,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         align-items: stretch;
         place-items: stretch;
         padding: max(8px, var(--safe-top)) 8px max(10px, var(--safe-bottom));
-        background:
-          radial-gradient(circle at 18% 0%, rgba(214, 169, 74, 0.24), transparent 34%),
-          radial-gradient(circle at 82% 12%, rgba(255, 255, 255, 0.45), transparent 20%),
-          linear-gradient(180deg, #FFF9EC 0%, #F7E8CB 100%);
+        background: var(--auth-mobile-bg);
       }
 
       .auth-card {
@@ -776,12 +773,9 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         gap: 14px;
         padding: 16px;
         border-radius: 26px;
-        border-color: rgba(214, 169, 74, 0.3);
-        background:
-          radial-gradient(circle at top center, rgba(255, 255, 255, 0.82), transparent 24%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.94)),
-          #FFF9EC;
-        box-shadow: 0 22px 56px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255,255,255,0.9);
+        border-color: rgba(99, 102, 241, 0.3);
+        background: var(--auth-mobile-card);
+        box-shadow: var(--auth-mobile-card-shadow);
       }
 
       .brand-mark {
@@ -790,7 +784,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         margin-bottom: 0;
         border-radius: 18px;
         background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255, 244, 215, 0.96));
-        box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.22), 0 14px 26px rgba(92, 65, 28, 0.1);
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22), 0 14px 26px rgba(28, 28, 28, 0.09);
       }
 
       h1 {
@@ -818,7 +812,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
         min-height: 28px;
         padding: 0 12px;
         background: rgba(255, 252, 244, 0.92);
-        box-shadow: inset 0 0 0 1px rgba(214, 169, 74, 0.16);
+        box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.16);
       }
 
 
@@ -831,15 +825,15 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
       .choice-email-form {
         padding: 14px;
-        border: 1px solid rgba(214, 169, 74, 0.18);
+        border: 1px solid rgba(99, 102, 241, 0.18);
         border-radius: 22px;
         background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,250,239,0.78));
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
       }
 
       ion-list {
         border-radius: 18px;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
       }
 
       ion-item {
@@ -847,7 +841,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       }
 
       .field-label {
-        font-size: 0.78rem;
+        font-size: 0.84rem;
       }
 
       .dark-continue-button,
@@ -860,7 +854,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
 
       .dark-continue-button {
         min-height: 52px;
-        --box-shadow: 0 16px 30px rgba(92, 65, 28, 0.16);
+        --box-shadow: 0 16px 30px rgba(28, 28, 28, 0.14);
       }
 
       .social-stack {
@@ -874,16 +868,16 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       }
 
       .social-stack .choice-button {
-        --background: rgba(255, 255, 255, 0.96);
+        --background: var(--glass);
         --border-radius: 18px;
         --border-color: rgba(126, 110, 85, 0.22);
-        --box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
+        --box-shadow: 0 10px 24px rgba(28, 28, 28, 0.08);
       }
 
       .social-stack .guest-button {
         grid-column: auto;
         min-height: 42px;
-        border-top: 1px solid rgba(214, 169, 74, 0.14);
+        border-top: 1px solid rgba(99, 102, 241, 0.14);
         border-radius: 0;
       }
 
@@ -968,6 +962,7 @@ export class LoginPage implements OnInit, OnDestroy {
       window.location.replace(`http://localhost:${window.location.port}${window.location.pathname}${window.location.search}${window.location.hash}`);
       return;
     }
+    this.auth.error.set("");
     void this.resumeExistingSession();
     void this.handleProviderRedirectResult();
   }
@@ -1242,6 +1237,7 @@ export class LoginPage implements OnInit, OnDestroy {
 
   async continueWithDemo() {
     this.notice = "";
+    this.auth.error.set("");
     await this.auth.demoLogin()
       .then((session) => this.afterProviderSignIn(session))
       .catch(() => undefined);

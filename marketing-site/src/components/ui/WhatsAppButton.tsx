@@ -19,7 +19,7 @@ export function WhatsAppButton() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-6 right-20 z-[9990]">
+    <div className="fixed bottom-20 right-6 z-[9990] sm:bottom-6 sm:right-[15rem]">
       {/* Tooltip */}
       <AnimatePresence>
         {tooltip && (
@@ -44,9 +44,7 @@ export function WhatsAppButton() {
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        href="https://wa.me/919876543210?text=Hi%2C%20I%27m%20interested%20in%20Aura%20Salon%20software"
-        target="_blank"
-        rel="noopener noreferrer"
+        href="/contact"
         className="flex items-center justify-center w-14 h-14 rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 hover:shadow-xl hover:shadow-[#25D366]/40 hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-all duration-300"
         aria-label={t("overlay.chat")}
         aria-describedby={tooltip ? tooltipId : undefined}

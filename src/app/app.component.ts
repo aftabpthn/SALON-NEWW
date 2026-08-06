@@ -962,6 +962,7 @@ export class AppComponent implements OnDestroy {
             { path: '/appointment-deposits', label: 'Deposit Report', icon: 'DP', keywords: 'appointment advance payment deposit report no show cancellation' }
           ]
         },
+        { path: '/booking-inbox', label: 'Booking Inbox', icon: 'BI', keywords: 'customer chat booking inbox salon conversation unread reply' },
         {
           path: '/salon-3d',
           label: 'Online Booking',
@@ -1670,13 +1671,11 @@ export class AppComponent implements OnDestroy {
     if (!this.generalSettings.allowBranchSwitch()) return;
     if (branchId === this.state.selectedBranchId()) return;
     this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
-    window.location.reload();
   }
 
   selectRequiredBranch(branchId: string): void {
     if (!branchId) return;
     this.state.setBranch(branchId, this.generalSettings.settings().branchBehavior.rememberLastBranch);
-    window.location.reload();
   }
 
   private applyDefaultLandingPage(): void {

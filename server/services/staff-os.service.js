@@ -5,6 +5,7 @@ import { jobQueueService } from "./job-queue.service.js";
 import { realtimeService } from "./realtime.service.js";
 import { securityService } from "./security.service.js";
 import { staffLoginService } from "./staff-login.service.js";
+import { invalidateStaffDashboardCache } from "./staff-dashboard-cache.service.js";
 import { istBusinessDate, staffOvertimeService } from "./staff-overtime.service.js";
 import { tenantService } from "./tenant.service.js";
 
@@ -16,6 +17,7 @@ const managerRoles = new Set(["owner", "admin", "superAdmin", "manager"]);
 const payrollRoles = new Set(["owner", "admin", "superAdmin", "accountant"]);
 const commissionRoles = new Set(["owner", "admin", "superAdmin"]);
 const attendanceCorrectionRoles = new Set(["owner", "admin", "superAdmin", "manager"]);
+const attendanceResetRoles = new Set(["owner"]);
 const staffCategoryScopes = new Set(["operator", "helper", "admin", "staff", "contract_operator"]);
 const attendanceLateMarkModes = new Set(["every_x_late", "all_after_x_late"]);
 const targetIncentiveTypes = new Set(["service", "product", "membership", "branch_admin", "admin", "all_transaction"]);
@@ -110,6 +112,26 @@ function istDateForTimestamp(value) {
   }).formatToParts(value);
   const part = (type) => parts.find((item) => item.type === type)?.value;
   return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function scheduledShiftEndAt(attendance, clockInDate) {
+  // Mirrors validateScheduleWindow: schedule times are naive UTC timestamps, overnight when end <= start.
+  const rows = db.prepare(`SELECT schedule_date, start_time, end_time FROM staff_schedules
+    WHERE tenant_id = @tenantId AND branch_id = @branchId AND staff_id = @staffId
+      AND schedule_date = @scheduleDate AND status != 'cancelled'`).all({
+    tenantId: attendance.tenant_id, branchId: attendance.branch_id,
+    staffId: attendance.staff_id, scheduleDate: attendance.business_date
+  });
+  const candidates = rows
+    .filter((row) => /^\d{2}:\d{2}$/.test(String(row.start_time || "")) && /^\d{2}:\d{2}$/.test(String(row.end_time || "")))
+    .map((row) => {
+      const endAt = new Date(`${row.schedule_date}T${row.end_time}:00.000Z`);
+      if (row.end_time <= row.start_time) endAt.setUTCDate(endAt.getUTCDate() + 1);
+      return endAt;
+    })
+    .filter((endAt) => endAt.getTime() > clockInDate.getTime())
+    .sort((left, right) => left.getTime() - right.getTime())[0];
+  return candidates ? candidates.toISOString() : "";
 }
 
 function validateScheduleWindow(scheduleDate, startTime, endTime, allowOvernight = false) {
@@ -319,6 +341,7 @@ function rowToStaff(row) {
     pincode: row.pincode,
     notes: row.notes,
     version: row.version,
+    isServiceStaff: row.is_service_staff === undefined ? 1 : Number(row.is_service_staff),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -363,6 +386,7 @@ function rowToLegacyStaff(row) {
     pincode: "",
     notes: "",
     version: 1,
+    isServiceStaff: row.isServiceStaff === undefined ? 1 : Number(row.isServiceStaff),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     employeeDetails: null
@@ -1389,11 +1413,13 @@ export class StaffOsService {
     access = normalizeAccess(access);
     const row = db.prepare(`SELECT sm.*, sc.id AS staff_category_id, sc.name AS staff_category_name, sc.scope AS staff_category_scope,
         tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
-        tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set
+        tu.status AS login_status, CASE WHEN COALESCE(tu.passwordHash, '') != '' THEN 1 ELSE 0 END AS login_password_set,
+        sst.isServiceStaff AS is_service_staff
       FROM staff_master sm
       LEFT JOIN staff_category_assignments sca ON sca.tenant_id = sm.tenant_id AND sca.staff_id = sm.id AND sca.status = 'active'
       LEFT JOIN staff_categories sc ON sc.tenant_id = sm.tenant_id AND sc.id = sca.category_id
       LEFT JOIN tenant_users tu ON tu.tenantId = sm.tenant_id AND tu.staffId = sm.id
+      LEFT JOIN staff sst ON sst.id = sm.id
       WHERE sm.id = ? AND sm.tenant_id = ?`).get(id, access.tenantId);
     if (!row) {
       const legacy = db.prepare(`SELECT s.*, tu.id AS login_user_id, tu.loginId AS login_id, tu.email AS login_email,
@@ -1467,6 +1493,9 @@ export class StaffOsService {
       if (hasCategoryPatch) this.assignStaffCategory(id, staffCategoryId, nextBranchId, access);
       if (hasEmployeeDetailsPayload(payload)) this.upsertStaffEmployeeDetails(id, nextBranchId, payload, access);
       const staffIdentity = staffIdentityForLogin(next);
+      if (payload.isServiceStaff !== undefined && payload.isServiceStaff !== null) {
+        staffIdentity.isServiceStaff = Number(payload.isServiceStaff);
+      }
       staffLoginService.syncCoreStaffFromStaffMaster(staffIdentity, access);
       if (hasStaffLoginPayload(payload)) staffLoginService.upsertStaffLogin(staffIdentity, buildStaffLoginPayload(payload), access);
       else staffLoginService.ensureStaffLogin(staffIdentity, access);
@@ -2983,6 +3012,57 @@ export class StaffOsService {
         branchId: attendance.branch_id
       });
     })();
+    this.emit("staff:clocked_out", access, attendance.branch_id, attendance.id);
+    const saved = rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(attendance.id, access.tenantId));
+    return staffOvertimeService.decorateAttendanceRows([saved], access.tenantId)[0];
+  }
+
+  closeOpenAttendance(payload = {}, access) {
+    access = normalizeAccess(access);
+    requireRole(access, attendanceResetRoles, "Only the owner can accept and close an open attendance record");
+    const attendance = payload.attendanceId || payload.attendance_id
+      ? db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(payload.attendanceId || payload.attendance_id, access.tenantId)
+      : db.prepare(`SELECT * FROM staff_attendance_logs WHERE tenant_id = ? AND status = 'clocked_in'
+          ORDER BY created_at DESC LIMIT 1`).get(access.tenantId);
+    if (!attendance || attendance.status !== "clocked_in") throw notFound("Open attendance record not found");
+    assertBranch(access, attendance.branch_id);
+    const reason = String(payload.reason || "").trim();
+    if (!reason) throw badRequest("A reason is required to accept and close an open attendance record");
+    const clockInDate = requireTimestamp(attendance.clock_in_at, "clockInAt");
+    const nowStamp = now();
+    const scheduledEnd = scheduledShiftEndAt(attendance, clockInDate);
+    let stamp = scheduledEnd || new Date(clockInDate.getTime() + 12 * 60 * 60 * 1000).toISOString();
+    if (new Date(stamp).getTime() > new Date(nowStamp).getTime()) stamp = nowStamp;
+    db.transaction(() => {
+      const calculation = staffOvertimeService.completeStaffOsAttendance(attendance, stamp);
+      const overtimeMinutes = calculation?.overtimeMinutes ?? Number(attendance.overtime_minutes || 0);
+      const result = db.prepare(`UPDATE staff_attendance_logs SET clock_out_at = @clockOutAt, status = 'clocked_out', overtime_minutes = @overtimeMinutes, version = version + 1, updated_at = @updatedAt
+        WHERE id = @id AND tenant_id = @tenantId AND status = 'clocked_in' AND version = @version`).run({
+          clockOutAt: stamp, overtimeMinutes, updatedAt: nowStamp,
+          id: attendance.id, tenantId: access.tenantId, version: Number(attendance.version)
+        });
+      if (result.changes !== 1) throw conflict("Attendance was already closed or updated by another request");
+      const after = { clock_out_at: stamp, status: "clocked_out", overtime_minutes: overtimeMinutes, reason };
+      const correction = {
+        id: makeId("corr"),
+        tenant_id: access.tenantId,
+        attendance_id: attendance.id,
+        staff_id: attendance.staff_id,
+        branch_id: attendance.branch_id,
+        requested_by: access.userId || "",
+        approved_by: access.userId || "",
+        reason,
+        old_value: json(attendance),
+        new_value: json(after),
+        status: "approved"
+      };
+      db.prepare(`INSERT INTO attendance_corrections (id, tenant_id, attendance_id, staff_id, branch_id, requested_by, approved_by, reason, old_value, new_value, status)
+        VALUES (@id, @tenant_id, @attendance_id, @staff_id, @branch_id, @requested_by, @approved_by, @reason, @old_value, @new_value, @status)`).run(correction);
+      this.writeAudit("staff.attendance_reset", "staff_attendance_logs", attendance.id, access, {
+        before: attendance, after, branchId: attendance.branch_id
+      });
+    })();
+    invalidateStaffDashboardCache();
     this.emit("staff:clocked_out", access, attendance.branch_id, attendance.id);
     const saved = rowToCamel(db.prepare("SELECT * FROM staff_attendance_logs WHERE id = ? AND tenant_id = ?").get(attendance.id, access.tenantId));
     return staffOvertimeService.decorateAttendanceRows([saved], access.tenantId)[0];

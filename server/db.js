@@ -1939,6 +1939,7 @@ const schema = [
     shift TEXT DEFAULT '',
     status TEXT DEFAULT 'active',
     assignedServices TEXT DEFAULT '[]',
+    isServiceStaff INTEGER DEFAULT 1,
     commissionRule TEXT DEFAULT '{}',
     attendance TEXT DEFAULT '[]',
     performance TEXT DEFAULT '{}',
@@ -2764,6 +2765,7 @@ function migrateOperationalColumns() {
   ensureColumn("clients", "importedAt", "TEXT DEFAULT ''");
   ensureColumn("clients", "importBatchId", "TEXT DEFAULT ''");
   ensureColumn("staff", "permissions", "TEXT DEFAULT '[]'");
+  ensureColumn("staff", "isServiceStaff", "INTEGER DEFAULT 1");
   ensureColumn("invoices", "tenant_id", `TEXT DEFAULT '${DEFAULT_TENANT_ID}'`);
   ensureColumn("invoices", "branch_id", "TEXT DEFAULT ''");
   ensureColumn("invoices", "customer_id", "TEXT DEFAULT ''");
@@ -3655,6 +3657,7 @@ export function seedDatabase() {
       branchId: "branch_blr",
       shift: "09:30-18:30",
       assignedServices: [],
+      isServiceStaff: 0,
       commissionRule: { servicePercent: 0, retailPercent: 2 },
       attendance: [{ date: "2026-05-10", status: "present" }],
       performance: { revenue: 7400, bookings: 11, rating: 4.6 },

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import HomePageClient from "./HomePageClient";
 import { breadcrumbJsonLd } from "@/lib/seo";
+import { SITE_URL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Aura — Salon CRM, POS & Booking Software for India",
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Aura — Salon CRM, POS & Booking Software for India",
     description: "Connected CRM, POS, booking, staff and inventory for Indian salons.",
-    url: "https://aura.example.com",
+    url: SITE_URL,
     images: [{ url: "/og?path=/", width: 1200, height: 630 }],
   },
   twitter: {
@@ -18,8 +19,8 @@ export const metadata: Metadata = {
     images: ["/og?path=/"],
   },
   alternates: {
-    canonical: "https://aura.example.com",
-    languages: { "en-IN": "https://aura.example.com", "hi-IN": "https://aura.example.com?lang=hi" },
+    canonical: SITE_URL,
+    languages: { "en-IN": SITE_URL, "hi-IN": `${SITE_URL}?lang=hi` },
   },
 };
 

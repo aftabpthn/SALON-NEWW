@@ -1,9 +1,11 @@
-import { Component, HostListener, signal } from "@angular/core";
-import { Router, RouterLink, RouterLinkActive } from "@angular/router";
+import { Component, HostListener, OnInit, signal } from "@angular/core";
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from "@angular/router";
+import { filter } from "rxjs";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronForwardOutline, closeOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, cloudOfflineOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
+import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
   standalone: true,
@@ -25,7 +27,30 @@ import { AuthService } from "../../core/auth.service";
         </div>
       </section>
     }
-    <header class="mobile-topbar" aria-label="Customer app quick header">
+    @if (salonModeActive()) {
+      <header class="salon-mode-header" aria-label="My Salon mode">
+        <div class="salon-mode-title">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          <strong>My Salon Mode</strong>
+        </div>
+        <div class="salon-mode-actions">
+          @if (!onSalonDashboard()) {
+            <button type="button" class="salon-mode-back" (click)="goToSalon()">
+              <ion-icon name="chevron-back-outline" aria-hidden="true"></ion-icon>
+              Salon
+            </button>
+          }
+          <button type="button" class="salon-mode-exit" (click)="exitSalonMode()">Exit</button>
+        </div>
+      </header>
+    }
+    @if (marketplace.offline() && !salonModeActive()) {
+      <aside class="offline-banner" role="status" aria-live="polite">
+        <ion-icon name="cloud-offline-outline" aria-hidden="true"></ion-icon>
+        <span>You're offline — some features may be unavailable.</span>
+      </aside>
+    }
+    <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive() || supportSubflowActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app quick header">
       <a class="mobile-brand" routerLink="/tabs/home" (click)="closeMenu()">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span>
@@ -42,7 +67,7 @@ import { AuthService } from "../../core/auth.service";
         </button>
       </div>
     </header>
-    @if (menuOpen()) {
+    @if (menuOpen() && !salonModeActive() && !supportSubflowActive()) {
       <button type="button" class="mobile-menu-backdrop" aria-label="Close menu" (click)="closeMenu()"></button>
       <section class="mobile-menu-sheet" aria-label="Customer app menu">
         <div class="menu-sheet-head">
@@ -73,26 +98,26 @@ import { AuthService } from "../../core/auth.service";
           </article>
         }
         <div class="menu-highlight-grid">
-          <a routerLink="/tabs/home" (click)="closeMenu()"><ion-icon name="home-outline"></ion-icon><span>My Salon</span></a>
+          <a [routerLink]="mySalonHref()" (click)="closeMenu()"><ion-icon name="sparkles-outline"></ion-icon><span>My Salon</span></a>
+          <a routerLink="/tabs/home" (click)="closeMenu()"><ion-icon name="home-outline"></ion-icon><span>Home</span></a>
           <a routerLink="/tabs/search" (click)="closeMenu()"><ion-icon name="compass-outline"></ion-icon><span>Explore</span></a>
-          <a routerLink="/tabs/bookings" (click)="closeMenu()"><ion-icon name="calendar-outline"></ion-icon><span>Bookings</span></a>
           <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="person-outline"></ion-icon><span>Profile</span></a>
         </div>
         <div class="menu-insight-strip">
           <article><span>Mode</span><strong>{{ auth.isAuthenticated() ? 'Member' : 'Guest' }}</strong></article>
-          <article><span>Tab</span><strong>My Salon</strong></article>
+          <article><span>Tab</span><strong>Home</strong></article>
           <article><span>Quick</span><strong>Explore</strong></article>
         </div>
         <nav class="mobile-menu-list">
-          <a routerLink="/tabs/home" (click)="closeMenu()"><span>My Salon</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a [routerLink]="mySalonHref()" (click)="closeMenu()"><span>My Salon</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a routerLink="/tabs/home" (click)="closeMenu()"><span>Home</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/search" (click)="closeMenu()"><span>Discover salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
           <a routerLink="/tabs/consultation" (click)="closeMenu()"><span>Live consultation</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/bookings" (click)="closeMenu()"><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/profile" (click)="closeMenu()"><span>Account and settings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          <a routerLink="/tabs/profile" (click)="closeMenu()"><span>Account, bookings & settings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
         </nav>
       </section>
     }
-    <nav class="web-nav" aria-label="Customer app navigation">
+    <nav class="web-nav" [class.salon-mode-hidden]="salonModeActive() || supportSubflowActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app navigation">
       <a class="brand" routerLink="/tabs/home">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span class="brand-copy">
@@ -100,15 +125,15 @@ import { AuthService } from "../../core/auth.service";
         </span>
       </a>
       <div class="nav-links">
-        <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">My Salon</a>
+        <a [routerLink]="mySalonHref()" routerLinkActive="active">My Salon</a>
+        <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Home</a>
         <a routerLink="/tabs/search" routerLinkActive="active">Explore</a>
         <a routerLink="/tabs/consultation" routerLinkActive="active">Consult</a>
         <a routerLink="/tabs/offers" routerLinkActive="active">Offers</a>
-        <a routerLink="/tabs/bookings" routerLinkActive="active">Bookings</a>
         <a routerLink="/tabs/profile" routerLinkActive="active">Profile</a>
       </div>
       <div class="nav-actions" aria-label="Customer quick actions">
-        <a class="location-chip" routerLink="/tabs/search" [queryParams]="{ nearMe: true, map: true, filter: 'nearest', sort: 'distance' }">
+        <a class="location-chip" routerLink="/search" [queryParams]="{ nearMe: true, map: true, filter: 'nearest', sort: 'distance' }">
           <ion-icon name="location-outline"></ion-icon>
           {{ locationLabel() }}
         </a>
@@ -132,12 +157,9 @@ import { AuthService } from "../../core/auth.service";
         </a>
       </div>
     </nav>
-    <ion-tabs>
+    <ion-tabs [class.salon-mode-active]="salonModeActive()" [class.offline-active]="marketplace.offline()">
+      @if (!salonModeActive() && !supportSubflowActive()) {
       <ion-tab-bar slot="bottom">
-        <ion-tab-button tab="home" href="/tabs/home">
-          <ion-icon name="home-outline"></ion-icon>
-          <ion-label>My Salon</ion-label>
-        </ion-tab-button>
         <ion-tab-button tab="search" href="/tabs/search">
           <ion-icon name="compass-outline"></ion-icon>
           <ion-label>Explore</ion-label>
@@ -151,6 +173,7 @@ import { AuthService } from "../../core/auth.service";
           <ion-label>Profile</ion-label>
         </ion-tab-button>
       </ion-tab-bar>
+      }
     </ion-tabs>
   `,
   styles: [`
@@ -170,6 +193,98 @@ import { AuthService } from "../../core/auth.service";
       align-items: center;
     }
 
+    .salon-mode-hidden {
+      display: none;
+    }
+
+    .salon-mode-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 58px;
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.18);
+      background: var(--glass-strong);
+      box-shadow: 0 8px 24px rgba(28, 28, 28, 0.08);
+      backdrop-filter: blur(18px);
+    }
+
+    .salon-mode-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 0.98rem;
+    }
+
+    .salon-mode-title ion-icon {
+      color: var(--primary);
+      font-size: 1.15rem;
+    }
+
+    .salon-mode-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .salon-mode-back {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--primary);
+      background: var(--surface);
+      font-size: 0.84rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .salon-mode-back ion-icon {
+      font-size: 0.9rem;
+    }
+
+    .salon-mode-exit {
+      min-width: 64px;
+      min-height: 36px;
+      padding: 0 16px;
+      border: 1px solid #dc2626;
+      border-radius: 999px;
+      color: #fff;
+      background: #dc2626;
+      font-size: 0.84rem;
+      font-weight: 950;
+      cursor: pointer;
+    }
+
+    ion-tabs.salon-mode-active {
+      padding-top: 58px;
+    }
+
+    @media (max-width: 599px) {
+      ion-tab-bar {
+        position: fixed;
+        left: 8px;
+        right: 8px;
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        width: auto;
+        height: calc(46px + env(safe-area-inset-bottom));
+        min-height: calc(46px + env(safe-area-inset-bottom));
+        margin: 0;
+        border-radius: 14px;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+    }
+
     .mobile-topbar {
       position: fixed;
       top: 0;
@@ -179,9 +294,42 @@ import { AuthService } from "../../core/auth.service";
       justify-content: space-between;
       gap: 12px;
       padding: 10px 12px 8px;
-      background: linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(255, 249, 236, 0.88));
-      border-bottom: 1px solid rgba(214, 169, 74, 0.14);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.92));
+      border-bottom: 1px solid rgba(99, 102, 241, 0.14);
       backdrop-filter: blur(18px);
+    }
+
+    .offline-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 55;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 6px 12px;
+      color: #FFFFFF;
+      background: #B91C1C;
+      font-size: 0.84rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .offline-banner ion-icon {
+      font-size: 1.05rem;
+      flex: 0 0 auto;
+    }
+
+    .mobile-topbar.offline-active,
+    .web-nav.offline-active {
+      top: 34px;
+    }
+
+    ion-tabs.offline-active {
+      padding-top: 94px;
     }
 
     ion-tabs {
@@ -203,39 +351,47 @@ import { AuthService } from "../../core/auth.service";
     }
 
     ion-tab-bar {
-      --background: rgba(255, 253, 248, 0.96);
-      --border: 1px solid rgba(214, 169, 74, 0.18);
-      min-height: calc(62px + env(safe-area-inset-bottom));
-      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-      box-shadow: 0 -12px 32px rgba(92, 65, 28, 0.12);
+      --background: var(--glass);
+      --border: 1px solid rgba(99, 102, 241, 0.16);
+      height: calc(48px + env(safe-area-inset-bottom));
+      min-height: calc(48px + env(safe-area-inset-bottom));
+      padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
+      box-shadow: 0 -4px 14px rgba(28, 28, 28, 0.05);
       backdrop-filter: blur(18px);
     }
 
     ion-tab-button {
-      --color: #7e6e55;
-      --color-selected: #201307;
-      --ripple-color: rgba(214, 169, 74, 0.18);
+      --color: var(--muted);
+      --color-selected: var(--primary);
+      --ripple-color: rgba(99, 102, 241, 0.18);
       min-width: 0;
-      border-radius: 16px;
-      font-size: 0.68rem;
-      font-weight: 900;
-    }
-
-    ion-tab-button.tab-selected {
-      background: linear-gradient(135deg, rgba(246, 200, 189, 0.88), rgba(241, 213, 159, 0.92));
+      min-height: 44px;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 850;
     }
 
     ion-tab-button ion-icon {
-      font-size: 1.18rem;
+      padding: 3px 12px;
+      border-radius: 999px;
+      font-size: 1.1rem;
+      transition: background-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
+    }
+
+    ion-tab-button.tab-selected ion-icon {
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 6px 14px rgba(99, 102, 241, 0.24);
     }
 
     @media (max-width: 1023px) {
       .mobile-topbar {
-        display: none !important;
+        display: none;
       }
 
       ion-tabs {
         padding-top: 0;
+        padding-bottom: calc(58px + env(safe-area-inset-bottom));
       }
     }
 
@@ -243,7 +399,7 @@ import { AuthService } from "../../core/auth.service";
       .mobile-topbar,
       .mobile-menu-backdrop,
       .mobile-menu-sheet {
-        display: none !important;
+        display: none;
       }
 
       ion-tabs {
@@ -265,14 +421,14 @@ import { AuthService } from "../../core/auth.service";
     }
 
     .mobile-brand strong {
-      color: #1d1307;
+      color: var(--text);
       font-size: 0.92rem;
       line-height: 1.1;
     }
 
     .mobile-brand small {
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 800;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -292,8 +448,8 @@ import { AuthService } from "../../core/auth.service";
       border: 1px solid rgba(17, 24, 39, 0.1);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 8px 18px rgba(92, 65, 28, 0.08);
+      background: var(--glass);
+      box-shadow: 0 8px 18px rgba(28, 28, 28, 0.08);
     }
 
     .mobile-menu-backdrop {
@@ -316,13 +472,11 @@ import { AuthService } from "../../core/auth.service";
       align-content: start;
       gap: 14px;
       padding: 16px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 28px;
       overflow: auto;
-      background:
-        radial-gradient(circle at top right, rgba(255,255,255,0.52), transparent 22%),
-        linear-gradient(180deg, rgba(255,255,255,0.99), rgba(255,249,236,0.96));
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18);
+      background: var(--glass-strong);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.14);
     }
 
     .menu-sheet-head {
@@ -333,8 +487,8 @@ import { AuthService } from "../../core/auth.service";
 
     .menu-kicker {
       margin: 0 0 4px;
-      color: #a36d16;
-      font-size: 0.68rem;
+      color: var(--primary);
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -342,7 +496,7 @@ import { AuthService } from "../../core/auth.service";
 
     .menu-sheet-head h2 {
       margin: 0;
-      color: #1d1307;
+      color: var(--text);
       font-size: 1.15rem;
       letter-spacing: -0.03em;
     }
@@ -351,10 +505,10 @@ import { AuthService } from "../../core/auth.service";
       gap: 6px;
       min-height: 38px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
-      color: #6e4810;
-      background: rgba(255,255,255,0.86);
+      color: var(--primary-2);
+      background: var(--glass);
       font-weight: 900;
       text-decoration: none;
     }
@@ -375,21 +529,21 @@ import { AuthService } from "../../core/auth.service";
       display: grid;
       gap: 3px;
       padding: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 16px;
-      background: rgba(255,255,255,0.76);
+      background: var(--glass);
     }
 
     .menu-insight-strip span {
       color: #a36d16;
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       font-weight: 950;
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
 
     .menu-insight-strip strong {
-      color: #1d1307;
+      color: var(--text);
       font-size: 0.9rem;
       line-height: 1.1;
     }
@@ -398,10 +552,10 @@ import { AuthService } from "../../core/auth.service";
       gap: 12px;
       justify-content: space-between;
       padding: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
-      background: radial-gradient(circle at 0 0, rgba(255,255,255,0.7), transparent 38%), rgba(255,255,255,0.86);
-      box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
+      background: var(--glass);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.08);
     }
 
     .menu-avatar {
@@ -411,7 +565,7 @@ import { AuthService } from "../../core/auth.service";
       place-items: center;
       border-radius: 14px;
       color: #6e4810;
-      background: linear-gradient(145deg, #f7d77f, #d6a94a);
+      background: linear-gradient(145deg, var(--brand-600), var(--primary));
       font-weight: 1000;
       flex: 0 0 auto;
     }
@@ -426,7 +580,7 @@ import { AuthService } from "../../core/auth.service";
     .menu-profile-card strong,
     .menu-profile-card small,
     .menu-profile-card a {
-      color: #1d1307;
+      color: var(--text);
     }
 
     .menu-profile-card small {
@@ -443,25 +597,25 @@ import { AuthService } from "../../core/auth.service";
       gap: 8px;
       min-height: 52px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
-      color: #1d1307;
-      background: rgba(255,255,255,0.8);
+      color: var(--text);
+      background: var(--glass);
       text-decoration: none;
       font-weight: 900;
     }
 
     .mobile-menu-list {
       display: grid;
-      border-top: 1px solid rgba(214, 169, 74, 0.16);
+      border-top: 1px solid rgba(99, 102, 241, 0.16);
     }
 
     .mobile-menu-list a {
       justify-content: space-between;
       gap: 10px;
       min-height: 48px;
-      border-bottom: 1px solid rgba(214, 169, 74, 0.12);
-      color: #3a2713;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+      color: var(--text);
       text-decoration: none;
       font-weight: 850;
     }
@@ -477,7 +631,7 @@ import { AuthService } from "../../core/auth.service";
       display: grid;
       place-items: center;
       padding: 24px;
-      background: linear-gradient(180deg, rgba(245, 243, 255, 0.94), rgba(255, 255, 255, 0.98));
+      background: linear-gradient(180deg, rgba(231, 240, 248, 0.94), rgba(255, 255, 255, 0.98));
       animation: aura-gate-fade 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
     }
 
@@ -488,7 +642,7 @@ import { AuthService } from "../../core/auth.service";
       padding: 24px;
       border: 1px solid rgba(17, 24, 39, 0.16);
       border-radius: 24px;
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       box-shadow: var(--shadow-card);
       backdrop-filter: blur(18px);
       animation: aura-gate-panel 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -522,8 +676,8 @@ import { AuthService } from "../../core/auth.service";
       padding: 12px 14px;
       border: 1px solid rgba(225, 29, 72, 0.16);
       border-radius: 16px;
-      color: #EF4444 !important;
-      background: #fff1f2;
+      color: #EF4444;
+      background: var(--error-soft);
     }
 
     @media (min-width: 1024px) {
@@ -550,8 +704,8 @@ import { AuthService } from "../../core/auth.service";
         padding: 10px 12px 10px 18px;
         border: 1px solid rgba(17, 24, 39, 0.14);
         border-radius: 999px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 249, 236, 0.82));
-        box-shadow: 0 18px 42px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(231, 240, 248, 0.84));
+        box-shadow: 0 18px 42px rgba(28, 28, 28, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72);
         backdrop-filter: blur(24px);
         transform: translateX(-50%);
         animation: aura-web-nav-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -578,7 +732,7 @@ import { AuthService } from "../../core/auth.service";
         width: 44px;
         height: 44px;
         border-radius: 15px;
-        box-shadow: 0 10px 24px rgba(139, 92, 246, 0.13);
+        box-shadow: 0 10px 24px rgba(99, 102, 241, 0.13);
         transition: transform var(--motion-medium), box-shadow var(--motion-medium);
       }
 
@@ -595,7 +749,7 @@ import { AuthService } from "../../core/auth.service";
 
       .brand-copy small {
         color: var(--muted);
-        font-size: 0.74rem;
+        font-size: 0.82rem;
         font-weight: 800;
       }
 
@@ -604,7 +758,7 @@ import { AuthService } from "../../core/auth.service";
         padding: 6px;
         border: 1px solid var(--border);
         border-radius: 999px;
-        background: rgba(255, 249, 236, 0.72);
+        background: rgba(246, 249, 252, 0.78);
       }
 
       .nav-links a {
@@ -619,14 +773,14 @@ import { AuthService } from "../../core/auth.service";
 
       .nav-links a:hover {
         color: var(--text);
-        background: #ffffff;
+        background: var(--surface);
         transform: translateY(-1px);
       }
 
       .nav-links a.active {
-        color: #120D05;
-        background: linear-gradient(135deg, rgba(244, 213, 141, 0.96), rgba(214, 169, 74, 0.82));
-        box-shadow: 0 12px 26px rgba(214, 169, 74, 0.18);
+        color: #FFFFFF;
+        background: linear-gradient(135deg, var(--brand-600), var(--primary));
+        box-shadow: 0 12px 26px rgba(99, 102, 241, 0.18);
       }
 
       .nav-actions {
@@ -638,7 +792,7 @@ import { AuthService } from "../../core/auth.service";
         min-height: 44px;
         border: 1px solid var(--border);
         color: var(--text);
-        background: rgba(255, 255, 255, 0.72);
+        background: var(--glass);
         text-decoration: none;
         transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast), box-shadow var(--motion-fast);
       }
@@ -665,23 +819,23 @@ import { AuthService } from "../../core/auth.service";
         right: 9px;
         width: 8px;
         height: 8px;
-        border: 1px solid rgba(255, 249, 236, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.92);
         border-radius: 999px;
-        background: #D6A94A;
+        background: var(--primary);
       }
 
       .location-chip:hover,
       .icon-link:hover {
-        border-color: rgba(214, 169, 74, 0.32);
-        color: #7A5019;
-        background: #ffffff;
+        border-color: rgba(99, 102, 241, 0.32);
+        color: var(--primary);
+        background: var(--surface);
         transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(92, 65, 28, 0.1);
+        box-shadow: 0 12px 24px rgba(28, 28, 28, 0.09);
       }
 
       .brand:hover .brand-mark {
         transform: rotate(-3deg) scale(1.04);
-        box-shadow: 0 14px 30px rgba(92, 65, 28, 0.18);
+        box-shadow: 0 14px 30px rgba(28, 28, 28, 0.14);
       }
     }
 
@@ -717,17 +871,27 @@ import { AuthService } from "../../core/auth.service";
     }
   `]
 })
-export class TabsPage {
+export class TabsPage implements OnInit {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
-  private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings", "/tabs/profile"];
+  readonly currentUrl = signal(this.router.url);
+  private readonly mobileSwipeRoutes = ["/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
   private swipeStartRoute = "";
   private swipeTracking = false;
 
-  constructor(readonly auth: AuthService, private readonly router: Router) {
-    addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+  constructor(readonly auth: AuthService, private readonly router: Router, readonly marketplace: MarketplaceService) {
+    addIcons({ compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline, cloudOfflineOutline });
+  }
+
+  ngOnInit(): void {
+    this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
+      this.currentUrl.set(this.router.url);
+      if (this.supportSubflowActive()) this.closeMenu();
+      if (!this.marketplace.salonMode() || this.normalizeSwipeRoute(this.router.url) !== "/tabs/home") return;
+      void this.router.navigateByUrl(this.mySalonHref(), { replaceUrl: true });
+    });
   }
 
   @HostListener("window:storage")
@@ -739,6 +903,7 @@ export class TabsPage {
 
   @HostListener("window:touchstart", ["$event"])
   startSwipe(event: TouchEvent) {
+    if (this.salonModeActive() || this.supportSubflowActive()) return;
     if (!window.matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
@@ -778,6 +943,38 @@ export class TabsPage {
 
   private normalizeSwipeRoute(url: string): string {
     return url.split(/[?#]/)[0].replace(/\/+$/, "");
+  }
+
+  salonModeActive(): boolean {
+    return this.marketplace.salonMode();
+  }
+
+  supportSubflowActive(): boolean {
+    const url = this.currentUrl();
+    return this.normalizeSwipeRoute(url) === "/tabs/support" && /(?:[?&])mode=booking(?:&|$)/.test(url) && /(?:[?&])bookingId=/.test(url);
+  }
+
+  onSalonDashboard(): boolean {
+    const route = this.normalizeSwipeRoute(this.router.url);
+    return route === "/tabs/my-salon" || route.startsWith("/my-salon/");
+  }
+
+  goToSalon(): void {
+    void this.router.navigateByUrl(this.mySalonHref());
+  }
+
+  mySalonHref(): string {
+    const context = this.marketplace.salonModeContext();
+    const primary = this.marketplace.primarySalon();
+    const tenantId = primary?.tenantId || context?.tenantId;
+    const branchId = primary?.branchId || context?.branchId;
+    return tenantId && branchId ? `/my-salon/${encodeURIComponent(tenantId)}/${encodeURIComponent(branchId)}` : "/tabs/my-salon";
+  }
+
+  exitSalonMode() {
+    this.marketplace.exitSalonMode();
+    this.closeMenu();
+    void this.router.navigateByUrl("/tabs/home");
   }
 
   unlock() {
@@ -822,9 +1019,10 @@ export class TabsPage {
   private readLocationLabel(): string {
     try {
       const label = (localStorage.getItem("aura_customer_area_label") || "").trim();
-      return label && label.toLowerCase() !== "near me" ? label : "Current location";
+      const hasLocation = !!localStorage.getItem("aura_customer_location");
+      return hasLocation && label && !/^(near me|near you|current location|choose location)$/i.test(label) ? label : "Choose location";
     } catch {
-      return "Current location";
+      return "Choose location";
     }
   }
 }

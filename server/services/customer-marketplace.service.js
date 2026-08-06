@@ -1,10 +1,13 @@
 import { columnsFor, db } from "../db.js";
 import { badRequest, notFound } from "../utils/app-error.js";
+import { enrichServicesWithHappyHours } from "../utils/happy-hours-portal-enrichment.js";
 
 const DEFAULT_TIMEZONE = "Asia/Kolkata";
 const DEFAULT_OPEN = "10:00";
 const DEFAULT_CLOSE = "20:00";
 const IST_OFFSET = "+05:30";
+const MARKETPLACE_LIST_CACHE_TTL_MS = 30_000;
+const marketplaceListCache = new Map();
 const WEEKDAYS = [
   ["monday", "Monday"],
   ["tuesday", "Tuesday"],
@@ -60,6 +63,12 @@ function branchArea(branch) {
 
 function unique(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function publicMediaUrl(value) {
+  const url = String(value || "").trim();
+  if (process.env.NODE_ENV === "production" && /^https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\//i.test(url)) return "";
+  return url;
 }
 
 function publicProfile(row) {
@@ -216,12 +225,18 @@ function resolveBusiness(slug) {
     JOIN tenants t ON t.id = b.tenantId
     WHERE b.status = 'active'
       AND COALESCE(b.onlineBookingEnabled, 1) = 1
-      AND (b.id = @key OR COALESCE(b.slug, '') = @key OR t.slug = @key)
+      AND (
+        b.id = @key
+        OR COALESCE(b.slug, '') = @key
+        OR t.slug = @key
+        OR @key LIKE '%' || b.id
+        OR b.id LIKE '%' || @key
+      )
     ORDER BY b.name
     LIMIT 1
   `).get({ key });
   if (direct) return direct;
-  const generated = activeBusinessRows().find((row) => businessSlug(row) === key);
+  const generated = activeBusinessRows().find((row) => businessSlug(row) === key || row.branchId === key || key.endsWith(row.branchId));
   if (!generated) throw notFound("Business not found");
   return generated;
 }
@@ -253,6 +268,7 @@ function staffRows(tenantId, branchId, serviceId = "") {
   `).all(params);
   if (!serviceId) return rows;
   return rows.filter((person) => {
+    if (Number(person.isServiceStaff) === 0) return false;
     const assigned = parseJson(person.assignedServices, []);
     return !assigned.length || assigned.includes(serviceId);
   });
@@ -293,6 +309,7 @@ function serviceItem(service, businessId = "") {
 function staffMember(person, serviceIds = []) {
   const performance = parseJson(person.performance, {});
   const assigned = parseJson(person.assignedServices, []);
+  const isServiceStaff = Number(person.isServiceStaff) !== 0;
   return {
     id: person.id,
     businessId: person.branchId || "",
@@ -302,7 +319,7 @@ function staffMember(person, serviceIds = []) {
     specialty: assigned.length ? assigned.join(", ") : person.role || "",
     image: person.image || "",
     nextAvailable: "",
-    bookableServiceIds: assigned.length ? assigned : serviceIds
+    bookableServiceIds: isServiceStaff ? (assigned.length ? assigned : serviceIds) : []
   };
 }
 
@@ -334,14 +351,14 @@ function mapBusiness(row, { includeDetails = false } = {}) {
     ...profileGallery,
     ...(Array.isArray(theme.galleryImages) ? theme.galleryImages : []),
     ...(Array.isArray(seo.galleryImages) ? seo.galleryImages : [])
-  ].filter(Boolean);
+  ].map(publicMediaUrl).filter(Boolean);
   const startingPrice = services.length ? Math.min(...services.map((service) => service.pricePaise || 0).filter((price) => price > 0)) : 0;
   const timezone = row.timezone || DEFAULT_TIMEZONE;
   const businessName = profile.business_name || row.branchName;
   const city = profile.city || row.city || "";
   const address = profile.address || row.address || city || "";
   const description = profile.about_us || seo.description || theme.description || `${businessName} accepts online bookings in ${city || "your city"}.`;
-  const coverImage = socialLinks.coverImage || socialLinks.coverImageUrl || theme.coverImage || seo.image || profile.logo_url || "";
+  const coverImage = publicMediaUrl(socialLinks.coverImage || socialLinks.coverImageUrl || theme.coverImage || seo.image || profile.logo_url);
   return {
     id: row.branchId,
     slug: businessSlug(row),
@@ -360,7 +377,7 @@ function mapBusiness(row, { includeDetails = false } = {}) {
     mobileNumber: profile.mobile_number || "",
     telephoneNumber: profile.telephone_number || "",
     appointmentNumber: profile.appointment_number || "",
-    logoUrl: profile.logo_url || "",
+    logoUrl: publicMediaUrl(profile.logo_url),
     websiteUrl: socialLinks.website || "",
     instagramUrl: socialLinks.instagram || "",
     mapsUrl: socialLinks.mapsUrl || socialLinks.googleMaps || "",
@@ -523,9 +540,19 @@ function availabilityDay({ date, service, staff, appointments }) {
   };
 }
 
+function cachedBusinessList(params = {}) {
+  const key = JSON.stringify(params);
+  const cached = marketplaceListCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  if (marketplaceListCache.size > 100) marketplaceListCache.clear();
+  const data = filterAndSortBusinesses(activeBusinessRows(params), params);
+  marketplaceListCache.set(key, { expiresAt: Date.now() + MARKETPLACE_LIST_CACHE_TTL_MS, data });
+  return data;
+}
+
 export const customerMarketplaceService = {
   listBusinesses(params = {}) {
-    return filterAndSortBusinesses(activeBusinessRows(params), params);
+    return cachedBusinessList(params);
   },
 
   business(slug) {
@@ -534,7 +561,8 @@ export const customerMarketplaceService = {
 
   services(slug) {
     const business = resolveBusiness(slug);
-    return serviceRows(business.tenantId, business.branchId).map((service) => serviceItem(service, business.branchId));
+    const services = serviceRows(business.tenantId, business.branchId).map((service) => serviceItem(service, business.branchId));
+    return enrichServicesWithHappyHours(services, { tenantId: business.tenantId, branchId: business.branchId });
   },
 
   staff(slug) {

@@ -103,9 +103,16 @@ export class StaffSettingsPage implements OnInit {
   ngOnInit() { void this.load(); }
 
   async load() {
-    this.loading.set(true);
+    const cached = this.staff.readStoredData<StaffDashboard>("dashboard");
+    if (cached) {
+      this.dashboard.set(cached);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     try {
-      this.dashboard.set(await this.staff.dashboard());
+      const data = await this.staff.dashboard();
+      this.dashboard.set(data);
     } finally {
       this.loading.set(false);
     }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Illustrative onboarding and support story</title><desc id="desc">A calm editorial composition representing assessment, preparation, training and ongoing support.</desc>
+  <rect width="1600" height="900" fill="#eee8de"/><path d="M0 670C350 470 520 700 800 560s500-140 800 20v320H0Z" fill="#d7e6fb"/>
+  <g fill="#0b3ea8"><rect x="170" y="215" width="260" height="360" rx="130"/><rect x="670" y="135" width="260" height="440" rx="130"/><rect x="1170" y="260" width="260" height="315" rx="130"/></g>
+  <g font-family="Arial, sans-serif" fill="#fffdf8" text-anchor="middle" font-size="24"><text x="300" y="420">ASSESS</text><text x="800" y="380">PREPARE + TRAIN</text><text x="1300" y="435">SUPPORT</text></g>
+  <text x="100" y="785" font-family="Georgia, serif" font-size="64" fill="#071b3d">From setup to daily success.</text>
+</svg>

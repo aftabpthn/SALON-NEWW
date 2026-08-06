@@ -1,0 +1,9 @@
+.stack-xs { display: grid; gap: var(--space-2); }
+.stack-sm { display: grid; gap: var(--space-3); }
+.stack-md { display: grid; gap: var(--space-4); }
+.stack-lg { display: grid; gap: var(--space-6); }
+
+.content-container {
+  width: min(calc(100% - (var(--page-gutter) * 2)), var(--container-desktop));
+  margin-inline: auto;
+}

@@ -207,6 +207,7 @@ export class OwnerPeopleService {
   }
   attendanceDetail(id, access) { const branchId = entityBranch("staff_attendance_logs", id, access); const row = staffOsService.listAttendance({ branchId, limit: 500 }, scopedAccess(access, branchId)).find((item) => item.id === id); if (!row) throw notFound("Attendance record not found"); return { attendance: row, capabilities: capabilities(["correction"]) }; }
   correctAttendance(id, body, access) { const branchId = entityBranch("staff_attendance_logs", id, access); if (!text(body.reason)) throw badRequest("A correction reason is required"); return staffOsService.correctAttendance({ ...body, attendanceId: id }, { ...scopedAccess(access, branchId), role: "owner" }); }
+  resetAttendance(id, body, access) { const branchId = entityBranch("staff_attendance_logs", id, access); if (!text(body.reason)) throw badRequest("A reason is required to accept and close an open attendance record"); return staffOsService.closeOpenAttendance({ ...body, attendanceId: id }, { ...scopedAccess(access, branchId), role: "owner" }); }
 
   leaves(access, query = {}) {
     const branches = ownerScope(access, query.branchId); const { limit, offset } = pageParams(query);

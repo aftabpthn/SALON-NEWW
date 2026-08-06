@@ -29,15 +29,15 @@ import { MarketplaceService } from "../core/marketplace.service";
           </button>
         </div>
         <nav class="salon-actions" aria-label="Quick actions for your primary salon">
-          <a [routerLink]="['/business', primarySalon.businessId, 'book']" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'business', primarySalon.businessId, 'book')" class="action-pill">
             <ion-icon name="calendar-outline"></ion-icon>
             <span>Book</span>
           </a>
-          <a routerLink="/tabs/rewards" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'rewards')" class="action-pill">
             <ion-icon name="ribbon-outline"></ion-icon>
             <span>Rewards</span>
           </a>
-          <a routerLink="/tabs/profile" class="action-pill">
+          <a [routerLink]="mySalonLink(primarySalon, 'wallet')" class="action-pill">
             <ion-icon name="wallet-outline"></ion-icon>
             <span>Wallet</span>
           </a>
@@ -47,10 +47,22 @@ import { MarketplaceService } from "../core/marketplace.service";
           <div class="salon-initials" aria-hidden="true">{{ salonInitials(suggestedSalon.businessName) }}</div>
           <div class="prompt-content">
             <h3>Make {{ suggestedSalon.businessName }} your primary salon?</h3>
-            <p>You've visited {{ suggestedSalon.visitCount }} times. Set as primary for quick access.</p>
+            <p>{{ suggestionCopy(suggestedSalon) }}</p>
             <div class="prompt-actions">
               <ion-button size="small" class="primary-gradient" (click)="confirmSetPrimary(suggestedSalon)">Set as primary</ion-button>
               <ion-button size="small" fill="clear" (click)="dismissPrompt.emit()">Not now</ion-button>
+            </div>
+          </div>
+        </div>
+      } @else {
+        <div class="prompt-card empty-primary">
+          <div class="salon-initials" aria-hidden="true">+</div>
+          <div class="prompt-content">
+            <h3>Choose your primary salon</h3>
+            <p>Select a salon you've booked, or discover a new salon and set it as primary.</p>
+            <div class="prompt-actions">
+              <ion-button size="small" class="primary-gradient" (click)="openSalonPicker.emit()">Choose salon</ion-button>
+              <ion-button size="small" fill="clear" routerLink="/tabs/search">Discover</ion-button>
             </div>
           </div>
         </div>
@@ -64,8 +76,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       padding: 16px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 251, 241, 0.98), rgba(246, 228, 193, 0.9));
-      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.9));
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
     }
 
     .salon-header {
@@ -81,8 +93,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       border-radius: 14px;
       display: grid;
       place-items: center;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       font-weight: 1000;
       font-size: 1.05rem;
       letter-spacing: -0.03em;
@@ -119,11 +131,11 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .change-salon {
-      width: 36px;
-      height: 36px;
+      width: 44px;
+      height: 44px;
       border-radius: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(99, 102, 241, 0.24);
+      background: var(--glass);
       color: var(--text);
       display: grid;
       place-items: center;
@@ -142,10 +154,10 @@ import { MarketplaceService } from "../core/marketplace.service";
       justify-content: center;
       gap: 6px;
       padding: 10px 12px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
+      border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 14px;
-      color: #201307;
-      background: rgba(255, 255, 255, 0.72);
+      color: var(--text);
+      background: var(--glass);
       font-size: 0.84rem;
       font-weight: 900;
       text-decoration: none;
@@ -155,13 +167,13 @@ import { MarketplaceService } from "../core/marketplace.service";
     .action-pill ion-icon {
       width: 16px;
       height: 16px;
-      color: #8a5a16;
+      color: var(--primary);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .action-pill:hover {
         transform: translateY(-2px);
-        border-color: rgba(214, 169, 74, 0.42);
+        border-color: rgba(99, 102, 241, 0.42);
       }
     }
 
@@ -198,6 +210,103 @@ import { MarketplaceService } from "../core/marketplace.service";
       gap: 8px;
       margin-top: 4px;
     }
+
+    @media (max-width: 599px) {
+      .my-salon-card {
+        gap: 8px;
+        padding: 12px;
+        border-radius: 18px;
+      }
+
+      .salon-header {
+        grid-template-columns: 40px minmax(0, 1fr) 36px;
+        gap: 9px;
+      }
+
+      .prompt-card {
+        grid-template-columns: 40px minmax(0, 1fr);
+        gap: 9px;
+      }
+
+      .salon-initials {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+      }
+
+      .salon-info .label {
+        font-size: 0.62rem;
+        letter-spacing: 0.04em;
+      }
+
+      .salon-info h3 {
+        font-size: 0.92rem;
+        line-height: 1.1;
+      }
+
+      .salon-info small {
+        font-size: 0.68rem;
+      }
+
+      .change-salon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+      }
+
+      .salon-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .action-pill {
+        min-width: 0;
+        min-height: 44px;
+        gap: 4px;
+        padding: 8px 6px;
+        border-radius: 12px;
+        font-size: 0.72rem;
+        white-space: nowrap;
+      }
+
+      .action-pill span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .action-pill ion-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .prompt-content {
+        gap: 3px;
+      }
+
+      .prompt-content h3 {
+        font-size: 0.88rem;
+        line-height: 1.15;
+      }
+
+      .prompt-content p {
+        font-size: 0.72rem;
+        line-height: 1.28;
+      }
+
+      .prompt-actions {
+        gap: 6px;
+        margin-top: 3px;
+      }
+
+      .prompt-actions ion-button {
+        min-height: 44px;
+        font-size: 0.78rem;
+        --padding-start: 10px;
+        --padding-end: 10px;
+      }
+    }
   `]
 })
 export class MySalonCardComponent {
@@ -230,5 +339,18 @@ export class MySalonCardComponent {
 
   confirmSetPrimary(salon: import("../core/api.types").CustomerSalonRelationship): void {
     this.setPrimary.emit(salon);
+  }
+
+  mySalonLink(salon: CustomerPrimarySalon, ...segments: Array<string | number>): string {
+    const tail = segments.map((segment) => encodeURIComponent(String(segment))).join("/");
+    return `/my-salon/${encodeURIComponent(salon.tenantId)}/${encodeURIComponent(salon.branchId)}${tail ? `/${tail}` : ""}`;
+  }
+
+  suggestionCopy(salon: CustomerSalonRelationship): string {
+    if (salon.relationshipType === "booked") {
+      return "You've booked this salon. Set it as primary for quick booking, wallet and rewards access.";
+    }
+    const visits = Math.max(1, Number(salon.visitCount || 0));
+    return `You've visited ${visits} ${visits === 1 ? "time" : "times"}. Set as primary for quick access.`;
   }
 }

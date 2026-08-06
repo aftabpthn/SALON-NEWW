@@ -1,14 +1,43 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { Location } from "@angular/common";
 import { ActivatedRoute } from "@angular/router";
 import { RouterLink } from "@angular/router";
-import { IonButton, IonContent, IonIcon, IonSearchbar } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
+import { Capacitor } from "@capacitor/core";
+import { SettingsLauncher } from "@capawesome/capacitor-settings-launcher";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
 
-type FilterKey = "anytime" | "open" | "today" | "morning" | "afternoon" | "evening" | "nearest" | "budget" | "mid" | "premium" | "top" | "reviewed" | "deals" | "offpeak" | "lastminute" | "female" | "male";
+type FilterKey = 
+  | "anytime" 
+  | "open" 
+  | "today" 
+  | "morning" 
+  | "afternoon" 
+  | "evening" 
+  | "nearest" 
+  | "within2km" 
+  | "within5km" 
+  | "within10km" 
+  | "customRadius" 
+  | "budget" 
+  | "mid" 
+  | "premium" 
+  | "top" 
+  | "reviewed" 
+  | "deals" 
+  | "offpeak" 
+  | "lastminute" 
+  | "instant-booking" 
+  | "female" 
+  | "male"
+  | "rating4"
+  | "rating4.5"
+  | "customMinPrice"
+  | "customMaxPrice";
 type SortKey = "recommended" | "distance" | "earliest" | "price" | "price_desc" | "rating" | "reviews";
 type SearchMode = "salons" | "services" | "staff" | "locations";
 
@@ -34,7 +63,7 @@ interface SearchSuggestion {
   type: string;
   copy: string;
   query: string;
-  business: import("../../core/api.types").Business;
+  business: import("../../core/api.types").Business | null;
 }
 
 interface ProfessionalResult {
@@ -45,57 +74,81 @@ interface ProfessionalResult {
   pricePaise: number;
 }
 
+interface QuickFilterChip {
+  label: string;
+  filter?: FilterKey | SearchMode;
+  query?: string;
+  mode?: SearchMode;
+  sort?: SortKey;
+}
+
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon, IonSearchbar, BusinessCardComponent],
+  imports: [RouterLink, IonButton, IonContent, IonIcon, BusinessCardComponent],
   template: `
     <ion-content>
-      <main class="page search-page">
+      <main class="page search-page" [class.keyboard-open]="keyboardOpen()">
         <section class="premium-discovery-top" aria-label="Salon discovery">
-          <section class="sticky-search fresha-search-card">
-            <div class="search-input-wrap">
-              <ion-searchbar [placeholder]="placeholder()" [value]="query()" (ionInput)="setQuery($any($event.target).value || '')"></ion-searchbar>
-              <div class="fresha-filter-row" aria-label="Search filters and sorting">
-                <div class="filter-sort-actions">
-                  <button type="button" class="control-button" [class.active]="filterPanelOpen() || activeFilterCount()" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
-                    <ion-icon name="options-outline"></ion-icon>
-                    <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
-                    <small>{{ filterButtonLabel() }}</small>
-                  </button>
-                  <button type="button" class="control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
-                    <ion-icon name="swap-vertical-outline"></ion-icon>
-                    <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
-                    <small>{{ sortDescription(sort()) }}</small>
-                  </button>
-                </div>
-              </div>
+          <section class="search-command-bar">
+            <div class="search-command-row">
+            <button type="button" class="search-command-back" (click)="goBack()" aria-label="Go back">
+              <ion-icon name="arrow-back-outline"></ion-icon>
+            </button>
+            <div class="search-command-input-wrap">
+              <ion-icon class="search-command-leading-icon" name="search-outline"></ion-icon>
+              <input class="search-command-input" type="search" [placeholder]="placeholder()" [value]="query()" (focus)="setKeyboardFocus(true)" (blur)="setKeyboardFocus(false)" (input)="setQuery($any($event.target).value || '')" aria-label="Search salons" />
               @if (suggestions().length) {
                 <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
                   @for (suggestion of suggestions(); track suggestion.key) {
                     <button type="button" role="option" (click)="applySuggestion(suggestion)">
                       <span><strong>{{ suggestion.label }}</strong><small>{{ suggestion.type }} · {{ suggestion.copy }}</small></span>
-                      <em>{{ distanceLabel(suggestion.business) }}</em>
+                      @if (suggestion.business) {
+                        <em>{{ distanceLabel(suggestion.business) }}</em>
+                      }
                     </button>
                   }
                 </div>
               }
             </div>
+            </div>
+            <button type="button" class="selected-area-row location-chooser" (click)="openLocationChooser()" aria-label="Choose location">
+              <span>
+                <ion-icon name="location-outline"></ion-icon>
+                <strong>{{ locationRowHeading() }}</strong>
+                <small>{{ locationRowValue() }}</small>
+              </span>
+              <ion-icon name="chevron-forward-outline"></ion-icon>
+            </button>
+            <div class="search-control-row" aria-label="Search controls">
+              <button type="button" class="search-control-button" [class.active]="filterPanelOpen() || activeFilterCount() > 0" [attr.data-count]="activeFilterCount() || null" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()">
+                <ion-icon name="options-outline"></ion-icon>
+                <span>Filter</span>
+              </button>
+              <button type="button" class="search-control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()">
+                <ion-icon name="swap-vertical-outline"></ion-icon>
+                <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
+              </button>
+              <button type="button" class="search-control-button" [class.active]="showMap()" (click)="toggleMapPanel()" [attr.aria-pressed]="showMap()">
+                <ion-icon [name]="showMap() ? 'business-outline' : 'map-outline'"></ion-icon>
+                <span>{{ showMap() ? "List" : "Map" }}</span>
+              </button>
+            </div>
           </section>
 
           <nav class="premium-chip-row" aria-label="Quick filters">
-            @for (chip of ['Nearby', 'Open Now', 'Offers', 'Premium', 'Women', 'Men', 'Spa', 'Hair', 'Facial', 'Massage', 'Nails']; track chip) {
-              <button type="button" [class.selected]="chip === 'Nearby'" (click)="toggleFilterPanel()">{{ chip }}</button>
+            @for (chip of quickFilterChips; track chip.label) {
+              <button type="button" [class.selected]="isQuickFilterSelected(chip)" [attr.aria-pressed]="isQuickFilterSelected(chip)" (click)="applyQuickFilter(chip)">{{ chip.label }}</button>
             }
           </nav>
 
           <div class="premium-result-row">
             <div>
-              <strong>✨ {{ resultCount() }} salons near you</strong>
-              <span>Sorted by <button type="button" (click)="toggleSortPanel()">Distance</button></span>
+              <strong>{{ resultsHeading() }}</strong>
+              <span>{{ resultCount() }} {{ resultNoun() }} · Sorted by <button type="button" (click)="toggleSortPanel()">{{ sortButtonLabel() }}</button></span>
             </div>
-            <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
-              <ion-icon name="map-outline"></ion-icon>
-              Map View
+            <button class="premium-map-switch" type="button" [class.active]="showMap()" (click)="toggleMapPanel()">
+              <ion-icon [name]="showMap() ? 'business-outline' : 'map-outline'"></ion-icon>
+              {{ showMap() ? "List view" : "Map view" }}
             </button>
           </div>
 
@@ -125,7 +178,7 @@ interface ProfessionalResult {
                   </div>
                 </section>
 
-                @for (section of filterSections; track section.title) {
+                @for (section of filterSections(); track section.title) {
                   <section class="sheet-section">
                     <h3>{{ section.title }}</h3>
                     <div class="option-grid">
@@ -140,19 +193,20 @@ interface ProfessionalResult {
                 }
 
                 <section class="sheet-section">
-                  <h3>Distance range</h3>
+<h3>Distance range</h3>
                   <label class="range-row">
                     <div class="range-label-row">
                       <span>Within <strong>{{ draftRadiusKm() }} km</strong></span>
                       @if (!location()) {
+                        <small class="location-hint">Enable location for distance filtering, or use custom radius.</small>
                       }
                     </div>
-                    <input type="range" min="3" max="50" step="1" [value]="draftRadiusKm()" [disabled]="!location()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
+                    <input type="range" min="1" max="50" step="1" [value]="draftRadiusKm()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
                   </label>
                 </section>
 
                 <section class="sheet-section">
-                  <h3>Custom price range <small style="font-weight:800;opacity:0.7">(₹ INR)</small></h3>
+                  <h3>Custom price range</h3>
                   <div class="price-inputs">
                     <label>
                       <span>Min price</span>
@@ -173,7 +227,7 @@ interface ProfessionalResult {
               </div>
 
               <footer class="sheet-footer">
-                <button type="button" class="apply-button" (click)="applyFilters()">Apply filters</button>
+                <button type="button" class="apply-button" (click)="applyFilters()">Show {{ draftResultCount() }} results</button>
               </footer>
             </section>
           }
@@ -192,14 +246,14 @@ interface ProfessionalResult {
                 @if (!location() && draftSort() === 'distance') {
                   <div class="sort-location-notice">
                     <ion-icon name="locate-outline"></ion-icon>
-                    <span>Distance sorting requires your location. It will be requested on apply.</span>
+                    <span>Enable location to sort by distance.</span>
                   </div>
                 }
                 <div class="option-grid sort-options">
                   @for (option of sortOptions; track option.key) {
                     <button type="button" [class.selected]="draftSort() === option.key" [class.needs-location]="option.key === 'distance' && !location()" (click)="draftSort.set(option.key)">
                       <span>{{ option.label }}</span>
-                      <small>{{ sortDescription(option.key) }}{{ option.key === 'distance' && !location() ? ' · needs location' : '' }}</small>
+                      <small>{{ sortDescription(option.key) }}{{ option.key === 'distance' && !location() ? ' · enable location' : '' }}</small>
                     </button>
                   }
                 </div>
@@ -220,6 +274,16 @@ interface ProfessionalResult {
                 <span>{{ filterLabel() }} · {{ modeLabel() }}</span>
               </div>
             </div>
+
+            @if (activeFilterChips().length) {
+              <div class="active-filter-chips" aria-label="Active filters">
+                @for (chip of activeFilterChips(); track $index) {
+                  <button type="button" class="active-filter-chip" (click)="removeActiveFilter(chip.key)" [attr.aria-label]="'Remove ' + chip.label">
+                    <span>{{ chip.label }}</span><span class="chip-remove" aria-hidden="true">×</span>
+                  </button>
+                }
+              </div>
+            }
 
             @if (showMap()) {
               <section class="aura-map-card premium-card" [class.fullscreen-map]="mapFullscreen()" aria-label="Live salon map">
@@ -295,12 +359,17 @@ interface ProfessionalResult {
                     <div class="map-state warning">
                       <strong>{{ mapErrorTitle() }}</strong>
                       <span>{{ mapError() }}</span>
-                      @if (locationRetryAvailable()) {
-                        <ion-button size="small" class="primary-gradient" (click)="useLocation(true)">Retry location</ion-button>
-                      }
+                      <div class="map-state-actions">
+                        @if (mapErrorTitle() === "Location permission blocked") {
+                          <ion-button size="small" fill="outline" (click)="openDeviceSettings()">Open settings</ion-button>
+                        }
+                        @if (locationRetryAvailable()) {
+                          <ion-button size="small" class="primary-gradient" (click)="useLocation(true)">Retry location</ion-button>
+                        }
+                      </div>
                     </div>
                   } @else if (!mapPins().length) {
-                    <div class="map-state"><strong>No mapped venues</strong><span>Try changing filters or search terms.</span></div>
+                    <div class="map-state"><strong>No salons in this area</strong><span>Try changing filters or search terms.</span></div>
                   }
                 </div>
 
@@ -308,19 +377,19 @@ interface ProfessionalResult {
                   <article class="map-preview-card">
                     <img [src]="venue.coverImage || 'assets/icons/icon.svg'" [alt]="venue.businessName + ' preview'" />
                     <div>
-                      <span class="rating-pill">Star {{ ratingText(venue) }}</span>
+                      <span class="rating-pill">{{ ratingText(venue) }}</span>
                       <h3>{{ venue.businessName }}</h3>
                       <p>{{ venue.address }}</p>
                       <strong>{{ distanceLabel(venue) }}</strong>
                     </div>
-                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', venue.slug]">View</ion-button>
+                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', venue.slug]">View salon</ion-button>
                   </article>
                 }
               </section>
             }
 
-            @if (marketplace.loading()) {
-              <section class="empty premium-card"><h2>Searching live marketplace</h2></section>
+            @if (marketplace.loadingForSkeleton() && !marketplace.businesses().length) {
+              <section class="empty premium-card"><h2>Searching salons</h2></section>
             }
             @if (marketplace.error()) {
               <section class="empty premium-card error"><h2>Search failed</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="executeSearch()">Retry</ion-button></section>
@@ -334,22 +403,22 @@ interface ProfessionalResult {
                     </button>
                     <img [src]="professional.staff.image || professional.business.coverImage || 'assets/icons/icon.svg'" [alt]="professional.staff.name" />
                     <div class="professional-copy">
-                      <span class="rating-pill">Star {{ professionalRatingText(professional) }} · {{ professional.business.ratingCount || 0 }} reviews</span>
+                      <span class="rating-pill">{{ professionalRatingText(professional) }} · {{ professional.business.ratingCount || 0 }} reviews</span>
                       <h3>{{ professional.staff.name }}</h3>
                       <p>{{ professional.staff.specialty || professional.staff.title || "Professional" }}</p>
                       <small>{{ professional.business.businessName }}</small>
                       <div class="professional-meta">
                         <span>{{ professionalDistanceLabel(professional.business) }}</span>
-                        <span>{{ professional.staff.nextAvailable || professional.business.nextAvailableSlot || "Next slot updating" }}</span>
+                        <span>{{ professional.staff.nextAvailable || professional.business.nextAvailableSlot || "Checking availability" }}</span>
                         <strong>from {{ money(professional.pricePaise) }}</strong>
                       </div>
                     </div>
-                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', professional.business.slug, 'book']" [queryParams]="{ staffId: professional.staff.id }" (click)="$event.stopPropagation()">Book</ion-button>
+                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', professional.business.slug, 'book']" [queryParams]="{ staffId: professional.staff.id }" (click)="$event.stopPropagation()">Book now</ion-button>
                   </article>
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No professionals yet</h2>
-                    <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
+                    <ion-button fill="outline" (click)="reset()">Reset search</ion-button>
                   </section>
                 }
               } @else {
@@ -365,8 +434,37 @@ interface ProfessionalResult {
                 } @empty {
                   <section class="empty premium-card">
                     <h2>No matches yet</h2>
-                    <ion-button class="primary-gradient" (click)="reset()">Reset search</ion-button>
+                    <p>{{ emptyStateNote() }}</p>
+                    @if (hasAnyTimeFilter()) {
+                      <ion-button fill="outline" (click)="clearTimeFilters()">Clear time filters</ion-button>
+                    }
+                    @if (location() && radiusKm() < 50) {
+                      <ion-button fill="outline" (click)="expandRadius()">Expand radius to 50 km</ion-button>
+                    }
+                    @if (activeFilterCount() > 0 || location()) {
+                      <ion-button fill="outline" (click)="clearFilters()">Clear filters</ion-button>
+                    }
+                    @if (query().trim()) {
+                      <ion-button fill="outline" (click)="clearQuery()">Clear search</ion-button>
+                    }
+                    <ion-button class="primary-gradient" (click)="reset()">See all salons</ion-button>
                   </section>
+                  @if (suggestedSalons().length) {
+                    <div class="empty-suggestions">
+                      <h3>You may also like</h3>
+                      <div class="suggestions-grid">
+                        @for (business of suggestedSalons(); track business.id) {
+                          <aura-business-card
+                            [business]="business"
+                            [selectable]="true"
+                            [displayDistanceKm]="businessDistanceForCard(business)"
+                            [userLocation]="location()"
+                            (cardSelect)="selectBusiness($event)">
+                          </aura-business-card>
+                        }
+                      </div>
+                    </div>
+                  }
                 }
               }
             </div>
@@ -376,6 +474,196 @@ interface ProfessionalResult {
     </ion-content>
   `,
   styles: [`
+    .search-command-bar {
+      position: sticky;
+      top: 8px;
+      z-index: 10;
+      width: 100%;
+      min-height: 52px;
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.06);
+    }
+
+    .search-command-bar:focus-within {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14), 0 8px 22px rgba(28, 28, 28, 0.08);
+    }
+
+    .search-command-row {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      align-items: center;
+      min-width: 0;
+    }
+
+    .search-command-back,
+    .search-command-action {
+      display: grid;
+      place-items: center;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .search-command-back {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      font-size: 1.2rem;
+    }
+
+    .search-command-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      min-height: 44px;
+      padding-left: 10px;
+    }
+
+    .search-command-leading-icon {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .search-command-input {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+      min-height: 44px;
+      margin: 0;
+      padding: 0 10px;
+      border: 0;
+      outline: 0;
+      color: var(--text);
+      background: transparent;
+      box-shadow: none;
+      font: inherit;
+    }
+
+    .search-command-input::placeholder {
+      color: var(--muted);
+      opacity: 0.68;
+    }
+
+    .search-control-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .search-control-button {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid rgba(75, 18, 56, 0.18);
+      border-radius: 14px;
+      color: var(--text);
+      background: #fff;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 900;
+    }
+
+    .search-control-button ion-icon {
+      font-size: 1rem;
+    }
+
+    .search-control-button.active {
+      color: #4b1238;
+      border-color: rgba(75, 18, 56, 0.28);
+      background: rgba(75, 18, 56, 0.1);
+    }
+
+    .search-page.keyboard-open .premium-discovery-top {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      padding-bottom: 8px;
+      background: var(--background, #FFFFFF);
+    }
+    .search-page.keyboard-open .premium-chip-row,
+    .search-page.keyboard-open .premium-result-row {
+      display: none;
+    }
+    .search-page.keyboard-open .results-panel {
+      padding-bottom: calc(160px + env(safe-area-inset-bottom));
+    }
+    .search-page.keyboard-open .suggestion-panel {
+      max-height: min(44vh, 320px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .search-control-button[data-count]::after {
+      position: absolute;
+      top: 3px;
+      right: 6px;
+      display: grid;
+      place-items: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 999px;
+      color: #ffffff;
+      background: var(--primary);
+      content: attr(data-count);
+      font-size: 0.58rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    @media (max-width: 599px) {
+      .search-command-bar {
+        width: calc(100% + 16px);
+        margin-left: -8px;
+      }
+    }
+
+    .search-primary-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .search-back-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin: 0;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      background: var(--glass);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.08);
+      cursor: pointer;
+      position: relative;
+      z-index: 20;
+    }
+
+    .search-back-button ion-icon {
+      font-size: 1.2rem;
+    }
+
     .search-hero {
       display: grid;
       gap: 10px;
@@ -400,7 +688,7 @@ interface ProfessionalResult {
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       color: var(--text);
-      background: rgba(255, 255, 255, 0.84);
+      background: var(--glass);
       box-shadow: var(--shadow-soft);
       text-align: left;
     }
@@ -468,12 +756,12 @@ interface ProfessionalResult {
     .location-select-row ion-select {
       min-height: 46px;
       padding: 0 12px;
-      border: 1px solid rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--glass);
       font-weight: 900;
-      box-shadow: 0 8px 18px rgba(139, 92, 246, 0.06);
+      box-shadow: 0 8px 18px rgba(99, 102, 241, 0.06);
     }
 
     .selected-area-row {
@@ -481,12 +769,53 @@ interface ProfessionalResult {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      min-height: 44px;
       padding: 12px 14px;
-      border: 1px solid rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 22px;
       color: var(--text);
-      background: rgba(245, 243, 255, 0.78);
+      background: rgba(231, 240, 248, 0.78);
       font-weight: 900;
+    }
+
+    .location-chooser {
+      width: 100%;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .location-chooser span {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 1px 8px;
+      align-items: center;
+    }
+
+    .location-chooser strong,
+    .location-chooser small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .location-chooser strong {
+      font-size: 0.95rem;
+    }
+
+    .location-chooser small {
+      grid-column: 2;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .location-chooser > ion-icon {
+      color: var(--primary);
+      font-size: 1rem;
     }
 
     .selected-area-row span,
@@ -518,11 +847,11 @@ interface ProfessionalResult {
       display: grid;
       gap: 6px;
       padding: 8px;
-      border: 1px solid rgba(139, 92, 246, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 20px;
-      background: rgba(255, 255, 255, 0.98);
-      box-shadow: 0 22px 44px rgba(17, 24, 39, 0.12);
-      backdrop-filter: blur(18px);
+      background: var(--surface);
+      box-shadow: 0 12px 30px rgba(17, 24, 39, 0.1);
+      backdrop-filter: none;
     }
 
     .suggestion-panel button {
@@ -541,7 +870,7 @@ interface ProfessionalResult {
 
     .suggestion-panel button:hover,
     .suggestion-panel button:focus-visible {
-      background: rgba(139, 92, 246, 0.08);
+      background: rgba(99, 102, 241, 0.08);
     }
 
     .suggestion-panel strong,
@@ -556,7 +885,7 @@ interface ProfessionalResult {
     .suggestion-panel small {
       margin-top: 3px;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -622,7 +951,7 @@ interface ProfessionalResult {
       padding: 14px;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      background: rgba(255, 255, 255, 0.84);
+      background: var(--surface);
     }
 
     .result-meta strong,
@@ -646,9 +975,9 @@ interface ProfessionalResult {
       --indicator-color: var(--primary);
       --color: var(--muted);
       --color-checked: var(--primary);
-      --background-checked: rgba(139, 92, 246, 0.08);
-      --background-hover: rgba(139, 92, 246, 0.06);
-      --background-focused: rgba(139, 92, 246, 0.08);
+      --background-checked: var(--primary-soft);
+      --background-hover: rgba(99, 102, 241, 0.06);
+      --background-focused: rgba(99, 102, 241, 0.1);
       font-size: 0.76rem;
       font-weight: 900;
     }
@@ -669,19 +998,19 @@ interface ProfessionalResult {
     .aura-map-card.premium-card,
     .aura-map-card.premium-card:hover,
     .aura-map-card.premium-card:active {
-      transform: none !important;
-      transform-style: flat !important;
-      filter: none !important;
-      animation-play-state: paused !important;
+      transform: none;
+      transform-style: flat;
+      filter: none;
+      animation-play-state: paused;
       transition:
         border-color 180ms ease,
         box-shadow 180ms ease,
-        background 180ms ease !important;
+        background 180ms ease;
     }
 
     .aura-map-card.premium-card:hover {
-      border-color: var(--border) !important;
-      box-shadow: var(--shadow-card) !important;
+      border-color: var(--border);
+      box-shadow: var(--shadow-card);
     }
 
     .aura-map-card.fullscreen-map {
@@ -693,8 +1022,8 @@ interface ProfessionalResult {
       margin: 0;
       max-height: calc(100vh - 32px);
       border-radius: 28px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 232, 0.98));
-      box-shadow: 0 30px 90px rgba(35, 25, 13, 0.28) !important;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.98));
+      box-shadow: 0 30px 90px rgba(28, 28, 28, 0.24);
     }
 
     .aura-map-card.fullscreen-map .map-copy,
@@ -714,8 +1043,8 @@ interface ProfessionalResult {
     }
     .aura-map-card.premium-card:hover ion-icon,
     .aura-map-card.premium-card:active ion-icon {
-      transform: none !important;
-      animation: none !important;
+      transform: none;
+      animation: none;
     }
 
     .aura-map-card h2,
@@ -742,7 +1071,7 @@ interface ProfessionalResult {
 
     .live-map {
       position: relative;
-      min-height: 360px;
+      min-height: 420px;
       overflow: hidden;
       border-radius: 24px;
       background: var(--pink-soft);
@@ -754,8 +1083,8 @@ interface ProfessionalResult {
     .live-map,
     .live-map:hover,
     .live-map:active {
-      transform: none !important;
-      filter: none !important;
+      transform: none;
+      filter: none;
     }
 
     .live-map:active {
@@ -764,7 +1093,7 @@ interface ProfessionalResult {
 
     .live-map.picking {
       cursor: crosshair;
-      outline: 3px solid rgba(139, 92, 246, 0.28);
+      outline: 3px solid rgba(99, 102, 241, 0.4);
       outline-offset: -3px;
     }
 
@@ -793,7 +1122,7 @@ interface ProfessionalResult {
       border: 3px solid #ffffff;
       border-radius: 999px;
       transform: translate(-50%, -50%);
-      box-shadow: 0 14px 24px rgba(139, 92, 246, 0.28);
+      box-shadow: 0 14px 24px rgba(99, 102, 241, 0.26);
     }
 
     .venue-pin {
@@ -813,10 +1142,10 @@ interface ProfessionalResult {
     .venue-pin.active {
       width: 38px;
       height: 38px;
-      background: #F472B6;
-      outline: 4px solid rgba(244, 114, 182, 0.28);
+      background: var(--brand-900);
+      outline: 4px solid rgba(99, 102, 241, 0.3);
       outline-offset: 2px;
-      box-shadow: 0 18px 32px rgba(251, 113, 133, 0.36);
+      box-shadow: 0 18px 32px rgba(99, 102, 241, 0.3);
     }
 
     .live-map .venue-pin,
@@ -825,13 +1154,13 @@ interface ProfessionalResult {
     .live-map .user-pin,
     .live-map .user-pin:hover,
     .live-map .user-pin:active {
-      transform: translate(-50%, -50%) !important;
-      animation: none !important;
+      transform: translate(-50%, -50%);
+      animation: none;
       transition:
         background 160ms ease,
         border-color 160ms ease,
         box-shadow 160ms ease,
-        outline-color 160ms ease !important;
+        outline-color 160ms ease;
     }
 
     .live-map .map-controls button,
@@ -840,19 +1169,19 @@ interface ProfessionalResult {
     .live-map .map-state button,
     .live-map .map-state button:hover,
     .live-map .map-state button:active {
-      transform: none !important;
-      animation: none !important;
+      transform: none;
+      animation: none;
     }
 
     .live-map button::after {
-      display: none !important;
+      display: none;
     }
 
     .user-pin {
       width: 28px;
       height: 28px;
-      color: #8B5CF6;
-      background: #ffffff;
+      color: var(--primary);
+      background: var(--surface);
       pointer-events: none;
     }
 
@@ -866,12 +1195,12 @@ interface ProfessionalResult {
     }
 
     .map-controls button {
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
       border: 1px solid rgba(17, 24, 39, 0.16);
       border-radius: 14px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       box-shadow: var(--shadow-soft);
       font-size: 1.2rem;
       font-weight: 900;
@@ -889,7 +1218,7 @@ interface ProfessionalResult {
       border: 1px solid rgba(255, 255, 255, 0.72);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.92);
+      background: var(--glass);
       box-shadow: var(--shadow-soft);
       backdrop-filter: blur(16px);
     }
@@ -909,6 +1238,13 @@ interface ProfessionalResult {
       max-width: 320px;
     }
 
+    .map-state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
     .map-preview-card {
       display: grid;
       grid-template-columns: 76px minmax(0, 1fr) auto;
@@ -917,7 +1253,7 @@ interface ProfessionalResult {
       padding: 12px;
       border: 1px solid var(--border);
       border-radius: 22px;
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--glass);
       box-shadow: var(--shadow-soft);
     }
 
@@ -967,6 +1303,76 @@ interface ProfessionalResult {
     .empty h2 {
       margin: 0;
       letter-spacing: -0.04em;
+    }
+
+    .empty p {
+      max-width: 340px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .empty-suggestions {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 10px;
+      padding: 6px 2px 4px;
+    }
+
+    .empty-suggestions h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 950;
+      letter-spacing: -0.02em;
+    }
+
+    .suggestions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .suggestions-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .suggestions-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .active-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 6px 2px 10px;
+    }
+
+    .active-filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .active-filter-chip .chip-remove {
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1;
     }
 
     @media (min-width: 768px) {
@@ -1022,6 +1428,114 @@ interface ProfessionalResult {
         padding-top: 0;
       }
 
+      .premium-discovery-top {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .premium-chip-row {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 2px 0 4px;
+        scrollbar-width: none;
+      }
+
+      .premium-chip-row button {
+        flex: 0 0 auto;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid rgba(75, 18, 56, 0.18);
+        border-radius: 999px;
+        color: #463449;
+        background: var(--surface);
+        font-size: 0.84rem;
+        font-weight: 900;
+      }
+
+      .premium-chip-row button.selected {
+        color: #4b1238;
+        border-color: rgba(75, 18, 56, 0.24);
+        background: rgba(75, 18, 56, 0.12);
+      }
+
+      .result-meta {
+        display: none;
+      }
+
+      .premium-result-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: -2px 0 4px;
+        padding: 8px 10px;
+        border: 1px solid rgba(232, 232, 232, 0.95);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: 0 8px 20px rgba(28, 28, 28, 0.05);
+      }
+
+      .premium-result-row > div {
+        min-width: 0;
+        display: grid;
+        gap: 1px;
+      }
+
+      .premium-result-row strong {
+        color: var(--text);
+        font-size: 0.9rem;
+        font-weight: 900;
+        line-height: 1.2;
+      }
+
+      .premium-result-row span {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 750;
+        line-height: 1.3;
+      }
+
+      .premium-result-row span button {
+        min-height: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--primary);
+        font: inherit;
+        font-weight: 900;
+      }
+
+      .premium-map-switch {
+        flex: 0 0 auto;
+        min-height: 44px;
+        padding: 0 12px;
+        border: 1px solid rgba(99, 102, 241, 0.18);
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-size: 0.82rem;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .premium-map-switch ion-icon {
+        font-size: 0.92rem;
+      }
+
+      .premium-map-switch.active {
+        color: #4b1238;
+        border-color: rgba(75, 18, 56, 0.28);
+        background: rgba(75, 18, 56, 0.12);
+      }
+
+      .results {
+        gap: 10px;
+      }
+
       .fresha-search-top {
         width: calc(100% + 20px);
         margin-left: -10px;
@@ -1032,8 +1546,8 @@ interface ProfessionalResult {
         margin-bottom: 7px;
         padding: 3px 6px;
         border-radius: 14px;
-        background: #fffdf8;
-        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+        background: var(--surface);
+        box-shadow: 0 8px 22px rgba(28, 28, 28, 0.08);
       }
 
       .fresha-search-top h1 {
@@ -1064,10 +1578,10 @@ interface ProfessionalResult {
         display: block;
         margin-bottom: 14px;
         padding: 0 8px;
-        border: 1px solid rgba(125, 89, 32, 0.12);
+        border: 1px solid rgba(99, 102, 241, 0.12);
         border-radius: 16px;
-        background: #ffffff;
-        box-shadow: 0 8px 22px rgba(92, 65, 28, 0.1);
+        background: var(--surface);
+        box-shadow: 0 8px 22px rgba(28, 28, 28, 0.08);
       }
 
       .search-input-wrap {
@@ -1194,7 +1708,7 @@ interface ProfessionalResult {
       padding: 10px 14px;
       border: 1px solid var(--border);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.96);
+      background: var(--glass);
       box-shadow: 0 8px 24px rgba(17, 24, 39, 0.06);
     }
 
@@ -1230,22 +1744,22 @@ interface ProfessionalResult {
       border: 1px solid rgba(17, 24, 39, 0.14);
       border-radius: 999px;
       color: var(--text);
-      background: #ffffff;
+      background: var(--surface);
       font-size: 1.15rem;
     }
 
     .map-toggle-button {
-      border-color: rgba(139, 92, 246, 0.18);
+      border-color: rgba(99, 102, 241, 0.18);
       color: var(--primary);
     }
 
     .header-change-button {
       min-height: 36px;
       padding: 0 14px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
-      color: #8A5C12;
-      background: rgba(255, 249, 236, 0.94);
+      color: var(--primary);
+      background: var(--glass);
       font: inherit;
       font-size: 0.82rem;
       font-weight: 950;
@@ -1268,7 +1782,7 @@ interface ProfessionalResult {
       padding: 0;
       min-height: 56px;
       --border-radius: 999px;
-      --background: #ffffff;
+      --background: var(--surface);
       --box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
       --placeholder-color: #6B7280;
       --color: var(--text);
@@ -1296,15 +1810,15 @@ interface ProfessionalResult {
       border: 1px solid rgba(17, 24, 39, 0.16);
       border-radius: 999px;
       color: var(--text);
-      background: #ffffff;
+      background: var(--surface);
       font-weight: 800;
       white-space: nowrap;
     }
 
     .fresha-filter-row button.active:not(.filter-icon-button) {
-      border-color: rgba(214, 169, 74, 0.5);
-      color: #9A6A13;
-      background: linear-gradient(135deg, rgba(255, 236, 177, 0.96), rgba(255, 249, 236, 0.92));
+      border-color: rgba(99, 102, 241, 0.5);
+      color: var(--primary);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }
 
     .control-button {
@@ -1383,10 +1897,10 @@ interface ProfessionalResult {
       flex: 0 0 auto;
       min-height: 32px;
       padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.35);
+      border: 1px solid rgba(99, 102, 241, 0.35);
       border-radius: 999px;
-      color: #7A5019;
-      background: rgba(255, 249, 236, 0.9);
+      color: var(--primary);
+      background: var(--glass);
       font: inherit;
       font-size: 0.74rem;
       font-weight: 900;
@@ -1394,7 +1908,7 @@ interface ProfessionalResult {
 
     .active-summary-row button {
       color: #9A3412;
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--glass);
     }
 
     .search-overlay-host {
@@ -1418,10 +1932,10 @@ interface ProfessionalResult {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       max-height: min(82vh, 760px);
-      border: 1px solid rgba(214, 169, 74, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.32);
       border-radius: 28px 28px 0 0;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 224, 0.98));
-      box-shadow: 0 -24px 70px rgba(92, 65, 28, 0.24);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.98));
+      box-shadow: 0 -24px 70px rgba(28, 28, 28, 0.2);
       overflow: hidden;
     }
 
@@ -1439,7 +1953,7 @@ interface ProfessionalResult {
 
     .sheet-header {
       top: 0;
-      border-bottom: 1px solid rgba(214, 169, 74, 0.18);
+      border-bottom: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     .sheet-header div {
@@ -1456,24 +1970,24 @@ interface ProfessionalResult {
 
     .sheet-header span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
     }
 
     .sheet-header button {
-      min-height: 36px;
-      padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.28);
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
-      color: #9A6A13;
-      background: rgba(255, 255, 255, 0.88);
+      color: var(--primary);
+      background: var(--glass);
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 950;
     }
 
     .sheet-header .sheet-close {
-      width: 38px;
+      width: 44px;
       padding: 0;
       color: var(--text);
       font-size: 1.35rem;
@@ -1509,18 +2023,18 @@ interface ProfessionalResult {
       gap: 4px;
       min-height: 72px;
       padding: 12px 14px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
+      border: 1px solid rgba(99, 102, 241, 0.2);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.9);
+      background: var(--glass);
       text-align: left;
-      box-shadow: 0 10px 22px rgba(92, 65, 28, 0.06);
+      box-shadow: 0 10px 22px rgba(28, 28, 28, 0.06);
     }
 
     .option-grid button.selected {
       border-color: rgba(154, 106, 19, 0.52);
-      color: #120D05;
-      background: linear-gradient(135deg, #FFE08A, #D6A94A, #B87D1E);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 14px 30px rgba(184, 125, 30, 0.24);
     }
 
@@ -1557,7 +2071,7 @@ interface ProfessionalResult {
     }
 
     .range-label-row strong {
-      color: #B87D1E;
+      color: var(--primary);
     }
 
     .range-location-hint {
@@ -1568,7 +2082,7 @@ interface ProfessionalResult {
 
     .range-row input {
       width: 100%;
-      accent-color: #D6A94A;
+      accent-color: var(--primary);
     }
 
     .range-row input:disabled {
@@ -1600,9 +2114,9 @@ interface ProfessionalResult {
       width: 100%;
       min-height: 44px;
       padding: 0 12px 0 28px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 14px;
-      background: #fff;
+      background: var(--surface);
       color: var(--text);
       font: inherit;
       font-weight: 900;
@@ -1610,7 +2124,8 @@ interface ProfessionalResult {
 
     .sheet-footer {
       bottom: 0;
-      border-top: 1px solid rgba(214, 169, 74, 0.18);
+      border-top: 1px solid rgba(99, 102, 241, 0.18);
+      padding-bottom: calc(14px + env(safe-area-inset-bottom));
     }
 
     .apply-button {
@@ -1618,8 +2133,8 @@ interface ProfessionalResult {
       min-height: 50px;
       border: 0;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #FFE08A, #D6A94A, #B87D1E);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary), var(--brand-800));
       box-shadow: 0 18px 34px rgba(184, 125, 30, 0.22);
       font: inherit;
       font-weight: 950;
@@ -1630,10 +2145,10 @@ interface ProfessionalResult {
       align-items: center;
       gap: 10px;
       padding: 12px 14px;
-      border: 1px solid rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 16px;
       color: var(--primary);
-      background: rgba(245, 243, 255, 0.72);
+      background: var(--primary-soft);
       font-size: 0.84rem;
       font-weight: 850;
     }
@@ -1649,9 +2164,9 @@ interface ProfessionalResult {
 
     .option-grid button.needs-location.selected {
       opacity: 1;
-      border-color: rgba(139, 92, 246, 0.4);
-      background: linear-gradient(135deg, rgba(237, 233, 254, 0.96), rgba(196, 181, 253, 0.72));
-      color: #4c1d95;
+      border-color: rgba(99, 102, 241, 0.4);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(203, 213, 225, 0.76));
+      color: var(--brand-800);
     }
 
     .professional-card {
@@ -1677,17 +2192,17 @@ interface ProfessionalResult {
       right: 12px;
       display: grid;
       place-items: center;
-      width: 40px;
-      height: 40px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      width: 44px;
+      height: 44px;
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 10px 20px rgba(92, 65, 28, 0.1);
+      background: var(--glass);
+      box-shadow: 0 10px 20px rgba(28, 28, 28, 0.08);
     }
 
     .professional-card .favorite.saved {
-      color: #B87D1E;
+      color: var(--primary);
     }
 
     .professional-copy {
@@ -1733,7 +2248,7 @@ interface ProfessionalResult {
     }
 
     .professional-meta strong {
-      color: #B87D1E;
+      color: var(--primary);
       font-weight: 950;
     }
 
@@ -1746,10 +2261,10 @@ interface ProfessionalResult {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid rgba(218, 165, 32, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.32);
       border-radius: 24px;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 246, 224, 0.94));
-      box-shadow: 0 18px 42px rgba(91, 61, 18, 0.14);
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(231, 240, 248, 0.94));
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.12);
     }
 
     .filter-popover.compact {
@@ -1778,7 +2293,7 @@ interface ProfessionalResult {
       border: 1px solid rgba(196, 139, 28, 0.28);
       border-radius: 999px;
       color: #9a6a13;
-      background: rgba(255, 255, 255, 0.82);
+      background: var(--glass);
       font: inherit;
       font-size: 0.74rem;
       font-weight: 950;
@@ -1798,9 +2313,9 @@ interface ProfessionalResult {
       border: 1px solid rgba(196, 139, 28, 0.2);
       border-radius: 18px;
       color: var(--text);
-      background: rgba(255, 255, 255, 0.76);
+      background: var(--glass);
       text-align: left;
-      box-shadow: 0 10px 24px rgba(91, 61, 18, 0.06);
+      box-shadow: 0 10px 24px rgba(28, 28, 28, 0.06);
     }
 
     .popover-grid button.active {
@@ -1889,9 +2404,9 @@ interface ProfessionalResult {
     }
 
     .filter-icon-button.active {
-      border-color: rgba(214, 169, 74, 0.5);
-      color: #9A6A13;
-      background: linear-gradient(135deg, rgba(255, 236, 177, 0.96), rgba(255, 249, 236, 0.92));
+      border-color: rgba(99, 102, 241, 0.5);
+      color: var(--primary);
+      background: linear-gradient(135deg, rgba(231, 240, 248, 0.96), rgba(255, 255, 255, 0.92));
     }
 
     .fresha-filter-row button:not(.filter-icon-button) {
@@ -1936,12 +2451,12 @@ interface ProfessionalResult {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      min-height: 36px;
+      min-height: 44px;
       padding: 0 12px;
       border: 1px solid rgba(124, 58, 237, 0.18);
       border-radius: 999px;
       color: var(--primary);
-      background: rgba(255, 255, 255, 0.94);
+      background: var(--glass);
       font: inherit;
       font-size: 0.78rem;
       font-weight: 900;
@@ -2035,16 +2550,16 @@ interface ProfessionalResult {
       }
 
       .fresha-search-top h1 {
-        font-size: 15px !important;
-        line-height: 1 !important;
-        letter-spacing: 0.04em !important;
-        text-transform: uppercase !important;
+        font-size: 15px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
 
       .fresha-search-top p {
         margin-top: 2px;
-        font-size: 0.72rem !important;
-        font-weight: 950 !important;
+        font-size: 0.72rem;
+        font-weight: 950;
       }
 
       .back-button,
@@ -2063,8 +2578,37 @@ interface ProfessionalResult {
         display: block;
         gap: 5px;
         margin-bottom: 6px;
-        padding: 6px;
-        border-radius: 14px;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .search-primary-row {
+        gap: 2px;
+      }
+
+      .search-back-button {
+        width: 44px;
+        height: 44px;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .sticky-search.fresha-search-card .search-input-wrap ion-searchbar {
+        --background: transparent;
+        --box-shadow: none;
       }
 
       .fresha-search-card ion-searchbar {
@@ -2074,15 +2618,15 @@ interface ProfessionalResult {
 
       .sticky-search.fresha-search-card .search-input-wrap ion-searchbar {
         flex: 1 1 auto;
-        width: auto !important;
+        width: auto;
         min-width: 0;
-        padding-right: 0 !important;
+        padding-right: 0;
       }
 
       .sticky-search.fresha-search-card .search-input-wrap {
-        position: static !important;
-        display: flex !important;
-        align-items: center !important;
+        position: relative;
+        display: flex;
+        align-items: center;
         gap: 6px;
         width: 100%;
         min-width: 0;
@@ -2095,14 +2639,14 @@ interface ProfessionalResult {
       }
 
       .fresha-filter-row {
-        position: static !important;
-        top: auto !important;
-        right: auto !important;
-        left: auto !important;
+        position: absolute;
+        top: 50%;
+        right: -10px;
+        left: auto;
         z-index: 5;
         display: flex;
         flex: 0 0 auto;
-        margin-left: auto;
+        margin: 0;
         align-items: center;
         justify-content: flex-end;
         gap: 6px;
@@ -2110,22 +2654,26 @@ interface ProfessionalResult {
         height: 34px;
         padding: 0;
         overflow: visible;
-        translate: none !important;
+        translate: 0 -50%;
+      }
+
+      .search-native-input {
+        padding-right: 84px;
       }
 
       .control-button {
         width: 34px;
         min-width: 34px;
         height: 34px;
-        min-height: 34px !important;
-        padding: 0 !important;
+        min-height: 34px;
+        padding: 0;
         border-radius: 999px;
         justify-content: center;
       }
 
       .control-button span,
       .control-button small {
-        display: none !important;
+        display: none;
       }
 
       .control-button ion-icon {
@@ -2136,11 +2684,11 @@ interface ProfessionalResult {
       }
 
       .quick-filter-row {
-        display: none !important;
+        display: none;
       }
 
       .active-summary-row {
-        display: none !important;
+        display: none;
       }
 
       .selected-area-row {
@@ -2232,7 +2780,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly mapFullscreen = signal(false);
   readonly selectedBusiness = signal<import("../../core/api.types").Business | null>(null);
   readonly searchModes: { key: SearchMode; label: string; copy: string; icon: string }[] = [
-    { key: "salons", label: "Salons", copy: "Venues near you", icon: "business-outline" },
+    { key: "salons", label: "Salons", copy: "Recommended venues", icon: "business-outline" },
     { key: "services", label: "Services", copy: "Hair, skin, nails", icon: "sparkles-outline" },
     { key: "staff", label: "Staff", copy: "Find professionals", icon: "people-outline" },
     { key: "locations", label: "Locations", copy: "Area and distance", icon: "location-outline" }
@@ -2242,37 +2790,56 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "services", label: "Treatments", copy: "Search by service menu" },
     { key: "staff", label: "Professionals", copy: "Find stylists or therapists" }
   ];
-  readonly filterSections: { title: string; options: { key: FilterKey; label: string; description: string; disabled?: boolean }[] }[] = [
+  private readonly baseFilterSections: { title: string; options: { key: FilterKey; label: string; description: string; disabled?: boolean }[] }[] = [
     {
-      title: "Availability",
+      title: "Date filter",
       options: [
-        { key: "anytime", label: "Any time", description: "No time restriction" },
-        { key: "today", label: "Today", description: "Available today" },
-        { key: "open", label: "Open now", description: "Currently open venues" },
-        { key: "morning", label: "Morning", description: "Before 12 pm" },
-        { key: "afternoon", label: "Afternoon", description: "12 pm to 5 pm" },
-        { key: "evening", label: "Evening", description: "After 5 pm" }
+        { key: "anytime", label: "Anytime", description: "No date restriction" },
+        { key: "today", label: "Today", description: "Available today only" },
+        { key: "open", label: "Open now", description: "Currently open venues" }
       ]
     },
     {
-      title: "Location",
+      title: "Time-of-day filter",
       options: [
-        { key: "nearest", label: "Current location", description: "Use your detected area" }
+        { key: "morning", label: "Morning", description: "Available before 12 pm" },
+        { key: "afternoon", label: "Afternoon", description: "Available 12 pm to 5 pm" },
+        { key: "evening", label: "Evening", description: "Available after 5 pm" }
       ]
     },
     {
-      title: "Price",
+      title: "Open-now filter",
       options: [
-        { key: "budget", label: "Low budget", description: "Under Rs 1,000" },
-        { key: "mid", label: "Mid range", description: "Rs 1,000 to Rs 2,500" },
-        { key: "premium", label: "Premium", description: "Rs 2,500+" }
+        { key: "open", label: "Open now", description: "Currently open venues only" }
       ]
     },
     {
-      title: "Rating",
+      title: "Distance-radius filter",
       options: [
-        { key: "top", label: "Top rated 4.5+", description: "Highest guest scores" },
-        { key: "reviewed", label: "Most reviewed", description: "More customer reviews" }
+        { key: "within2km", label: "Within 2 km", description: "Show salons within 2 km" },
+        { key: "within5km", label: "Within 5 km", description: "Show salons within 5 km" },
+        { key: "within10km", label: "Within 10 km", description: "Show salons within 10 km" },
+        { key: "customRadius", label: "Custom", description: "Set custom distance radius" }
+      ]
+    },
+    {
+      title: "Price range",
+      options: [
+        { key: "customMinPrice", label: "Min price", description: "Set minimum price" },
+        { key: "customMaxPrice", label: "Max price", description: "Set maximum price" }
+      ]
+    },
+    {
+      title: "Rating filter",
+      options: [
+        { key: "rating4", label: "4.0+", description: "Salons with 4.0+ rating" },
+        { key: "rating4.5", label: "4.5+", description: "Salons with 4.5+ rating" }
+      ]
+    },
+    {
+      title: "Instant-booking filter",
+      options: [
+        { key: "instant-booking", label: "Instant booking", description: "Salons that can confirm immediately" }
       ]
     },
     {
@@ -2280,17 +2847,25 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       options: [
         { key: "deals", label: "Deals", description: "Promos and savings" },
         { key: "offpeak", label: "Off-peak discounts", description: "Lower demand offers", disabled: true },
-        { key: "lastminute", label: "Last-minute offers", description: "Late availability deals", disabled: true }
+        { key: "lastminute", label: "Last-minute offers", description: "Late availability deals" }
       ]
     },
     {
       title: "Staff preference",
       options: [
-        { key: "female", label: "Female staff", description: "When staff data includes it" },
-        { key: "male", label: "Male staff", description: "When staff data includes it", disabled: true }
+        { key: "female", label: "Female", description: "When staff includes gender data" },
+        { key: "male", label: "Male", description: "When staff includes gender data" }
       ]
     }
   ];
+  readonly filterSections = computed(() => this.baseFilterSections.map((section) => ({
+    title: section.title,
+    options: section.options.map((option) =>
+      option.key === "female" || option.key === "male"
+        ? { ...option, disabled: !this.hasGenderDataAvailable() }
+        : option
+    )
+  })));
   readonly sortOptions: { key: SortKey; label: string }[] = [
     { key: "recommended", label: "Best match" },
     { key: "distance", label: "Nearest" },
@@ -2300,17 +2875,265 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "rating", label: "Top rated" },
     { key: "reviews", label: "Most reviewed" }
   ];
-  readonly flatFilterOptions = computed(() => this.filterSections.flatMap((section) => section.options));
-  readonly activeFilterCount = computed(() => this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0));
+  readonly quickFilterChips: QuickFilterChip[] = [
+    { label: "Near me", filter: "nearest", sort: "distance" },
+    { label: "Open now", filter: "open" },
+    { label: "Top rated", filter: "top", sort: "rating" },
+    { label: "Offers", filter: "deals" }
+  ];
+  readonly flatFilterOptions = computed(() => this.filterSections().flatMap((section) => section.options));
+  readonly activeFilterCount = computed(() => {
+    let count = this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0) + (this.draftRadiusKm() !== 25 ? 1 : 0) + (this.hasRatingFilter() ? 1 : 0) + (this.hasInstantBookingFilter() ? 1 : 0) + (this.hasGenderFilter() ? 1 : 0);
+    if (this.hasDateFilter() || this.hasTimeFilter() || this.hasAvailabilityFilter()) count += 1;
+    if (this.hasPriceRangeFilter()) count += 2;
+    if (this.hasLocationSelectorFilter()) count += 1;
+    return count;
+  });
   readonly filterButtonLabel = computed(() => this.activeFilterCount() ? this.activeFilterSummary().slice(0, 2).join(", ") : "All filters");
   readonly sortButtonLabel = computed(() => this.sortOptions.find((option) => option.key === this.sort())?.label ?? "Best match");
   readonly hasPriceFilter = computed(() => this.activeFilters().some((key) => key === "budget" || key === "mid" || key === "premium") || !!this.minPrice() || !!this.maxPrice());
-  readonly hasTimeFilter = computed(() => this.activeFilters().some((key) => key === "today" || key === "morning" || key === "afternoon" || key === "evening"));
-  readonly hasAvailabilityFilter = computed(() => this.activeFilters().some((key) => key === "open" || key === "today" || key === "morning" || key === "afternoon" || key === "evening"));
+  readonly hasTimeFilter = computed(() => this.activeFilters().some((key) => key === "morning" || key === "afternoon" || key === "evening"));
+  readonly hasAnyTimeFilter = computed(() => this.hasTimeFilter() || this.hasDateFilter());
+  readonly hasAvailabilityFilter = computed(() => this.activeFilters().some((key) => key === "open"));
+  readonly hasDateFilter = computed(() => this.activeFilters().some((key) => key === "today"));
+  readonly hasRatingFilter = computed(() => this.activeFilters().some((key) => key === "rating4" || key === "rating4.5"));
+  readonly hasDistanceFilter = computed(() => this.activeFilters().some((key) => key === "within2km" || key === "within5km" || key === "within10km" || key === "customRadius"));
+  readonly hasInstantBookingFilter = computed(() => this.activeFilters().some((key) => key === "instant-booking"));
+  readonly hasGenderFilter = computed(() => this.activeFilters().some((key) => key === "female" || key === "male"));
+  readonly hasPriceRangeFilter = computed(() => this.minPrice() || this.maxPrice());
+  readonly hasLocationSelectorFilter = computed(() => this.selectedCountry() || this.selectedState() || this.selectedCity());
+  readonly hasGenderDataAvailable = computed(() => {
+    const businesses = this.marketplace.businesses();
+    return businesses.some((business) => business.staff && business.staff.some((staff) => staff.gender)) || false;
+  });
+  readonly activeFilterChips = computed(() => {
+    const chips: { key: string; label: string }[] = [];
+    this.activeFilters().forEach((key) => {
+      switch (key) {
+        case "today":
+          chips.push({ key, label: "Today" });
+          break;
+        case "morning":
+          chips.push({ key, label: "Morning" });
+          break;
+        case "afternoon":
+          chips.push({ key, label: "Afternoon" });
+          break;
+        case "evening":
+          chips.push({ key, label: "Evening" });
+          break;
+        case "within2km":
+          chips.push({ key, label: "Within 2 km" });
+          break;
+        case "within5km":
+          chips.push({ key, label: "Within 5 km" });
+          break;
+        case "within10km":
+          chips.push({ key, label: "Within 10 km" });
+          break;
+        case "customRadius":
+          chips.push({ key, label: `Within ${this.radiusKm()} km` });
+          break;
+        case "budget":
+          chips.push({ key, label: "Low budget" });
+          break;
+        case "mid":
+          chips.push({ key, label: "Mid range" });
+          break;
+        case "premium":
+          chips.push({ key, label: "Premium" });
+          break;
+        case "rating4":
+          chips.push({ key, label: "4.0+" });
+          break;
+        case "rating4.5":
+          chips.push({ key, label: "4.5+" });
+          break;
+        case "instant-booking":
+          chips.push({ key, label: "Instant booking" });
+          break;
+        case "female":
+          chips.push({ key, label: "Female" });
+          break;
+        case "male":
+          chips.push({ key, label: "Male" });
+          break;
+        case "deals":
+          chips.push({ key, label: "Deals" });
+          break;
+        case "nearest":
+          chips.push({ key, label: `Within ${this.radiusKm()} km` });
+          break;
+        case "open":
+          chips.push({ key, label: "Open now" });
+          break;
+      }
+    });
+    if (this.minPrice() || this.maxPrice()) {
+      chips.push({ key: "priceRange", label: `₹ ${this.minPrice() || "0"} - ${this.maxPrice() || "Any"}` });
+    }
+    if (this.selectedCountry() || this.selectedState() || this.selectedCity()) {
+      chips.push({ key: "location", label: this.getLocationLabel() });
+    }
+    return chips;
+  });
+  getLocationLabel(): string {
+    if (this.selectedCity()) return `City: ${this.selectedCity()}`;
+    if (this.selectedState()) return `State: ${this.selectedState()}`;
+    if (this.selectedCountry()) return `Country: ${this.selectedCountry()}`;
+    return "Location";
+  }
+
+  isQuickFilterSelected(chip: QuickFilterChip): boolean {
+    if (chip.filter) return this.activeFilters().includes(chip.filter as FilterKey);
+    if (!chip.query) return false;
+    return this.mode() === (chip.mode || "services") && this.query().trim().toLowerCase() === chip.query.toLowerCase();
+  }
+
+  isDraftOptionSelected(value: FilterKey): boolean {
+    if (value === "anytime") return !this.draftFilters().some((key) => this.isTimeFilterKey(key));
+    return this.draftFilters().includes(value);
+  }
+
+  toggleDraftFilter(value: FilterKey) {
+    if (value === "anytime") {
+      this.draftFilters.update((filters) => filters.filter((item) => !this.isTimeFilterKey(item)));
+      return;
+    }
+    if (value === "within2km" || value === "within5km" || value === "within10km") {
+      this.draftRadiusKm.set(value === "within2km" ? 2 : value === "within5km" ? 5 : 10);
+    }
+    if (value === "customRadius") this.draftRadiusKm.set(this.radiusKm());
+    this.draftFilters.update((filters) => {
+      const next = filters.includes(value) ? filters.filter((item) => item !== value) : [...filters, value];
+      return this.normalizedFilterList(next);
+    });
+  }
+
+  clearDraftFilters() {
+    this.draftFilters.set([]);
+    this.draftMode.set("salons");
+    this.draftRadiusKm.set(25);
+    this.draftMinPrice.set("");
+    this.draftMaxPrice.set("");
+  }
+
+  clearFilters() {
+    this.activeFilters.set([]);
+    this.filter.set("open");
+    this.minPrice.set("");
+    this.maxPrice.set("");
+    this.radiusKm.set(25);
+    this.draftFilters.set([]);
+    this.draftMinPrice.set("");
+    this.draftMaxPrice.set("");
+    this.draftRadiusKm.set(25);
+    this.filterPanelOpen.set(false);
+    void this.executeSearch();
+  }
+
+  clearTimeFilters() {
+    this.activeFilters.update((filters) => filters.filter((key) => key !== "today" && key !== "morning" && key !== "afternoon" && key !== "evening"));
+    this.draftFilters.set([...this.activeFilters()]);
+    void this.executeSearch();
+  }
+
+  expandRadius() {
+    this.radiusKm.set(50);
+    this.draftRadiusKm.set(50);
+    void this.executeSearch();
+  }
+
+  removeActiveFilter(key: string) {
+    if (key === "priceRange") {
+      this.minPrice.set("");
+      this.maxPrice.set("");
+    } else if (key === "location") {
+      this.clearSelectedArea();
+      return;
+    } else {
+      this.activeFilters.update((filters) => filters.filter((item) => item !== key));
+      if (key === "within2km" || key === "within5km" || key === "within10km" || key === "customRadius" || key === "nearest") {
+        this.radiusKm.set(25);
+        this.draftRadiusKm.set(25);
+      }
+    }
+    this.draftFilters.set([...this.activeFilters()]);
+    void this.executeSearch();
+  }
+
+  clearQuery() {
+    this.query.set("");
+    void this.executeSearch();
+  }
+
+  applyFilters() {
+    const filters = this.normalizedFilterList(this.draftFilters());
+    this.mode.set(this.draftMode());
+    this.radiusKm.set(this.draftRadiusKm());
+    this.minPrice.set(this.draftMinPrice());
+    this.maxPrice.set(this.draftMaxPrice());
+    this.filterPanelOpen.set(false);
+    if (filters.includes("nearest") && !this.hasUsableLocation()) {
+      const withoutNearest = filters.filter((item) => item !== "nearest");
+      this.activeFilters.set(withoutNearest);
+      this.filter.set(withoutNearest[0] || "open");
+      this.useLocation();
+      return;
+    }
+    this.activeFilters.set(filters);
+    this.filter.set(filters[0] || "open");
+    void this.executeSearch();
+  }
+
+  applyQuickFilter(chip: QuickFilterChip) {
+    this.closeSheets();
+    if (chip.filter) {
+      if (this.isModeChipValue(chip.filter)) {
+        this.mode.set(chip.filter);
+        this.draftMode.set(chip.filter);
+        void this.executeSearch();
+        return;
+      }
+      const isSelected = this.activeFilters().includes(chip.filter as FilterKey);
+      const filters = isSelected
+        ? this.activeFilters().filter((item) => item !== chip.filter)
+        : this.normalizedFilterList([...this.activeFilters(), chip.filter]);
+      this.activeFilters.set(filters);
+      this.draftFilters.set(filters);
+      this.filter.set(filters[0] || "open");
+      if (chip.sort) {
+        this.sort.set(isSelected && this.sort() === chip.sort ? "recommended" : chip.sort);
+        this.draftSort.set(this.sort());
+      }
+      if (chip.filter === "nearest" && !isSelected && !this.hasUsableLocation()) {
+        this.activeFilters.set(filters.filter((item) => item !== "nearest"));
+        this.useLocation();
+        return;
+      }
+      void this.executeSearch();
+      return;
+    }
+
+    if (!chip.query) return;
+    if (this.isQuickFilterSelected(chip)) {
+      this.query.set("");
+      this.mode.set("salons");
+      this.draftMode.set("salons");
+    } else {
+      this.query.set(chip.query);
+      this.mode.set(chip.mode || "services");
+      this.draftMode.set(this.mode());
+    }
+    void this.executeSearch();
+  }
+  private isModeChipValue(value: FilterKey | SearchMode): value is SearchMode {
+    return value === "salons" || value === "services" || value === "staff" || value === "locations";
+  }
   private readonly initialLocation = this.savedLocation();
   readonly location = signal<{ lat: number; lng: number } | null>(this.initialLocation);
   readonly areaLabel = signal(this.savedAreaLabel(this.initialLocation));
-  readonly locationDisplayLabel = computed(() => this.location() ? this.areaLabel() : "Current location");
+  readonly locationDisplayLabel = computed(() => this.location() ? this.areaLabel() : "Choose location");
   readonly activeFilterSummary = computed(() => {
     const labels = this.activeFilters()
       .map((key) => key === "nearest" ? this.locationDisplayLabel() : this.flatFilterOptions().find((option) => option.key === key)?.label)
@@ -2323,12 +3146,17 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly locationTimeoutMs = 20000;
   private panStart: { x: number; y: number; center: { lat: number; lng: number } } | null = null;
   private routeSubscription?: Subscription;
+  private visualViewportListener?: () => void;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchSequence = 0;
+  readonly keyboardOpen = signal(false);
+  readonly inputFocused = signal(false);
   readonly mapCenter = signal<{ lat: number; lng: number }>(this.defaultCenter);
   readonly placeholder = computed(() => {
-    if (this.mode() === "services") return "Search haircut, facial, nails";
-    if (this.mode() === "staff") return "Search staff name or specialty";
-    if (this.mode() === "locations") return "Search area, city or address";
-    return "Search salon, spa or clinic";
+    if (this.mode() === "services") return "Search services";
+    if (this.mode() === "staff") return "Search professionals";
+    if (this.mode() === "locations") return "Search locations";
+    return "Search salons";
   });
   readonly modeLabel = computed(() => this.searchModes.find((item) => item.key === this.mode())?.label ?? "Salons");
   readonly searchTitle = computed(() => {
@@ -2402,6 +3230,28 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   });
   readonly suggestions = computed<SearchSuggestion[]>(() => {
     const query = this.query().trim().toLowerCase();
+    if (this.mode() === "locations" && !query) {
+      const recent = this.recentAreas().slice(0, 3).map<SearchSuggestion>((area) => ({
+        key: `recent-${area}`,
+        label: area,
+        type: "Recent",
+        copy: "Places in this area",
+        query: area,
+        business: null
+      }));
+      const popular = this.popularAreas()
+        .filter((area) => !this.recentAreas().includes(area.label))
+        .slice(0, 4)
+        .map<SearchSuggestion>((area) => ({
+          key: `popular-${area.label}`,
+          label: area.label,
+          type: "Popular",
+          copy: `${area.count} places`,
+          query: area.label,
+          business: null
+        }));
+      return [...recent, ...popular].slice(0, 6);
+    }
     if (!query) return [];
     const suggestions: SearchSuggestion[] = [];
     for (const business of this.filtered()) {
@@ -2411,6 +3261,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }
     return suggestions;
   });
+  readonly popularAreas = computed(() => {
+    const counts = new Map<string, number>();
+    for (const business of this.marketplace.businesses()) {
+      const area = (business.city || business.area || "").trim();
+      if (!area) continue;
+      counts.set(area, (counts.get(area) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((left, right) => right.count - left.count);
+  });
+  readonly recentAreas = computed(() => this.readRecentAreas());
   readonly countryOptions = computed(() => this.uniqueLocationValues("country"));
   readonly stateOptions = computed(() => {
     const country = this.selectedCountry();
@@ -2424,50 +3286,76 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       return (!country || meta.country === country) && (!state || meta.state === state);
     });
   });
+  private matchesCriteria(business: import("../../core/api.types").Business, ctx: {
+    query: string;
+    mode: SearchMode;
+    filters: FilterKey[];
+    selectedCountry: string;
+    selectedState: string;
+    selectedCity: string;
+    minPrice: string;
+    maxPrice: string;
+    radiusKm: number;
+  }): boolean {
+    const query = ctx.query.trim().toLowerCase();
+    const mode = ctx.mode;
+    const filters = ctx.filters;
+    const serviceText = business.services.map((service) => [service.name, service.description, service.category].join(" ")).join(" ");
+    const staffText = business.staff.map((staff) => [staff.name, staff.title, staff.specialty].join(" ")).join(" ");
+    const locationText = [business.area, business.city, business.address].join(" ");
+    const salonText = [business.businessName, business.category, business.popularService, ...business.categories].join(" ");
+    const meta = this.locationMeta(business);
+    const modeText = (mode === "services"
+      ? serviceText || salonText
+      : mode === "staff"
+        ? staffText || salonText
+        : mode === "locations"
+          ? locationText
+          : [salonText, serviceText, staffText, locationText].join(" ")).toLowerCase();
+    const searchText = query
+      ? [salonText, serviceText, staffText, locationText].join(" ").toLowerCase()
+      : modeText;
+    if (query && !searchText.includes(query)) return false;
+    if (ctx.selectedCountry && meta.country !== ctx.selectedCountry) return false;
+    if (ctx.selectedState && meta.state !== ctx.selectedState) return false;
+    if (ctx.selectedCity && business.city !== ctx.selectedCity) return false;
+    if (filters.includes("open") && !business.isOpen) return false;
+    if (filters.includes("top") && business.ratingAverage < 4.5) return false;
+    if (filters.includes("reviewed") && Number(business.ratingCount || 0) < 10) return false;
+    if ((filters.includes("deals") || filters.includes("offpeak") || filters.includes("lastminute")) && !business.hasOffer) return false;
+    if (filters.includes("rating4") && Number(business.ratingAverage || 0) < 4) return false;
+    if (filters.includes("rating4.5") && Number(business.ratingAverage || 0) < 4.5) return false;
+    if (filters.includes("instant-booking") && !business.paymentModes?.includes("online")) return false;
+    if (filters.includes("nearest") && !this.isUsableDistance(business)) return false;
+    if (this.location()) {
+      const distanceKm = this.businessDistance(business);
+      if (distanceKm !== null && distanceKm > ctx.radiusKm) return false;
+    }
+    if (filters.includes("budget") && business.startingPricePaise > 100000) return false;
+    if (filters.includes("mid") && (business.startingPricePaise < 100000 || business.startingPricePaise > 250000)) return false;
+    if (filters.includes("premium") && business.startingPricePaise < 250000) return false;
+    const minPrice = Number(ctx.minPrice);
+    const maxPrice = Number(ctx.maxPrice);
+    if (Number.isFinite(minPrice) && minPrice > 0 && business.startingPricePaise < minPrice * 100) return false;
+    if (Number.isFinite(maxPrice) && maxPrice > 0 && business.startingPricePaise > maxPrice * 100) return false;
+    if (filters.some((key) => key === "morning" || key === "afternoon" || key === "evening") && !this.matchesTimeFilter(business, filters)) return false;
+    return true;
+  }
+
   readonly filtered = computed(() => {
-    const query = this.query().trim().toLowerCase();
-    const mode = this.mode();
     const filters = this.activeFilters();
     const sort = this.sort();
-    const rows = this.marketplace.businesses().filter((business) => {
-      const serviceText = business.services.map((service) => [service.name, service.description, service.category].join(" ")).join(" ");
-      const staffText = business.staff.map((staff) => [staff.name, staff.title, staff.specialty].join(" ")).join(" ");
-      const locationText = [business.area, business.city, business.address].join(" ");
-      const salonText = [business.businessName, business.category, business.popularService, ...business.categories].join(" ");
-      const meta = this.locationMeta(business);
-      const modeText = (mode === "services"
-        ? serviceText || salonText
-        : mode === "staff"
-          ? staffText || salonText
-          : mode === "locations"
-            ? locationText
-            : [salonText, serviceText, staffText, locationText].join(" ")).toLowerCase();
-      const searchText = query
-        ? [salonText, serviceText, staffText, locationText].join(" ").toLowerCase()
-        : modeText;
-      if (query && !searchText.includes(query)) return false;
-      if (this.selectedCountry() && meta.country !== this.selectedCountry()) return false;
-      if (this.selectedState() && meta.state !== this.selectedState()) return false;
-      if (this.selectedCity() && business.city !== this.selectedCity()) return false;
-      if (filters.includes("open") && !business.isOpen) return false;
-      if (filters.includes("top") && business.ratingAverage < 4.5) return false;
-      if (filters.includes("reviewed") && Number(business.ratingCount || 0) < 10) return false;
-      if ((filters.includes("deals") || filters.includes("offpeak") || filters.includes("lastminute")) && !business.hasOffer) return false;
-      if (filters.includes("nearest") && !this.isUsableDistance(business)) return false;
-      if (this.location()) {
-        const distanceKm = this.businessDistance(business);
-        if (distanceKm !== null && distanceKm > this.radiusKm()) return false;
-      }
-      if (filters.includes("budget") && business.startingPricePaise > 100000) return false;
-      if (filters.includes("mid") && (business.startingPricePaise < 100000 || business.startingPricePaise > 250000)) return false;
-      if (filters.includes("premium") && business.startingPricePaise < 250000) return false;
-      const minPrice = Number(this.minPrice());
-      const maxPrice = Number(this.maxPrice());
-      if (Number.isFinite(minPrice) && minPrice > 0 && business.startingPricePaise < minPrice * 100) return false;
-      if (Number.isFinite(maxPrice) && maxPrice > 0 && business.startingPricePaise > maxPrice * 100) return false;
-      if (filters.some((key) => key === "morning" || key === "afternoon" || key === "evening") && !this.matchesTimeFilter(business, filters)) return false;
-      return true;
-    });
+    const rows = this.marketplace.businesses().filter((business) => this.matchesCriteria(business, {
+      query: this.query(),
+      mode: this.mode(),
+      filters: this.activeFilters(),
+      selectedCountry: this.selectedCountry(),
+      selectedState: this.selectedState(),
+      selectedCity: this.selectedCity(),
+      minPrice: this.minPrice(),
+      maxPrice: this.maxPrice(),
+      radiusKm: this.radiusKm()
+    }));
 
     const sorted = [...rows];
     if (sort === "rating" || filters.includes("top")) {
@@ -2485,6 +3373,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }
     return sorted;
   });
+
+  readonly draftResultCount = computed(() => this.marketplace.businesses().filter((business) => this.matchesCriteria(business, {
+    query: this.query(),
+    mode: this.draftMode(),
+    filters: this.draftFilters(),
+    selectedCountry: this.selectedCountry(),
+    selectedState: this.selectedState(),
+    selectedCity: this.selectedCity(),
+    minPrice: this.draftMinPrice(),
+    maxPrice: this.draftMaxPrice(),
+    radiusKm: this.draftRadiusKm()
+  })).length);
 
   readonly professionalResults = computed<ProfessionalResult[]>(() => {
     const query = this.query().trim().toLowerCase();
@@ -2515,14 +3415,44 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   });
   readonly resultCount = computed(() => this.mode() === "staff" ? this.professionalResults().length : this.filtered().length);
   readonly filterLabel = computed(() => this.activeFilterSummary().join(", ") || "all filters");
+  readonly emptyStateNote = computed(() => {
+    const reasons: string[] = [];
+    if (this.activeFilterCount() > 0) reasons.push("your filters");
+    if (this.query().trim()) reasons.push("your search");
+    if (this.location()) reasons.push("this area");
+    if (reasons.length) {
+      return `No salons match ${reasons.join(" and ")}. Try removing filters, widening the radius or checking another area.`;
+    }
+    return "No salons are available right now. Try another area or check back later.";
+  });
+  readonly suggestedSalons = computed(() => {
+    if (this.filtered().length || !this.marketplace.businesses().length) return [];
+    return this.marketplace.businesses()
+      .filter((business) => Number(business.ratingCount || 0) > 0)
+      .sort((a, b) => Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0))
+      .slice(0, 3);
+  });
   readonly showMap = computed(() => this.mapPanelOpen() || this.mapPickMode() || this.mapFullscreen());
 
-  constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
+  constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute, private readonly browserLocation: Location) {
     addIcons({ arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline });
+  }
+
+  goBack() {
+    this.browserLocation.back();
   }
 
   ngOnInit() {
     this.routeSubscription = this.route.queryParamMap.subscribe((params) => {
+      // Re-entering /search with no explicit URL intent (e.g. via the Explore bar after a
+      // round trip) should restore the query and filters the customer last used.
+      const hasExplicitIntent = ["q", "mode", "filter", "sort", "panel", "map", "nearMe", "country", "state", "city"].some((key) => params.has(key));
+      if (!hasExplicitIntent && this.restoreLastSearch()) {
+        if (params.get("map") === "true") this.mapPanelOpen.set(true);
+        this.openPanelFromRoute(params.get("panel"));
+        void this.executeSearch();
+        return;
+      }
       const intent = this.routeSearchIntent(params.get("q") || "");
       const nextQuery = intent.query;
       const nextMode = this.toSearchMode(params.get("mode")) || intent.mode;
@@ -2557,14 +3487,41 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     if (host && host.parentNode !== document.body) {
       document.body.appendChild(host);
     }
+    this.installKeyboardWatcher();
   }
 
   ngOnDestroy() {
     this.routeSubscription?.unsubscribe();
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (this.visualViewportListener && typeof window !== "undefined" && window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", this.visualViewportListener);
+      window.visualViewport.removeEventListener("scroll", this.visualViewportListener);
+    }
     const host = this.overlayHost?.nativeElement;
     if (host && host.parentNode) {
       host.parentNode.removeChild(host);
     }
+  }
+
+  private installKeyboardWatcher(): void {
+    if (typeof window === "undefined" || !window.visualViewport) return;
+    const viewport = window.visualViewport;
+    this.visualViewportListener = () => {
+      this.keyboardOpen.set(window.innerHeight - viewport.height > 140);
+    };
+    viewport.addEventListener("resize", this.visualViewportListener);
+    viewport.addEventListener("scroll", this.visualViewportListener);
+    this.visualViewportListener();
+  }
+
+  setKeyboardFocus(focused: boolean): void {
+    this.inputFocused.set(focused);
+    if (!focused) {
+      if (typeof window === "undefined") this.keyboardOpen.set(false);
+      else window.setTimeout(() => this.keyboardOpen.set(false), 120);
+      return;
+    }
+    if (typeof window === "undefined" || !window.visualViewport) this.keyboardOpen.set(true);
   }
 
   reset() {
@@ -2582,12 +3539,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.draftRadiusKm.set(25);
     this.filterPanelOpen.set(false);
     this.sortPanelOpen.set(false);
+    try { window.sessionStorage.removeItem(SearchPage.LAST_SEARCH_KEY); } catch {}
     void this.executeSearch();
   }
 
   setQuery(value: string) {
     this.query.set(value);
-    void this.executeSearch();
+    this.scheduleSearch();
+  }
+
+  private scheduleSearch() {
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => void this.executeSearch(), 300);
   }
 
   setMode(value: SearchMode) {
@@ -2628,7 +3591,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   clearSelectedArea() {
     this.location.set(null);
-    this.areaLabel.set("Current location");
+    this.areaLabel.set("Choose location");
     this.mapPickMode.set(false);
     this.mapFullscreen.set(false);
     this.locationRetryAvailable.set(false);
@@ -2700,6 +3663,32 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.toggleFilterPanel();
   }
 
+  openLocationChooser() {
+    if (this.location()) {
+      this.openFullMap();
+      return;
+    }
+    if (this.mapErrorTitle() === "Location permission blocked") {
+      this.mapPanelOpen.set(true);
+      this.mapPickMode.set(true);
+      this.locationNotice.set("Pick an area on the map or enter a city manually.");
+      return;
+    }
+    this.useLocation();
+  }
+
+  locationRowHeading(): string {
+    return this.location() ? this.areaLabel() : "Choose location";
+  }
+
+  locationRowValue(): string {
+    return this.location() ? "Tap to change your selected area" : "Use current location or pick an area manually";
+  }
+
+  resultsHeading(): string {
+    return this.location() ? `Salons near ${this.areaLabel()}` : "Recommended salons";
+  }
+
   applyAnyTime() {
     const filters = this.activeFilters().filter((key) => key !== "open" && !this.isTimeFilterKey(key));
     this.activeFilters.set(filters);
@@ -2711,63 +3700,6 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   closeSheets() {
     this.filterPanelOpen.set(false);
     this.sortPanelOpen.set(false);
-  }
-
-  toggleDraftFilter(value: FilterKey) {
-    if (value === "anytime") {
-      this.draftFilters.update((filters) => filters.filter((item) => !this.isTimeFilterKey(item)));
-      return;
-    }
-    this.draftFilters.update((filters) => {
-      const next = filters.includes(value) ? filters.filter((item) => item !== value) : [...filters, value];
-      return this.normalizedFilterList(next);
-    });
-  }
-
-  isDraftOptionSelected(value: FilterKey): boolean {
-    if (value === "anytime") return !this.draftFilters().some((key) => this.isTimeFilterKey(key));
-    return this.draftFilters().includes(value);
-  }
-
-  clearDraftFilters() {
-    this.draftFilters.set([]);
-    this.draftMode.set("salons");
-    this.draftRadiusKm.set(25);
-    this.draftMinPrice.set("");
-    this.draftMaxPrice.set("");
-  }
-
-  clearFilters() {
-    this.activeFilters.set([]);
-    this.filter.set("open");
-    this.minPrice.set("");
-    this.maxPrice.set("");
-    this.radiusKm.set(25);
-    this.draftFilters.set([]);
-    this.draftMinPrice.set("");
-    this.draftMaxPrice.set("");
-    this.draftRadiusKm.set(25);
-    this.filterPanelOpen.set(false);
-    void this.executeSearch();
-  }
-
-  applyFilters() {
-    const filters = this.normalizedFilterList(this.draftFilters());
-    this.mode.set(this.draftMode());
-    this.radiusKm.set(this.draftRadiusKm());
-    this.minPrice.set(this.draftMinPrice());
-    this.maxPrice.set(this.draftMaxPrice());
-    this.filterPanelOpen.set(false);
-    if (filters.includes("nearest") && !this.hasUsableLocation()) {
-      const withoutNearest = filters.filter((item) => item !== "nearest");
-      this.activeFilters.set(withoutNearest);
-      this.filter.set(withoutNearest[0] || "open");
-      this.useLocation();
-      return;
-    }
-    this.activeFilters.set(filters);
-    this.filter.set(filters[0] || "open");
-    void this.executeSearch();
   }
 
   applySort() {
@@ -2789,6 +3721,11 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   applySuggestion(suggestion: SearchSuggestion) {
     this.query.set(suggestion.query);
+    if (!suggestion.business) {
+      this.selectedBusiness.set(null);
+      void this.executeSearch();
+      return;
+    }
     this.selectedBusiness.set(suggestion.business);
     const coordinates = this.businessCoordinates(suggestion.business);
     if (coordinates) this.mapCenter.set(coordinates);
@@ -2796,6 +3733,8 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   async executeSearch() {
+    this.persistSearchState();
+    const sequence = ++this.searchSequence;
     const query = this.query().trim();
     const filters = this.activeFilters();
     const shouldSortByDistance = this.hasUsableLocation() && !!query && this.sort() === "recommended";
@@ -2814,6 +3753,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       staffGender: filters.includes("female") ? "female" : filters.includes("male") ? "male" : undefined,
       sort: this.apiSort(shouldSortByDistance)
     }).then((rows) => {
+      if (sequence !== this.searchSequence) return;
       if (!this.selectedBusiness() || !rows.some((business) => business.id === this.selectedBusiness()?.id)) {
         this.selectedBusiness.set(rows[0] ?? null);
       }
@@ -2821,10 +3761,96 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }).catch(() => undefined);
   }
 
-  useLocation(isManualRetry = false) {
+  /** sessionStorage key holding the last search intent so returning customers keep their query and filters. */
+  private static readonly LAST_SEARCH_KEY = "aura_last_search";
+
+  private persistSearchState(): void {
+    try {
+      const payload = {
+        query: this.query(),
+        mode: this.mode(),
+        filter: this.filter(),
+        sort: this.sort(),
+        activeFilters: this.activeFilters(),
+        minPrice: this.minPrice(),
+        maxPrice: this.maxPrice(),
+        radiusKm: this.radiusKm()
+      };
+      window.sessionStorage.setItem(SearchPage.LAST_SEARCH_KEY, JSON.stringify(payload));
+    } catch { /* sessionStorage unavailable — best-effort persistence */ }
+  }
+
+  private restoreLastSearch(): boolean {
+    try {
+      const raw = window.sessionStorage.getItem(SearchPage.LAST_SEARCH_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw) as {
+        query?: string;
+        mode?: string;
+        filter?: string;
+        sort?: string;
+        activeFilters?: string[];
+        minPrice?: string;
+        maxPrice?: string;
+        radiusKm?: number;
+      };
+      if (!saved || typeof saved !== "object") return false;
+      this.query.set(typeof saved.query === "string" ? saved.query : "");
+      const mode = this.toSearchMode(saved.mode ?? null);
+      if (mode) this.mode.set(mode);
+      const filter = this.toFilterKey(saved.filter ?? null);
+      if (filter) this.filter.set(filter);
+      if (Array.isArray(saved.activeFilters)) {
+        const valid = saved.activeFilters.map((key) => this.toFilterKey(key)).filter((key): key is FilterKey => !!key);
+        if (valid.length) this.activeFilters.set(valid);
+      }
+      const sort = this.toSortKey(saved.sort ?? null);
+      if (sort) this.sort.set(sort);
+      if (typeof saved.minPrice === "string") this.minPrice.set(saved.minPrice);
+      if (typeof saved.maxPrice === "string") this.maxPrice.set(saved.maxPrice);
+      if (typeof saved.radiusKm === "number" && Number.isFinite(saved.radiusKm)) this.radiusKm.set(saved.radiusKm);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+useLocation(isManualRetry = false) {
+    if (this.isLocationPermissionBlocked()) {
+      this.openLocationSettings();
+      return;
+    }
     this.mapPanelOpen.set(true);
     this.mapPickMode.set(false);
     this.requestCurrentLocation(isManualRetry ? 2 : 1);
+  }
+
+  isLocationPermissionBlocked(): boolean {
+    return this.mapErrorTitle() === "Location permission blocked";
+  }
+
+  openLocationSettings() {
+    this.mapErrorTitle.set("Location permission blocked");
+    this.mapError.set("Location permission is blocked. You can still search by picking an area on the map or entering a city manually. To use your current location, open device settings and allow location access.");
+    this.locationRetryAvailable.set(true);
+  }
+
+  async openDeviceSettings() {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await SettingsLauncher.openAppSettings();
+        return;
+      } catch {
+        this.mapError.set("Open Settings > App permissions for this app and allow Location, then come back and tap Retry location.");
+      }
+    } else {
+      this.mapError.set("Open your browser's site settings for this app and allow location access, then retry. You can also pick an area on the map or enter a city manually.");
+    }
+    this.locationRetryAvailable.set(true);
+  }
+
+  isLocationAvailable(): boolean {
+    return !!this.location();
   }
 
   toggleMapPickMode() {
@@ -2908,7 +3934,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private setLocationError(error: GeolocationPositionError) {
     if (error.code === 1) {
       this.mapErrorTitle.set("Location permission blocked");
-      this.mapError.set("Location permission is blocked. Please enable location access in your browser.");
+      this.mapError.set("Location permission is blocked. Results are based on your selected or manually picked area. You can pick an area on the map or enter a city manually.");
       this.locationRetryAvailable.set(false);
       return;
     }
@@ -2998,6 +4024,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     );
     this.location.set(pickedLocation);
     this.areaLabel.set(`Selected area ${this.coordinateLabel(pickedLocation)}`);
+    this.recordRecentArea(this.areaLabel());
     this.mapCenter.set(pickedLocation);
     this.mapPickMode.set(false);
     this.filter.set("nearest");
@@ -3014,7 +4041,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   distanceLabel(business: import("../../core/api.types").Business): string {
     const distance = this.businessDistance(business);
-    return distance !== null ? `${this.decimalText(distance)} km away` : "Distance available after location";
+    return distance !== null ? `${this.decimalText(distance)} km away` : "Enable location to see distance";
   }
 
   businessDistanceForCard(business: import("../../core/api.types").Business): number | null {
@@ -3022,15 +4049,15 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   ratingText(business: import("../../core/api.types").Business): string {
-    if (this.isNewForRating(business)) return "New";
+    if (this.isNewForRating(business)) return "New salon";
     const rating = Number(business.ratingAverage);
-    if (!Number.isFinite(rating) || rating <= 0) return "New";
+    if (!Number.isFinite(rating) || rating <= 0) return "New salon";
     return this.oneDecimalText(Math.min(5, rating));
   }
 
   professionalRatingText(professional: ProfessionalResult): string {
     const rating = this.professionalRatingNumber(professional);
-    return Number.isFinite(rating) && rating > 0 ? this.oneDecimalText(Math.min(5, rating)) : "New";
+    return Number.isFinite(rating) && rating > 0 ? this.oneDecimalText(Math.min(5, rating)) : "New salon";
   }
 
   professionalDistanceLabel(business: import("../../core/api.types").Business): string {
@@ -3090,9 +4117,29 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     try {
       localStorage.setItem("aura_customer_area_label", label);
       localStorage.setItem("aura_customer_location", JSON.stringify(coordinates));
+      this.recordRecentArea(label);
       window.dispatchEvent(new CustomEvent("aura:customer-location-updated", { detail: { label, location: coordinates } }));
     } catch {
       // Local storage can be unavailable in private or restricted browser modes.
+    }
+  }
+
+  private recordRecentArea(label: string) {
+    try {
+      const areas = this.readRecentAreas().filter((area) => area.toLowerCase() !== label.toLowerCase());
+      areas.unshift(label);
+      localStorage.setItem("aura_customer_recent_areas", JSON.stringify(areas.slice(0, 6)));
+    } catch {
+      // Local storage can be unavailable in private or restricted browser modes.
+    }
+  }
+
+  private readRecentAreas(): string[] {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("aura_customer_recent_areas") || "[]") as string[];
+      return Array.isArray(parsed) ? parsed.filter((area) => typeof area === "string").slice(0, 6) : [];
+    } catch {
+      return [];
     }
   }
 
@@ -3114,7 +4161,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     } catch {
       // Fall through to a deterministic coordinate label.
     }
-    return location ? `Current location ${this.coordinateLabel(location)}` : "Current location";
+    return location ? `Current location ${this.coordinateLabel(location)}` : "Choose location";
   }
 
   private coordinateLabel(coordinates: { lat: number; lng: number }): string {
@@ -3321,7 +4368,9 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   private toFilterKey(value: string | null): FilterKey | null {
     const key = value === "offers" ? "deals" : value === "price" ? "mid" : value;
-    return key === "anytime" || key === "open" || key === "today" || key === "morning" || key === "afternoon" || key === "evening" || key === "nearest" || key === "budget" || key === "mid" || key === "premium" || key === "top" || key === "reviewed" || key === "deals" || key === "offpeak" || key === "lastminute" || key === "female" || key === "male" ? key : null;
+    if (!key) return null;
+    const validKeys: FilterKey[] = ["anytime", "open", "today", "morning", "afternoon", "evening", "nearest", "within2km", "within5km", "within10km", "customRadius", "budget", "mid", "premium", "top", "reviewed", "deals", "offpeak", "lastminute", "instant-booking", "female", "male", "rating4", "rating4.5", "customMinPrice", "customMaxPrice"];
+    return validKeys.includes(key as FilterKey) ? (key as FilterKey) : null;
   }
 
   private toSortKey(value: string | null): SortKey | null {

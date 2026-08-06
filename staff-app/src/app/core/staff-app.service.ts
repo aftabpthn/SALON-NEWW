@@ -5,11 +5,14 @@ import { environment } from "../../environments/environment";
 import { resetCsrfState } from "./csrf.interceptor";
 import { addBusinessDays, businessDate } from "./business-date";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { Preferences } from "@capacitor/preferences";
 import { AttendanceBiometricService, AttendanceInstallationIdentity, NativeAttendanceLocation } from "./attendance-biometric.service";
 
 const STAFF_OFFLINE_QUEUE_KEY = "auraStaffOfflineQueue";
 const STAFF_OFFLINE_LEASE_KEY = "auraStaffOfflineQueueLease";
 const STAFF_BIOMETRIC_HINT_KEY = "auraStaffBiometricLoginHint";
+const STAFF_SESSION_KEY = "auraStaffPersistentSession";
+const STAFF_DATA_CACHE_PREFIX = "auraStaffData:";
 const LEGACY_STAFF_AUTH_KEYS = ["auraStaffAccessToken", "auraStaffRefreshToken", "auraStaffSession", "auraStaffBiometricEnabled", "auraStaffBiometricCredentialId"];
 
 export type MutationResult<T> =
@@ -455,6 +458,13 @@ type StaffLoginResponse = {
   user: StaffUser;
 };
 
+type StoredStaffSession = {
+  accessToken: string;
+  refreshToken?: string;
+  user: StaffUser;
+  tenantId: string;
+};
+
 export type StaffChatConversation = {
   id: string;
   type: "team" | "private-owner";
@@ -501,6 +511,8 @@ export class StaffAppService {
   private sessionIdValue = "";
   private refreshPromise: Promise<void> | null = null;
   private flushPromise: Promise<number> | null = null;
+  private readonly responseCache = new Map<string, { value: unknown; expiresAt: number }>();
+  private readonly inFlightResponses = new Map<string, Promise<unknown>>();
   private readonly tabId = crypto.randomUUID();
   readonly loading = signal(false);
   readonly error = signal("");
@@ -515,6 +527,23 @@ export class StaffAppService {
 
   constructor(private readonly http: HttpClient, private readonly attendanceBiometric: AttendanceBiometricService) {
     this.purgeLegacyAuthStorage();
+    this.restoreInitialSessionSync();
+  }
+
+  private restoreInitialSessionSync(): void {
+    try {
+      const raw = localStorage.getItem(STAFF_SESSION_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      const stored = parsed as Partial<StoredStaffSession>;
+      if (typeof stored.accessToken === "string" && stored.user && typeof stored.user === "object" && (stored.user as StaffUser).staffId) {
+        this.accessTokenValue = stored.accessToken;
+        this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "tenant_aura";
+        this.sessionIdValue = crypto.randomUUID();
+        this.user.set(this.normalizeUser(stored.user as StaffUser));
+      }
+    } catch { /* best-effort */ }
   }
 
   isAuthenticated(): boolean {
@@ -523,12 +552,27 @@ export class StaffAppService {
 
   async tryRestoreSession(): Promise<boolean> {
     if (this.isAuthenticated()) return true;
-    try { await this.refreshSession(); } catch { /* refresh failed */ }
+    const stored = await this.readStoredSession();
+    if (stored?.accessToken && stored?.user?.staffId) {
+      this.accessTokenValue = stored.accessToken;
+      this.tenantIdValue = stored.tenantId || this.readBiometricHint()?.tenantId || "tenant_aura";
+      this.sessionIdValue = crypto.randomUUID();
+      this.profile.set(null);
+      this.user.set(this.normalizeUser(stored.user));
+      void this.writeStoredSession(stored);
+      void this.refreshSession().catch(() => undefined);
+      return true;
+    }
     return this.isAuthenticated();
   }
 
   hasSavedSession(): boolean {
-    return this.isAuthenticated();
+    if (this.isAuthenticated()) return true;
+    try {
+      return !!localStorage.getItem(STAFF_SESSION_KEY);
+    } catch {
+      return false;
+    }
   }
 
   async ensureDemoSession(): Promise<boolean> {
@@ -621,6 +665,7 @@ export class StaffAppService {
         if (response.status >= 300) this.throwNativeError(response);
         const dashboard = this.unwrap(response.data);
         this.profile.set(dashboard.staff);
+        this.writeStoredData("dashboard", dashboard);
         return dashboard;
       });
     } catch (error) {
@@ -632,17 +677,23 @@ export class StaffAppService {
     }
   }
 
-  async enterpriseOs(query: Record<string, string> = {}): Promise<StaffEnterpriseOs> {
-    return this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query);
+  async enterpriseOs(query: Record<string, string> = {}, fresh = false): Promise<StaffEnterpriseOs> {
+    const key = `enterprise-os:${JSON.stringify(query)}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffEnterpriseOs>(key, 30_000, () => this.get<StaffEnterpriseOs>("/staff-self/enterprise-os", query));
   }
 
-  async workspacePreferences(): Promise<StaffWorkspacePreferences> {
-    return this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences");
+  async workspacePreferences(fresh = false): Promise<StaffWorkspacePreferences> {
+    const key = "workspace-preferences";
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffWorkspacePreferences>(key, 30_000, () => this.get<StaffWorkspacePreferences>("/staff-self/workspace-preferences"));
   }
 
-  async business(input: string | StaffBusinessQuery): Promise<StaffBusiness> {
+  async business(input: string | StaffBusinessQuery, fresh = false): Promise<StaffBusiness> {
     const query = typeof input === "string" ? { date: input } : input;
-    return this.get<StaffBusiness>("/staff-self/business", this.stringQuery(query));
+    const key = `business:${JSON.stringify(query)}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffBusiness>(key, 15_000, () => this.get<StaffBusiness>("/staff-self/business", this.stringQuery(query)));
   }
 
   async businessInvoice(invoiceId: string): Promise<StaffBusinessInvoiceDetail> {
@@ -728,8 +779,10 @@ export class StaffAppService {
     return this.post(`/team-chat/conversations/${encodeURIComponent(conversationId)}/receipts`, { messageIds, status });
   }
 
-  async today(date = staffBusinessDate()): Promise<StaffToday> {
-    return this.get<StaffToday>("/staff-os/mobile/today", { date });
+  async today(date = staffBusinessDate(), fresh = false): Promise<StaffToday> {
+    const key = `today:${date}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffToday>(key, 10_000, () => this.get<StaffToday>("/staff-os/mobile/today", { date }));
   }
 
   async attendanceHistory(days = 30): Promise<StaffAttendance[]> {
@@ -746,8 +799,10 @@ export class StaffAppService {
     return this.get<StaffAttendance[]>("/staff-os/attendance", { from, to, limit: "500" });
   }
 
-  async overtimeSummary(): Promise<StaffOvertimeSummary> {
-    return this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { asOf: staffBusinessDate() });
+  async overtimeSummary(fresh = false): Promise<StaffOvertimeSummary> {
+    const key = `overtime:${staffBusinessDate()}`;
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffOvertimeSummary>(key, 10_000, () => this.get<StaffOvertimeSummary>("/staff-os/attendance/overtime-summary", { asOf: staffBusinessDate() }));
   }
 
   async payroll(): Promise<StaffPayrollItem[]> {
@@ -762,8 +817,10 @@ export class StaffAppService {
     return this.get<StaffLeave[]>("/staff-os/leaves", { limit: "6" });
   }
 
-  async leaveBalances(): Promise<StaffLeaveBalance[]> {
-    return this.get<StaffLeaveBalance[]>("/staff-os/leave-balances");
+  async leaveBalances(fresh = false): Promise<StaffLeaveBalance[]> {
+    const key = "leave-balances";
+    if (fresh) this.responseCache.delete(key);
+    return this.cachedGet<StaffLeaveBalance[]>(key, 60_000, () => this.get<StaffLeaveBalance[]>("/staff-os/leave-balances"));
   }
 
   async clockIn(): Promise<MutationResult<StaffAttendance>> {
@@ -1079,6 +1136,11 @@ export class StaffAppService {
     return this.readOfflineQueue().length;
   }
 
+  /** Last successfully fetched payload for a data key, if available on this device. */
+  storedData<T>(key: string): T | undefined {
+    return this.readStoredData<T>(key);
+  }
+
   private authHeaders(): HttpHeaders {
     const token = this.accessTokenValue;
     if (!token) throw new Error("Staff login required.");
@@ -1107,6 +1169,27 @@ export class StaffAppService {
         .filter(([, value]) => value !== undefined && value !== null && value !== "")
         .map(([key, value]) => [key, String(value)])
     );
+  }
+
+  private async cachedGet<T>(key: string, ttlMs: number, request: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const hit = this.responseCache.get(key);
+    if (hit && hit.expiresAt > now) return hit.value as T;
+    const running = this.inFlightResponses.get(key);
+    if (running) return running as Promise<T>;
+    const promise = request().then((value) => {
+      this.responseCache.set(key, { value, expiresAt: now + ttlMs });
+      this.inFlightResponses.delete(key);
+      this.writeStoredData(key, value);
+      return value;
+    }).catch((error) => {
+      this.inFlightResponses.delete(key);
+      const stored = this.readStoredData<T>(key);
+      if (stored !== undefined) return stored;
+      throw error;
+    });
+    this.inFlightResponses.set(key, promise);
+    return promise;
   }
 
   private nativeGet<T>(url: string, headers: Record<string, string> = {}): Promise<{ data: T | ApiEnvelope<T>; status: number }> {
@@ -1187,6 +1270,7 @@ export class StaffAppService {
     this.sessionIdValue = crypto.randomUUID();
     this.profile.set(null);
     this.user.set(this.normalizeUser(session.user));
+    void this.writeStoredSession({ accessToken: session.accessToken, refreshToken: session.refreshToken, user: this.user()!, tenantId });
   }
 
   private async withRefreshRetry<T>(request: () => Promise<T>): Promise<T> {
@@ -1203,29 +1287,41 @@ export class StaffAppService {
   private async refreshSession(): Promise<void> {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = (async () => {
+      let status = 0;
       try {
+        const stored = await this.readStoredSession();
         const response = await CapacitorHttp.post({
           url: `${this.baseUrl}/auth/refresh`,
           headers: { "Content-Type": "application/json" },
-          data: { device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() } }
+          data: {
+            ...(stored?.refreshToken ? { refreshToken: stored.refreshToken } : {}),
+            device: { type: "staff-app", name: "Aura Staff App", platform: Capacitor.getPlatform() }
+          }
         });
-        if (response.status < 200 || response.status >= 300) {
-          const message = this.errorMessage({ error: response.data, message: `Session refresh failed (${response.status}).` }, "Staff session refresh failed.");
-          throw new Error(message);
+        status = response.status || 0;
+        if (status < 200 || status >= 300) {
+          const message = this.errorMessage({ error: response.data, message: `Session refresh failed (${status}).` }, "Staff session refresh failed.");
+          const err = new Error(message);
+          (err as unknown as { status: number }).status = status;
+          throw err;
         }
         const session = this.unwrap<StaffRefreshResponse>(response.data);
         if (!session.accessToken) throw new Error("Staff session refresh failed.");
         this.accessTokenValue = session.accessToken;
+        const refreshedUser = session.user?.staffId ? this.normalizeUser(session.user) : this.user();
         if (session.user?.staffId) {
           if (this.user()?.id && this.user()?.id !== session.user.id) this.clearOfflineState();
           this.profile.set(null);
-          this.user.set(this.normalizeUser(session.user));
+          this.user.set(refreshedUser);
           this.tenantIdValue ||= this.readBiometricHint()?.tenantId || "";
           this.sessionIdValue ||= crypto.randomUUID();
         }
+        if (refreshedUser?.staffId) {
+          void this.writeStoredSession({ accessToken: session.accessToken, refreshToken: (session as StaffLoginResponse).refreshToken, user: refreshedUser, tenantId: this.tenantIdValue });
+        }
       } catch (error) {
-        this.clearLocalAuthState(false);
-        throw error;
+        // Do NOT clear local session state on background refresh error or 401 response.
+        // User session remains logged in locally until explicitly logged out by user.
       }
     })().finally(() => { this.refreshPromise = null; });
     return this.refreshPromise;
@@ -1239,6 +1335,7 @@ export class StaffAppService {
       const status = (error as unknown as { status?: number }).status;
       if (status === 401) return true;
       if (status === 400 && this.isProxyBadRequest((error as unknown as { error?: unknown }).error)) return true;
+      if (status && status >= 400 && status !== 401) return false;
       const msg = (error.message || "").toLowerCase();
       return msg.includes("401") || msg.includes("unauthorized") || msg.includes("session") || msg.includes("expired");
     }
@@ -1370,6 +1467,35 @@ export class StaffAppService {
   }
 
   private writeOfflineQueue(queue: OfflineQueueEntry[]): void { localStorage.setItem(STAFF_OFFLINE_QUEUE_KEY, JSON.stringify(queue)); }
+
+  private storedDataKey(key: string): string {
+    const user = this.user();
+    return `${STAFF_DATA_CACHE_PREFIX}${this.tenantIdValue}:${user?.branchId || "branch"}:${user?.id || user?.staffId || "user"}:${key}`;
+  }
+
+  readStoredData<T>(key: string): T | undefined {
+    try {
+      const raw = localStorage.getItem(this.storedDataKey(key));
+      if (!raw) return undefined;
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && "v" in (parsed as Record<string, unknown>)
+        ? (parsed as { v: T }).v
+        : undefined;
+    } catch { return undefined; }
+  }
+
+  writeStoredData<T>(key: string, value: T): void {
+    try { localStorage.setItem(this.storedDataKey(key), JSON.stringify({ v: value })); } catch { /* Storage unavailable or full — data still works from the network. */ }
+  }
+
+  private clearStoredData(): void {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(STAFF_DATA_CACHE_PREFIX)) localStorage.removeItem(key);
+      }
+    } catch { /* Best-effort cleanup. */ }
+  }
   private clearOfflineState(): void { localStorage.removeItem(STAFF_OFFLINE_QUEUE_KEY); localStorage.removeItem(STAFF_OFFLINE_LEASE_KEY); }
   private isQueueOwner(item: OfflineQueueEntry): boolean {
     return !!this.user()?.id && item.userId === this.user()?.id && item.tenantId === this.tenantIdValue && item.sessionId === this.sessionIdValue;
@@ -1407,6 +1533,7 @@ export class StaffAppService {
 
   private clearLocalAuthState(clearBiometric: boolean): void {
     resetCsrfState();
+    this.responseCache.clear();
     this.accessTokenValue = "";
     this.tenantIdValue = "";
     this.sessionIdValue = "";
@@ -1414,6 +1541,8 @@ export class StaffAppService {
     this.user.set(null);
     this.biometricLocked.set(false);
     this.clearOfflineState();
+    this.clearStoredData();
+    void this.clearStoredSession();
     this.purgeLegacyAuthStorage();
     localStorage.removeItem("auraStaffRecent");
     if (clearBiometric) localStorage.removeItem(STAFF_BIOMETRIC_HINT_KEY);
@@ -1431,6 +1560,55 @@ export class StaffAppService {
       const hint = value as Record<string, unknown>;
       return typeof hint["tenantId"] === "string" && typeof hint["loginId"] === "string" ? { tenantId: hint["tenantId"], loginId: hint["loginId"] } : null;
     } catch { return null; }
+  }
+
+  private async readStoredSession(): Promise<StoredStaffSession | null> {
+    try {
+      let value: string | null = null;
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const pref = await Preferences.get({ key: STAFF_SESSION_KEY });
+          value = pref.value;
+        } catch { /* fallback to localStorage */ }
+      }
+      if (!value) {
+        try { value = localStorage.getItem(STAFF_SESSION_KEY); } catch { /* best-effort */ }
+      }
+      if (!value) return null;
+      const parsed: unknown = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object") return null;
+      const stored = parsed as Partial<StoredStaffSession>;
+      if (typeof stored.accessToken !== "string" || !stored.user || typeof stored.user !== "object") return null;
+      return {
+        accessToken: stored.accessToken,
+        refreshToken: typeof stored.refreshToken === "string" ? stored.refreshToken : undefined,
+        user: stored.user as StaffUser,
+        tenantId: typeof stored.tenantId === "string" ? stored.tenantId : ""
+      };
+    } catch { return null; }
+  }
+
+  private async writeStoredSession(session: StoredStaffSession): Promise<void> {
+    const raw = JSON.stringify(session);
+    try {
+      localStorage.setItem(STAFF_SESSION_KEY, raw);
+    } catch { /* persistence is best-effort */ }
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.set({ key: STAFF_SESSION_KEY, value: raw });
+      } catch { /* persistence is best-effort */ }
+    }
+  }
+
+  private async clearStoredSession(): Promise<void> {
+    try {
+      localStorage.removeItem(STAFF_SESSION_KEY);
+    } catch { /* persistence is best-effort */ }
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Preferences.remove({ key: STAFF_SESSION_KEY });
+      } catch { /* persistence is best-effort */ }
+    }
   }
 
   private async publicPost<T>(path: string, body: Record<string, unknown>): Promise<T> {

@@ -2,6 +2,8 @@ import { Router } from "express";
 import { authenticateJwt } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { customerAppService } from "../services/customer-app.service.js";
+import { customerNotificationService } from "../services/customer-notification.service.js";
+import { slotReservationService } from "../services/slot-reservation.service.js";
 
 export const customerAppRouter = Router();
 
@@ -45,6 +47,19 @@ customerAppRouter.post("/customer/favorites/:businessId", asyncHandler((req, res
 
 customerAppRouter.delete("/customer/favorites/:businessId", asyncHandler((req, res) => {
   customerAppService.removeFavorite(req.access, req.params.businessId);
+  res.json({ removed: true });
+}));
+
+customerAppRouter.get("/customer/saved-salons", asyncHandler((req, res) => {
+  res.json(customerAppService.listSavedSalons(req.access));
+}));
+
+customerAppRouter.post("/customer/saved-salons/:businessId", asyncHandler((req, res) => {
+  res.status(201).json(customerAppService.saveSalon(req.access, req.params.businessId));
+}));
+
+customerAppRouter.delete("/customer/saved-salons/:businessId", asyncHandler((req, res) => {
+  customerAppService.removeSavedSalon(req.access, req.params.businessId);
   res.json({ removed: true });
 }));
 
@@ -93,7 +108,31 @@ customerAppRouter.get("/customer/payments", asyncHandler((req, res) => {
 }));
 
 customerAppRouter.get("/customer/notifications", asyncHandler((req, res) => {
-  res.json(customerAppService.notifications(req.access));
+  res.json(customerNotificationService.list(req.access, req.query || {}));
+}));
+
+customerAppRouter.patch("/customer/notifications/read-all", asyncHandler((req, res) => {
+  res.json(customerNotificationService.markAllRead(req.access));
+}));
+
+customerAppRouter.patch("/customer/notifications/:id", asyncHandler((req, res) => {
+  res.json(customerNotificationService.markRead(req.access, req.params.id, req.body?.status || "read"));
+}));
+
+customerAppRouter.get("/customer/notification-preferences", asyncHandler((req, res) => {
+  res.json(customerNotificationService.preferences(req.access));
+}));
+
+customerAppRouter.patch("/customer/notification-preferences", asyncHandler((req, res) => {
+  res.json(customerNotificationService.updatePreferences(req.access, req.body || {}));
+}));
+
+customerAppRouter.put("/customer/push-devices/:deviceId", asyncHandler((req, res) => {
+  res.json(customerNotificationService.registerDevice(req.access, { ...req.body, deviceId: req.params.deviceId }));
+}));
+
+customerAppRouter.delete("/customer/push-devices/:deviceId", asyncHandler((req, res) => {
+  res.json(customerNotificationService.unregisterDevice(req.access, req.params.deviceId));
 }));
 
 customerAppRouter.get("/customer/devices", asyncHandler((req, res) => {
@@ -113,3 +152,26 @@ customerAppRouter.delete("/customer/devices", asyncHandler((req, res) => {
 customerAppRouter.delete("/customer/me", asyncHandler((req, res) => {
   res.json(customerAppService.deleteMe(req.access));
 }));
+
+customerAppRouter.post("/customer/slot-holds", asyncHandler((req, res) => {
+  const { serviceIds, staffId, branchId, startAt, durationMinutes } = req.body || {};
+  if (!serviceIds?.length || !startAt) {
+    return res.status(400).json({ error: "serviceIds and startAt are required" });
+  }
+  const hold = slotReservationService.createHold({
+    serviceIds,
+    staffId: staffId || null,
+    branchId: branchId || req.access.branchId,
+    startAt: new Date(startAt).toISOString(),
+    durationMinutes: durationMinutes || 30,
+    tenantId: req.access.tenantId,
+    clientId: req.access.userId,
+    source: "customer-app"
+  }, req.access);
+  res.status(201).json(hold);
+}));
+
+customerAppRouter.delete("/customer/slot-holds/:holdId", asyncHandler((req, res) => {
+  const released = slotReservationService.releaseHold(req.params.holdId, req.access);
+  res.json(released);
+}));;

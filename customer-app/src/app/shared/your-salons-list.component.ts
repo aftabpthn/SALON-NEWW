@@ -14,14 +14,27 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       <div class="salons-header">
         <h3>Your salons</h3>
         @if (salons.length > 0) {
-          <span class="count">{{ salons.length }} visited</span>
+          <span class="count">{{ salons.length }} visited or chosen</span>
         }
       </div>
 
       @if (salons.length === 0) {
         <div class="empty-state">
-          <p>You haven't visited any salons yet. Start exploring!</p>
-          <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+          @if (hasBookings) {
+            <p>Your salons shows visited salons or the salon you choose as primary. Booked salons appear here after a visit or when you choose one.</p>
+            <div class="empty-state-facts" aria-label="Salon account summary">
+              <span>{{ bookingCount }} booked</span>
+              <span>{{ favouriteCount }} favourite{{ favouriteCount === 1 ? '' : 's' }}</span>
+              <span>0 visited</span>
+            </div>
+            <div class="empty-actions">
+              <a class="empty-link" routerLink="/tabs/my-salon">Choose My Salon</a>
+              <a class="empty-link secondary" routerLink="/tabs/search">Explore salons</a>
+            </div>
+          } @else {
+            <p>You haven't visited or chosen a salon yet. Favourites and booked salons are tracked separately.</p>
+            <ion-button class="primary-gradient" routerLink="/tabs/search">Explore salons</ion-button>
+          }
         </div>
       } @else {
         <ul class="salon-list" role="list">
@@ -82,11 +95,11 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
   styles: [`
     .salons-section {
       display: grid;
-      gap: 12px;
-      padding: 16px;
+      gap: 6px;
+      padding: 12px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96));
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
     }
 
     .salons-header {
@@ -110,9 +123,51 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 
     .empty-state {
       display: grid;
-      gap: 12px;
-      padding: 18px 0;
+      gap: 8px;
+      padding: 4px 0;
       text-align: center;
+    }
+
+    .empty-state-facts,
+    .empty-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .empty-state-facts span {
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.76rem;
+      font-weight: 850;
+    }
+
+    .empty-state ion-button {
+      min-height: 44px;
+      margin: 0;
+    }
+
+    .empty-link {
+      justify-self: center;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--surface);
+      font-size: 0.85rem;
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .empty-link.secondary {
+      color: var(--text);
     }
 
     .empty-state p {
@@ -140,13 +195,13 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .salon-row.is-primary {
-      background: rgba(214, 169, 74, 0.08);
-      border: 1px solid rgba(214, 169, 74, 0.18);
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .salon-row:hover {
-        background: rgba(214, 169, 74, 0.06);
+        background: rgba(99, 102, 241, 0.06);
       }
     }
 
@@ -156,14 +211,15 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       border-radius: 12px;
       display: grid;
       place-items: center;
-      color: #120D05;
-      background: linear-gradient(135deg, #f0f4f8, #dde6ee);
+      color: var(--text);
+      background: linear-gradient(135deg, var(--surface-soft), var(--surface-elevated));
       font-size: 0.82rem;
       font-weight: 1000;
     }
 
     .salon-initials.primary-badge {
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .salon-details {
@@ -192,8 +248,8 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       flex-shrink: 0;
       padding: 2px 8px;
       border-radius: 999px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
       font-size: 0.64rem;
       font-weight: 1000;
       text-transform: uppercase;
@@ -213,7 +269,7 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       padding: 1px 7px;
       border-radius: 999px;
       color: var(--muted);
-      background: rgba(214, 169, 74, 0.08);
+      background: rgba(99, 102, 241, 0.08);
       font-size: 0.72rem;
       font-weight: 800;
     }
@@ -224,13 +280,13 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .meta-pill.relationship[data-type="loyal"] {
-      color: #0F766E;
+      color: #6366F1;
       background: rgba(15, 118, 110, 0.1);
     }
 
     .meta-pill.relationship[data-type="regular"] {
-      color: #8B5CF6;
-      background: rgba(139, 92, 246, 0.1);
+      color: var(--primary);
+      background: var(--primary-soft);
     }
 
     .salon-actions {
@@ -240,11 +296,11 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 
     .set-primary-btn,
     .remove-primary-btn {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
-      background: rgba(255, 255, 255, 0.7);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      background: var(--glass);
       color: var(--text);
       display: grid;
       place-items: center;
@@ -253,8 +309,8 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     }
 
     .remove-primary-btn {
-      color: #D6A94A;
-      border-color: rgba(214, 169, 74, 0.34);
+      color: var(--primary);
+      border-color: rgba(99, 102, 241, 0.34);
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -268,6 +324,9 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 export class YourSalonsListComponent {
   @Input() salons: CustomerSalonRelationship[] = [];
   @Input() primarySalon: CustomerPrimarySalon | null = null;
+  @Input() hasBookings = false;
+  @Input() bookingCount = 0;
+  @Input() favouriteCount = 0;
   @Output() setAsPrimary = new EventEmitter<CustomerSalonRelationship>();
   @Output() removePrimary = new EventEmitter<void>();
 

@@ -15,7 +15,7 @@ function StaticScene({ selected }: { selected: EcosystemRole }) {
   return (
     <div className="absolute inset-0 grid place-items-center" aria-hidden="true">
       <div className="ecosystem-orbit relative h-[78%] w-[82%] max-w-[38rem]">
-        <div className="absolute left-1/2 top-1/2 grid h-28 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[2rem] border border-white/35 bg-aura-burgundy text-center text-white shadow-[0_24px_70px_rgba(69,18,37,.35)] sm:h-36 sm:w-36"><span className="font-display text-3xl italic">Aura</span></div>
+        <div className="absolute left-1/2 top-1/2 grid h-28 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[2rem] border border-white/35 bg-aura-burgundy text-center text-white shadow-[0_24px_70px_rgba(6,23,36,.32)] sm:h-36 sm:w-36"><span className="font-display text-3xl italic">Aura</span></div>
         {(["owner", "customer", "staff", "flow"] as EcosystemRole[]).map((role, index) => {
           const Icon = roleIcons[role];
           const position = ["left-[2%] top-[18%]", "right-[4%] top-[12%]", "right-[1%] bottom-[10%]", "left-[8%] bottom-[8%]"][index];
@@ -43,7 +43,7 @@ export function EcosystemStage({ selected, onSelect }: { selected: EcosystemRole
 
   const useWebGL = visible && capabilities.ready && capabilities.webgl && !capabilities.coarsePointer && capabilities.viewport === "wide";
   return (
-    <div ref={ref} className="relative aspect-[4/4.35] min-h-[25rem] overflow-hidden rounded-[1.75rem] border border-white/60 bg-[radial-gradient(circle_at_50%_45%,#fffaf2_0%,#eadfd2_52%,#d7c5b4_100%)] shadow-[0_35px_100px_rgba(61,30,40,.2)] sm:aspect-[4/3.3] lg:aspect-[4/4.15]" aria-label={copy.hero.sceneLabel}>
+    <div ref={ref} className="relative aspect-[4/4.35] min-h-[25rem] overflow-hidden rounded-[1.75rem] border border-white/60 bg-[radial-gradient(circle_at_50%_45%,#fffdf8_0%,#e8e8e1_52%,#cbd8d9_100%)] shadow-[0_35px_100px_rgba(6,23,36,.18)] sm:aspect-[4/3.3] lg:aspect-[4/4.15]" aria-label={copy.hero.sceneLabel}>
       <StaticScene selected={selected} />
       {useWebGL && <div className="absolute inset-0"><DynamicScene selected={selected} reducedMotion={capabilities.reducedMotion} onSelect={onSelect} /></div>}
       <div className="absolute inset-x-3 bottom-3 rounded-2xl border border-white/60 bg-aura-surface/92 p-2.5 shadow-lg backdrop-blur-md sm:inset-x-5 sm:bottom-5">

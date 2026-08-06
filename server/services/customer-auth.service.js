@@ -15,6 +15,7 @@ const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
 const CODE_TTL_MINUTES = 10;
 const CODE_RESEND_SECONDS = 30;
 const MAX_CODE_ATTEMPTS = 5;
+const PERSISTENT_CUSTOMER_SESSION_EXPIRES_AT = "9999-12-31T23:59:59.999Z";
 ensureCustomerAuthSchema();
 
 function hashToken(token) {
@@ -400,10 +401,21 @@ function issueCustomerSession({ tenant, customer, provider, device = {}, globalA
     globalAccountId
   };
   const pair = authService.issueTokenPair({ tenant, user: tokenUser, branchId: "", deviceId: device.deviceId || "" });
+  db.prepare(`
+    UPDATE auth_refresh_tokens
+       SET expiresAt = @expiresAt,
+           updatedAt = @updatedAt
+     WHERE tokenHash = @tokenHash
+       AND role = 'customer'
+  `).run({
+    expiresAt: PERSISTENT_CUSTOMER_SESSION_EXPIRES_AT,
+    updatedAt: now(),
+    tokenHash: hashToken(pair.refreshToken)
+  });
   return {
     accessToken: pair.accessToken,
     refreshToken: pair.refreshToken,
-    refreshExpiresAt: pair.refreshExpiresAt,
+    refreshExpiresAt: PERSISTENT_CUSTOMER_SESSION_EXPIRES_AT,
     isNewCustomer: customer.isNewCustomer,
     authProvider: provider,
     customer: { ...rowToCustomer(customer), globalAccountId }
@@ -681,13 +693,24 @@ export const customerAuthService = {
         AND COALESCE(revokedAt, '') = ''
       LIMIT 1
     `).get({ tokenHash: hashToken(refreshToken) });
-    if (!record || record.expiresAt <= now()) throw unauthorized("Refresh token is invalid or expired");
+    if (!record) throw unauthorized("Refresh token is invalid or revoked");
     const tenant = db.prepare("SELECT * FROM tenants WHERE id = @id").get({ id: record.tenantId });
     const customer = clientById(record.tenantId, record.userId);
     if (!tenant || !customer) throw unauthorized("Customer session is invalid");
-    db.prepare("UPDATE auth_refresh_tokens SET revokedAt = @revokedAt, updatedAt = @updatedAt WHERE id = @id").run({ id: record.id, revokedAt: now(), updatedAt: now() });
     const globalAccountId = tableHasColumn("clients", "customerAccountId") ? (customer.customerAccountId || "") : "";
-    return issueCustomerSession({ tenant, customer: { ...customer, isNewCustomer: false }, provider: customer.authProvider || "customer", device, globalAccountId });
+    const session = issueCustomerSession({ tenant, customer: { ...customer, isNewCustomer: false }, provider: customer.authProvider || "customer", device, globalAccountId });
+    db.prepare("DELETE FROM auth_refresh_tokens WHERE tokenHash = @tokenHash AND role = 'customer'").run({ tokenHash: hashToken(session.refreshToken) });
+    db.prepare(`
+      UPDATE auth_refresh_tokens
+         SET expiresAt = @expiresAt,
+             updatedAt = @updatedAt
+       WHERE id = @id
+    `).run({ id: record.id, expiresAt: PERSISTENT_CUSTOMER_SESSION_EXPIRES_AT, updatedAt: now() });
+    return {
+      ...session,
+      refreshToken,
+      refreshExpiresAt: PERSISTENT_CUSTOMER_SESSION_EXPIRES_AT
+    };
   },
 
   logout(refreshToken = "") {

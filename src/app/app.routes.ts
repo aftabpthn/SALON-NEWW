@@ -16,6 +16,7 @@ export const routes: Routes = [
   { path: 'analytics', loadComponent: () => import('./pages/analytics-engine.component').then(m => m.AnalyticsEngineComponent), title: 'Advanced Analytics' },
   { path: 'engagement', loadComponent: () => import('./pages/engagement-command-center.component').then(m => m.EngagementCommandCenterComponent), title: 'Engagement Command Center' },
   { path: 'staff-chat', loadComponent: () => import('./pages/team-chat.component').then(m => m.TeamChatComponent), title: 'Team Chat', canActivate: [permissionGuard], data: { permission: 'read:staff' } },
+  { path: 'booking-inbox', loadComponent: () => import('./pages/customer-booking-chat.component').then(m => m.CustomerBookingChatComponent), title: 'Booking Inbox', canActivate: [permissionGuard], data: { permission: 'read:appointments' } },
 
   { path: 'enterprise-security-shield', loadComponent: () => import('./pages/enterprise-security-shield.component').then(m => m.EnterpriseSecurityShieldComponent), title: 'Enterprise Security Shield' },
   { path: 'two-factor', loadComponent: () => import('./pages/two-factor-setup.component').then(m => m.TwoFactorSetupComponent), title: 'Two-Factor Authentication' },

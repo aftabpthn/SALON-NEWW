@@ -125,7 +125,13 @@ export class StaffCalendarPage implements OnInit, OnDestroy {
 
   async load() {
     const generation = ++this.loadGeneration;
-    this.loading.set(true);
+    const cachedToday = this.staff.readStoredData<StaffToday>("today");
+    if (cachedToday) {
+      this.today.set(cachedToday);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
     try {
       const from = this.view() === "day" ? this.selectedDate() : this.weekStart();
       const to = this.view() === "day" ? this.selectedDate() : this.weekEnd();

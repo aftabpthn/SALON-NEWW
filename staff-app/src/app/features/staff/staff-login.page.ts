@@ -29,7 +29,7 @@ import { StaffAppService } from "../../core/staff-app.service";
           <form class="staff-form" (ngSubmit)="login($event)">
             <div class="floating-field">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v4h1a2 2 0 0 1 2 2v10h-7v-4H8v4H4Zm3-14h2V5H7v2Zm4 0h2V5h-2v2Zm-4 4h2V9H7v2Zm4 0h2V9h-2v2Zm4 2v2h2v-2h-2Zm0 6h2v-2h-2v2Z"></path></svg>
-              <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="tenant_aura" autocomplete="organization" />
+              <input id="staff-tenant-id" [(ngModel)]="tenantId" name="tenantId" placeholder="tenant_" autocomplete="organization" />
               <label for="staff-tenant-id">Tenant ID</label>
             </div>
 
@@ -118,7 +118,7 @@ import { StaffAppService } from "../../core/staff-app.service";
 export class StaffLoginPage {
   readonly message = signal("");
   readonly showPassword = signal(false);
-  tenantId = "tenant_aura";
+  tenantId = "tenant_";
   loginId = "";
   password = "";
 
