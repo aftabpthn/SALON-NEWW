@@ -192,6 +192,7 @@ export class OwnerAppService {
   calculateOwnerCommission(id: string, payload: { periodStart: string; periodEnd: string; baseAmountPaise: number; rate: number; commissionType: string }): Promise<OwnerRecord> { return this.post(`/owner-console/people/staff/${encodeURIComponent(id)}/commissions`, payload); }
   ownerAttendance(params: Record<string, string | number | boolean>): Promise<OwnerListResponse<OwnerAttendance>> { return this.get("/owner-console/people/attendance", params); }
   correctOwnerAttendance(id: string, payload: { reason: string; patch: Record<string, string> }): Promise<OwnerRecord> { return this.post(`/owner-console/people/attendance/${encodeURIComponent(id)}/corrections`, payload); }
+  resetOwnerAttendance(id: string, payload: { reason: string }): Promise<OwnerRecord> { return this.post(`/owner-console/people/attendance/${encodeURIComponent(id)}/reset`, payload); }
   ownerAttendancePolicy(branchId: string): Promise<OwnerAttendancePolicy> { return this.get(`/attendance-verification/branches/${encodeURIComponent(branchId)}/policy`); }
   saveOwnerAttendancePolicy(branchId: string, policy: OwnerAttendancePolicy): Promise<OwnerAttendancePolicy> { return this.put(`/attendance-verification/branches/${encodeURIComponent(branchId)}/policy`, policy); }
   ownerAttendanceDevices(params: { branchId: string; status?: string }): Promise<OwnerAttendanceDevice[]> { return this.get<{ items: OwnerAttendanceDevice[] }>("/attendance-verification/devices", params).then((response) => response.items); }

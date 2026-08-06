@@ -14,9 +14,9 @@ const TIME_SLOTS = [
 ];
 
 const BENEFITS = [
-  "15-minute personalized walkthrough",
+  "A focused walkthrough; timing confirmed by the team",
   "See features relevant to your salon size",
-  "Get your questions answered live",
+  "Review questions relevant to your workflow",
   "Clear guidance on setup and migration",
 ];
 
@@ -48,7 +48,9 @@ export default function DemoPage() {
       });
       const payload = await response.json().catch(() => null) as { code?: string; error?: string } | null;
       if (!response.ok) {
-        setErrorMessage(payload?.code === "DELIVERY_NOT_CONFIGURED" ? t("demo.deliveryMissing") : t("demo.error"));
+        setErrorMessage(payload?.code === "DELIVERY_NOT_CONFIGURED"
+          ? (language === "hi" ? "Demo request delivery अभी configured नहीं है। Approved contact channel configure होने के बाद यहाँ दिखेगा।" : "Demo request delivery is not configured yet. An approved contact channel will be shown here once configured.")
+          : t("demo.error"));
         setStatus("error");
         return;
       }

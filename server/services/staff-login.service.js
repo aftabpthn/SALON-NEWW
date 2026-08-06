@@ -4,6 +4,7 @@ import { badRequest, forbidden, notFound } from "../utils/app-error.js";
 import { realtimeService } from "./realtime.service.js";
 import { ensureTenantUserAccessColumns, normalizeBranchIdsForRole } from "./access-control.service.js";
 import { assertActiveStaffAppRole } from "./staff-app-role-policy.service.js";
+import { cachedStaffDashboard } from "./staff-dashboard-cache.service.js";
 
 const now = () => new Date().toISOString();
 const makeId = (prefix) => `${prefix}_${randomUUID().slice(0, 10)}`;
@@ -320,6 +321,7 @@ export class StaffLoginService {
       shift: "",
       status: staff.status || "active",
       assignedServices: "[]",
+      isServiceStaff: staff.isServiceStaff !== undefined && staff.isServiceStaff !== null ? Number(staff.isServiceStaff) : (existing?.isServiceStaff ?? 1),
       commissionRule: "{}",
       attendance: "[]",
       performance: "{}",
@@ -329,15 +331,15 @@ export class StaffLoginService {
     if (existing) {
       db.prepare(`UPDATE staff
         SET name = @name, role = @role, phone = @phone, email = @email, branchId = @branchId,
-            image = @image, status = @status, updatedAt = @updatedAt
+            image = @image, status = @status, isServiceStaff = @isServiceStaff, updatedAt = @updatedAt
         WHERE id = @id`).run(row);
     } else {
       db.prepare(`INSERT INTO staff (
         id, name, role, phone, email, branchId, image, shift, status, assignedServices,
-        commissionRule, attendance, performance, createdAt, updatedAt
+        isServiceStaff, commissionRule, attendance, performance, createdAt, updatedAt
       ) VALUES (
         @id, @name, @role, @phone, @email, @branchId, @image, @shift, @status, @assignedServices,
-        @commissionRule, @attendance, @performance, @createdAt, @updatedAt
+        @isServiceStaff, @commissionRule, @attendance, @performance, @createdAt, @updatedAt
       )`).run(row);
     }
     return row;
@@ -487,7 +489,7 @@ export class StaffLoginService {
   }
 
   enterpriseOs(query = {}, access) {
-    const dashboard = this.staffDashboard(query, access);
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const staffId = dashboard.staff.id;
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const date = String(query.date || dashboard.range.date || istBusinessDate()).slice(0, 10);
@@ -614,7 +616,7 @@ export class StaffLoginService {
   }
 
   clients(query = {}, access) {
-    const dashboard = this.staffDashboard({}, access);
+    const dashboard = cachedStaffDashboard({}, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const columns = columnsFor("clients");
     const q = String(query.q || query.search || "").trim().toLowerCase();
@@ -645,7 +647,7 @@ export class StaffLoginService {
 
   client360(clientId, query = {}, access) {
     ensureStaffSelfAppSchema();
-    const dashboard = this.staffDashboard(query, access);
+    const dashboard = cachedStaffDashboard(query, access, (q, a) => this.staffDashboard(q, a), "dashboard");
     const branchId = dashboard.staff.branchId || access.branchId || "";
     const client = this.clientRecord(access.tenantId, branchId, clientId);
     if (!client) throw notFound("Client record not found");
@@ -1258,18 +1260,26 @@ export class StaffLoginService {
     return [...ids].filter(Boolean);
   }
 
-  enrichAppointments(rows, tenantId = "", branchId = "") {
-    if (!tenantId) throw badRequest("tenantId is required to enrich appointments");
+  appointmentEnrichment(tenantId = "", branchId = "") {
     const clientColumns = columnsFor("clients");
     const clientSelect = ["id", "name", clientColumns.includes("phone") ? "phone" : "'' AS phone"];
     clientSelect.push(clientColumns.includes("mobile") ? "mobile" : "'' AS mobile");
     const clientBranchFilter = branchId && clientColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
     const clientRows = db.prepare(`SELECT ${clientSelect.join(", ")} FROM clients WHERE tenantId = @tenantId${clientBranchFilter}`).all({ tenantId, branchId });
-    const clients = new Map(clientRows.map((row) => [row.id, row]));
     const serviceColumns = columnsFor("services");
     const serviceBranchFilter = branchId && serviceColumns.includes("branchId") ? " AND (branchId = @branchId OR branchId = '')" : "";
     const serviceRows = db.prepare(`SELECT id, name, durationMinutes, price FROM services WHERE tenantId = @tenantId${serviceBranchFilter}`).all({ tenantId, branchId });
-    const services = new Map(serviceRows.map((row) => [row.id, row]));
+    return {
+      clients: new Map(clientRows.map((row) => [row.id, row])),
+      services: new Map(serviceRows.map((row) => [row.id, row]))
+    };
+  }
+
+  enrichAppointments(rows, tenantId = "", branchId = "", enrichment = null) {
+    if (!tenantId) throw badRequest("tenantId is required to enrich appointments");
+    const data = enrichment || this.appointmentEnrichment(tenantId, branchId);
+    const clients = data.clients;
+    const services = data.services;
     return rows.map((row) => {
       const serviceIds = parseServiceIds(row.serviceIds);
       const serviceRows = serviceIds.map((serviceId) => services.get(serviceId)).filter(Boolean);

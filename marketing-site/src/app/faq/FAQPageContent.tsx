@@ -28,16 +28,16 @@ const FAQ_ITEMS_HI: Record<string, string> = {
 };
 
 const ANSWERS_HI: Record<string, string> = {
-  "What is Aura?": "Aura एक कनेक्टेड सैलून ऑपरेटिंग सिस्टम है। Owner CRM और POS, कस्टमर बुकिंग, स्टाफ अटेंडेंस और पेऑल, इन्वेंटरी, फाइनेंस और ब्रांच-अवेयर ऑपरेशन — सब एक ही सैलून डे के चारों ओर चलते हैं — कोई डबल एंट्री नहीं, कोई गैप नहीं।",
-  "Is Aura only for large salon chains?": "नहीं। सोलो सैलून ओनर, 2-ब्रांच सेटअप और मल्टी-लोकेशन चेन — सभी Aura का उपयोग करते हैं। Starter प्लान सिंगल-ब्रांच सैलून के लिए है। Growth 5 ब्रांच तक सपोर्ट करता है। Enterprise अनलिमिटेड ब्रांच कवर करता है।",
+  "What is Aura?": "Aura एक connected salon operating system है। Owner CRM और POS, pay-at-salon customer booking, qualified staff operations, inventory, finance और branch-aware records एक salon day के अनुसार बने हैं।",
+  "Is Aura only for large salon chains?": "Aura plans single branch, पाँच branch तक बढ़ते operation और proposal-based enterprise operation के लिए structured हैं। सही fit और final scope demo व proposal में confirm करें।",
   "How does multi-branch work?": "हर रिकॉर्ड — अपॉइंटमेंट, इनवॉइस, स्टाफ, इन्वेंटरी, खर्च — में tenant और branch ID होती है। ओनर्स को कंसोलिडेटेड डैशबोर्ड दिखता है। ब्रांच मैनेजर सिर्फ अपनी लोकेशन देखते हैं। क्रॉस-ब्रांच एनालिटिक्स Growth टियर में उपलब्ध है।",
   "Does Aura support GST billing?": "हाँ। Aura GST-रेडी इनवॉइस जनरेट करता है HSN/SAC कॉन्टेक्सट के साथ, CGST/SGST या IGST कैल्कुलेट करता है, और GST रिपोर्ट समरी बनाता है। फाइलिंग आपके CA या सरकारी पोर्टल के जरिए होती है।",
-  "Can clients book online?": "हाँ। ऑनलाइन बुकिंग पोर्टल एक पब्लिक, पे-एट-सैलून फ्लो है। क्लाइंट सर्विस चुनते हैं, प्रोफेशनल पिक करते हैं, स्लॉट सेलेक्ट करते हैं, और कन्फर्म करते हैं — बिना पेमेंट अपफ्रंट। बुकिंग तुरंत ओनर के कैलेंडर पर दिखती है।",
-  "Is there a mobile app for staff?": "हाँ। Staff App में सिक्योर अटेंडेंस (एंड्रॉइड-ओनली फेस/बायोमेट्रिक), शिफ्ट व्यूइंग, कमीशन ट्रैकिंग और परफॉर्मेंस डैशबोर्ड हैं। iOS यूज़र्स वेब-बेस्ड अटेंडेंस फ्लो यूज़ कर सकते हैं।",
-  "What about data security?": "Aura एन्क्रिप्टेड डेटा, रोल-बेस्ड एक्सेस कंट्रोल, मल्टी-टेनेंसी आइसोलेशन और रेगुलर बैकअप्स यूज़ करता है। JWT रिफ्रेश टोकन API एक्सेस सिक्योर करते हैं।",
-  "Can I import data from another tool?": "हाँ। Aura क्लाइंट, सर्विस, स्टाफ और इन्वेंटरी के लिए स्ट्रक्चर्ड CSV टेम्पलेट्स के जरिए बल्क इम्पोर्ट सपोर्ट करता है। इम्पोर्ट सिस्टम डेटा वैलिडेट करता है और डेटाबेस में लिखने से पहले एरर्स रिपोर्ट करता है।",
-  "How do I get started?": "फ्री डेमो बुक करें। हम आपको प्लेटफ़ॉर्म दिखाएंगे, आपकी सर्विस और स्टाफ सेटअप में मदद करेंगे, और ज़रूरत पड़ने पर आपका एग्ज़िस्टिंग क्लाइंट डेटा माइग्रेट करेंगे। हर प्लान 14-दिन के फ्री ट्रायल से शुरू होता है — क्रेडिट कार्ड की ज़रूरत नहीं।",
-  "What payment methods does Aura accept?": "Aura Razorpay के जरिए पेमेंट प्रोसेस करता है — UPI, क्रेडिट/डेबिट कार्ड, नेट बैंकिंग और बैंक ट्रांसफर। सभी ट्रांज़ैक्शन बैंक-ग्रेड एन्क्रिप्शन से सिक्योर हैं।",
+  "Can clients book online?": "हाँ। Current public booking story pay at salon है: client service, professional और slot चुनकर online prepayment के बिना confirm करता है।",
+  "Is there a mobile app for staff?": "Staff App qualified workday journey देता है। Secure attendance owner policy और configuration enabled होने पर Android-only है। Complete iOS attendance claim नहीं है।",
+  "What about data security?": "Aura tenant और branch isolation, role-based access और audit trail के लिए बना है। Hosting, encryption, backup, retention और compliance commitments proposal में confirm होंगे।",
+  "Can I import data from another tool?": "Data preparation और agreed imports onboarding का हिस्सा हैं। Source format, validation और migration scope assessment में confirm होंगे।",
+  "How do I get started?": "डेमो का अनुरोध करें। Team workflow review के बाद assessment, data preparation, configuration, role training, go-live checks और suitable trial access proposal में confirm करेगी।",
+  "What payment methods does Aura accept?": "Subscription payment methods और provider proposal में confirm होंगे। Customer booking का current flow pay at salon है।",
   "Does Aura handle staff payroll?": "हाँ। Growth और Enterprise प्लान में अटेंडेंस ट्रैकिंग, शिफ्ट शेड्यूलिंग, कमीशन कैल्कुलेशन और पेऑल प्रोसेसिंग शामिल है। Aura PF, ESI, TDS, प्रोफेशनल टैक्स, ग्रैच्युटी और बोनस कैल्कुलेट करता है।",
   "Can I white-label the customer app?": "हाँ। व्हाइट-लेबल ब्रांडिंग — कस्टम डोमेन, लोगो, कलर्स — Enterprise प्लान में उपलब्ध है। कस्टमर-फेसिंग बुकिंग पोर्टल आपके सैलून की ब्रांड आइडेंटिटी कैरी कर सकता है।",
 };
@@ -114,7 +114,9 @@ export default function FAQPageContent({ faqData }: { faqData: FAQItem[] }) {
                   <button
                     type="button"
                     onClick={() => setOpenIndex(isOpen ? null : i)}
-                    aria-expanded={isOpen}
+                   aria-expanded={isOpen}
+                  aria-controls={`faq-panel-${i}`}
+                  id={`faq-trigger-${i}`}
                     className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
                   >
                     <span className="text-sm font-semibold text-aura-text">{question}</span>
@@ -129,6 +131,9 @@ export default function FAQPageContent({ faqData }: { faqData: FAQItem[] }) {
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.25, ease: "easeInOut" }}
+                        id={`faq-panel-${i}`}
+                        role="region"
+                        aria-labelledby={`faq-trigger-${i}`}
                         className="overflow-hidden"
                       >
                         <div className="px-5 pb-4 text-sm text-aura-text-secondary leading-relaxed">

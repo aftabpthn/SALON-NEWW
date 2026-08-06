@@ -44,11 +44,6 @@ customerSalonRouter.post("/customer/salons/:tenantId/primary", asyncHandler((req
   const { tenantId } = req.params;
   const { branchId, businessId, businessName, reason } = req.body || {};
 
-  // Validate tenant matches request context
-  if (req.access?.tenantId && req.access.tenantId !== tenantId) {
-    return res.status(403).json({ error: "Tenant mismatch" });
-  }
-
   const result = setPrimarySalon({
     customerId,
     tenantId,
@@ -87,11 +82,6 @@ customerSalonRouter.post("/customer/salons/:tenantId/visit", asyncHandler((req, 
 
   const { tenantId } = req.params;
   const { branchId, businessId, businessName } = req.body || {};
-
-  // Validate tenant matches request context
-  if (req.access?.tenantId && req.access.tenantId !== tenantId) {
-    return res.status(403).json({ error: "Tenant mismatch" });
-  }
 
   // Upsert relationship
   getOrCreateRelationship({

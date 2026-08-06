@@ -13,5 +13,12 @@
   </head>
   <body>
     <aura-root></aura-root>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/offline-sw.js").catch(function () {});
+        });
+      }
+    </script>
   </body>
 </html>

@@ -8,6 +8,7 @@ import { requireIdempotencyKey } from "../middleware/idempotency.middleware.js";
 import { staffSelfContext } from "../middleware/staff-self-context.middleware.js";
 import { staffSelfResponsePresenterService } from "../services/staff-self-response-presenter.service.js";
 import { staffShiftSwapService } from "../services/staff-shift-swap.service.js";
+import { cachedStaffDashboard } from "../services/staff-dashboard-cache.service.js";
 
 export const staffSelfRouter = Router();
 
@@ -27,7 +28,7 @@ staffSelfRouter.get(
   staffSelfContext(),
   requireStaffAppSelfPermission("read", "staff-app-appointments"),
   asyncHandler((req, res) => {
-    const result = staffLoginService.staffDashboard(req.query, req.access);
+    const result = cachedStaffDashboard(req.query, req.access, (q, a) => staffLoginService.staffDashboard(q, a), "dashboard");
     res.json(staffSelfResponsePresenterService.dashboard(result, req.access));
   })
 );

@@ -1,116 +1,191 @@
-import { Component, OnInit, computed } from "@angular/core";
-import { RouterLink } from "@angular/router";
-import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
+import { Component, OnInit, computed, signal } from "@angular/core";
+import { Router, RouterLink } from "@angular/router";
+import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { heart, locationOutline, searchOutline, trashOutline } from "ionicons/icons";
+import { heart, locationOutline, searchOutline, star, storefrontOutline } from "ionicons/icons";
+import { Business, CustomerFavorite } from "../../core/api.types";
+import { CustomerFeedbackService } from "../../core/customer-feedback.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon],
+  imports: [RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
       <main class="page wishlist-page">
-        <section class="wishlist-hero premium-card">
-          <div class="hero-icon"><ion-icon name="heart"></ion-icon></div>
-          <div>
-            <h1>Saved salons</h1>
+        <header class="wishlist-header">
+          <div class="header-copy">
+            <div class="content-title-row">
+              <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
+              <h1>Favourites</h1>
+            </div>
+            <p>{{ savedCount() }} {{ savedCount() === 1 ? "salon" : "salons" }} saved</p>
           </div>
-          <ion-button class="primary-gradient" routerLink="/tabs/search">
-            <ion-icon name="search-outline" slot="start"></ion-icon>
-            Discover more
-          </ion-button>
-        </section>
+          <a class="discover-action" [routerLink]="discoverLink()">
+            <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+            <span>Discover</span>
+          </a>
+        </header>
 
         @if (!marketplace.isAuthenticated()) {
-          <section class="state-card premium-card">
-            <h2>Login to use wishlist</h2>
+          <section class="state-card" aria-labelledby="login-title">
+            <div class="state-icon"><ion-icon name="heart"></ion-icon></div>
+            <div>
+              <h2 id="login-title">Login to use favourites</h2>
+              <p>Keep your favourite salons close at hand.</p>
+            </div>
             <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wishlist' }">Login</ion-button>
           </section>
         } @else {
-          @if (marketplace.loading()) {
-            <section class="state-card premium-card">
-              <h2>Loading wishlist</h2>
+          @if (marketplace.loading() && savedCount() === 0) {
+            <section class="loading-state" aria-live="polite" aria-busy="true">
+              <span class="sr-only">Loading favourite salons</span>
+              @for (item of loadingItems; track item) {
+                <div class="skeleton-card" aria-hidden="true">
+                  <div class="skeleton-image"></div>
+                  <div class="skeleton-copy">
+                    <span class="skeleton-line title"></span>
+                    <span class="skeleton-line meta"></span>
+                    <span class="skeleton-line service"></span>
+                    <span class="skeleton-line actions"></span>
+                  </div>
+                </div>
+              }
             </section>
-          }
-
-          @if (marketplace.error()) {
-            <section class="state-card premium-card error">
-              <h2>Could not load wishlist</h2>
+          } @else if (marketplace.error() && savedCount() === 0) {
+            <section class="state-card error" role="alert">
+              <div class="state-icon"><ion-icon name="storefront-outline"></ion-icon></div>
+              <h2>Could not load favourites</h2>
               <p>{{ marketplace.error() }}</p>
               <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
             </section>
-          }
-
-          <section class="summary-grid">
-            <article class="summary-card premium-card">
-              <span>Saved</span>
-              <strong>{{ savedCount() }}</strong>
-            </article>
-            <article class="summary-card premium-card">
-              <span>Ready to book</span>
-              <strong>{{ bookableCount() }}</strong>
-            </article>
-          </section>
-
-          <section class="wishlist-grid">
-            @for (favorite of saved(); track favorite.businessId) {
-              @if (favorite.business; as business) {
-                <article class="wishlist-card premium-card">
-                  <img [src]="business.coverImage || business.galleryImages[0] || 'assets/icons/icon.svg'" [alt]="business.businessName + ' cover'" />
-                  <div class="wishlist-copy">
-                    <span class="rating-pill">{{ ratingLabel(business) }}</span>
-                    <h2>{{ business.businessName }}</h2>
-                    <p>{{ business.category }} · {{ business.area || business.city }}</p>
-                    <small><ion-icon name="location-outline"></ion-icon>{{ business.address }}</small>
-                    <strong>{{ business.popularService || "Services" }} from {{ money(business.startingPricePaise) }}</strong>
-                    <div class="wishlist-actions">
-                      <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']">Book</ion-button>
-                      <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="['/business', business.slug]">View</ion-button>
-                      <ion-button size="small" fill="clear" color="danger" (click)="remove(business.id)">
-                        <ion-icon name="trash-outline" slot="start"></ion-icon>
-                        Remove
-                      </ion-button>
+          } @else {
+            <section class="wishlist-grid" aria-label="Favourite salons">
+              @for (favorite of saved(); track favorite.businessId) {
+                @if (favorite.business; as business) {
+                  <article
+                    class="wishlist-card"
+                    tabindex="0"
+                    role="link"
+                    [attr.aria-label]="'Open ' + business.businessName"
+                    (click)="openBusiness(business)"
+                    (keydown.enter)="openBusiness(business)">
+                    <div class="salon-image">
+                      @if (displayImage(business); as image) {
+                        <img [src]="image" [alt]="business.businessName + ' cover'" loading="lazy" (error)="markImageFailed(business.id)" />
+                      } @else {
+                        <div class="image-fallback" aria-hidden="true">
+                          <span>{{ businessInitials(business) }}</span>
+                          <ion-icon name="storefront-outline"></ion-icon>
+                        </div>
+                      }
                     </div>
+
+                    <div class="wishlist-copy">
+                      <div class="salon-heading">
+                        <h2>{{ business.businessName }}</h2>
+                        <button
+                          class="remove-action"
+                          type="button"
+                          [disabled]="isRemoving(business.id)"
+                          [attr.aria-label]="'Remove ' + business.businessName + ' from favourites'"
+                          (click)="remove(business, $event)">
+                          <ion-icon name="heart" aria-hidden="true"></ion-icon>
+                        </button>
+                      </div>
+
+                      <div class="metadata">
+                        @if (business.category) {
+                          <span class="category">{{ business.category }}</span>
+                        }
+                        @if (locationLabel(business); as location) {
+                          <span><ion-icon name="location-outline" aria-hidden="true"></ion-icon>{{ location }}</span>
+                        }
+                        @if (distanceLabel(business); as distance) {
+                          <span>{{ distance }}</span>
+                        }
+                        @if (ratingLabel(business); as rating) {
+                          <span><ion-icon name="star" aria-hidden="true"></ion-icon>{{ rating }}</span>
+                        }
+                      </div>
+
+                      @if (serviceLabel(business); as service) {
+                        <p class="service-line">
+                          <span>{{ service }}</span>
+                          @if (hasStartingPrice(business)) {
+                            <strong>From {{ money(business.startingPricePaise) }}</strong>
+                          }
+                        </p>
+                      } @else if (hasStartingPrice(business)) {
+                        <p class="service-line"><span>Services</span><strong>From {{ money(business.startingPricePaise) }}</strong></p>
+                      } @else {
+                        <p class="service-line unavailable">Service details unavailable</p>
+                      }
+
+                      <div class="wishlist-actions">
+                        <a class="card-action primary" [routerLink]="businessBookLink(business)" (click)="$event.stopPropagation()">Book now</a>
+                      </div>
+                    </div>
+                  </article>
+                }
+              } @empty {
+                <section class="state-card empty-state">
+                  <div class="state-icon"><ion-icon name="heart"></ion-icon></div>
+                  <div>
+                    <h2>No favourites yet</h2>
+                    <p>Tap the heart on a salon to keep it here.</p>
                   </div>
-                </article>
+                  <ion-button class="primary-gradient" [routerLink]="discoverLink()">
+                    <ion-icon name="search-outline" slot="start"></ion-icon>
+                    Find salons
+                  </ion-button>
+                </section>
               }
-            } @empty {
-              <section class="state-card premium-card">
-                <h2>No saved salons yet</h2>
-                <ion-button class="primary-gradient" routerLink="/tabs/search">Find salons</ion-button>
-              </section>
-            }
-          </section>
+            </section>
+          }
         }
       </main>
     </ion-content>
   `,
   styles: [`
+    :host {
+      display: block;
+    }
+
     .wishlist-page {
       display: grid;
-      gap: 16px;
+      gap: 12px;
+      max-width: 980px;
       padding-bottom: 112px;
     }
 
-    .wishlist-hero {
+    .wishlist-header {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
       align-items: center;
-      padding: 22px;
+      min-width: 0;
+      padding: 2px 0 8px;
+      border-bottom: 1px solid var(--border);
     }
 
-    .hero-icon {
-      width: 64px;
-      height: 64px;
+    .header-identity,
+    .state-icon {
       display: grid;
       place-items: center;
-      border-radius: 22px;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      font-size: 1.7rem;
-      box-shadow: 0 16px 32px rgba(139, 92, 246, 0.2);
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .header-identity {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      font-size: 1rem;
+    }
+
+    .header-copy {
+      min-width: 0;
     }
 
     h1,
@@ -121,132 +196,460 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     h1 {
       color: var(--text);
-      font-size: clamp(2rem, 5vw, 3rem);
-      letter-spacing: -0.05em;
-      line-height: 1;
-    }
-
-    .summary-grid,
-    .wishlist-grid {
-      display: grid;
-      gap: 14px;
-    }
-
-    .summary-card {
-      display: grid;
-      gap: 5px;
-      padding: 16px;
-    }
-
-    .summary-card span {
-      color: var(--muted);
-      font-size: 0.78rem;
+      font-size: clamp(1.2rem, 5vw, 1.45rem);
       font-weight: 900;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      letter-spacing: -0.035em;
+      line-height: 1.08;
     }
 
-    .summary-card strong {
-      color: var(--text);
-      font-size: 2rem;
-      letter-spacing: -0.04em;
-      line-height: 1;
+    .content-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .summary-card small,
-    .wishlist-card p,
-    .wishlist-card small {
+    .content-back-button {
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      margin-left: -8px;
+      --color: var(--brand-950);
+      --icon-font-size: 25px;
+      --background: transparent;
+      --border-radius: 12px;
+      --padding-start: 0;
+      --padding-end: 0;
+      filter: drop-shadow(0.45px 0 0 var(--brand-950));
+    }
+
+    .header-copy p {
+      margin-top: 2px;
       color: var(--muted);
-      line-height: 1.4;
+      font-size: 0.82rem;
+      font-weight: 700;
     }
 
-    .wishlist-card {
+    .discover-action {
+      min-height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--primary);
+      background: var(--surface);
+      font-size: 0.82rem;
+      font-weight: 850;
+      text-decoration: none;
+      transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+
+    .discover-action ion-icon {
+      font-size: 0.9rem;
+    }
+
+    .wishlist-grid,
+    .loading-state {
       display: grid;
+      gap: 8px;
+    }
+
+    .wishlist-card,
+    .skeleton-card {
+      display: grid;
+      grid-template-columns: 78px minmax(0, 1fr);
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--surface);
+      box-shadow: 0 4px 14px rgba(28, 28, 28, 0.04);
+      transition: border-color 200ms ease, box-shadow 200ms ease, transform 180ms ease;
+    }
+
+    .salon-image,
+    .skeleton-image {
+      min-height: 106px;
+      background: var(--surface-soft);
+    }
+
+    .salon-image {
+      position: relative;
       overflow: hidden;
     }
 
-    .wishlist-card img {
+    .salon-image img {
       width: 100%;
-      aspect-ratio: 16 / 10;
-      height: auto;
+      height: 100%;
+      display: block;
       object-fit: cover;
-      background: var(--surface-soft);
+      transition: transform 450ms ease-out;
+    }
+
+    .image-fallback {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      gap: 4px;
+      color: #4F46E5;
+      background: linear-gradient(145deg, #e8f5fa, #c8e9f3 52%, #a8dbe9);
+    }
+
+    .image-fallback span {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.76);
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 4px 12px rgba(15, 79, 101, 0.08);
+      font-size: 0.86rem;
+      font-weight: 950;
+      letter-spacing: -0.04em;
+    }
+
+    .image-fallback ion-icon {
+      font-size: 0.84rem;
+      opacity: 0.72;
     }
 
     .wishlist-copy {
       display: grid;
-      gap: 8px;
-      padding: 16px;
+      grid-template-rows: auto auto minmax(14px, auto) auto;
+      gap: 4px;
+      min-width: 0;
+      padding: 7px 9px;
+    }
+
+    .salon-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 30px;
+      gap: 4px;
+      align-items: start;
     }
 
     .wishlist-copy h2 {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 1;
       color: var(--text);
-      font-size: 1.35rem;
-      letter-spacing: -0.04em;
+      font-size: 0.9rem;
+      font-weight: 850;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
     }
 
-    .wishlist-card small {
+    .remove-action {
+      width: 30px;
+      height: 30px;
+      margin: -4px -4px 0 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 8px;
+      color: #c0264d;
+      background: transparent;
+      cursor: pointer;
+      transition: color 180ms ease, background 180ms ease, transform 180ms ease, opacity 180ms ease;
+    }
+
+    .remove-action ion-icon {
+      font-size: 1.05rem;
+    }
+
+    .remove-action:disabled {
+      cursor: wait;
+      opacity: 0.42;
+    }
+
+    .metadata {
+      display: flex;
+      align-items: center;
+      gap: 3px 6px;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .metadata span {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      font-weight: 800;
+      gap: 2.5px;
+      min-width: 0;
     }
 
-    .wishlist-card strong {
+    .metadata span:not(.category) {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .metadata ion-icon {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-size: 0.78rem;
+    }
+
+    .category {
+      flex: 0 1 auto;
+      overflow: hidden;
+      padding: 1.5px 5px;
+      border-radius: 4px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      text-overflow: ellipsis;
+    }
+
+    .service-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 4px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.2;
+    }
+
+    .service-line span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .service-line strong {
+      flex: 0 0 auto;
       color: var(--primary-2);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    .service-line.unavailable {
+      font-style: italic;
     }
 
     .wishlist-actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 6px;
+      align-items: center;
+      gap: 5px;
+      margin-top: auto;
+    }
+
+    .card-action {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      font-size: 0.84rem;
+      font-weight: 850;
+      line-height: 1;
+      text-decoration: none;
+      transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+    }
+
+    .card-action.primary {
+      color: #fff;
+      background: var(--primary);
+      box-shadow: 0 4px 10px rgba(99, 102, 241, 0.14);
     }
 
     .state-card {
       display: grid;
-      gap: 12px;
-      padding: 20px;
+      justify-items: start;
+      gap: 10px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.05);
+    }
+
+    .state-card h2 {
+      color: var(--text);
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: -0.025em;
+    }
+
+    .state-card p {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .state-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 13px;
+      font-size: 1.05rem;
     }
 
     .state-card.error p {
-      color: #EF4444;
+      color: var(--error);
     }
 
-    @media (max-width: 599px) {
-      .wishlist-hero {
-        grid-template-columns: 1fr;
+    .empty-state {
+      justify-items: center;
+      padding: 28px 20px;
+      text-align: center;
+    }
+
+    .skeleton-card {
+      pointer-events: none;
+    }
+
+    .skeleton-copy {
+      display: grid;
+      align-content: center;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .skeleton-line {
+      height: 9px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--surface-soft) 20%, var(--surface-elevated) 50%, var(--surface-soft) 80%);
+      background-size: 220% 100%;
+      animation: skeleton-shimmer 1.35s ease-in-out infinite;
+    }
+
+    .skeleton-line.title { width: 72%; height: 13px; }
+    .skeleton-line.meta { width: 88%; }
+    .skeleton-line.service { width: 64%; }
+    .skeleton-line.actions { width: 48%; height: 30px; border-radius: 10px; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .discover-action:focus-visible,
+    .card-action:focus-visible,
+    .remove-action:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--focus) 42%, transparent);
+      outline-offset: 2px;
+    }
+
+    .discover-action:active,
+    .card-action:active,
+    .remove-action:active {
+      transform: scale(0.97);
+    }
+
+    @keyframes skeleton-shimmer {
+      from { background-position: 100% 0; }
+      to { background-position: -100% 0; }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .wishlist-card:hover {
+        border-color: var(--border-strong);
+        box-shadow: 0 12px 28px rgba(28, 28, 28, 0.09);
       }
 
-      .wishlist-actions ion-button,
-      .wishlist-hero ion-button {
-        width: 100%;
+      .wishlist-card:hover .salon-image img {
+        transform: scale(1.035);
+      }
+
+      .discover-action:hover,
+      .remove-action:hover {
+        background: var(--primary-soft);
+      }
+
+      .card-action.primary:hover {
+        background: var(--primary-hover);
       }
     }
 
     @media (min-width: 768px) {
-      .summary-grid {
+      .wishlist-grid,
+      .loading-state {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
-      .wishlist-card {
-        grid-template-columns: 260px minmax(0, 1fr);
+      .wishlist-header {
+        padding-bottom: 12px;
+      }
+    }
+
+    @media (max-width: 359px) {
+      .wishlist-page {
+        gap: 10px;
       }
 
-      .wishlist-card img {
-        height: 100%;
-        min-height: 240px;
+      .wishlist-card,
+      .skeleton-card {
+        grid-template-columns: 84px minmax(0, 1fr);
+      }
+
+      .wishlist-copy {
+        padding: 8px;
+      }
+
+      .card-action {
+        padding-inline: 10px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .wishlist-card,
+      .salon-image img,
+      .discover-action,
+      .card-action,
+      .remove-action,
+      .skeleton-line {
+        animation: none;
+        transition: none;
       }
     }
   `]
 })
 export class WishlistPage implements OnInit {
-  readonly saved = computed(() => this.marketplace.favorites().filter((favorite) => favorite.business));
+  readonly saved = computed<CustomerFavorite[]>(() => {
+    const seen = new Set<string>();
+    const merged: CustomerFavorite[] = [];
+    for (const item of [...this.marketplace.favorites(), ...this.marketplace.savedSalons()]) {
+      const key = item.businessId || item.business?.id || item.business?.slug || "";
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    return merged.filter((favorite) => favorite.business);
+  });
   readonly savedCount = computed(() => this.saved().length);
-  readonly bookableCount = computed(() => this.saved().filter((favorite) => (favorite.business?.services.length || 0) > 0).length);
+  readonly failedImages = signal<ReadonlySet<string>>(new Set());
+  readonly removingIds = signal<ReadonlySet<string>>(new Set());
+  readonly loadingItems = [1, 2, 3];
 
-  constructor(readonly marketplace: MarketplaceService) {
-    addIcons({ heart, locationOutline, searchOutline, trashOutline });
+  constructor(
+    readonly marketplace: MarketplaceService,
+    private readonly router: Router,
+    private readonly alerts: AlertController,
+    private readonly feedback: CustomerFeedbackService
+  ) {
+    addIcons({ heart, locationOutline, searchOutline, star, storefrontOutline });
   }
 
   ngOnInit() {
@@ -257,18 +660,107 @@ export class WishlistPage implements OnInit {
     void this.marketplace.ensureFavorites().catch(() => undefined);
   }
 
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("profile") : "/tabs/profile";
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
+  }
+
+  businessProfileLink(business: Business): string {
+    const slug = business.slug || business.id || business.branchId || "";
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug) : `/business/${encodeURIComponent(slug)}`;
+  }
+
+  businessBookLink(business: Business): string {
+    const slug = business.slug || business.id || business.branchId || "";
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slug, "book") : `/business/${encodeURIComponent(slug)}/book`;
+  }
+
   money(pricePaise: number): string {
     return this.marketplace.formatMoney(pricePaise);
   }
 
-  ratingLabel(business: { ratingAverage: number; ratingCount: number; createdAt?: string }): string {
-    const firstMonth = business.createdAt ? Date.now() - new Date(business.createdAt).getTime() < 30 * 24 * 60 * 60 * 1000 : false;
-    if (business.ratingCount < 5 || firstMonth) return "New";
-    const rating = Math.min(5, Number(business.ratingAverage || 0));
-    return rating > 0 ? `Star ${Number(rating.toFixed(1))}` : "New";
+  displayImage(business: Business): string {
+    if (this.failedImages().has(business.id)) return "";
+    const image = String(business.coverImage || business.galleryImages?.[0] || business.logoUrl || "").trim();
+    const normalized = image.toLowerCase();
+    return normalized.endsWith("assets/icons/icon.svg") || normalized.endsWith("/assets/icons/icon.svg") ? "" : image;
   }
 
-  remove(businessId: string) {
-    void this.marketplace.removeFavorite(businessId).catch(() => undefined);
+  markImageFailed(businessId: string) {
+    this.failedImages.update((current) => new Set([...current, businessId]));
+  }
+
+  businessInitials(business: Business): string {
+    const words = String(business.businessName || "Aura").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    return words.map((word) => word.charAt(0).toUpperCase()).join("") || "A";
+  }
+
+  locationLabel(business: Business): string {
+    const parts = [business.area, business.city].map((part) => String(part || "").trim()).filter(Boolean);
+    return [...new Set(parts)].join(", ") || String(business.address || "").trim();
+  }
+
+  distanceLabel(business: Business): string {
+    const distance = Number(business.distanceKm);
+    if (!Number.isFinite(distance) || distance < 0) return "";
+    return `${Number(distance.toFixed(distance < 10 ? 1 : 0))} km`;
+  }
+
+  ratingLabel(business: Business): string {
+    const rating = Number(business.ratingAverage);
+    const count = Number(business.ratingCount);
+    if (!Number.isFinite(rating) || rating <= 0 || !Number.isFinite(count) || count <= 0) return "";
+    return `${Number(Math.min(5, rating).toFixed(1))} (${count})`;
+  }
+
+  serviceLabel(business: Business): string {
+    return String(business.popularService || business.services?.[0]?.name || business.categories?.[0] || "").trim();
+  }
+
+  hasStartingPrice(business: Business): boolean {
+    return Number.isFinite(Number(business.startingPricePaise)) && Number(business.startingPricePaise) > 0;
+  }
+
+  isRemoving(businessId: string): boolean {
+    return this.removingIds().has(businessId);
+  }
+
+  openBusiness(business: Business) {
+    void this.router.navigateByUrl(this.businessProfileLink(business));
+  }
+
+  async remove(business: Business, event?: Event) {
+    event?.stopPropagation();
+    const alert = await this.alerts.create({
+      header: "Remove favourite?",
+      message: `${business.businessName} will be removed from your favourites.`,
+      buttons: [
+        { text: "Keep", role: "cancel" },
+        { text: "Remove", role: "destructive", handler: () => void this.confirmRemove(business) }
+      ]
+    });
+    await alert.present();
+  }
+
+  private async confirmRemove(business: Business) {
+    this.removingIds.update((current) => new Set([...current, business.id]));
+    try {
+      await this.marketplace.removeFavorite(business.id);
+      if (this.marketplace.isSalonSaved(business.id)) {
+        await this.marketplace.toggleSavedSalon(business.id);
+      }
+      await this.feedback.success(`${business.businessName} removed from favourites.`);
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Unable to remove favourite.");
+    } finally {
+      this.removingIds.update((current) => {
+        const next = new Set(current);
+        next.delete(business.id);
+        return next;
+      });
+    }
   }
 }

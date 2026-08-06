@@ -160,9 +160,9 @@ export const floatingOrb = (delay: number, duration: number): Variants => ({
 export const breathingGlow: Variants = {
   animate: {
     boxShadow: [
-      "0 0 20px rgba(104,31,55,0.08)",
-      "0 0 50px rgba(104,31,55,0.2)",
-      "0 0 20px rgba(104,31,55,0.08)",
+      "0 0 20px rgba(18,63,92,0.08)",
+      "0 0 50px rgba(47,120,149,0.18)",
+      "0 0 20px rgba(18,63,92,0.08)",
     ],
     transition: {
       duration: 3,

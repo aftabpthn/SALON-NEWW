@@ -4,6 +4,7 @@ import { billingService } from "./billing.service.js";
 import { balanceSheetConnector } from "./balance-sheet-connector.service.js";
 import { balanceSheetService } from "./balance-sheet.service.js";
 import { realtimeService } from "./realtime.service.js";
+import { customerNotificationService } from "./customer-notification.service.js";
 
 const money = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
@@ -23,6 +24,24 @@ export class PaymentService {
     realtimeService.broadcast("payment:received", { invoiceId, mode, amount }, { tenantId: access.tenantId, branchId: invoice.branch_id });
     if (updated.payment_status === "paid") {
       realtimeService.broadcast("invoice:paid", { invoiceId, invoiceNo: updated.invoice_no }, { tenantId: access.tenantId, branchId: invoice.branch_id });
+    }
+    const customerId = updated.client_id || updated.clientId || invoice.client_id || invoice.clientId || "";
+    if (customerId) {
+      const amountPaise = Math.round(amount * 100);
+      customerNotificationService.safeCreate({
+        tenantId: access.tenantId,
+        branchId: updated.branch_id || updated.branchId || invoice.branch_id || invoice.branchId || "",
+        customerId,
+        type: updated.payment_status === "paid" ? "invoice_paid" : "payment_received",
+        category: "payments",
+        title: updated.payment_status === "paid" ? "Invoice paid" : "Payment received",
+        body: updated.payment_status === "paid" ? "Your invoice has been paid successfully." : "Your payment was received successfully.",
+        data: { invoiceId, invoiceNo: updated.invoice_no || "", amountPaise, paymentStatus: updated.payment_status || "" },
+        deepLink: "/tabs/wallet",
+        sourceType: "invoice",
+        sourceId: invoiceId,
+        eventKey: `invoice-payment:${invoiceId}:${Number(updated.paid_amount || amount)}:${mode}`
+      });
     }
     return updated;
   }
@@ -93,6 +112,23 @@ export class PaymentService {
       balanceSheetConnector.connectDeferredRevenueForInvoice({ invoice: updated, payments: [{ mode: payment.payment_mode || "bank", amount }] }, access);
     } catch {
       billingService.writeEvent({ tenantId: access.tenantId, invoiceId: invoice.id, eventType: "finance.gl_enqueue_failed", actorUserId: access.userId || "provider-webhook", payload: { amount, paymentId } });
+    }
+    const customerId = updated.client_id || updated.clientId || invoice.client_id || invoice.clientId || "";
+    if (customerId) {
+      customerNotificationService.safeCreate({
+        tenantId: access.tenantId,
+        branchId: updated.branch_id || updated.branchId || invoice.branch_id || invoice.branchId || "",
+        customerId,
+        type: paymentStatus === "paid" ? "invoice_paid" : "payment_received",
+        category: "payments",
+        title: paymentStatus === "paid" ? "Invoice paid" : "Payment received",
+        body: paymentStatus === "paid" ? "Your invoice has been paid successfully." : "Your payment was received successfully.",
+        data: { invoiceId: invoice.id, invoiceNo: updated.invoice_no || "", paymentId, amountPaise: Math.round(amount * 100), paymentStatus },
+        deepLink: "/tabs/wallet",
+        sourceType: "invoice_payment",
+        sourceId: paymentId,
+        eventKey: `provider-payment:${paymentId}:paid`
+      });
     }
     return updated;
   }

@@ -166,8 +166,21 @@ export class StaffAppointmentsPage implements OnInit {
 
   async load() {
     const generation = ++this.loadGeneration;
-    this.loading.set(true);
-    try { const dashboard = await this.staff.dashboard(); if (generation === this.loadGeneration) this.dashboard.set(dashboard); } finally { if (generation === this.loadGeneration) this.loading.set(false); }
+    const cached = this.staff.readStoredData<StaffDashboard>("dashboard");
+    if (cached) {
+      this.dashboard.set(cached);
+      this.loading.set(false);
+    } else {
+      this.loading.set(true);
+    }
+    try {
+      const dashboard = await this.staff.dashboard();
+      if (generation === this.loadGeneration) this.dashboard.set(dashboard);
+    } catch (error) {
+      if (!cached) throw error;
+    } finally {
+      if (generation === this.loadGeneration) this.loading.set(false);
+    }
   }
 
   canSeeRevenue(): boolean { return this.staff.hasAnyPermission(["read:finance", "read:sales", "read:payments", "read:invoices"]); }

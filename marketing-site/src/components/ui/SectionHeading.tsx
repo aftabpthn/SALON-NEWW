@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { motion, useInView } from "motion/react";
+import { motion, useInView, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
 
 interface SectionHeadingProps {
@@ -16,6 +16,7 @@ interface SectionHeadingProps {
 function WordByWordReveal({ text, className }: { text: string; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-60px" });
+  const reducedMotion = useReducedMotion();
   const words = text.split(" ");
 
   return (
@@ -23,11 +24,11 @@ function WordByWordReveal({ text, className }: { text: string; className?: strin
       {words.map((word, i) => (
         <span key={i} className="inline-block overflow-hidden mr-[0.3em]">
           <motion.span
-            initial={{ y: "110%", opacity: 0 }}
+            initial={reducedMotion ? false : { y: "110%", opacity: 0 }}
             animate={inView ? { y: "0%", opacity: 1 } : {}}
             transition={{
-              duration: 0.6,
-              delay: i * 0.06,
+              duration: reducedMotion ? 0 : 0.55,
+              delay: reducedMotion ? 0 : i * 0.045,
               ease: [0.16, 1, 0.3, 1],
             }}
             className="inline-block"
@@ -75,7 +76,7 @@ export function SectionHeading({
       {/* Title — word-by-word reveal */}
       <h2
         className={cn(
-          "font-display text-[clamp(2.2rem,5vw,4.75rem)] font-normal tracking-[-.035em] text-aura-text leading-[1.02] text-balance",
+          "font-display text-[clamp(2.35rem,5vw,4.9rem)] font-medium tracking-[-.045em] text-aura-text leading-[.98] text-balance",
           gradient && "gradient-text"
         )}
       >

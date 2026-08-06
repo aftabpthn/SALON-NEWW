@@ -14,15 +14,15 @@ export const metadata: Metadata = {
 const FAQ_DATA = [
   {
     q: "What is Aura?",
-    a: "Aura is a connected salon operating system. Owner CRM and POS, customer booking, staff attendance and payroll, inventory, finance and branch-aware operations run around the same salon day — no double entry, no gaps.",
+    a: "Aura is a connected salon operating system. Owner CRM and POS, pay-at-salon customer booking, qualified staff operations, inventory, finance and branch-aware records are designed around the same salon day.",
   },
   {
     q: "Is Aura only for large salon chains?",
-    a: "No. Solo salon owners, 2-branch setups and multi-location chains all use Aura. The Starter plan covers single-branch salons. Growth supports up to 5 branches. Enterprise handles unlimited branches with custom pricing.",
+    a: "Aura plans are structured for a single branch, growing operations up to five branches, and proposal-based enterprise operations. Confirm fit and final scope in a demo and proposal.",
   },
   {
     q: "How does multi-branch work?",
-    a: "Every record — appointments, invoices, staff, inventory, expenses — carries a tenant and branch ID. Owners see a consolidated dashboard. Branch managers see only their location. Cross-branch analytics are available at the Growth tier.",
+    a: "Operational records carry tenant and branch context. Access is designed around authorised roles and locations; exact cross-branch permissions and settlement rules should be verified for your configuration.",
   },
   {
     q: "Does Aura support GST billing?",
@@ -30,27 +30,27 @@ const FAQ_DATA = [
   },
   {
     q: "Can clients book online?",
-    a: "Yes. The online booking portal is a public, pay-at-salon flow. Clients choose services, pick a professional, select a slot, and confirm — no payment upfront. Bookings appear instantly on the owner's calendar.",
+    a: "Yes. The current public booking story is pay at salon: clients choose a service, professional and slot, then confirm without online prepayment.",
   },
   {
     q: "Is there a mobile app for staff?",
-    a: "Yes. The Staff App supports secure attendance (Android-only face/biometric), shift viewing, commission tracking and performance dashboards. iOS users can access a web-based attendance flow.",
+    a: "The Staff App supports a qualified workday journey. Secure attendance is Android-only when owner policy and configuration enable it. Roster, tasks, leave, communication and permitted attribution context are included in the current story; complete iOS attendance is not claimed.",
   },
   {
     q: "What about data security?",
-    a: "Aura uses encrypted data, role-based access control, multi-tenancy isolation, and regular backups. JWT refresh tokens secure API access. The system runs on compliant cloud infrastructure.",
+    a: "Aura is designed around tenant and branch isolation, role-based access and audit trails. Hosting, encryption, backup, retention and compliance commitments are confirmed in the proposal and data-processing terms.",
   },
   {
     q: "Can I import data from another tool?",
-    a: "Aura supports bulk import for clients, services, staff and inventory through structured CSV templates. The import system validates data and reports errors before writing to the database.",
+    a: "Data preparation and agreed imports are part of the onboarding process. Source formats, validation, correction responsibility and migration scope are confirmed during assessment.",
   },
   {
     q: "How do I get started?",
-    a: "Book a free demo. We'll walk you through the platform, help you set up your services and staff, and migrate your existing client data if needed. Every plan starts with a 14-day free trial — no credit card required.",
+    a: "Request a demo. The team will review your workflow, then confirm assessment, data preparation, configuration, role training, go-live checks and any suitable trial access in the proposal.",
   },
   {
     q: "What payment methods does Aura accept?",
-    a: "Aura processes payments through Razorpay — UPI, credit/debit cards, net banking and bank transfers. All transactions are secured with bank-grade encryption.",
+    a: "Subscription payment methods and payment-provider details are confirmed in the proposal. Customer bookings shown on this site use the pay-at-salon flow.",
   },
   {
     q: "Does Aura handle staff payroll?",

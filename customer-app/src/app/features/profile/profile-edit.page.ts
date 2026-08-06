@@ -43,22 +43,22 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
         @if (section() === "menu") {
           <section class="settings-menu premium-card">
-            <a routerLink="/tabs/profile/edit/personal">
+            <a [routerLink]="editRoute('personal')">
               <span class="section-icon"><ion-icon name="person-outline"></ion-icon></span>
             <span><strong>Personal information</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/notifications">
+            <a [routerLink]="editRoute('notifications')">
               <span class="section-icon"><ion-icon name="notifications-outline"></ion-icon></span>
               <span><strong>Notifications</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/password">
+            <a [routerLink]="editRoute('password')">
               <span class="section-icon"><ion-icon name="lock-closed-outline"></ion-icon></span>
               <span><strong>Change password</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
             </a>
-            <a routerLink="/tabs/profile/edit/delete" class="danger-link">
+            <a [routerLink]="editRoute('delete')" class="danger-link">
               <span class="section-icon danger"><ion-icon name="trash-outline"></ion-icon></span>
               <span><strong>Delete account</strong></span>
               <ion-icon name="chevron-forward-outline"></ion-icon>
@@ -270,7 +270,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
       animation-iteration-count: 1;
-      transform: none !important;
+      transform: none;
       transform-style: flat;
       transition: box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
     }
@@ -282,7 +282,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .edit-profile-page .hero-card,
     .edit-profile-page .editor-card {
-      box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12) !important;
+      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
     }
 
     .edit-profile-page .hero-card *,
@@ -293,25 +293,25 @@ import { MarketplaceService } from "../../core/marketplace.service";
     @media (hover: hover) and (pointer: fine) {
       .edit-profile-page .hero-card:hover,
       .edit-profile-page .editor-card:hover {
-        transform: none !important;
-        filter: none !important;
-        animation-play-state: running !important;
-        box-shadow: 0 18px 42px rgba(92, 65, 28, 0.12) !important;
+        transform: none;
+        filter: none;
+        animation-play-state: running;
+        box-shadow: 0 18px 42px rgba(28, 28, 28, 0.1);
       }
 
       .edit-profile-page .hero-card:hover ion-icon,
       .edit-profile-page .editor-card:hover ion-icon,
       .edit-profile-page .hero-card:hover .section-icon,
       .edit-profile-page .editor-card:hover .section-icon {
-        transform: none !important;
-        animation: none !important;
+        transform: none;
+        animation: none;
       }
     }
 
     .edit-profile-page .hero-card:active,
     .edit-profile-page .editor-card:active {
-      transform: none !important;
-      filter: none !important;
+      transform: none;
+      filter: none;
     }
 
     h1,
@@ -390,11 +390,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       font-size: 1.2rem;
-      box-shadow: 0 14px 28px rgba(139, 92, 246, 0.18);
+      box-shadow: 0 14px 28px rgba(99, 102, 241, 0.18);
     }
 
     .section-icon.danger {
-      background: linear-gradient(135deg, #EF4444, #EC4899);
+      background: linear-gradient(135deg, #EF4444, #B91C1C);
     }
 
     ion-list {
@@ -430,9 +430,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       gap: 10px;
       padding: 14px;
-      border: 1px solid rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
       border-radius: 18px;
-      background: rgba(245, 243, 255, 0.72);
+      background: var(--primary-soft);
     }
 
     .verify-box strong,
@@ -468,14 +468,14 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .notice-text {
-      color: #7C3AED;
+      color: var(--primary);
       background: var(--aura-gold-soft);
-      border: 1px solid rgba(124, 58, 237, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.18);
     }
 
     .error-text {
       color: #EF4444;
-      background: #fff1f2;
+      background: var(--error-soft);
       border: 1px solid rgba(239, 68, 68, 0.16);
     }
 
@@ -484,11 +484,11 @@ import { MarketplaceService } from "../../core/marketplace.service";
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
       animation-iteration-count: 1;
-      transform: none !important;
+      transform: none;
     }
 
     .danger-card .muted {
-      color: #7A6444 !important;
+      color: var(--muted);
       font-weight: 700;
     }
 
@@ -503,67 +503,67 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .delete-input-row {
       min-height: 72px;
-      border: 1px solid rgba(214, 169, 74, 0.26);
+      border: 1px solid rgba(99, 102, 241, 0.26);
       border-radius: 18px;
       background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.94));
+        linear-gradient(145deg, var(--glass-strong), var(--surface-soft));
       box-shadow:
-        0 14px 32px rgba(92, 65, 28, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+        0 14px 32px rgba(28, 28, 28, 0.09),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
       --background: transparent;
       --padding-start: 16px;
       --inner-padding-end: 16px;
       --min-height: 72px;
-      transform: none !important;
+      transform: none;
       transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
     }
 
     .delete-input-row ion-icon {
-      color: #9B6B22;
+      color: var(--primary);
       font-size: 1.25rem;
     }
 
     .delete-input-row ion-input {
       --color: var(--text);
-      --placeholder-color: rgba(122, 100, 68, 0.45);
-      --highlight-color-focused: #D6A94A;
-      --highlight-color-valid: #D6A94A;
+      --placeholder-color: rgba(82, 101, 121, 0.55);
+      --highlight-color-focused: var(--focus);
+      --highlight-color-valid: var(--primary);
       --highlight-color-invalid: #EF4444;
       font-weight: 800;
     }
 
     .delete-input-row ion-input::part(label) {
-      color: #7A5019 !important;
+      color: var(--primary);
       font-weight: 900;
     }
 
     .delete-input-row ion-input.has-focus::part(label),
     .delete-input-row ion-input.ion-focused::part(label),
     .delete-input-row:focus-within ion-input::part(label) {
-      color: #B87D1E !important;
+      color: var(--primary);
     }
 
     .delete-input-row ion-input::part(native) {
-      caret-color: #B87D1E;
+      caret-color: var(--primary);
     }
 
     .delete-input-row:focus-within {
-      border-color: rgba(214, 169, 74, 0.58);
+      border-color: rgba(99, 102, 241, 0.58);
       box-shadow:
-        0 14px 30px rgba(92, 65, 28, 0.12),
-        0 0 0 4px rgba(214, 169, 74, 0.16),
+        0 14px 30px rgba(28, 28, 28, 0.1),
+        0 0 0 4px rgba(99, 102, 241, 0.18),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .danger-card:hover,
       .delete-input-row:hover {
-        transform: none !important;
-        filter: none !important;
+        transform: none;
+        filter: none;
       }
 
       .danger-card:hover {
-        box-shadow: var(--shadow-soft) !important;
+        box-shadow: var(--shadow-soft);
       }
     }
 
@@ -683,7 +683,12 @@ export class ProfileEditPage implements OnInit {
   }
 
   backHref(): string {
-    return this.section() === "menu" ? "/tabs/profile" : "/tabs/profile/edit";
+    if (!this.marketplace.salonMode()) return this.section() === "menu" ? "/tabs/profile" : "/tabs/profile/edit";
+    return this.section() === "menu" ? this.marketplace.salonModeUrl("profile") : this.marketplace.salonModeUrl("profile", "edit");
+  }
+
+  editRoute(section: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("profile", "edit", section) : `/tabs/profile/edit/${encodeURIComponent(section)}`;
   }
 
   emailChanged(): boolean {
@@ -848,7 +853,7 @@ export class ProfileEditPage implements OnInit {
   async deleteAccount() {
     if (this.deleteConfirm !== "DELETE") return;
     await this.marketplace.deleteAccount(this.deletePassword)
-      .then(() => this.router.navigateByUrl("/tabs/home"))
+      .then(() => this.router.navigateByUrl(this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home"))
       .catch(() => undefined);
   }
 

@@ -11,7 +11,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     <section class="page attendance-page">
       <header class="page-head attendance-head"><div><h1>Attendance</h1><p>Your shift, attendance timeline, and monthly summary.</p></div><span class="date-chip">{{ today()?.date | date:'EEE, d MMM' }}</span></header>
       @if (!canUseAttendance()) { <section staffPageState class="notice">You do not have permission to use attendance controls.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading attendance...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (localError()) { <section staffPageState class="notice">{{ localError() }}</section> }
       @if (staff.error() && !localError()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
@@ -96,13 +95,12 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   `]
 })
 export class StaffAttendancePage implements OnInit, OnDestroy {
-  readonly today = signal<StaffToday | null>(null);
-  readonly attendance = signal<StaffAttendance[]>([]);
+  readonly today = signal<StaffToday>(this.staff.readStoredData<StaffToday>("today") || { date: businessDate(), schedules: [], attendance: [], activeBreak: null, tasks: [] });
+  readonly attendance = signal<StaffAttendance[]>(this.staff.readStoredData<StaffAttendance[]>("attendance-history") || []);
   readonly monthlyAttendance = signal<StaffAttendance[]>([]);
   readonly currentTime = signal(Date.now());
   readonly view = signal<"today" | "history" | "monthly">("today");
   readonly views = [{ id: "today", label: "Today", icon: "TD" }, { id: "history", label: "Timeline", icon: "TL" }, { id: "monthly", label: "Month", icon: "MO" }] as const;
-  readonly loading = signal(false);
   readonly historyLoading = signal(false);
   readonly selectedDays = signal<30 | 90 | 180 | 365>(30);
   readonly historyRanges = [{ days: 30, label: "30 days", rangeLabel: "Last 30 days" }, { days: 90, label: "3 months", rangeLabel: "Last 3 months" }, { days: 180, label: "6 months", rangeLabel: "Last 6 months" }, { days: 365, label: "12 months", rangeLabel: "Last 12 months" }] as const;
@@ -134,27 +132,36 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   readonly activeAttendance = computed(() => this.today()?.attendance.find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || this.attendance().find((item) => ["clocked_in", "on_break", "break"].includes(String(item.status).toLowerCase())) || null);
   readonly activeOrLatestAttendance = computed<StaffAttendance | null>(() => this.activeAttendance() || this.today()?.attendance[0] || null);
   readonly todayShift = computed(() => this.today()?.schedules[0] || null);
-  private readonly attendanceUpdated = () => void this.load();
+  private readonly attendanceUpdated = () => {
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => { this.reloadTimer = null; void this.load(true); }, 800);
+  };
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
   private loadGeneration = 0;
   private historyGeneration = 0;
   private minuteTimer: ReturnType<typeof setInterval> | null = null;
   constructor(readonly staff: StaffAppService) {}
   ngOnInit() { window.addEventListener("aura:attendance-updated", this.attendanceUpdated); this.minuteTimer = setInterval(() => this.currentTime.set(Date.now()), 60_000); void this.load(); }
-  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); if (this.minuteTimer) clearInterval(this.minuteTimer); this.loadGeneration += 1; this.historyGeneration += 1; }
-  async load() {
+  ngOnDestroy() { window.removeEventListener("aura:attendance-updated", this.attendanceUpdated); if (this.reloadTimer !== null) clearTimeout(this.reloadTimer); if (this.minuteTimer) clearInterval(this.minuteTimer); this.loadGeneration += 1; this.historyGeneration += 1; }
+  async load(fresh = false) {
     const generation = ++this.loadGeneration;
     const historyGeneration = ++this.historyGeneration;
-    this.loading.set(true);
     try {
       const date = businessDate();
       const monthStart = `${date.slice(0, 7)}-01`;
-      const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
+      const [today, attendance, monthlyAttendance, policy] = await Promise.all([this.staff.today(undefined, fresh), this.staff.attendanceHistory(this.selectedDays()), this.staff.attendanceHistoryRange(monthStart, date), this.staff.attendanceVerificationPolicy().catch(() => null)]);
       if (generation !== this.loadGeneration) return;
       this.today.set(today);
-      if (historyGeneration === this.historyGeneration) this.attendance.set(attendance);
+      this.staff.writeStoredData("today", today);
+      if (historyGeneration === this.historyGeneration) {
+        this.attendance.set(attendance);
+        this.staff.writeStoredData("attendance-history", attendance);
+      }
       this.monthlyAttendance.set(monthlyAttendance);
       this.verificationPolicy.set(!!policy && policy.status === "active" && (policy.enforceClockIn || policy.enforceClockOut));
-    } finally { if (generation === this.loadGeneration) this.loading.set(false); }
+    } catch {
+      // Backend error handled by StaffAppService
+    }
   }
   canUseAttendance(): boolean { return this.staff.hasAnyPermission(["allow:staff-checkin-checkout", "write:staff"]); }
   attendanceStatus(): string { return this.activeOrLatestAttendance()?.status?.replace(/_/g, " ") || "not clocked in"; }
@@ -180,7 +187,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
   currentMonthLabel(): string { const key = String(this.today()?.date || "").slice(0, 7); return /^\d{4}-\d{2}$/.test(key) ? this.monthLabel(key) : "Current month"; }
   private monthLabel(key: string): string { const [year, month] = key.split("-").map(Number); return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" }).format(new Date(Date.UTC(year, month - 1, 1))); }
   async clockIn() { await this.runAction("clock-in", () => this.staff.clockIn(), "Clock-in saved."); }
-  async clockOut() { await this.runAction("clock-out", () => this.staff.clockOut(this.activeAttendance()?.id), "Clock-out saved."); }
+  async clockOut() { const active = this.activeAttendance(); const clockInMs = new Date(active?.clockInAt || "").getTime(); if (active && !active.clockOutAt && Number.isFinite(clockInMs) && clockInMs < Date.now() - 36 * 60 * 60 * 1000) { this.localError.set("Your last shift wasn’t clocked out. Ask your owner to close it, then you can clock in fresh."); return; } await this.runAction("clock-out", () => this.staff.clockOut(active?.id), "Clock-out saved."); }
   async startBreak() { await this.runAction("start-break", () => this.staff.startBreak(), "Break started."); }
   async endBreak() { await this.runAction("end-break", () => this.staff.endBreak(), "Break ended."); }
   private async runAction(action: NonNullable<ReturnType<typeof this.pendingAction>>, mutate: () => Promise<MutationResult<unknown>>, completedMessage: string) {
@@ -203,7 +210,7 @@ export class StaffAttendancePage implements OnInit, OnDestroy {
         }
       }
       this.message.set(completedMessage);
-      await this.load();
+      await this.load(true);
       window.dispatchEvent(new CustomEvent("aura:attendance-updated"));
     } catch {
       this.localError.set(this.staff.error() || `Unable to ${action.replace(/-/g, " ")}.`);

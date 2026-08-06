@@ -42,8 +42,8 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       padding: 24px;
       background:
         linear-gradient(135deg, rgba(35, 25, 13, 0.08), transparent 42%),
-        radial-gradient(circle at 16% 18%, rgba(214, 169, 74, 0.28), transparent 32%),
-        radial-gradient(circle at 84% 8%, rgba(244, 213, 141, 0.24), transparent 34%),
+        radial-gradient(circle at 16% 18%, rgba(99, 102, 241, 0.2), transparent 32%),
+        radial-gradient(circle at 84% 8%, rgba(99, 102, 241, 0.14), transparent 34%),
         linear-gradient(180deg, #fff8e8 0%, #f8e6c7 100%);
     }
 
@@ -51,7 +51,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       content: "";
       position: absolute;
       inset: 18px;
-      border: 1px solid rgba(125, 89, 32, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.12);
       border-radius: 34px;
       pointer-events: none;
     }
@@ -69,7 +69,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       height: 220px;
       left: -70px;
       bottom: 12%;
-      background: rgba(214, 169, 74, 0.22);
+      background: rgba(99, 102, 241, 0.18);
     }
 
     .ambient-two {
@@ -95,7 +95,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       inset: auto -18% -34% 24%;
       height: 220px;
       border-radius: 999px;
-      background: radial-gradient(circle, rgba(244, 213, 141, 0.42), transparent 68%);
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.24), transparent 68%);
       pointer-events: none;
     }
 
@@ -110,7 +110,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       width: 64px;
       height: 64px;
       border-radius: 16px;
-      box-shadow: 0 16px 34px rgba(139, 92, 246, 0.16);
+      box-shadow: 0 16px 34px rgba(99, 102, 241, 0.16);
     }
 
     .brand-lockup strong,
@@ -133,8 +133,8 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
 
     .eyebrow {
       margin: 18px 0 8px;
-      color: #9b6b22;
-      font-size: 0.78rem;
+      color: var(--primary);
+      font-size: 0.84rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -164,9 +164,9 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
       align-content: center;
       gap: 4px;
       padding: 9px 6px;
-      border: 1px solid rgba(125, 89, 32, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.14);
       border-radius: 16px;
-      background: rgba(255, 255, 255, 0.58);
+      background: var(--glass);
     }
 
     .feature-grid strong,
@@ -182,7 +182,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
 
     .feature-grid small {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 

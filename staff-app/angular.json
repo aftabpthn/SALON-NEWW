@@ -25,7 +25,7 @@
               },
               "src/manifest.webmanifest",
               {
-                "glob": "_redirects",
+                "glob": "**/*",
                 "input": "public",
                 "output": "."
               }

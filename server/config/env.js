@@ -24,7 +24,7 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || "dev-only-change-this-mobile-secret",
   encryptionSecret: process.env.ENCRYPTION_SECRET || process.env.JWT_SECRET || "dev-only-change-this-encryption-secret",
   jwtAccessTtlSeconds: Number(process.env.JWT_ACCESS_TTL_SECONDS || 900),
-  jwtRefreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS || 30),
+  jwtRefreshTtlDays: Number(process.env.JWT_REFRESH_TTL_DAYS || 3650),
   allowLegacyRefreshTokenBody: (process.env.ALLOW_LEGACY_REFRESH_TOKEN_BODY || "true") === "true",
   allowRefreshTokenInResponse: (process.env.ALLOW_REFRESH_TOKEN_IN_RESPONSE || "true") === "true",
   refreshCookieName: process.env.REFRESH_COOKIE_NAME || (process.env.NODE_ENV === "production" ? "__Host-aura_refresh" : "aura_refresh"),

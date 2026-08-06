@@ -48,7 +48,7 @@ export function POSSandbox() {
             <SectionHeading
               badge="Express POS Terminal"
               title="Checkout & Billing in Under 10 Seconds"
-              subtitle="Designed for fast-moving front desks. Print GST invoices, track staff commissions, and auto-sync inventory with zero lag."
+              subtitle="Designed for fast-moving front desks. Print GST invoices, track staff attribution, and connect inventory records without an unsupported latency promise."
               align="left"
               className="[&_h2]:text-white [&_p]:text-white/60 [&>span]:text-aura-copper"
             />

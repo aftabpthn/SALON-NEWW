@@ -47,6 +47,15 @@ export interface ServiceItem {
   category: string;
   popular?: boolean;
   active?: boolean;
+  happyHour?: {
+    id: string;
+    name: string;
+    discountPaise: number;
+    finalPricePaise: number;
+    discountType: string;
+    discountValue: number;
+    timeRange: string;
+  } | null;
 }
 
 export interface StaffMember {
@@ -60,6 +69,9 @@ export interface StaffMember {
   image?: string;
   nextAvailable?: string;
   bookableServiceIds?: string[];
+  gender?: string;
+  experienceYears?: number;
+  pricePaise?: number;
 }
 
 export interface BusinessReview {
@@ -322,6 +334,12 @@ export interface CustomerDeviceInfo {
   userAgent?: string;
 }
 
+export interface CustomerPushDevicePayload {
+  token: string;
+  platform: "android" | "ios";
+  appVersion?: string;
+}
+
 export interface CustomerDeviceSession {
   id: string;
   deviceId: string;
@@ -367,12 +385,78 @@ export interface Booking {
   endsAt?: string;
   durationMinutes?: number;
   serviceDurationMinutes?: number;
-  address: string;
+  address?: string;
   latitude?: number | null;
   longitude?: number | null;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
   paymentStatus?: "not_required" | "pending" | "paid" | "refunded";
   cancellationPolicy?: string;
+}
+
+export type CustomerBookingChatStatus = "open" | "waiting_for_salon" | "waiting_for_customer" | "resolved" | "closed";
+
+export interface CustomerBookingChatThread {
+  id: string;
+  bookingId: string;
+  salonName: string;
+  subject: string;
+  status: CustomerBookingChatStatus;
+  lastMessageAt: string | null;
+  lastMessagePreview: string;
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerBookingChatMessage {
+  id: string;
+  conversationId: string;
+  senderType: "customer" | "staff" | "system";
+  senderName: string;
+  body: string;
+  clientMessageId: string | null;
+  customerReadAt: string | null;
+  staffReadAt: string | null;
+  createdAt: string;
+}
+
+export interface CustomerBookingChatMessagesResponse {
+  thread: CustomerBookingChatThread;
+  messages: CustomerBookingChatMessage[];
+}
+
+export interface SendCustomerBookingChatMessagePayload {
+  body: string;
+  clientMessageId: string;
+}
+
+export type CustomerBookingSupportCategory = "reschedule" | "cancellation" | "payment" | "salon_unavailable" | "other";
+export type CustomerBookingSupportPreferredContact = "phone" | "email" | "in_app";
+export type CustomerBookingSupportPriority = "low" | "medium" | "high";
+
+export interface CreateCustomerBookingSupportTicketPayload {
+  category: CustomerBookingSupportCategory;
+  message: string;
+  preferredContact?: CustomerBookingSupportPreferredContact;
+  priority?: CustomerBookingSupportPriority;
+}
+
+export interface CustomerBookingSupportTicket {
+  id: string;
+  bookingId: string;
+  branchId: string;
+  category: CustomerBookingSupportCategory;
+  message: string;
+  preferredContact: CustomerBookingSupportPreferredContact;
+  priority: CustomerBookingSupportPriority;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerSupportTicketQuery {
+  status?: string;
+  limit?: number;
 }
 
 export interface CancelBookingPayload {
@@ -382,6 +466,7 @@ export interface CancelBookingPayload {
 export interface RescheduleBookingPayload {
   startAt: string;
   staffId?: string;
+  serviceId?: string;
 }
 
 export interface JoinWaitlistPayload {
@@ -491,6 +576,7 @@ export interface CustomerPackage {
   status: string;
   createdAt?: string;
   updatedAt?: string;
+  serviceIds?: string[];
 }
 
 export interface CustomerGiftCard {
@@ -567,9 +653,15 @@ export interface CustomerPaymentLink {
 export interface CustomerNotification {
   id: string;
   type: string;
+  category?: string;
   channel: string;
+  title?: string;
   message: string;
   status: string;
+  readAt?: string | null;
+  deepLink?: string;
+  data?: Record<string, unknown>;
+  scheduledAt?: string;
   createdAt: string;
 }
 
@@ -713,7 +805,8 @@ export interface MySalonDashboardWallet {
     id: string;
     type: string;
     amountPaise: number;
-    description: string;
+    description?: string;
+    notes?: string;
     createdAt: string;
   }>;
 }
@@ -739,10 +832,57 @@ export interface MySalonDashboardPackage {
   sessionsUsed: number;
 }
 
+export interface MySalonDashboardGiftCard {
+  id: string;
+  code: string;
+  balancePaise: number;
+  expiryDate: string;
+  status: string;
+}
+
+export interface MySalonDashboardInvoice {
+  id: string;
+  invoiceNumber: string;
+  totalPaise: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface MySalonDashboardNotification {
+  id: string;
+  title?: string;
+  message: string;
+  createdAt: string;
+  readAt?: string | null;
+}
+
+export interface SlotHoldPayload {
+  serviceIds: string[];
+  staffId?: string | null;
+  branchId?: string;
+  startAt: string;
+  durationMinutes?: number;
+}
+
+export interface SlotHold {
+  holdId: string;
+  serviceIds: string[];
+  staffId: string | null;
+  branchId: string;
+  startAt: string;
+  endAt: string;
+  expiresAt: string;
+  status: "active" | "expired" | "converted" | "released";
+  createdAt: string;
+}
+
 export interface MySalonDashboard {
   hasPrimarySalon: boolean;
   salon: {
+    tenantId?: string;
+    branchId?: string;
     name: string;
+    businessName?: string;
     address: string;
     city: string;
     phone: string;
@@ -751,6 +891,9 @@ export interface MySalonDashboard {
     hoursLabel: string;
     ratingAverage: number;
     ratingCount: number;
+    logoImage?: string;
+    coverImage?: string;
+    policies?: string[];
   } | null;
   wallet: MySalonDashboardWallet | null;
   loyalty: MySalonDashboardLoyalty | null;
@@ -760,10 +903,12 @@ export interface MySalonDashboard {
   services: MySalonDashboardService[];
   staff: MySalonDashboardStaff[];
   offers: MySalonDashboardOffer[];
+  giftCards?: MySalonDashboardGiftCard[];
+  invoices?: MySalonDashboardInvoice[];
+  notifications?: MySalonDashboardNotification[];
   relationship: {
     visitCount: number;
     type: string;
     lastVisitAt: string;
   } | null;
 }
-

@@ -32,16 +32,16 @@ export function LiveActivityTicker() {
   const current = ACTIVITIES[index];
 
   return (
-    <div className="bg-aura-dark border-y border-white/10 py-2.5 text-white text-xs">
-      <div className="mx-auto flex max-w-7xl items-center justify-center gap-3 px-4 text-center">
-        <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 font-bold text-emerald-400">
+    <div className="mt-[calc(4rem+env(safe-area-inset-top))] border-y border-white/10 bg-aura-dark py-2.5 text-xs text-white sm:mt-[calc(4.5rem+env(safe-area-inset-top))]">
+      <div className="mx-auto flex min-w-0 max-w-7xl items-center justify-center gap-2 px-3 text-center sm:gap-3 sm:px-4">
+        <span className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 font-bold text-emerald-400">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
           <Zap className="h-3 w-3" /> Live Activity
         </span>
-        <div className="flex items-center gap-2 overflow-hidden">
-          <span className="font-bold text-aura-copper">{current.salon} ({current.city})</span>
-          <span className="text-white/70">{current.action}</span>
-          <span className="text-[10px] text-white/40">• {current.time}</span>
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden">
+          <span className="truncate font-bold text-aura-copper">{current.salon} ({current.city})</span>
+          <span className="hidden text-white/70 sm:inline">{current.action}</span>
+          <span className="hidden shrink-0 text-[10px] text-white/40 md:inline">• {current.time}</span>
         </div>
       </div>
     </div>

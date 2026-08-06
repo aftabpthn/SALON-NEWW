@@ -56,18 +56,18 @@ export function Navbar() {
         className={cn(
           "fixed inset-x-0 top-0 z-[9997] border-b pt-[env(safe-area-inset-top)] transition-[background-color,border-color,box-shadow] duration-300",
           scrolled || mobileOpen
-            ? "border-aura-border/80 bg-aura-surface/95 shadow-[0_10px_35px_rgba(49,28,33,0.07)] backdrop-blur-xl"
-            : "border-transparent bg-aura-bg/75 backdrop-blur-md"
+            ? "border-white/10 bg-aura-dark/95 shadow-[0_10px_35px_rgba(6,22,52,0.2)] backdrop-blur-xl"
+            : "border-white/10 bg-aura-dark/90 backdrop-blur-md"
         )}
       >
         <nav className="mx-auto max-w-[90rem] px-3 sm:px-6 xl:px-8 2xl:px-10" aria-label={t("nav.primary")}>
           <div className="flex h-16 items-center justify-between gap-3 sm:h-[4.5rem]">
             {/* Logo */}
             <Link href="/" className="group flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl" aria-label={t("nav.home")}>
-              <span className="grid h-10 w-10 place-items-center rounded-[.85rem] bg-aura-burgundy font-display text-xl italic text-white shadow-[0_6px_18px_rgba(69,18,37,.2)] transition-transform duration-300 group-hover:scale-[1.03]" aria-hidden="true">A</span>
+              <span className="grid h-10 w-10 place-items-center rounded-[.85rem] bg-aura-cta-cream font-display text-xl italic text-aura-burgundy shadow-[0_6px_18px_rgba(0,0,0,.2)] transition-transform duration-300 group-hover:scale-[1.03]" aria-hidden="true">A</span>
               <span className="leading-none">
-                <span className="block font-display text-[1.35rem] tracking-[-.035em] text-aura-text">Aura</span>
-                <span className="mt-1 hidden text-[8px] font-bold uppercase tracking-[.2em] text-aura-text-muted md:block">Salon OS</span>
+                <span className="block font-display text-[1.35rem] tracking-[-.035em] text-white">Aura</span>
+                <span className="mt-1 hidden text-[8px] font-bold uppercase tracking-[.2em] text-white/55 md:block">Salon OS</span>
               </span>
             </Link>
 
@@ -111,13 +111,13 @@ export function Navbar() {
               </div>
               <Link
                 href={CTA_LINKS.login}
-                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold text-aura-text-secondary transition-colors hover:bg-white/60 hover:text-aura-text"
+                className="inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold text-white/75 transition-colors hover:bg-white/10 hover:text-white"
               >
                 {t("nav.login")}
               </Link>
               <Link
                 href={CTA_LINKS.trial}
-                className="group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full bg-aura-burgundy px-5 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(69,18,37,.2)] transition-[background-color,box-shadow] duration-300 hover:bg-aura-burgundy-strong hover:shadow-[0_10px_25px_rgba(69,18,37,.25)]"
+                className="group inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-full bg-aura-cta-cream px-5 text-sm font-semibold text-aura-burgundy shadow-[0_8px_20px_rgba(0,0,0,.2)] transition-[background-color,box-shadow] duration-300 hover:bg-white hover:shadow-[0_10px_25px_rgba(0,0,0,.25)]"
               >
                 {t("nav.trial")}
                 <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
@@ -125,13 +125,13 @@ export function Navbar() {
             </div>
 
             <div className="ml-auto flex shrink-0 items-center gap-2 xl:hidden">
-              <Link href={CTA_LINKS.trial} className="hidden min-h-11 items-center whitespace-nowrap rounded-full bg-aura-burgundy px-4 text-sm font-semibold text-white shadow-sm sm:inline-flex">
+              <Link href={CTA_LINKS.trial} className="hidden min-h-11 items-center whitespace-nowrap rounded-full bg-aura-cta-cream px-4 text-sm font-semibold text-aura-burgundy shadow-sm sm:inline-flex">
                 {t("nav.trial")}
               </Link>
               <button
                 type="button"
                 onClick={() => setMobileOpen((open) => !open)}
-                className={cn("relative z-50 grid h-11 w-11 place-items-center rounded-[.85rem] border text-aura-text transition-colors", mobileOpen ? "border-aura-burgundy bg-aura-burgundy text-white" : "border-aura-border bg-white/75 hover:bg-white")}
+                className={cn("relative z-50 grid h-11 w-11 place-items-center rounded-[.85rem] border transition-colors", mobileOpen ? "border-white/20 bg-white text-aura-burgundy" : "border-white/20 bg-white/10 text-white hover:bg-white/20")}
                 aria-label={mobileOpen ? t("nav.close") : t("nav.open")}
                 aria-expanded={mobileOpen}
                 aria-controls="mobile-navigation"

@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import { Check } from "lucide-react";
-import { PRICING_TIERS, CTA_LINKS } from "@/lib/constants";
+import { PRICING_PLANS, CTA_LINKS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useLanguage } from "@/components/providers/LanguageProvider";
 import { PRICING_FEATURES_HI } from "@/lib/translations";
 
-function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; index: number }) {
+function PricingCard({ tier, index }: { tier: typeof PRICING_PLANS[number]; index: number }) {
   const { language, t } = useLanguage();
   const features = language === "hi" ? PRICING_FEATURES_HI[index] : tier.features;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -50,7 +50,7 @@ function PricingCard({ tier, index }: { tier: typeof PRICING_TIERS[number]; inde
         <>
           <div className="absolute -inset-[1px] rounded-2xl animate-breathe pointer-events-none" />
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-full bg-gradient-to-r from-aura-burgundy to-aura-rose text-white text-xs font-bold shadow-lg">
-            {t("pricing.popular")}
+             {language === "hi" ? "Growth प्लान" : "Growth plan"}
           </div>
         </>
       )}
@@ -112,7 +112,7 @@ export function PricingPreview() {
           animate={inView ? "visible" : "hidden"}
           className="mt-16 grid md:grid-cols-3 gap-6 lg:gap-8 max-w-5xl mx-auto items-start"
         >
-          {PRICING_TIERS.map((tier, i) => (
+          {PRICING_PLANS.map((tier, i) => (
             <PricingCard key={tier.name} tier={tier} index={i} />
           ))}
         </motion.div>

@@ -12,7 +12,6 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
     <section class="page">
       <header class="page-head"><div><p class="eyebrow">Leaves</p><h1>Leave management</h1><p>Balances, history and request form.</p></div></header>
       @if (!canReadLeaves()) { <section staffPageState class="notice">You do not have permission to view leave data.</section> }
-      @if (loading()) { <section staffPageState class="state" [loading]="true">Loading leaves...</section> }
       @if (message()) { <section staffPageState class="notice success">{{ message() }}</section> }
       @if (staff.error()) { <section staffPageState class="notice">{{ staff.error() }}</section> }
 
@@ -32,9 +31,8 @@ import { StaffPageStateComponent } from "./staff-page-state.component";
   styleUrls: ["./staff-app.styles.css"]
 })
 export class StaffLeavesPage implements OnInit {
-  readonly leaves = signal<StaffLeave[]>([]);
-  readonly balances = signal<StaffLeaveBalance[]>([]);
-  readonly loading = signal(false);
+  readonly leaves = signal<StaffLeave[]>(this.staff.readStoredData<StaffLeave[]>("leaves") || []);
+  readonly balances = signal<StaffLeaveBalance[]>(this.staff.readStoredData<StaffLeaveBalance[]>("leave-balances") || []);
   readonly submitting = signal(false);
   readonly message = signal("");
   leaveType = "casual";
@@ -46,15 +44,16 @@ export class StaffLeavesPage implements OnInit {
 
   ngOnInit() { if (this.canReadLeaves()) void this.load(); }
 
-  async load() {
+  async load(fresh = false) {
     if (!this.canReadLeaves()) return;
-    this.loading.set(true);
     try {
-      const [leaves, balances] = await Promise.all([this.staff.leaves(), this.staff.leaveBalances()]);
+      const [leaves, balances] = await Promise.all([this.staff.leaves(), this.staff.leaveBalances(fresh)]);
       this.leaves.set(leaves);
       this.balances.set(balances);
-    } finally {
-      this.loading.set(false);
+      this.staff.writeStoredData("leaves", leaves);
+      this.staff.writeStoredData("leave-balances", balances);
+    } catch {
+      // Backend error handled by StaffAppService
     }
   }
 
@@ -86,7 +85,7 @@ export class StaffLeavesPage implements OnInit {
         return;
       }
       this.message.set(result?.duplicate ? "This leave request is already pending." : "Leave request sent.");
-      await this.load();
+      await this.load(true);
     } catch {
       // StaffAppService exposes the API error through staff.error().
     } finally {

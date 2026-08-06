@@ -568,6 +568,14 @@ export class StaffEnterpriseService {
     return mapJson(recordById("staff_branch_transfers", id, access), ["history"]);
   }
 
+  setServiceStaff(staffId, isServiceStaff, access) {
+    const staff = staffRow(staffId, access);
+    const flag = Number(isServiceStaff) === 0 ? 0 : 1;
+    db.prepare("UPDATE staff SET isServiceStaff = ?, updatedAt = ? WHERE id = ? AND tenantId = ?")
+      .run(flag, now(), staff.id, access.tenantId);
+    return { ...staff, isServiceStaff: flag, updatedAt: now() };
+  }
+
   payslipPdf(id, access) {
     const row = recordById("staff_payroll_components", id, access);
     const staff = staffRow(row.staffId, access);

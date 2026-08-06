@@ -1,229 +1,154 @@
-import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
-import { AlertController, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
-import { FormsModule } from "@angular/forms";
+import { IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline } from "ionicons/icons";
+import { cardOutline, checkmarkCircleOutline, chevronForwardOutline, helpCircleOutline, locationOutline, repeatOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { AvailabilitySlot, Booking } from "../../core/api.types";
+import { Booking } from "../../core/api.types";
 
-type BookingTab = "upcoming" | "past";
-type RescheduleDateOption = { date: string; day: string; label: string; short: string };
-type RescheduleDialog = {
-  booking: Booking;
-  businessSlug: string;
-  dates: RescheduleDateOption[];
-  selectedDate: string;
-  slots: AvailabilitySlot[];
-  selectedStartAt: string;
-  loading: boolean;
-  error: string;
-};
-type WaitlistDialog = {
-  booking: Booking;
-  preferredDate: string;
-  preferredTime: "any" | "morning" | "afternoon" | "evening";
-  priority: "normal" | "high";
-  reason: string;
-  error: string;
-};
+type BookingTab = "upcoming" | "past" | "cancelled";
+type BookingGroup = { key: string; label: string; countLabel: string; items: Booking[] };
+type PaymentTone = "paid" | "pending" | "refunded" | "default";
+type EffectiveBookingStatus = Booking["status"] | "no_show";
+type CheckInState = { kind: "available" | "checked_in" | "unavailable" | "hidden"; reason?: string };
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton],
+  imports: [RouterLink, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton],
   template: `
-    <ion-content>
+    <ion-content #bookingsContent>
+      <ion-refresher slot="fixed" (ionRefresh)="onPullRefresh($event)">
+        <ion-refresher-content pullingIcon="crescent" pullingText="Refreshing bookings..." refreshingSpinner="crescent"></ion-refresher-content>
+      </ion-refresher>
       <main class="page bookings-page">
         <section class="bookings-hero">
-          <h1 class="page-title">My bookings</h1>
-          <div class="booking-command-grid">
-            @for (item of bookingCommands; track item.label) {
-              <article class="command-card premium-card">
-                <ion-icon [name]="item.icon"></ion-icon>
-                <strong>{{ item.label }}</strong>
-                <span>{{ item.copy }}</span>
-              </article>
-            }
+          <div class="header-actions-row">
+            <a class="support-link" [routerLink]="supportLink()" aria-label="Open booking support">
+              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+              <span>Support</span>
+            </a>
+          </div>
+          <div class="content-title-row">
+            <h1 class="page-title">My bookings</h1>
           </div>
         </section>
 
-        <ion-segment [value]="tab()" (ionChange)="setTab($any($event.detail.value) || 'upcoming')">
-          <ion-segment-button value="upcoming">Upcoming</ion-segment-button>
-          <ion-segment-button value="past">Past</ion-segment-button>
-        </ion-segment>
+        <div class="booking-tabs-shell">
+          <ion-segment [value]="tab()" (ionChange)="setTab($any($event.detail.value) || 'upcoming')">
+            <ion-segment-button value="upcoming">Upcoming</ion-segment-button>
+            <ion-segment-button value="past">Past</ion-segment-button>
+            <ion-segment-button value="cancelled">Cancelled</ion-segment-button>
+          </ion-segment>
+        </div>
 
-        @if (marketplace.loading()) {
-          <section class="empty premium-card"><h2>Loading bookings</h2></section>
-        } @else if (marketplace.error()) {
-          <section class="empty premium-card error"><h2>Could not load bookings</h2><p>{{ marketplace.error() }}</p><ion-button class="primary-gradient" (click)="reload()">Retry</ion-button></section>
-        } @else {
-          <div class="booking-stack">
-            @for (booking of filtered(); track booking.id) {
-              <article
-                class="booking-card premium-card"
-                [class.expanded]="expandedBookingId() === booking.id"
-                [attr.data-booking-id]="booking.id"
-                role="button"
-                tabindex="0"
-                aria-label="Booking actions"
-                [attr.aria-expanded]="expandedBookingId() === booking.id"
-                (click)="openBooking(booking)"
-                (keydown)="handleBookingKeydown($event, booking)"
-              >
-                <div class="date-block">
-                  <span>{{ dateParts(booking).month }}</span>
-                  <strong>{{ dateParts(booking).day }}</strong>
+        @if (showTopProgress()) {
+          <div class="refresh-strip" role="status" aria-label="Updating bookings"><span></span></div>
+        }
+
+        @if (tabLoaded()[tab()]) {
+          @if (filtered().length) {
+            @for (group of groups(); track group.key) {
+              <section class="date-group" [attr.aria-label]="group.label || undefined">
+                @if (group.label) {
+                  <h2 class="date-group-label">{{ group.label }}@if (group.countLabel) { <span>{{ group.countLabel }}</span> }</h2>
+                }
+                <div class="booking-stack">
+                  @for (booking of group.items; track booking.id) {
+                    <article
+                      class="booking-card premium-card"
+                      [class.cancelled]="booking.status === 'cancelled'"
+                      [attr.data-booking-id]="booking.id"
+                      role="button"
+                      tabindex="0"
+                      [attr.aria-label]="cardLabel(booking)"
+                      (click)="openBooking(booking)"
+                      (keydown)="handleBookingKeydown($event, booking)"
+                    >
+                      <div class="date-block" aria-hidden="true">
+                        <span>{{ dateParts(booking).month }}</span>
+                        <strong>{{ dateParts(booking).day }}</strong>
+                      </div>
+                      <div class="booking-content">
+                        <div class="booking-main">
+                          <h2 class="booking-service">{{ bookingTitle(booking) }}</h2>
+                          @if (serviceCount(booking) > 1) {
+                            <p class="service-subtitle">Includes {{ booking.serviceName }}</p>
+                          }
+                          <p class="salon-name">{{ booking.businessName }}</p>
+                          <div class="booking-meta">
+                            <span class="meta-line">
+                              <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+                              <span class="meta-text">{{ bookingDateTimeLabel(booking) }}</span>
+                            </span>
+                            @if (compactProfessionalLine(booking); as professional) {
+                              <span class="meta-line compact-line">
+                                <span class="meta-dot" aria-hidden="true"></span>
+                                <span class="meta-text">{{ professional }}</span>
+                              </span>
+                            }
+                            <span class="meta-line">
+                              <ion-icon name="location-outline" aria-hidden="true"></ion-icon>
+                              <span class="meta-text" [title]="booking.address || 'Venue to be confirmed'">{{ booking.address || "Venue to be confirmed" }}</span>
+                            </span>
+                            @if (paymentMetaLabel(booking); as payment) {
+                              <span class="meta-line tone-{{ payment.tone }}">
+                                <ion-icon name="card-outline" aria-hidden="true"></ion-icon>
+                                <span class="meta-text">{{ payment.label }}</span>
+                              </span>
+                            }
+                          </div>
+                        </div>
+                        <div class="booking-footer">
+                          <span class="status-pill status-{{ effectiveStatus(booking) }}" role="status">{{ statusLabel(effectiveStatus(booking)) }}</span>
+                          <div class="footer-actions">
+                            @if (showCheckIn(booking)) {
+                              <button type="button" class="card-action checkin" (click)="checkIn($event, booking)">
+                                <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
+                                Check-in
+                              </button>
+                            }
+                            @if (showRebook(booking)) {
+                              <button type="button" class="card-action rebook" (click)="rebook($event, booking)">
+                                <ion-icon name="repeat-outline" aria-hidden="true"></ion-icon>
+                                Book again
+                              </button>
+                            }
+                          </div>
+                          <span class="card-chevron-hit" aria-hidden="true"><ion-icon class="card-chevron" name="chevron-forward-outline"></ion-icon></span>
+                        </div>
+                      </div>
+                    </article>
+                  }
                 </div>
-                <div class="booking-content">
-                  <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
-                  <h2>{{ booking.serviceName }}</h2>
-                  <p>{{ booking.businessName }}</p>
-                  <div class="booking-meta">
-                    <span><ion-icon name="time-outline"></ion-icon>{{ booking.displayStartAt || booking.startsAt || booking.startAt }}</span>
-                    <span><ion-icon name="location-outline"></ion-icon>{{ booking.address }}</span>
-                  </div>
-                  <div class="actions">
-                    @if (canRebook(booking)) {
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="rebook($event, booking)">
-                        <ion-icon name="repeat-outline" slot="start"></ion-icon>
-                        Rebook
-                      </ion-button>
-                    }
-                    @if (canManageUpcoming(booking)) {
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="reschedule($event, booking.id)">Reschedule</ion-button>
-                      <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="joinWaitlist($event)">
-                        <ion-icon name="hourglass-outline" slot="start"></ion-icon>
-                        Waitlist
-                      </ion-button>
-                    }
-                    <ion-button size="small" fill="outline" class="secondary-button" [disabled]="!!actionLoading()" (click)="directions($event, booking)">
-                      <ion-icon name="navigate-outline" slot="start"></ion-icon>
-                      Directions
-                    </ion-button>
-                    <ion-button size="small" fill="outline" class="secondary-button" (click)="$event.stopPropagation(); openBookingDetails(booking)">
-                      <ion-icon name="receipt-outline" slot="start"></ion-icon>
-                      View invoice
-                    </ion-button>
-                    @if (canManageUpcoming(booking)) {
-                      <ion-button size="small" fill="clear" color="danger" (click)="cancel($event, booking.id)">Cancel</ion-button>
-                    }
-                  </div>
-                </div>
-              </article>
-            } @empty {
-              <section class="empty premium-card">
-                <h2>No bookings yet</h2>
-                <ion-button class="primary-gradient" routerLink="/tabs/search">Find a place</ion-button>
               </section>
             }
-          </div>
+          } @else {
+            <section class="empty premium-card">
+              <h2>{{ emptyTitle() }}</h2>
+              <ion-button class="primary-gradient" [routerLink]="discoverLink()">{{ emptyActionLabel() }}</ion-button>
+            </section>
+          }
+        } @else if (tabBusy()[tab()]) {
+          <section class="empty premium-card"><h2>Loading bookings</h2></section>
+        } @else if (marketplace.error()) {
+          <section class="empty premium-card error">
+            <h2>Could not load bookings</h2>
+            <p>{{ marketplace.error() }}</p>
+            <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
+          </section>
         }
       </main>
 
-      @if (rescheduleDialog(); as dialog) {
-        <div class="reschedule-backdrop" role="presentation" (click)="closeReschedule()">
-          <section class="reschedule-sheet" role="dialog" aria-modal="true" aria-label="Choose new appointment date and time" (click)="$event.stopPropagation()">
-            <div class="sheet-head">
-              <div>
-                <h2>Choose new date & time</h2>
-                <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
-              </div>
-              <button type="button" class="close-button" aria-label="Close reschedule picker" (click)="closeReschedule()">x</button>
+      @if (cancelDialog(); as booking) {
+        <div class="cancel-backdrop" role="presentation" (click)="closeCancelDialog()">
+          <section class="cancel-sheet" role="dialog" aria-modal="true" aria-labelledby="cancel-booking-title" (click)="$event.stopPropagation()">
+            <div>
+              <h2 id="cancel-booking-title">Cancel this booking?</h2>
+              <p>{{ booking.serviceName }} at {{ booking.businessName }} will be cancelled. The salon may apply its cancellation policy.</p>
             </div>
-
-            <div class="calendar-strip" aria-label="Available dates" (wheel)="scrollDateStrip($event)" (pointerdown)="startDateSwipe($event)" (pointerup)="finishDateSwipe($event)" (pointercancel)="cancelDateSwipe()">
-              @for (date of dialog.dates; track date.date) {
-                <button type="button" class="date-pill" [class.active]="dialog.selectedDate === date.date" (click)="selectRescheduleDate(date.date)">
-                  <span>{{ date.day }}</span>
-                  <strong>{{ date.label }}</strong>
-                  <small>{{ date.short }}</small>
-                </button>
-              }
-            </div>
-
-            @if (dialog.loading) {
-              <div class="slot-state">Loading live slots...</div>
-            } @else if (dialog.error) {
-              <div class="slot-state error">{{ dialog.error }}</div>
-            } @else {
-              <div class="slot-grid-picker" aria-label="Available times">
-                @for (slot of dialog.slots; track slot.startAt) {
-                  <button type="button" class="time-pill" [class.active]="dialog.selectedStartAt === slot.startAt" (click)="selectRescheduleSlot(slot.startAt)">
-                    {{ slot.displayTime }}
-                  </button>
-                } @empty {
-                  <div class="slot-state">No slots on this date. Choose another date or join waitlist.</div>
-                }
-              </div>
-            }
-
-            <div class="sheet-actions">
-              <ion-button fill="clear" (click)="closeReschedule()">Cancel</ion-button>
-              <ion-button class="primary-gradient" [disabled]="!dialog.selectedStartAt || dialog.loading || !!actionLoading()" (click)="confirmReschedule()">
-                Reschedule
-              </ion-button>
-            </div>
-          </section>
-        </div>
-      }
-
-      @if (waitlistDialog(); as dialog) {
-        <div class="reschedule-backdrop" role="presentation" (click)="closeWaitlist()">
-          <section class="waitlist-sheet" role="dialog" aria-modal="true" aria-label="Join appointment waitlist" (click)="$event.stopPropagation()">
-            <div class="sheet-head waitlist-head">
-              <div>
-                <h2>Join smart waitlist</h2>
-                <p>{{ dialog.booking.serviceName }} at {{ dialog.booking.businessName }}</p>
-              </div>
-              <button type="button" class="close-button" aria-label="Close waitlist" (click)="closeWaitlist()">x</button>
-            </div>
-
-            <div class="waitlist-body">
-              <div class="waitlist-summary">
-                <ion-icon name="hourglass-outline"></ion-icon>
-                <div>
-                  <strong>Auto-fill queue</strong>
-                  <span>We will look for earlier or backup slots and share the best match.</span>
-                </div>
-              </div>
-
-              <label class="waitlist-field">
-                <span>Preferred date</span>
-                <input type="date" [min]="todayKey()" [(ngModel)]="dialog.preferredDate" name="waitlistDate" (ngModelChange)="updateWaitlist({ preferredDate: $event })" />
-              </label>
-
-              <div class="waitlist-field">
-                <span>Preferred time</span>
-                <div class="waitlist-options" role="radiogroup" aria-label="Preferred waitlist time">
-                  @for (option of waitlistTimeOptions; track option.value) {
-                    <button type="button" [class.active]="dialog.preferredTime === option.value" (click)="updateWaitlist({ preferredTime: option.value })">{{ option.label }}</button>
-                  }
-                </div>
-              </div>
-
-              <div class="waitlist-field">
-                <span>Priority</span>
-                <div class="waitlist-options two" role="radiogroup" aria-label="Waitlist priority">
-                  <button type="button" [class.active]="dialog.priority === 'normal'" (click)="updateWaitlist({ priority: 'normal' })">Normal</button>
-                  <button type="button" [class.active]="dialog.priority === 'high'" (click)="updateWaitlist({ priority: 'high' })">Urgent</button>
-                </div>
-              </div>
-
-              <label class="waitlist-field">
-                <span>Note for the salon</span>
-                <textarea rows="3" maxlength="180" placeholder="Preferred staff, time window, or special request" [(ngModel)]="dialog.reason" name="waitlistReason" (ngModelChange)="updateWaitlist({ reason: $event })"></textarea>
-              </label>
-
-              @if (dialog.error) {
-                <p class="waitlist-error">{{ dialog.error }}</p>
-              }
-            </div>
-
-            <div class="sheet-actions">
-              <ion-button fill="clear" (click)="closeWaitlist()">Not now</ion-button>
-              <ion-button class="primary-gradient" [disabled]="!!actionLoading()" (click)="submitWaitlist()">
-                {{ actionLoading() === "waitlist:" + dialog.booking.id ? "Joining..." : "Join waitlist" }}
-              </ion-button>
+            <div class="cancel-actions">
+              <button type="button" class="neutral-action" (click)="closeCancelDialog()">Keep booking</button>
+              <button type="button" class="destructive-action" (click)="confirmCancel(booking.id)">Cancel booking</button>
             </div>
           </section>
         </div>
@@ -233,54 +158,88 @@ type WaitlistDialog = {
   styles: [`
     .bookings-page {
       max-width: 1180px;
+      padding-top: 0;
+      scroll-padding-top: calc(174px + env(safe-area-inset-top));
     }
 
     .bookings-hero {
+      position: sticky;
+      top: 0;
+      z-index: 20;
       display: grid;
       gap: 10px;
-      margin-bottom: 18px;
+      margin: 0 calc(var(--page-x, 0px) * -1) 18px;
+      padding: calc(12px + env(safe-area-inset-top)) var(--page-x, 0px) 12px;
+      background: linear-gradient(180deg, rgba(255, 250, 246, 0.98), rgba(255, 250, 246, 0.94));
+      backdrop-filter: blur(18px);
     }
 
-    .bookings-hero .muted {
-      max-width: 680px;
+    .header-actions-row {
+      display: flex;
+      justify-content: flex-end;
+      min-height: 44px;
+    }
+
+    .content-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .content-title-row .page-title {
       margin: 0;
     }
 
-    .booking-command-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 8px;
-    }
-
-    .command-card {
-      display: grid;
+    .support-link {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       gap: 6px;
-      padding: 14px;
-    }
-
-    .command-card ion-icon {
-      width: 42px;
-      height: 42px;
-      padding: 10px;
-      border-radius: 16px;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-    }
-
-    .command-card strong {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
       color: var(--text);
+      background: var(--surface);
+      font-size: 0.9rem;
+      font-weight: 900;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast);
     }
 
-    .command-card span {
-      color: var(--muted);
-      line-height: 1.35;
-      font-size: 0.88rem;
+    .support-link ion-icon {
+      flex: 0 0 auto;
+      font-size: 1.1rem;
+    }
+
+    .support-link:hover {
+      color: var(--primary);
+      border-color: rgba(99, 102, 241, 0.35);
+      background: var(--primary-soft);
+    }
+
+    .support-link:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+      border-radius: 999px;
+    }
+
+    .booking-tabs-shell {
+      position: sticky;
+      top: calc(96px + env(safe-area-inset-top));
+      z-index: 19;
+      margin: 0 calc(var(--page-x, 0px) * -1) 18px;
+      padding: 0 var(--page-x, 0px) 10px;
+      background: linear-gradient(180deg, rgba(255, 250, 246, 0.94), rgba(255, 250, 246, 0.88));
+      backdrop-filter: blur(18px);
     }
 
     ion-segment {
-      --background: rgba(255, 255, 255, 0.86);
-      margin-bottom: 18px;
+      --background: var(--glass);
+      margin-bottom: 0;
       border: 1px solid var(--border);
       border-radius: 999px;
       overflow: hidden;
@@ -288,7 +247,7 @@ type WaitlistDialog = {
 
     ion-segment-button {
       --indicator-color: var(--primary);
-      --background-checked: rgba(139, 92, 246, 0.08);
+      --background-checked: var(--primary-soft);
       --color: var(--muted);
       --color-checked: var(--primary);
       min-height: 48px;
@@ -298,77 +257,320 @@ type WaitlistDialog = {
     ion-segment-button::part(indicator-background) {
       height: 3px;
       border-radius: 999px 999px 0 0;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
+      background: var(--primary);
+    }
+
+    .refresh-strip {
+      position: relative;
+      height: 3px;
+      margin: -10px 2px 12px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.14);
+    }
+
+    .refresh-strip span {
+      position: absolute;
+      inset: 0;
+      width: 42%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      animation: strip-slide 1.1s ease-in-out infinite;
+    }
+
+    @keyframes strip-slide {
+      from { transform: translateX(-110%); }
+      to { transform: translateX(360%); }
+    }
+
+    .date-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .date-group + .date-group {
+      margin-top: 18px;
+    }
+
+    .date-group-label {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin: 2px 4px 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 950;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .date-group-label span {
+      color: var(--muted);
+      opacity: 0.75;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: none;
     }
 
     .booking-stack {
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .booking-card {
       display: grid;
-      grid-template-columns: 86px minmax(0, 1fr);
-      gap: 16px;
-      padding: 16px;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+      min-height: 128px;
+      padding: 12px 12px 12px 10px;
       color: inherit;
       text-decoration: none;
-      transition: transform 180ms ease, box-shadow 180ms ease;
+      cursor: pointer;
+      transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+    }
+
+    .booking-card.cancelled {
+      opacity: 0.82;
     }
 
     .date-block {
-      min-height: 96px;
+      min-height: 70px;
       display: grid;
       place-items: center;
       align-content: center;
-      border-radius: 24px;
+      border-radius: 16px;
       color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
+      background: var(--primary);
     }
 
     .date-block span {
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 900;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       opacity: 0.8;
     }
 
     .date-block strong {
-      font-size: 2rem;
+      font-size: 1.45rem;
       line-height: 1;
     }
 
-    .booking-content h2 {
-      margin: 10px 0 5px;
-      letter-spacing: -0.04em;
+    .booking-content {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
 
-    .booking-content p {
-      margin: 0 0 10px;
+    .booking-service {
+      margin: 0;
+      color: var(--text);
+      font-size: 1.02rem;
+      font-weight: 950;
+      letter-spacing: -0.03em;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .service-subtitle {
+      margin: 2px 0 0;
       color: var(--muted);
+      font-size: 0.82rem;
       font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .service-count {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft, rgba(99, 102, 241, 0.1));
+      font-size: 0.74rem;
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    .salon-name {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .booking-meta {
       display: grid;
-      gap: 6px;
+      gap: 4px;
+      margin-top: 7px;
       color: var(--muted);
-      font-size: 0.9rem;
-      font-weight: 800;
+      font-size: 0.82rem;
+      font-weight: 750;
     }
 
-    .booking-meta span {
+    .meta-line {
       display: flex;
+      align-items: center;
       gap: 7px;
-      align-items: flex-start;
+      min-width: 0;
     }
 
-    .actions {
+    .meta-line ion-icon {
+      flex: 0 0 auto;
+      font-size: 0.92rem;
+      color: var(--primary);
+    }
+
+    .meta-dot {
+      width: 4px;
+      height: 4px;
+      flex: 0 0 auto;
+      margin-left: 5px;
+      border-radius: 999px;
+      background: var(--primary);
+      opacity: 0.72;
+    }
+
+    .compact-line {
+      font-size: 0.80rem;
+    }
+
+    .meta-line .meta-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta-line.tone-paid { color: #047857; }
+    .meta-line.tone-pending { color: #B45309; }
+    .meta-line.tone-refunded { color: #1D4ED8; }
+
+    .booking-footer {
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+
+    .status-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 10px;
+      border: 1px solid;
+      border-radius: 999px;
+      font-size: 0.80rem;
+      font-weight: 850;
+      letter-spacing: 0.01em;
+      text-transform: capitalize;
+      white-space: nowrap;
+    }
+
+    .status-pill.status-pending {
+      color: #92600A;
+      border-color: rgba(217, 119, 6, 0.35);
+      background: rgba(251, 191, 36, 0.14);
+    }
+
+    .status-pill.status-confirmed {
+      color: #047857;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.13);
+    }
+
+    .status-pill.status-completed {
+      color: #1D4ED8;
+      border-color: rgba(59, 130, 246, 0.36);
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    .status-pill.status-cancelled {
+      color: #991B1B;
+      border-color: rgba(153, 27, 27, 0.28);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .status-pill.status-no_show {
+      color: #7C2D12;
+      border-color: rgba(234, 88, 12, 0.36);
+      background: rgba(251, 146, 60, 0.14);
+    }
+
+    .footer-actions {
+      display: flex;
+      align-items: center;
       gap: 8px;
-      margin-top: 14px;
+      margin-left: auto;
+    }
+
+    .card-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid;
+      border-radius: 999px;
+      font-family: inherit;
+      font-size: 0.80rem;
+      font-weight: 850;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
+    }
+
+    .card-action ion-icon {
+      font-size: 0.9rem;
+    }
+
+    .card-action.checkin {
+      color: #ffffff;
+      border-color: transparent;
+      background: var(--primary);
+      box-shadow: 0 6px 14px rgba(99, 102, 241, 0.22);
+    }
+
+    .card-action.rebook {
+      color: var(--primary);
+      border-color: rgba(99, 102, 241, 0.22);
+      background: var(--primary-soft, rgba(99, 102, 241, 0.08));
+    }
+
+    .card-action:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .card-chevron-hit {
+      flex: 0 0 auto;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      margin-right: -10px;
+      border-radius: 999px;
+    }
+
+    .card-chevron {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .booking-card:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
     }
 
     .empty {
@@ -384,298 +586,32 @@ type WaitlistDialog = {
       letter-spacing: -0.04em;
     }
 
-    .reschedule-backdrop {
+    .cancel-backdrop {
       position: fixed;
       inset: 0;
       z-index: 3000;
       display: grid;
-      place-items: center;
-      padding: 18px;
+      align-items: end;
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
       background: rgba(17, 24, 39, 0.42);
-      backdrop-filter: blur(5px);
     }
-
-    .reschedule-sheet {
+    .cancel-sheet {
       width: min(100%, 520px);
-      max-height: min(760px, calc(100vh - 36px));
       display: grid;
-      grid-template-rows: auto auto minmax(120px, 1fr) auto;
-      overflow: hidden;
-      border: 1px solid rgba(17, 24, 39, 0.12);
-      border-radius: 28px;
-      background: #ffffff;
-      box-shadow: 0 28px 70px rgba(17, 24, 39, 0.24);
-    }
-
-    .waitlist-sheet {
-      width: min(100%, 560px);
-      max-height: min(820px, calc(100vh - 36px));
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      overflow: hidden;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      border-radius: 28px;
-      background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.98) 48%, rgba(246, 228, 193, 0.92)),
-        #FFF9EC;
-      box-shadow: 0 28px 70px rgba(92, 65, 28, 0.24);
-    }
-
-    .sheet-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 14px;
-      padding: 22px 22px 12px;
-    }
-
-    .sheet-head h2 {
-      margin: 0 0 8px;
-      color: var(--text);
-      font-size: 1.45rem;
-      letter-spacing: -0.035em;
-    }
-
-    .sheet-head p:not(.eyebrow) {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.4;
-      font-weight: 800;
-    }
-
-    .waitlist-head {
-      padding-bottom: 8px;
-    }
-
-    .waitlist-body {
-      display: grid;
-      gap: 14px;
-      overflow-y: auto;
-      padding: 10px 22px 18px;
-    }
-
-    .waitlist-summary {
-      display: grid;
-      grid-template-columns: 48px minmax(0, 1fr);
-      gap: 12px;
-      align-items: center;
-      padding: 14px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
-      border-radius: 20px;
-      background: rgba(255, 255, 255, 0.72);
-    }
-
-    .waitlist-summary ion-icon {
-      width: 28px;
-      height: 28px;
-      padding: 10px;
-      border-radius: 16px;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-      box-shadow: 0 12px 24px rgba(122, 80, 25, 0.14);
-    }
-
-    .waitlist-summary strong,
-    .waitlist-field span {
-      display: block;
-      color: var(--text);
-      font-weight: 900;
-    }
-
-    .waitlist-summary span {
-      display: block;
-      margin-top: 3px;
-      color: var(--muted);
-      line-height: 1.35;
-      font-size: 0.88rem;
-      font-weight: 700;
-    }
-
-    .waitlist-field {
-      display: grid;
-      gap: 8px;
-    }
-
-    .waitlist-field input,
-    .waitlist-field textarea {
-      width: 100%;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      border-radius: 18px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.88);
-      font: inherit;
-      font-weight: 800;
-      outline: none;
-    }
-
-    .waitlist-field input {
-      min-height: 52px;
-      padding: 0 14px;
-    }
-
-    .waitlist-field textarea {
-      resize: vertical;
-      min-height: 92px;
-      padding: 12px 14px;
-      line-height: 1.45;
-    }
-
-    .waitlist-field input:focus,
-    .waitlist-field textarea:focus {
-      border-color: rgba(214, 169, 74, 0.56);
-      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
-    }
-
-    .waitlist-options {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .waitlist-options.two {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .waitlist-options button {
-      min-height: 44px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      border-radius: 999px;
-      color: #7A5019;
-      background: rgba(255, 255, 255, 0.78);
-      font-weight: 900;
-    }
-
-    .waitlist-options button.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      box-shadow: 0 12px 24px rgba(122, 80, 25, 0.15);
-    }
-
-    .waitlist-error {
-      margin: 0;
-      padding: 10px 12px;
-      border: 1px solid rgba(239, 68, 68, 0.24);
-      border-radius: 14px;
-      color: #B91C1C;
-      background: rgba(254, 226, 226, 0.72);
-      font-size: 0.88rem;
-      font-weight: 800;
-    }
-
-    .close-button {
-      flex: 0 0 auto;
-      width: 42px;
-      height: 42px;
-      min-height: 42px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--text);
-      background: #ffffff;
-      font-size: 1.55rem;
-      line-height: 1;
-    }
-
-    .calendar-strip {
-      display: flex;
-      gap: 10px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 10px 22px 16px;
-      border-bottom: 1px solid var(--border);
-      scrollbar-width: none;
-      touch-action: pan-x;
-      -webkit-overflow-scrolling: touch;
-      scroll-snap-type: x mandatory;
-    }
-
-    .calendar-strip::-webkit-scrollbar {
-      display: none;
-    }
-
-    .date-pill {
-      flex: 0 0 86px;
-      min-height: 92px;
-      display: grid;
-      align-content: center;
-      justify-items: center;
-      gap: 5px;
-      padding: 10px 8px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      color: var(--text);
+      gap: 16px;
+      margin: 0 auto;
+      padding: 20px;
+      border: 1px solid rgba(180, 35, 24, 0.16);
+      border-radius: 24px;
       background: var(--surface);
-      font-weight: 900;
-      scroll-snap-align: start;
+      box-shadow: 0 24px 60px rgba(28, 28, 28, 0.22);
     }
-
-    .date-pill span,
-    .date-pill small {
-      color: var(--muted);
-      font-size: 0.74rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .date-pill strong {
-      font-size: 1.45rem;
-      line-height: 1;
-    }
-
-    .date-pill.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-      box-shadow: 0 14px 28px rgba(139, 92, 246, 0.22);
-    }
-
-    .date-pill.active span,
-    .date-pill.active small {
-      color: rgba(255, 255, 255, 0.84);
-    }
-
-    .slot-grid-picker {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      overflow-y: auto;
-      padding: 18px 22px;
-    }
-
-    .time-pill {
-      min-height: 48px;
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--text);
-      background: #ffffff;
-      font-weight: 900;
-    }
-
-    .time-pill.active {
-      border-color: transparent;
-      color: #ffffff;
-      background: linear-gradient(135deg, var(--primary), var(--accent));
-    }
-
-    .slot-state {
-      align-self: center;
-      padding: 26px 22px;
-      color: var(--muted);
-      text-align: center;
-      font-weight: 900;
-    }
-
-    .slot-state.error {
-      color: #EF4444;
-    }
-
-    .sheet-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      padding: 14px 18px;
-      border-top: 1px solid var(--border);
-      background: rgba(255, 255, 255, 0.94);
-    }
+    .cancel-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .cancel-sheet p { margin: 8px 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+    .cancel-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cancel-actions button { min-height: 48px; border-radius: 999px; font-family: inherit; font-size: 0.9rem; font-weight: 900; }
+    .cancel-actions .neutral-action { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
+    .cancel-actions .destructive-action { border: 1px solid #B42318; color: #FFFFFF; background: #B42318; }
 
     @media (hover: hover) and (pointer: fine) {
       .booking-card:hover {
@@ -685,195 +621,175 @@ type WaitlistDialog = {
     }
 
     @media (max-width: 599px) {
-      .booking-card {
-        grid-template-columns: 1fr;
-      }
-
-      .date-block {
-        min-height: 74px;
-        grid-template-columns: auto auto;
-        justify-content: start;
-        gap: 8px;
-        padding: 0 18px;
-      }
-
-      .slot-grid-picker {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .waitlist-options {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 599px) {
       .bookings-page {
-        padding-top: 4px !important;
+        --page-x: 16px;
+        padding-top: 0;
       }
 
       .bookings-hero {
-        gap: 6px;
-        margin-bottom: 10px;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
       }
 
       .bookings-hero .page-title {
-        margin-bottom: 0 !important;
-        font-size: 1.65rem !important;
-        line-height: 1 !important;
+        margin-bottom: 0;
+        font-size: 1.65rem;
+        line-height: 1;
       }
 
-      .booking-command-grid {
-        gap: 8px;
-        margin-top: 4px;
-      }
-
-      .command-card {
-        min-height: 0;
-        gap: 3px;
-        padding: 10px;
-        border-radius: 16px !important;
-      }
-
-      .command-card ion-icon {
-        width: 34px;
-        height: 34px;
-        padding: 8px;
-        border-radius: 12px;
-      }
-
-      .command-card strong {
-        font-size: 0.86rem;
-        line-height: 1.05;
-      }
-
-      .command-card span {
-        font-size: 0.72rem;
-        line-height: 1.2;
+      .support-link {
+        min-height: 44px;
+        padding: 0 14px;
+        font-size: 0.9rem;
       }
 
       ion-segment {
-        margin-bottom: 10px;
+        margin-bottom: 0;
       }
 
       ion-segment-button {
-        min-height: 38px;
-        font-size: 0.78rem;
-      }
-
-      .booking-stack {
-        gap: 10px;
+        min-height: 44px;
+        font-size: 0.82rem;
       }
 
       .booking-card {
-        grid-template-columns: 1fr;
-        gap: 8px;
-        padding: 10px;
-        border-radius: 16px !important;
-      }
-
-      .date-block {
-        min-height: 54px;
-        grid-template-columns: auto auto;
-        justify-content: start;
-        gap: 8px;
-        padding: 0 14px;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 9px;
+        min-height: 118px;
+        padding: 9px 10px 9px 8px;
         border-radius: 16px;
       }
 
+      .date-block {
+        min-height: 62px;
+        border-radius: 14px;
+      }
+
       .date-block span {
-        font-size: 0.7rem;
+        font-size: 0.76rem;
       }
 
       .date-block strong {
-        font-size: 1.55rem;
+        font-size: 1.24rem;
       }
 
-      .booking-content h2 {
-        margin: 5px 0 2px;
-        font-size: 1.2rem;
-        line-height: 1.05;
+      .booking-service {
+        font-size: 0.96rem;
       }
 
-      .booking-content p {
-        margin: 0 0 5px;
-        font-size: 0.86rem;
+      .service-subtitle { font-size: 0.78rem; }
+
+      .salon-name {
+        margin-top: 2px;
+        font-size: 0.8rem;
       }
 
       .booking-meta {
-        gap: 3px;
-        font-size: 0.76rem;
-        line-height: 1.15;
+        gap: 4px;
+        margin-top: 5px;
+        font-size: 0.84rem;
       }
 
-      .actions {
-        display: none;
-        gap: 5px;
-        margin-top: 8px;
+      .booking-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-top: 6px;
       }
 
-      .booking-card.expanded .actions {
-        display: flex;
+      .footer-actions {
+        gap: 6px;
       }
 
-      .booking-card {
-        cursor: pointer;
-      }
-
-      .booking-card:focus-visible {
-        outline: 3px solid rgba(214, 169, 74, 0.6);
-        outline-offset: 2px;
-      }
-
-      .actions ion-button {
+      .card-action {
         min-height: 32px;
-        margin: 0;
-        font-size: 0.7rem;
-        --padding-start: 10px;
-        --padding-end: 10px;
+        padding: 0 10px;
+        font-size: 0.78rem;
+      }
+
+      .status-pill {
+        min-height: 22px;
+        padding: 2px 8px;
+        font-size: 0.78rem;
       }
     }
+
     @media (min-width: 1024px) {
       .booking-stack {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
       }
+    }
 
-      .booking-command-grid {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+    @media (prefers-reduced-motion: reduce) {
+      .refresh-strip span {
+        animation: none;
+      }
+
+      .booking-card,
+      .card-action,
+      .status-pill,
+      .support-link {
+        transition: none;
       }
     }
   `]
 })
 export class BookingsPage implements OnDestroy, OnInit {
+  private static readonly TAB_STORAGE_KEY = "aura_bookings_tab";
+  private static readonly SCROLL_STORAGE_KEY = "aura_bookings_scroll_top";
+  @ViewChild("bookingsContent") private bookingsContent?: IonContent;
   readonly tab = signal<BookingTab>("upcoming");
-  readonly expandedBookingId = signal<string | null>(null);
-  readonly actionLoading = signal("");
-  readonly rescheduleDialog = signal<RescheduleDialog | null>(null);
-  readonly waitlistDialog = signal<WaitlistDialog | null>(null);
-  readonly filtered = computed(() => this.marketplace.bookings());
-  readonly waitlistTimeOptions: Array<{ value: WaitlistDialog["preferredTime"]; label: string }> = [
-    { value: "any", label: "Any time" },
-    { value: "morning", label: "Morning" },
-    { value: "afternoon", label: "Afternoon" },
-    { value: "evening", label: "Evening" }
-  ];
-  readonly bookingCommands = [
-    { label: "Rebooking", copy: "Repeat past visits faster", icon: "repeat-outline" },
-    { label: "Waitlist", copy: "Join auto-fill queues", icon: "hourglass-outline" },
-    { label: "Digital check-in", copy: "Arrival and consent ready", icon: "checkmark-circle-outline" },
-    { label: "Support", copy: "Chat and ticket handoff", icon: "chatbubbles-outline" }
-  ];
+  readonly cancelDialog = signal<Booking | null>(null);
+  private readonly allBookings = signal<Booking[]>([]);
+  private readonly tabResults = signal<Record<BookingTab, Booking[]>>({ upcoming: [], past: [], cancelled: [] });
+  readonly tabLoaded = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
+  readonly tabBusy = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
+  readonly filtered = computed(() => this.tabResults()[this.tab()]);
+  readonly showTopProgress = computed(() => this.tabBusy()[this.tab()] && this.tabLoaded()[this.tab()]);
+  readonly groups = computed<BookingGroup[]>(() => {
+    const rows = this.filtered();
+    const grouped = new Map<string, Booking[]>();
+    for (const booking of rows) {
+      const key = this.bookingDateKey(booking);
+      const list = grouped.get(key) ?? [];
+      list.push(booking);
+      grouped.set(key, list);
+    }
+    const direction = this.tab() === "upcoming" ? 1 : -1;
+    return [...grouped.entries()]
+      .sort((a, b) => direction * a[0].localeCompare(b[0]))
+      .map(([key, items]) => {
+        const sorted = [...items].sort((a, b) => direction * (this.bookingTimeValue(a) - this.bookingTimeValue(b)));
+        return { key, label: this.groupLabel(key), countLabel: this.appointmentCountLabel(sorted.length), items: sorted };
+      });
+  });
+  readonly emptyTitle = computed(() => {
+    switch (this.tab()) {
+      case "past": return "No past bookings yet";
+      case "cancelled": return "No cancelled bookings";
+      default: return "No upcoming bookings";
+    }
+  });
+  readonly emptyActionLabel = computed(() => this.tab() === "upcoming" ? "Find a place" : "Book a visit");
   private midnightRefreshId: ReturnType<typeof setTimeout> | null = null;
-  private dateSwipeStartX = 0;
-  private dateSwipeStartY = 0;
 
-  constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly router: Router, private readonly toasts: ToastController) {
-    addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
+  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly toasts: ToastController) {
+    addIcons({ cardOutline, checkmarkCircleOutline, chevronForwardOutline, helpCircleOutline, locationOutline, repeatOutline, timeOutline });
   }
 
   ngOnInit() {
-    this.reload();
+    this.tab.set(this.readSavedTab());
+    this.ensureTab("upcoming");
+    this.ensureTab("past");
+    this.ensureTab("cancelled");
     this.scheduleMidnightRefresh();
+  }
+
+  ionViewWillEnter() {
+    this.tab.set(this.readSavedTab());
+    this.ensureTab(this.tab());
+    window.setTimeout(() => this.restoreScrollPosition(), 80);
   }
 
   ngOnDestroy() {
@@ -881,21 +797,15 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   setTab(tab: BookingTab) {
+    if (this.tab() === tab) return;
     this.tab.set(tab);
-    this.expandedBookingId.set(null);
-    this.reload();
+    this.saveTab(tab);
+    this.ensureTab(tab);
   }
 
-  openBooking(booking: Booking) {
-    if (window.matchMedia("(max-width: 599px)").matches) {
-      this.expandedBookingId.update((id) => id === booking.id ? null : booking.id);
-      return;
-    }
-    void this.router.navigate(["/bookings", booking.id]);
-  }
-
-  openBookingDetails(booking: Booking) {
-    void this.router.navigate(["/bookings", booking.id]);
+  async openBooking(booking: Booking) {
+    await this.saveScrollPosition();
+    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
   handleBookingKeydown(event: KeyboardEvent, booking: Booking) {
@@ -904,12 +814,102 @@ export class BookingsPage implements OnDestroy, OnInit {
     this.openBooking(booking);
   }
 
+  backHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile";
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
+  }
+
+  supportLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+  }
+
+  private bookingDetailUrl(id: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", id) : `/bookings/${encodeURIComponent(id)}`;
+  }
+
+  private businessBookUrl(slugOrId: string): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("business", slugOrId, "book") : `/business/${encodeURIComponent(slugOrId)}/book`;
+  }
+
   reload() {
     if (!this.marketplace.isAuthenticated()) {
       void this.router.navigateByUrl("/login");
       return;
     }
-    void this.marketplace.loadBookings(this.tab()).catch(() => undefined);
+    this.ensureTab(this.tab(), true);
+  }
+
+  private ensureTab(tab: BookingTab, force = false) {
+    if (this.tabBusy()[tab]) return;
+    void this.loadTab(tab, force);
+  }
+
+  private async loadTab(tab: BookingTab, force = false) {
+    if (this.tabBusy()[tab]) return;
+    this.tabBusy.update((state) => ({ ...state, [tab]: true }));
+    try {
+      const rows = await this.marketplace.loadBookings(tab, force);
+      this.mergeBookings(rows);
+      this.reclassifyBookings();
+      this.tabLoaded.update((state) => ({ ...state, [tab]: true }));
+    } catch {
+      // The failure is surfaced through marketplace.error(); cached content, if any, stays visible.
+    } finally {
+      this.tabBusy.update((state) => ({ ...state, [tab]: false }));
+    }
+  }
+
+  private readSavedTab(): BookingTab {
+    try {
+      const value = sessionStorage.getItem(BookingsPage.TAB_STORAGE_KEY);
+      return value === "past" || value === "cancelled" || value === "upcoming" ? value : "upcoming";
+    } catch {
+      return "upcoming";
+    }
+  }
+
+  private saveTab(tab: BookingTab) {
+    try {
+      sessionStorage.setItem(BookingsPage.TAB_STORAGE_KEY, tab);
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
+  private async saveScrollPosition() {
+    try {
+      const element = await this.bookingsContent?.getScrollElement();
+      sessionStorage.setItem(BookingsPage.SCROLL_STORAGE_KEY, String(element?.scrollTop || 0));
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
+  private restoreScrollPosition() {
+    try {
+      const value = Number(sessionStorage.getItem(BookingsPage.SCROLL_STORAGE_KEY) || 0);
+      if (!Number.isFinite(value) || value <= 0) return;
+      void this.bookingsContent?.scrollToPoint(0, value, 0);
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
+  async onPullRefresh(event: Event) {
+    const refresher = event.target as unknown as { complete(): Promise<void> };
+    try {
+      const rows = await this.marketplace.loadBookings(this.tab(), true);
+      this.mergeBookings(rows);
+      this.reclassifyBookings();
+      this.tabLoaded.update((state) => ({ ...state, [this.tab()]: true }));
+    } catch {
+      // handled through marketplace.error()
+    } finally {
+      await refresher.complete();
+    }
   }
 
   dateParts(booking: Booking) {
@@ -919,21 +919,122 @@ export class BookingsPage implements OnDestroy, OnInit {
     return { month: match?.[2] ?? "Soon", day: match?.[1] ?? "Next" };
   }
 
-  async cancel(event: Event, id: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const alert = await this.alerts.create({
-      header: "Cancel booking?",
-      message: "This will request cancellation from the booking API.",
-      buttons: [
-        { text: "Keep booking", role: "cancel" },
-        { text: "Cancel booking", role: "destructive", handler: () => void this.confirmCancel(id) }
-      ]
-    });
-    await alert.present();
+  bookingTimeLabel(booking: Booking): string {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = this.parseBookingTime(raw);
+    if (date && Number.isFinite(date.getTime())) {
+      return new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: "Asia/Kolkata"
+      }).format(date).toUpperCase();
+    }
+    return booking.displayStartAt?.match(/\d{1,2}:\d{2}\s*[AP]M/i)?.[0].toUpperCase() || "Time to be confirmed";
   }
 
-  private async confirmCancel(id: string) {
+  bookingDateTimeLabel(booking: Booking): string {
+    const raw = booking.startsAt || booking.startAt || "";
+    const date = this.parseBookingTime(raw);
+    if (date && Number.isFinite(date.getTime())) {
+      try {
+        const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(date);
+        const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(date).toUpperCase();
+        return `${day} · ${time}`;
+      } catch {
+        return this.bookingTimeLabel(booking);
+      }
+    }
+    const label = String(booking.displayStartAt || "");
+    const timeMatch = label.match(/\d{1,2}:\d{2}\s*[AP]M/i)?.[0].toUpperCase();
+    if (label.toLowerCase().includes("today")) return timeMatch ? `Today · ${timeMatch}` : "Today";
+    return [label, timeMatch].filter(Boolean).join(" · ") || "Time to be confirmed";
+  }
+
+  serviceCount(booking: Booking): number {
+    const reference = booking.reference;
+    if (!reference) return 1;
+    const count = this.filtered().filter((row) => row.reference === reference).length;
+    return count > 1 ? count : 1;
+  }
+
+  bookingTitle(booking: Booking): string {
+    const count = this.serviceCount(booking);
+    return count > 1 ? `${count} services` : booking.serviceName;
+  }
+
+  compactProfessionalLine(booking: Booking): string {
+    const parts = [booking.staffName, this.durationLabel(booking)].filter(Boolean);
+    return parts.join(" · ");
+  }
+
+  private durationLabel(booking: Booking): string {
+    const minutes = Number(booking.durationMinutes || booking.serviceDurationMinutes || 0);
+    if (!Number.isFinite(minutes) || minutes <= 0) return "";
+    return `${minutes} min`;
+  }
+
+  statusLabel(status: EffectiveBookingStatus): string {
+    switch (status) {
+      case "pending": return "Pending";
+      case "confirmed": return "Confirmed";
+      case "completed": return "Completed";
+      case "cancelled": return "Cancelled";
+      case "no_show": return "No-show";
+      default: return String(status || "").charAt(0).toUpperCase() + String(status || "").slice(1);
+    }
+  }
+
+  cardLabel(booking: Booking): string {
+    return `View details — ${booking.serviceName} at ${booking.businessName}, ${this.bookingDateTimeLabel(booking)}, status ${this.statusLabel(this.effectiveStatus(booking))}`;
+  }
+
+  paymentMetaLabel(booking: Booking): { label: string; tone: PaymentTone } | null {
+    const value = String(booking.paymentStatus || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (["paid", "payment_received", "success", "captured"].includes(value)) return { label: "Paid", tone: "paid" };
+    if (["refunded", "refund_completed", "refund_issued"].includes(value)) return { label: "Refunded", tone: "refunded" };
+    if (["pending", "unpaid", "due", "awaiting_payment"].includes(value)) return { label: "Payment pending", tone: "pending" };
+    if (booking.status === "cancelled" && (!value || value === "not_required" || value === "no_payment_required")) {
+      return { label: "No payment required", tone: "default" };
+    }
+    return null;
+  }
+
+  showCheckIn(booking: Booking): boolean {
+    return this.checkInState(booking).kind === "available";
+  }
+
+  checkInState(booking: Booking): CheckInState {
+    const status = this.effectiveStatus(booking);
+    if (status === "cancelled" || status === "completed" || status === "no_show") return { kind: "hidden" };
+    if (this.isCheckedIn(booking)) return { kind: "checked_in" };
+    const start = this.appointmentStartDate(booking)?.getTime() ?? null;
+    if (!start) return { kind: "unavailable", reason: "Time unavailable" };
+    const now = Date.now();
+    const opensAt = start - 30 * 60 * 1000;
+    const closesAt = start + 15 * 60 * 1000;
+    if (now < opensAt) return { kind: "unavailable", reason: "Opens 30 min before" };
+    if (now > closesAt || this.hasAppointmentEnded(booking)) return { kind: "hidden" };
+    if (this.hasConflictingCheckedInBooking(booking)) return { kind: "unavailable", reason: "Another check-in active" };
+    return { kind: "available" };
+  }
+
+  showRebook(booking: Booking): boolean {
+    return this.effectiveStatus(booking) === "completed" || this.effectiveStatus(booking) === "no_show";
+  }
+
+  checkIn(event: Event, booking: Booking) {
+    event.preventDefault();
+    event.stopPropagation();
+    void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
+  }
+
+  closeCancelDialog(): void {
+    this.cancelDialog.set(null);
+  }
+
+  async confirmCancel(id: string) {
+    this.cancelDialog.set(null);
     await this.marketplace.cancelBooking(id).catch(() => undefined);
     // Re-fetch so a cancelled booking drops out of the Upcoming list immediately.
     this.reload();
@@ -943,7 +1044,7 @@ export class BookingsPage implements OnDestroy, OnInit {
     event.preventDefault();
     event.stopPropagation();
     if (booking.businessId) {
-      void this.router.navigate(["/business", booking.businessId, "book"], {
+      void this.router.navigate([this.businessBookUrl(booking.businessId)], {
         queryParams: {
           serviceId: booking.serviceId || undefined,
           staffId: booking.staffId || undefined,
@@ -953,273 +1054,160 @@ export class BookingsPage implements OnDestroy, OnInit {
       });
       return;
     }
-    void this.router.navigateByUrl("/tabs/search");
+    void this.router.navigateByUrl(this.discoverLink());
   }
 
-  canRebook(booking: Booking): boolean {
-    return this.tab() === "past" || booking.status === "completed" || booking.status === "cancelled";
+  private istDateKey(date: Date): string {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || "";
+    return `${get("year")}-${get("month")}-${get("day")}`;
   }
 
-  canManageUpcoming(booking: Booking): boolean {
-    return this.tab() === "upcoming" && booking.status !== "cancelled" && booking.status !== "completed";
+  private istTodayKey(): string {
+    return this.istDateKey(new Date());
   }
 
-  async joinWaitlist(event: Event) {
-    event.preventDefault();
-    event.stopPropagation();
-    const booking = this.bookingFromEvent(event);
-    if (!booking) return;
-    this.waitlistDialog.set({
-      booking,
-      preferredDate: this.dateValue(booking),
-      preferredTime: "any",
-      priority: "normal",
-      reason: "",
-      error: ""
+  private tomorrowKey(): string {
+    const [year, month, day] = this.istTodayKey().split("-").map(Number);
+    return this.istDateKey(new Date(Date.UTC(year, month - 1, day + 1)));
+  }
+
+  private bookingDateKey(booking: Booking): string {
+    const date = this.appointmentStartDate(booking);
+    if (date && Number.isFinite(date.getTime())) return this.istDateKey(date);
+    return String(booking.displayStartAt || "").toLowerCase().includes("today") ? this.istTodayKey() : "9999-12-31";
+  }
+
+  private bookingTimeValue(booking: Booking): number {
+    const date = this.appointmentStartDate(booking);
+    return date && Number.isFinite(date.getTime()) ? date.getTime() : Number.MAX_SAFE_INTEGER;
+  }
+
+  private groupLabel(key: string): string {
+    if (key === this.istTodayKey()) return `Today · ${this.formatDateGroupKey(key)}`;
+    if (key === this.tomorrowKey()) return "Tomorrow";
+    return this.formatDateGroupKey(key);
+  }
+
+  private formatDateGroupKey(key: string): string {
+    const [year, month, day] = key.split("-").map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    try {
+      return new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(date);
+    } catch {
+      return key;
+    }
+  }
+
+  private appointmentCountLabel(count: number): string {
+    return `${count} ${count === 1 ? "appointment" : "appointments"}`;
+  }
+
+  private isTodayBooking(booking: Booking): boolean {
+    const date = this.appointmentStartDate(booking);
+    if (date && Number.isFinite(date.getTime())) return this.istDateKey(date) === this.istTodayKey();
+    return String(booking.displayStartAt || "").toLowerCase().includes("today");
+  }
+
+  effectiveStatus(booking: Booking): EffectiveBookingStatus {
+    const rawStatus = String(booking.status || "") as EffectiveBookingStatus;
+    if (rawStatus === "cancelled" || rawStatus === "completed" || rawStatus === "no_show") return rawStatus;
+    if (!this.hasAppointmentEnded(booking)) return booking.status;
+    return rawStatus === "pending" ? "no_show" : "completed";
+  }
+
+  private mergeBookings(rows: Booking[]) {
+    const byId = new Map<string, Booking>();
+    for (const booking of this.allBookings()) byId.set(booking.id, booking);
+    for (const booking of rows) byId.set(booking.id, booking);
+    this.allBookings.set([...byId.values()]);
+  }
+
+  private reclassifyBookings() {
+    const next: Record<BookingTab, Booking[]> = { upcoming: [], past: [], cancelled: [] };
+    for (const booking of this.allBookings()) {
+      const bucket = this.bookingBucket(booking);
+      next[bucket].push(booking);
+    }
+    next.upcoming.sort((a, b) => this.bookingTimeValue(a) - this.bookingTimeValue(b));
+    next.past.sort((a, b) => this.bookingTimeValue(b) - this.bookingTimeValue(a));
+    next.cancelled.sort((a, b) => this.bookingTimeValue(b) - this.bookingTimeValue(a));
+    this.tabResults.set(next);
+  }
+
+  private bookingBucket(booking: Booking): BookingTab {
+    if (String(booking.status) === "cancelled") return "cancelled";
+    return this.hasAppointmentEnded(booking) ? "past" : "upcoming";
+  }
+
+  private hasAppointmentEnded(booking: Booking): boolean {
+    const end = this.appointmentEndTime(booking);
+    return end !== null && end <= Date.now();
+  }
+
+  private isCheckedIn(booking: Booking): boolean {
+    const row = booking as Booking & { checkedInAt?: string; checkInAt?: string; attendanceStatus?: string; checkInStatus?: string };
+    const status = String(row.attendanceStatus || row.checkInStatus || "").toLowerCase().replace(/[\s-]+/g, "_");
+    return Boolean(row.checkedInAt || row.checkInAt || status === "checked_in" || status === "arrived");
+  }
+
+  private hasConflictingCheckedInBooking(booking: Booking): boolean {
+    const start = this.appointmentStartDate(booking)?.getTime() ?? null;
+    const end = this.appointmentEndTime(booking);
+    if (start === null || end === null) return false;
+    return this.allBookings().some((candidate) => {
+      if (candidate.id === booking.id || !this.isCheckedIn(candidate)) return false;
+      if (this.effectiveStatus(candidate) === "cancelled") return false;
+      const candidateStart = this.appointmentStartDate(candidate)?.getTime() ?? null;
+      const candidateEnd = this.appointmentEndTime(candidate);
+      return candidateStart !== null && candidateEnd !== null && candidateStart < end && candidateEnd > start;
     });
   }
 
-  updateWaitlist(patch: Partial<Omit<WaitlistDialog, "booking">>) {
-    this.waitlistDialog.update((current) => current ? { ...current, ...patch, error: "" } : current);
+  private appointmentEndTime(booking: Booking): number | null {
+    const explicitEnd = this.parseBookingTime(booking.endsAt || booking.endAt || "");
+    if (explicitEnd) return explicitEnd.getTime();
+    const start = this.appointmentStartDate(booking);
+    if (!start) return null;
+    const duration = Number(booking.durationMinutes || booking.serviceDurationMinutes || 60);
+    return start.getTime() + Math.max(1, Number.isFinite(duration) ? duration : 60) * 60 * 1000;
   }
 
-  closeWaitlist() {
-    this.waitlistDialog.set(null);
+  private parseBookingTime(value: string): Date | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+      ? `${raw.replace(" ", "T")}+05:30`
+      : raw;
+    const date = new Date(normalized);
+    return Number.isFinite(date.getTime()) ? date : null;
   }
 
-  async submitWaitlist() {
-    const dialog = this.waitlistDialog();
-    if (!dialog) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dialog.preferredDate)) {
-      this.updateWaitlist({ error: "Choose a valid preferred date." });
-      return;
-    }
-    if (dialog.preferredDate < this.todayKey()) {
-      this.updateWaitlist({ error: "Preferred date cannot be in the past." });
-      return;
-    }
-    await this.joinWaitlistForBooking(dialog.booking, {
-      preferredDate: dialog.preferredDate,
-      preferredTime: dialog.preferredTime,
-      priority: dialog.priority,
-      reason: dialog.reason
-    });
+  private appointmentStartDate(booking: Booking): Date | null {
+    return this.parseBookingTime(booking.startsAt || booking.startAt || "") || this.parseDisplayStartAt(booking.displayStartAt || "");
   }
 
-  async reschedule(event: Event, id: string) {
-    event.preventDefault();
-    event.stopPropagation();
-    const booking = this.marketplace.bookings().find((item) => item.id === id);
-    if (!booking) return;
-    await this.openRescheduleSlots(booking);
-  }
-
-  directions(event: Event, booking: Booking) {
-    event.preventDefault();
-    event.stopPropagation();
-    const hasCoordinates = booking.latitude !== undefined && booking.latitude !== null && booking.longitude !== undefined && booking.longitude !== null;
-    const query = hasCoordinates
-      ? `${booking.latitude},${booking.longitude}`
-      : encodeURIComponent([booking.businessName, booking.address].filter(Boolean).join(", "));
-    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, "_blank", "noopener,noreferrer");
-  }
-
-  private async openRescheduleSlots(booking: Booking) {
-    if (!booking.businessId || !booking.serviceId) {
-      await this.presentToast("This booking cannot be rescheduled because service details are missing.", "danger");
-      return;
-    }
-    this.actionLoading.set(`reschedule:${booking.id}`);
-    try {
-      const business = await this.marketplace.loadBusiness(booking.businessId);
-      const dates = this.rescheduleDates(booking);
-      const selectedDate = dates.find((item) => item.date === this.dateValue(booking))?.date || dates[0]?.date || this.localDateKey(new Date());
-      this.rescheduleDialog.set({
-        booking,
-        businessSlug: business.slug,
-        dates,
-        selectedDate,
-        slots: [],
-        selectedStartAt: "",
-        loading: true,
-        error: ""
-      });
-      await this.loadRescheduleSlots(selectedDate);
-    } catch {
-      await this.presentToast(this.marketplace.error() || "Could not load reschedule slots.", "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
-  }
-
-  closeReschedule() {
-    this.rescheduleDialog.set(null);
-  }
-
-  selectRescheduleSlot(startAt: string) {
-    this.rescheduleDialog.update((current) => current ? { ...current, selectedStartAt: startAt } : current);
-  }
-
-  scrollDateStrip(event: WheelEvent) {
-    const strip = event.currentTarget as HTMLElement | null;
-    if (!strip) return;
-    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-    if (!delta) return;
-    strip.scrollLeft += delta;
-    event.preventDefault();
-  }
-
-  startDateSwipe(event: PointerEvent) {
-    this.dateSwipeStartX = event.clientX;
-    this.dateSwipeStartY = event.clientY;
-  }
-
-  finishDateSwipe(event: PointerEvent) {
-    const deltaX = event.clientX - this.dateSwipeStartX;
-    const deltaY = event.clientY - this.dateSwipeStartY;
-    this.cancelDateSwipe();
-    if (Math.abs(deltaX) < 50 || Math.abs(deltaX) < Math.abs(deltaY)) return;
-    void this.moveRescheduleDate(deltaX < 0 ? 1 : -1);
-  }
-
-  cancelDateSwipe() {
-    this.dateSwipeStartX = 0;
-    this.dateSwipeStartY = 0;
-  }
-
-  async selectRescheduleDate(date: string) {
-    await this.loadRescheduleSlots(date);
-  }
-
-  async moveRescheduleDate(offset: -1 | 1) {
-    const dialog = this.rescheduleDialog();
-    if (!dialog) return;
-    const currentIndex = Math.max(0, dialog.dates.findIndex((item) => item.date === dialog.selectedDate));
-    const nextIndex = Math.min(dialog.dates.length - 1, Math.max(0, currentIndex + offset));
-    const nextDate = dialog.dates[nextIndex]?.date;
-    if (!nextDate || nextDate === dialog.selectedDate) return;
-    await this.loadRescheduleSlots(nextDate);
-  }
-
-  async confirmReschedule() {
-    const dialog = this.rescheduleDialog();
-    if (!dialog?.selectedStartAt) return;
-    const slot = dialog.slots.find((item) => item.startAt === dialog.selectedStartAt);
-    await this.rescheduleToSlot(dialog.booking, dialog.selectedStartAt, slot);
-  }
-
-  private async loadRescheduleSlots(date: string) {
-    const dialog = this.rescheduleDialog();
-    if (!dialog?.booking.serviceId) return;
-    this.rescheduleDialog.update((current) => current ? { ...current, selectedDate: date, slots: [], selectedStartAt: "", loading: true, error: "" } : current);
-    try {
-      const days = await this.marketplace.loadAvailability(dialog.businessSlug, {
-        serviceId: dialog.booking.serviceId,
-        staffId: dialog.booking.staffId || undefined,
-        date,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      });
-      const slots = days.flatMap((day) => day.periods.flatMap((period) => period.slots)).filter((slot) => slot.available).slice(0, 18);
-      this.rescheduleDialog.update((current) => current ? { ...current, slots, selectedStartAt: slots[0]?.startAt || "", loading: false, error: "" } : current);
-    } catch {
-      this.rescheduleDialog.update((current) => current ? { ...current, loading: false, error: this.marketplace.error() || "Could not load slots for this date." } : current);
-    }
-  }
-
-  private async rescheduleToSlot(booking: Booking, startAt: string, slot?: AvailabilitySlot) {
-    this.actionLoading.set(`reschedule:${booking.id}`);
-    try {
-      await this.marketplace.rescheduleBooking(booking.id, { startAt, staffId: slot?.staffId || booking.staffId || undefined });
-      await this.presentToast("Booking rescheduled successfully.", "success");
-      this.closeReschedule();
-      await this.reload();
-    } catch {
-      await this.presentToast(this.marketplace.error() || "Unable to reschedule booking.", "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
-  }
-
-  private async joinWaitlistForBooking(booking: Booking, value: { preferredDate?: string; preferredTime?: WaitlistDialog["preferredTime"]; priority?: "normal" | "high"; reason?: string }) {
-    this.actionLoading.set(`waitlist:${booking.id}`);
-    try {
-      const timeNote = value.preferredTime && value.preferredTime !== "any" ? `Preferred time: ${value.preferredTime}.` : "Preferred time: any.";
-      const customerNote = String(value.reason || "").trim();
-      const result = await this.marketplace.joinBookingWaitlist(booking.id, {
-        preferredDate: value.preferredDate || this.dateValue(booking),
-        reason: [timeNote, customerNote || "Customer wants an earlier or backup slot"].join(" "),
-        priority: value.priority || "normal",
-        serviceId: booking.serviceId || undefined,
-        staffId: booking.staffId || undefined
-      });
-      const recommendation = result.recommendations[0]?.displayTime ? ` First suggestion: ${result.recommendations[0].displayTime}.` : "";
-      await this.presentToast(`Waitlist joined successfully.${recommendation}`, "success");
-      this.closeWaitlist();
-      await this.reload();
-    } catch {
-      const message = this.marketplace.error() || "Unable to join waitlist.";
-      this.updateWaitlist({ error: message });
-      await this.presentToast(message, "danger");
-    } finally {
-      this.actionLoading.set("");
-    }
-  }
-
-  private bookingFromEvent(event: Event): Booking | null {
-    const element = event.currentTarget as HTMLElement | null;
-    const card = element?.closest("[data-booking-id]");
-    const id = card?.getAttribute("data-booking-id") || "";
-    return this.marketplace.bookings().find((booking) => booking.id === id) ?? null;
-  }
-
-  private dateValue(booking: Booking): string {
-    const source = booking.startAt || booking.startsAt || "";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(source)) return source;
-    const date = source ? new Date(source) : new Date();
-    return Number.isNaN(date.getTime()) ? this.localDateKey(new Date()) : this.localDateKey(date);
-  }
-
-  private rescheduleDates(booking: Booking): RescheduleDateOption[] {
+  private parseDisplayStartAt(value: string): Date | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const lower = raw.toLowerCase();
+    const time = raw.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+    const hour12 = Number(time?.[1] || 9);
+    const minute = Number(time?.[2] || 0);
+    const period = String(time?.[3] || "AM").toUpperCase();
+    const hour = period === "PM" && hour12 < 12 ? hour12 + 12 : period === "AM" && hour12 === 12 ? 0 : hour12;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const bookingDate = this.localDateFromKey(this.dateValue(booking));
-    bookingDate.setHours(0, 0, 0, 0);
-    const selected = bookingDate.getTime() >= today.getTime() ? bookingDate : today;
-    const dates: Date[] = [];
-    const endDate = new Date(today);
-    endDate.setMonth(endDate.getMonth() + 1);
-    const dayCount = Math.max(1, Math.round((endDate.getTime() - today.getTime()) / 86400000) + 1);
-    for (let index = 0; index < dayCount; index += 1) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + index);
-      dates.push(date);
-    }
-    if (!dates.some((date) => this.localDateKey(date) === this.localDateKey(selected))) {
-      dates.unshift(selected);
-    }
-    return dates.map((date) => ({
-      date: this.localDateKey(date),
-      day: new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(date),
-      label: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
-      short: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date)
-    }));
-  }
-
-  private localDateKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  todayKey(): string {
-    return this.localDateKey(new Date());
-  }
-
-  private localDateFromKey(value: string): Date {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) return new Date();
-    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    const todayParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(today);
+    const part = (type: Intl.DateTimeFormatPartTypes) => Number(todayParts.find((item) => item.type === type)?.value || 0);
+    if (lower.includes("today")) return new Date(`${part("year")}-${String(part("month")).padStart(2, "0")}-${String(part("day")).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`);
+    const monthMap: Record<string, number> = { jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
+    const match = raw.match(/(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+    if (!match) return null;
+    const day = Number(match[1]);
+    const month = monthMap[match[2].toLowerCase()];
+    const year = Number(match[3] || part("year"));
+    if (!month || !day) return null;
+    return new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`);
   }
 
   private scheduleMidnightRefresh() {
@@ -1228,13 +1216,6 @@ export class BookingsPage implements OnDestroy, OnInit {
     const nextMidnight = new Date(now);
     nextMidnight.setHours(24, 0, 5, 0);
     this.midnightRefreshId = setTimeout(() => {
-      const dialog = this.rescheduleDialog();
-      if (dialog) {
-        const dates = this.rescheduleDates(dialog.booking);
-        const selectedDate = dates.some((date) => date.date === dialog.selectedDate) ? dialog.selectedDate : dates[0]?.date || "";
-        this.rescheduleDialog.set({ ...dialog, dates, selectedDate });
-        if (selectedDate) void this.loadRescheduleSlots(selectedDate);
-      }
       this.reload();
       this.scheduleMidnightRefresh();
     }, Math.max(1000, nextMidnight.getTime() - now.getTime()));

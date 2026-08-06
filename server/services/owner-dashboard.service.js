@@ -76,8 +76,14 @@ function resolveRanges(query = {}) {
   };
 }
 
+const tableColumnsCache = new Map();
 function tableColumns(table) {
-  return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+  let cols = tableColumnsCache.get(table);
+  if (!cols) {
+    cols = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name));
+    tableColumnsCache.set(table, cols);
+  }
+  return cols;
 }
 
 function hasColumns(table, required) {
@@ -686,8 +692,27 @@ function deterministicSummaries(kpis, actions, appointmentSnapshot, branchIds, r
   };
 }
 
+const ownerDashboardCache = new Map();
+const OWNER_DASHBOARD_TTL_MS = 5000;
+
 export class OwnerDashboardService {
   getDashboard(access, query = {}) {
+    const cacheKey = `${access?.tenantId}|${access?.userId}|${query.branchId || "all"}|${query.range || "today"}|${query.from || ""}|${query.to || ""}`;
+    const cached = ownerDashboardCache.get(cacheKey);
+    const now = Date.now();
+    if (cached && now < cached.expiresAt) return cached.data;
+
+    const data = this.computeDashboard(access, query);
+    ownerDashboardCache.set(cacheKey, { data, expiresAt: now + OWNER_DASHBOARD_TTL_MS });
+    if (ownerDashboardCache.size > 200) {
+      for (const [k, v] of ownerDashboardCache.entries()) {
+        if (v.expiresAt < now) ownerDashboardCache.delete(k);
+      }
+    }
+    return data;
+  }
+
+  computeDashboard(access, query = {}) {
     const tenantId = String(access.tenantId || "");
     const owner = db.prepare(`SELECT role, status, branchIds FROM tenant_users WHERE tenantId = @tenantId AND id = @userId`).get({ tenantId, userId: String(access.userId || "") });
     if (!owner || String(owner.role || "").toLowerCase() !== "owner" || String(owner.status || "").toLowerCase() !== "active") throw forbidden("Active owner access is required");

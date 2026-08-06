@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Illustrative Aura workflow poster</title>
+  <desc id="desc">An editorial diagram showing booking, schedule, checkout and owner review as connected stages.</desc>
+  <rect width="1600" height="1000" fill="#071b3d"/>
+  <path d="M0 760C340 560 555 920 930 676c270-176 444-115 670-18v342H0Z" fill="#0d3f91"/>
+  <circle cx="1320" cy="180" r="240" fill="#1769e8" opacity=".45"/>
+  <g fill="none" stroke="#8bc9ff" stroke-width="2" opacity=".62"><path d="M240 510h1120"/><path d="M335 420v180M645 420v180M955 420v180M1265 420v180"/></g>
+  <g font-family="Arial, sans-serif" fill="#fffdf8">
+    <text x="120" y="155" font-size="28" letter-spacing="6" fill="#8bc9ff">ILLUSTRATIVE PRODUCT CHAPTER</text>
+    <text x="120" y="245" font-family="Georgia, serif" font-size="76">One visit, one connected record.</text>
+    <g font-size="25" text-anchor="middle"><text x="335" y="500">BOOK</text><text x="645" y="500">SCHEDULE</text><text x="955" y="500">CHECKOUT</text><text x="1265" y="500">REVIEW</text></g>
+    <g font-size="18" fill="#c9defe" text-anchor="middle"><text x="335" y="645">Pay at salon</text><text x="645" y="645">Branch + staff</text><text x="955" y="645">GST-ready bill</text><text x="1265" y="645">Owner context</text></g>
+  </g>
+</svg>

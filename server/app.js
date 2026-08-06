@@ -21,6 +21,7 @@ import { ensureAppointmentActivitySchema } from "./services/appointment-activity
 import { ensureEnterpriseSchedulerSchema } from "./services/enterprise-scheduler-schema.service.js";
 import { ensureClientMasterSchema } from "./services/client-master-schema.service.js";
 import { ensureStaffOsSchema } from "./services/staff-os-schema.service.js";
+import { ensureStaffPerformanceSchema } from "./services/staff-performance-schema.service.js";
 import { ensureStaffAppRolePolicySchema } from "./services/staff-app-role-policy.service.js";
 import { ensureAttendanceVerificationSchema } from "./services/attendance-verification-schema.service.js";
 import { ensureStatutoryComplianceSchema } from "./services/compliance/compliance-schema.service.js";
@@ -57,6 +58,7 @@ import { getSchemaMigrationHealth, initializeSchemaMigrationHealth } from "./ser
 import { ensureDashboardSchema } from "./services/dashboard-schema.service.js";
 import { ensureCustomerAuthSchema } from "./services/customer-auth-schema.service.js";
 import { ensureCustomerIdentitySchema } from "./services/customer-identity-schema.service.js";
+import { ensureCustomerNotificationSchema } from "./services/customer-notification-schema.service.js";
 import { ensureCustomerCareAiSchema } from "./services/customer-care-ai-schema.service.js";
 import { ensureOwnerPosHandoffSchema } from "./services/owner-pos-handoff-schema.service.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -117,6 +119,8 @@ import { clientMasterRouter } from "./routes/client-master.routes.js";
 import { customer360Router } from "./routes/customer-360.routes.js";
 import { customerAppRouter } from "./routes/customer-app.routes.js";
 import { customerAuthRouter } from "./routes/customer-auth.routes.js";
+import { customerBookingSupportRouter } from "./routes/customer-booking-support.routes.js";
+import { customerSalonChatRouter } from "./routes/customer-salon-chat.routes.js";
 import { customerCareAiRouter } from "./routes/customer-care-ai.routes.js";
 import { customerMarketplaceRouter } from "./routes/customer-marketplace.routes.js";
 import { customerSalonRouter } from "./routes/customer-salon.routes.js";
@@ -281,6 +285,7 @@ export function createApp() {
   ensureEnterpriseSchedulerSchema();
   ensureClientMasterSchema();
   ensureStaffOsSchema();
+  ensureStaffPerformanceSchema();
   ensureStaffAppRolePolicySchema();
   ensureAttendanceVerificationSchema();
   ensureStatutoryComplianceSchema();
@@ -307,6 +312,7 @@ export function createApp() {
   ensureDashboardSchema();
   ensureCustomerAuthSchema();
   ensureCustomerIdentitySchema();
+  ensureCustomerNotificationSchema();
   ensureCustomerCareAiSchema();
   ensureOwnerPosHandoffSchema();
   ensureWaitlistSchema();
@@ -337,7 +343,7 @@ export function createApp() {
     app.use(express.static(clientDist));
     app.get(/^(?!\/api).*/, (_req, res) => {
       const indexPath = join(clientDist, "index.html");
-      res.sendFile(indexPath);
+      res.sendFile(indexPath, { dotfiles: "allow" });
     });
   }
 
@@ -417,6 +423,18 @@ export function createApp() {
       mobile: "/api/v1"
     });
   });
+  app.get("/api/deployment/runtime", (_req, res) => {
+    const clientDist = resolveClientDist();
+    res.json({
+      ok: true,
+      commit: "2026-08-03-spa-fallback-1",
+      cwd: process.cwd(),
+      clientDist,
+      clientIndexFound: Boolean(clientDist),
+      auraClientDistSet: Boolean(process.env.AURA_CLIENT_DIST),
+      nodeEnv: process.env.NODE_ENV || ""
+    });
+  });
   app.use("/api/v1", mobileApiContext);
   app.get("/health", (_req, res) => {
     res.json(healthPayload("root"));
@@ -438,6 +456,8 @@ export function createApp() {
   app.use("/api/v1", publicBookingProfileRouter);
   app.use("/api/v1", customerAuthRouter);
   app.use("/api/v1", customerAppRouter);
+  app.use("/api/v1", customerBookingSupportRouter);
+  app.use("/api/v1", customerSalonChatRouter);
   app.use("/api/v1", customerMarketplaceRouter);
   app.use("/api/v1", customerSalonRouter);
   app.use("/api/v1", customerIdentityRouter);
@@ -837,6 +857,17 @@ export function createApp() {
   app.use("/api", messageHistoryReportRouter);
   app.use("/api", messageTemplateStudioRouter);
 
+  app.get(/^(?!\/api).*/, (_req, res, next) => {
+    const clientDist = resolveClientDist();
+    if (!clientDist) {
+      res.redirect(302, "/");
+      return;
+    }
+    res.sendFile(join(clientDist, "index.html"), { dotfiles: "allow" }, (error) => {
+      if (error) next(error);
+    });
+  });
+
   app.use(notFoundHandler);
   app.use(errorHandler);
 
@@ -846,12 +877,16 @@ export function createApp() {
 
 function resolveClientDist() {
   const candidates = [
+    process.env.AURA_CLIENT_DIST,
+    join(process.cwd(), "customer-app", "www"),
+    join(process.cwd(), "customer-app", "dist", "browser"),
+    join(process.cwd(), "customer-app", "dist"),
+    join(process.cwd(), "www"),
+    join(process.cwd(), "public_html"),
     join(process.cwd(), "dist", "aura-salon-crm-pos", "browser"),
-    join(process.cwd(), "dist", "aura-salon-crm-pos")
-  ];
+    join(process.cwd(), "dist", "aura-salon-crm-pos"),
+    join(process.cwd(), "dist"),
+    join(process.cwd(), "public")
+  ].filter(Boolean);
   return candidates.find((candidate) => existsSync(join(candidate, "index.html"))) || "";
 }
-
-
-
-

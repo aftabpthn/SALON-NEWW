@@ -1,5 +1,5 @@
 import { DatePipe } from "@angular/common";
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { StaffAppService, StaffChatConversation, StaffConversationMessage, StaffMessageReceiptUpdate } from "../../core/staff-app.service";
 
@@ -103,7 +103,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
                 </div>
               </div>
 
-              <div #messageViewport class="chat-message-viewport" (scroll)="onMessageScroll()" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">
+              <div class="chat-message-viewport" [attr.aria-busy]="messagesLoading()" aria-live="polite" aria-relevant="additions text">
                 @if (messagesLoading()) {
                   <div class="chat-message-loading"><div class="chat-skeleton bubble"></div><div class="chat-skeleton bubble mine"></div></div>
                 } @else if (messagesError()) {
@@ -188,8 +188,7 @@ type RealtimeState = "connecting" | "live" | "polling" | "offline";
     }
   `]
 })
-export class StaffChatPage implements OnInit, OnDestroy {
-  @ViewChild("messageViewport") private messageViewport?: ElementRef<HTMLElement>;
+export class StaffChatPage implements OnInit, AfterViewInit, OnDestroy {
   readonly conversations = signal<StaffChatConversation[]>([]);
   readonly messages = signal<StaffConversationMessage[]>([]);
   readonly activeConversationId = signal("");
@@ -273,7 +272,7 @@ export class StaffChatPage implements OnInit, OnDestroy {
   private readonly deliveredMessageIds = new Set<string>();
   private readonly readMessageIds = new Set<string>();
 
-  constructor(readonly staff: StaffAppService) {}
+  constructor(readonly staff: StaffAppService, private readonly hostRef: ElementRef<HTMLElement>) {}
 
   ngOnInit(): void {
     if (!this.canReadChat()) return;
@@ -283,12 +282,20 @@ export class StaffChatPage implements OnInit, OnDestroy {
     void this.loadConversations();
     void this.connectRealtime();
     this.pollTimer = window.setInterval(() => {
-      if (this.online() && document.visibilityState === "visible") void this.poll();
+      if (this.online() && document.visibilityState === "visible" && this.connectionState() !== "live") void this.poll();
     }, 15000);
+  }
+
+  ngAfterViewInit(): void {
+    const scroller = this.pageScroller();
+    scroller.addEventListener("scroll", this.scrollerScrollListener, { passive: true });
+    this.attachedScroller = scroller;
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
+    this.attachedScroller?.removeEventListener("scroll", this.scrollerScrollListener);
+    this.attachedScroller = null;
     window.removeEventListener("online", this.handleOnline);
     window.removeEventListener("offline", this.handleOffline);
     document.removeEventListener("visibilitychange", this.handleVisibilityChange);
@@ -359,17 +366,26 @@ export class StaffChatPage implements OnInit, OnDestroy {
   async loadConversations(silent = false): Promise<void> {
     if (!this.canReadChat()) return;
     const generation = ++this.conversationGeneration;
-    if (!silent) this.initialLoading.set(true);
+    const cached = this.staff.readStoredData<StaffChatConversation[]>("chat-conversations");
+    if (cached) {
+      this.conversations.set(this.sortConversations(cached));
+      const defaultConversation = cached.find((item) => item.type === "team") || cached[0];
+      if (defaultConversation && !this.activeConversationId()) void this.openConversation(defaultConversation.id);
+      this.initialLoading.set(false);
+    } else if (!silent) {
+      this.initialLoading.set(true);
+    }
     this.loadError.set("");
     try {
       const conversations = await this.staff.staffChatConversations();
       if (generation !== this.conversationGeneration) return;
       this.conversations.set(this.sortConversations(conversations));
+      this.staff.writeStoredData("chat-conversations", conversations);
       const currentExists = conversations.some((item) => item.id === this.activeConversationId());
       const defaultConversation = conversations.find((item) => item.type === "team") || conversations[0];
       if (!currentExists && defaultConversation) await this.openConversation(defaultConversation.id);
     } catch {
-      if (generation === this.conversationGeneration && !silent) this.loadError.set(this.staff.error() || "Check your connection and try again.");
+      if (generation === this.conversationGeneration && !silent && !cached) this.loadError.set(this.staff.error() || "Check your connection and try again.");
     } finally {
       if (generation === this.conversationGeneration) this.initialLoading.set(false);
     }
@@ -459,16 +475,33 @@ export class StaffChatPage implements OnInit, OnDestroy {
   }
 
   onMessageScroll(): void {
-    const viewport = this.messageViewport?.nativeElement;
-    if (!viewport) return;
-    this.nearBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+    const scroller = this.pageScroller();
+    this.nearBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     if (this.nearBottom) this.unseenMessageCount.set(0);
   }
 
   scrollToLatest(smooth: boolean): void {
     this.nearBottom = true;
     this.unseenMessageCount.set(0);
-    window.setTimeout(() => this.messageViewport?.nativeElement.scrollTo({ top: this.messageViewport.nativeElement.scrollHeight, behavior: smooth ? "smooth" : "auto" }));
+    window.setTimeout(() => {
+      const scroller = this.pageScroller();
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  private attachedScroller: HTMLElement | null = null;
+
+  private readonly scrollerScrollListener = (): void => this.onMessageScroll();
+
+  /** The scroll container that actually moves the whole chat page (staff-content on desktop, staff-main-shell on mobile). */
+  private pageScroller(): HTMLElement {
+    let el: HTMLElement | null = this.hostRef.nativeElement.parentElement;
+    while (el) {
+      const style = window.getComputedStyle(el);
+      if (style.overflowY === "auto" || style.overflowY === "scroll") return el;
+      el = el.parentElement;
+    }
+    return (document.scrollingElement as HTMLElement) || document.body;
   }
 
   private readonly handleOnline = (): void => {

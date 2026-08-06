@@ -1,0 +1,99 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="800" fill="#FFFFFF"/>
+  <circle cx="1032" cy="126" r="164" fill="#EEF2FF" opacity="0.62"/>
+  <circle cx="118" cy="720" r="210" fill="#FDF2F8" opacity="0.64"/>
+  <circle cx="650" cy="728" r="170" fill="#ECFDF5" opacity="0.52"/>
+
+  <rect x="46" y="46" width="1108" height="708" rx="34" fill="#FFFFFF" stroke="#EEF0F4"/>
+
+  <text x="78" y="104" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="850">Clean White Salon Marketplace</text>
+  <text x="78" y="142" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="500">Mostly white UI, soft pastel accents, clean cards, one confident CTA color.</text>
+
+  <g transform="translate(78 190)">
+    <rect width="162" height="96" rx="24" fill="#101828"/>
+    <text x="20" y="56" fill="white" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="800">Text</text>
+    <text x="20" y="78" fill="#D0D5DD" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#101828</text>
+
+    <rect x="184" width="162" height="96" rx="24" fill="#FFFFFF" stroke="#E4E7EC"/>
+    <text x="204" y="56" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">White</text>
+    <text x="204" y="78" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#FFFFFF</text>
+
+    <rect x="368" width="162" height="96" rx="24" fill="#F8FAFC" stroke="#E4E7EC"/>
+    <text x="388" y="56" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">Soft Base</text>
+    <text x="388" y="78" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#F8FAFC</text>
+
+    <rect x="552" width="162" height="96" rx="24" fill="#6366F1"/>
+    <text x="572" y="56" fill="white" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">CTA</text>
+    <text x="572" y="78" fill="#E0E7FF" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#6366F1</text>
+
+    <rect x="736" width="162" height="96" rx="24" fill="#FDF2F8" stroke="#FCE7F3"/>
+    <text x="756" y="56" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">Blush</text>
+    <text x="756" y="78" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#FDF2F8</text>
+
+    <rect x="920" width="162" height="96" rx="24" fill="#ECFDF5" stroke="#D1FAE5"/>
+    <text x="940" y="56" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">Mint</text>
+    <text x="940" y="78" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">#ECFDF5</text>
+  </g>
+
+  <g transform="translate(78 340)">
+    <rect width="510" height="326" rx="34" fill="#FFFFFF" stroke="#EAECF0"/>
+    <rect x="28" y="28" width="454" height="94" rx="28" fill="#FFFFFF" stroke="#EAECF0"/>
+    <circle cx="76" cy="75" r="24" fill="#EEF2FF"/>
+    <path d="M68 75h16M76 67v16" stroke="#6366F1" stroke-width="3" stroke-linecap="round"/>
+    <text x="116" y="70" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="850">Aura Marketplace</text>
+    <text x="116" y="96" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600">Book salons nearby with clean pricing.</text>
+
+    <rect x="28" y="148" width="136" height="96" rx="26" fill="#F8FAFC" stroke="#EAECF0"/>
+    <circle cx="96" cy="182" r="18" fill="#FDF2F8"/>
+    <text x="54" y="218" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="850">Hair</text>
+    <text x="54" y="240" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650">₹499+</text>
+
+    <rect x="186" y="148" width="136" height="96" rx="26" fill="#F8FAFC" stroke="#EAECF0"/>
+    <circle cx="254" cy="182" r="18" fill="#ECFDF5"/>
+    <text x="212" y="218" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="850">Skin</text>
+    <text x="212" y="240" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650">Today</text>
+
+    <rect x="344" y="148" width="138" height="96" rx="26" fill="#F8FAFC" stroke="#EAECF0"/>
+    <circle cx="413" cy="182" r="18" fill="#FFF7ED"/>
+    <text x="370" y="218" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="850">Nails</text>
+    <text x="370" y="240" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="650">20% off</text>
+
+    <rect x="28" y="270" width="454" height="40" rx="20" fill="#6366F1"/>
+    <text x="206" y="296" fill="white" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="850">Explore salons</text>
+  </g>
+
+  <g transform="translate(670 312)">
+    <rect width="304" height="500" rx="50" fill="#F2F4F7"/>
+    <rect x="10" y="10" width="284" height="480" rx="42" fill="#FFFFFF"/>
+
+    <rect x="30" y="38" width="244" height="56" rx="28" fill="#F8FAFC" stroke="#EAECF0"/>
+    <text x="54" y="72" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">My Salon</text>
+    <circle cx="244" cy="66" r="18" fill="#EEF2FF"/>
+
+    <rect x="30" y="118" width="244" height="112" rx="30" fill="#FFFFFF" stroke="#EAECF0"/>
+    <text x="54" y="158" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="850">Thakur Village</text>
+    <text x="54" y="184" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">Open until 8:00 PM</text>
+    <rect x="54" y="198" width="102" height="24" rx="12" fill="#ECFDF5"/>
+    <text x="70" y="215" fill="#047857" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="850">Available now</text>
+
+    <rect x="30" y="254" width="112" height="86" rx="26" fill="#F8FAFC" stroke="#EAECF0"/>
+    <text x="54" y="292" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="800">REWARDS</text>
+    <text x="54" y="320" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="850">420</text>
+
+    <rect x="162" y="254" width="112" height="86" rx="26" fill="#F8FAFC" stroke="#EAECF0"/>
+    <text x="186" y="292" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="800">WALLET</text>
+    <text x="186" y="320" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="850">₹1.2k</text>
+
+    <rect x="30" y="370" width="244" height="58" rx="29" fill="#6366F1"/>
+    <text x="112" y="406" fill="white" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="850">Book now</text>
+  </g>
+
+  <g transform="translate(1010 398)">
+    <text x="0" y="0" fill="#101828" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="850">Vibe</text>
+    <text x="0" y="44" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650">Mostly white</text>
+    <text x="0" y="78" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650">Soft colors only</text>
+    <text x="0" y="112" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650">Clean cards</text>
+    <text x="0" y="146" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650">Modern app</text>
+    <text x="0" y="180" fill="#667085" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650">Not loud</text>
+  </g>
+</svg>

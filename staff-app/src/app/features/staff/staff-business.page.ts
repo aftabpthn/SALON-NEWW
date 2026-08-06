@@ -1208,13 +1208,22 @@ export class StaffBusinessPage implements OnInit, OnDestroy {
     const generation = ++this.loadGeneration;
     const current = this.business();
     const page = reset ? 1 : Number(current?.pagination.page || 1) + 1;
-    reset ? this.loading.set(true) : this.loadingMore.set(true);
+    const queryObj = this.query(page);
+    const cachedKey = `business:${JSON.stringify(queryObj)}`;
+    const cached = this.staff.readStoredData<StaffBusiness>(cachedKey) || (reset ? this.staff.readStoredData<StaffBusiness>("business:default") : undefined);
+    if (cached && reset && !current) {
+      this.business.set(cached);
+      this.loading.set(false);
+    } else {
+      reset ? this.loading.set(true) : this.loadingMore.set(true);
+    }
     this.message.set("");
     try {
-      const data = await this.staff.business(this.query(page));
+      const data = await this.staff.business(queryObj, reset);
       if (generation !== this.loadGeneration) return;
       if (reset || !current) {
         this.business.set(data);
+        if (reset) this.staff.writeStoredData("business:default", data);
       } else {
         const byId = new Map([...current.appointments, ...data.appointments].map((item) => [item.id, item]));
         this.business.set({ ...data, appointments: [...byId.values()] });

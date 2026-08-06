@@ -35,7 +35,7 @@ export async function GET(request: Request) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
-          backgroundColor: "#171415",
+          backgroundColor: "#061724",
           padding: "80px",
           position: "relative",
           overflow: "hidden",
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
             width: "500px",
             height: "500px",
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(104,31,55,0.3) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(47,120,149,0.28) 0%, transparent 70%)",
           }}
         />
         <div
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
             width: "400px",
             height: "400px",
             borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(184,115,67,0.15) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(91,169,189,0.14) 0%, transparent 70%)",
           }}
         />
 
@@ -79,11 +79,11 @@ export async function GET(request: Request) {
               width: "56px",
               height: "56px",
               borderRadius: "16px",
-              backgroundColor: "#681f37",
+              backgroundColor: "#123f5c",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              color: "#fffaf2",
+              color: "#fffdf8",
               fontSize: "28px",
               fontStyle: "italic",
               fontFamily: "Georgia, serif",
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
           </div>
           <span
             style={{
-              color: "#fffaf2",
+              color: "#fffdf8",
               fontSize: "24px",
               fontFamily: "Georgia, serif",
               letterSpacing: "-0.03em",
@@ -106,7 +106,7 @@ export async function GET(request: Request) {
         {/* Title */}
         <div
           style={{
-            color: "#fffaf2",
+            color: "#fffdf8",
             fontSize: title.length > 50 ? "42px" : "52px",
             fontFamily: "Georgia, serif",
             fontWeight: "bold",
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
             left: "80px",
             right: "80px",
             height: "2px",
-            background: "linear-gradient(to right, #681f37, #b87343, #567565)",
+            background: "linear-gradient(to right, #123f5c, #397f99, #8bcbd8)",
             borderRadius: "1px",
           }}
         />

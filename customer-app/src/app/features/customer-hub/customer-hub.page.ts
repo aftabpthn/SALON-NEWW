@@ -1,28 +1,53 @@
-import { Component, OnInit, computed, signal } from "@angular/core";
-import { ActivatedRoute, RouterLink } from "@angular/router";
-import { AlertController, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
+import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
+import { firstValueFrom } from "rxjs";
 import {
+  arrowUndoOutline,
   briefcaseOutline,
   calendarOutline,
+  cardOutline,
+  cashOutline,
   chatbubblesOutline,
+  chevronForwardOutline,
   colorPaletteOutline,
   giftOutline,
   heartCircleOutline,
   imagesOutline,
+  informationCircleOutline,
+  linkOutline,
   peopleOutline,
+  phonePortraitOutline,
+  receiptOutline,
   ribbonOutline,
   searchOutline,
   shareSocialOutline,
+  shieldCheckmarkOutline,
   ticketOutline,
+  trendingDownOutline,
+  trendingUpOutline,
   walletOutline
 } from "ionicons/icons";
 import {
   CustomerAccountModule,
+  Booking,
+  CustomerBookingSupportCategory,
+  CustomerBookingSupportPreferredContact,
+  CustomerBookingSupportPriority,
+  CustomerBookingSupportTicket,
+  CustomerInvoice,
+  CustomerGiftCard,
+  CustomerMembership,
   CustomerMembershipPlan,
+  CustomerPackage,
+  CustomerPayment,
   CustomerRewardSummary,
-  CustomerWallet
+  CustomerWallet,
+  CustomerWalletTransaction
 } from "../../core/api.types";
+import { CustomerApiService } from "../../core/customer-api.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 interface HubConfig {
@@ -42,6 +67,16 @@ interface HubRecord {
   description?: string;
   route?: string;
   demo?: boolean;
+}
+
+type SupportIssueValue = "" | "reschedule_problem" | "payment_issue" | "salon_no_response" | "service_issue" | "refund_issue" | "other";
+
+interface SupportDraft {
+  issue: SupportIssueValue;
+  message: string;
+  preferredContact: CustomerBookingSupportPreferredContact;
+  priority: CustomerBookingSupportPriority;
+  attachmentName: string;
 }
 
 const hubConfigs: Record<string, HubConfig> = {
@@ -133,27 +168,1781 @@ const hubConfigs: Record<string, HubConfig> = {
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonButton, IonContent, IonIcon],
+  imports: [FormsModule, RouterLink, IonBackButton, IonButton, IonContent, IonIcon],
   template: `
     <ion-content>
-      <main class="page hub-page">
-        <section class="hub-hero">
+      <main class="page hub-page" [class.wallet-hub-page]="walletMode() || rewardsMode() || membershipsMode() || packagesMode() || paymentsMode() || familyMode() || referralsMode() || giftCardsMode() || corporateMode() || goalsMode() || slug() === 'support'">
+        @if (bookingSupportMode()) {
+          <section class="booking-support" aria-labelledby="booking-support-title">
+            <header class="support-heading">
+              <p class="support-eyebrow">Booking support</p>
+              <div class="wallet-title-row support-title-line">
+                <button type="button" class="content-back-button support-back-button" aria-label="Back" (click)="goBackFromSupport()">
+                  <ion-icon name="arrow-undo-outline" aria-hidden="true"></ion-icon>
+                </button>
+                <div class="hero-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
+                <h1 id="booking-support-title">How can we help?</h1>
+              </div>
+              <span>Send a request linked securely to your booking.</span>
+            </header>
+
+            <div class="support-status">
+              @if (supportLoading()) {
+                <p class="support-inline-loader" role="status">Loading booking details...</p>
+              }
+              @if (supportLoadError()) {
+                <section class="support-panel support-error" role="alert">
+                  <h2>Booking support is unavailable</h2>
+                  <p>{{ supportLoadError() }}</p>
+                  <div class="support-inline-actions">
+                    <ion-button class="primary-gradient" (click)="loadBookingSupportContext()">Retry</ion-button>
+                    <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/help')">General help</ion-button>
+                  </div>
+                </section>
+              } @else if (supportTicket(); as ticket) {
+                <section class="support-panel support-success" role="status">
+                  <span class="status-pill">{{ ticket.status }}</span>
+                  <h2>Support request sent</h2>
+                  <dl>
+                    <div><dt>Ticket ID</dt><dd>{{ ticket.id }}</dd></div>
+                    <div><dt>Status</dt><dd>{{ ticket.status }}</dd></div>
+                  </dl>
+                  <ion-button class="primary-gradient" [routerLink]="hubRoute('/bookings/' + ticket.bookingId)">Back to booking</ion-button>
+                  <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/tabs/support')">View support status</ion-button>
+                </section>
+              } @else if (supportBooking(); as booking) {
+                <section class="support-booking-card" aria-label="Verified booking details">
+                  <div>
+                    <span class="status-pill status-{{ booking.status }}">{{ hubStatusLabel(booking.status) }}</span>
+                    <h2>{{ booking.serviceName }}</h2>
+                    <p>{{ booking.businessName }}</p>
+                  </div>
+                  <dl>
+                    <div><dt>Appointment</dt><dd>{{ supportAppointmentDisplay() }}</dd></div>
+                    <div class="support-reference"><dt>Reference</dt><dd>{{ booking.reference || booking.id }}</dd></div>
+                  </dl>
+                </section>
+
+                <form class="support-form" (submit)="submitBookingSupport($event)" novalidate>
+                  <p class="support-context-note">
+                    <ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>
+                    We&rsquo;ve attached your booking &mdash; no need to repeat your salon, service or reference.
+                  </p>
+
+                  <div class="field-group">
+                    <label for="support-category">What do you need help with?</label>
+                    <select id="support-category" name="supportIssue" [(ngModel)]="supportIssue" (ngModelChange)="persistSupportDraft()" required>
+                      <option value="" disabled>Select an issue</option>
+                      @for (issue of supportIssues; track issue.value) {
+                        <option [value]="issue.value">{{ issue.label }}</option>
+                      }
+                    </select>
+                  </div>
+
+                  <div class="field-group">
+                    <div class="field-label-row">
+                      <label for="support-message">Message <span class="required-label">required</span></label>
+                      <span>{{ supportMessage.length }}/1200</span>
+                    </div>
+                    <textarea
+                      id="support-message"
+                      name="supportMessage"
+                      [(ngModel)]="supportMessage"
+                      (ngModelChange)="persistSupportDraft()"
+                      maxlength="1200"
+                      rows="6"
+                      required
+                      placeholder="Tell us what happened and how we can help."
+                    ></textarea>
+                    <small class="field-hint">Minimum 10 characters so support has enough context.</small>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="support-attachment">Screenshot or photo</label>
+                    <label class="attachment-control" for="support-attachment">
+                      <ion-icon name="images-outline" aria-hidden="true"></ion-icon>
+                      <span>{{ supportAttachmentName || "Add screenshot/photo (optional)" }}</span>
+                    </label>
+                    <input id="support-attachment" class="attachment-input" type="file" accept="image/*" (change)="captureSupportAttachment($event)" />
+                  </div>
+
+                  <div class="support-field-grid">
+                    <div class="field-group">
+                      <label for="preferred-contact">Preferred contact</label>
+                      <select id="preferred-contact" name="preferredContact" [(ngModel)]="preferredContact" (ngModelChange)="persistSupportDraft()">
+                        <option value="in_app">In-app</option>
+                        <option value="phone">Phone</option>
+                        <option value="email">Email</option>
+                      </select>
+                    </div>
+                    <div class="field-group">
+                      <label for="support-priority">Priority <span class="optional-label">optional</span></label>
+                      <select id="support-priority" name="supportPriority" [(ngModel)]="supportPriority" (ngModelChange)="persistSupportDraft()">
+                        <option value="medium">Normal</option>
+                        <option value="low">Low</option>
+                        <option value="high">Urgent - safety, payment loss, or salon no-show only</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p class="response-time">Usually replies within 2 hours.</p>
+
+                  @if (supportSubmitError()) {
+                    <p class="form-error" role="alert">{{ supportSubmitError() }}</p>
+                  }
+                  <span class="support-live" aria-live="polite">{{ supportSubmitting() ? "Sending support request" : "" }}</span>
+                  <div class="support-submit-bar">
+                    <ion-button type="submit" expand="block" class="primary-gradient" [disabled]="!supportFormValid() || supportSubmitting()">
+                      {{ supportSubmitting() ? "Sending request" : "Send support request" }}
+                    </ion-button>
+                  </div>
+                </form>
+              }
+            </div>
+          </section>
+        } @else if (walletMode()) {
+          <section class="wallet-screen" aria-labelledby="wallet-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura wallet</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="wallet-title">Wallet</h1>
+                </div>
+                <p class="wallet-intro">Your credits, refunds and wallet activity in one place.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/invoices')" aria-label="View invoices">
+                <ion-icon class="wallet-header-receipt" name="receipt-outline" aria-hidden="true"></ion-icon>
+                <span>View invoices</span>
+                <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved wallet details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (!marketplace.isAuthenticated()) {
+              <section class="wallet-state" aria-labelledby="wallet-login-title">
+                <div class="wallet-state-icon"><ion-icon name="wallet-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="wallet-login-title">Log in to see your wallet</h2>
+                <p>Your wallet balance and transaction history are private to your Aura account.</p>
+                <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wallet' }">Log in</ion-button>
+              </section>
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <section class="wallet-loading" role="status" aria-live="polite">
+                <span class="sr-only">Loading your wallet</span>
+                <div class="wallet-balance-skeleton skeleton-block"></div>
+                <div class="wallet-content-grid">
+                  <div class="wallet-list-skeleton">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </section>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="wallet-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="wallet-error-title">We couldn’t load your wallet</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else if (wallet(); as walletData) {
+              @if (walletData.balancePaise > 0 || walletData.transactions.length) {
+                <section class="wallet-balance-card" aria-labelledby="available-balance-label">
+                  <div class="wallet-balance-copy">
+                    <div class="wallet-status-row">
+                      <span class="wallet-status"><span aria-hidden="true"></span>{{ walletData.balancePaise > 0 ? "Available" : "No credits available" }}</span>
+                      <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+                    </div>
+                    <p id="available-balance-label">Available balance</p>
+                    <strong>{{ money(walletData.balancePaise) }}</strong>
+                    <small>Applied only where wallet payment is eligible.</small>
+                  </div>
+                  <div class="wallet-actions" aria-label="Wallet actions">
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/payments')">
+                      <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
+                      Transaction history
+                    </a>
+                    <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/invoices')">
+                      <ion-icon name="card-outline" aria-hidden="true"></ion-icon>
+                      Check invoices
+                    </a>
+                  </div>
+                </section>
+              } @else {
+                <div class="wallet-zero">
+                  <span class="wallet-zero-icon"><ion-icon name="wallet-outline" aria-hidden="true"></ion-icon></span>
+                  <div class="wallet-zero-copy">
+                    <h2 id="available-balance-label">No credits yet</h2>
+                    <p>Credits, eligible refunds and wallet payments will appear here automatically.</p>
+                  </div>
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                    Explore services
+                  </a>
+                </div>
+              }
+
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="wallet-activity-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">Activity</p>
+                      <h2 id="wallet-activity-title">Transaction history</h2>
+                    </div>
+                    @if (walletData.transactions.length) {
+                      <span>{{ walletData.transactions.length }} {{ walletData.transactions.length === 1 ? "record" : "records" }}</span>
+                    }
+                  </div>
+
+                  @if (walletData.transactions.length) {
+                    <div class="wallet-transactions">
+                      @for (transaction of walletData.transactions; track transaction.id) {
+                        <article class="wallet-transaction">
+                          <div class="transaction-icon" [class.transaction-debit]="!walletTransactionIsCredit(transaction)">
+                            <ion-icon [name]="walletTransactionIsCredit(transaction) ? 'trending-down-outline' : 'trending-up-outline'" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ walletTransactionLabel(transaction.type) }}</strong>
+                            <span>{{ walletTransactionDescription(transaction) }}</span>
+                            <small>{{ walletTransactionDate(transaction.createdAt) }}</small>
+                          </div>
+                          <div class="transaction-value" [class.transaction-value-debit]="!walletTransactionIsCredit(transaction)">
+                            <strong>{{ money(walletTransactionAmount(transaction.amountPaise)) }}</strong>
+                            <small>Balance {{ money(transaction.balanceAfterPaise) }}</small>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>No wallet activity yet</h3>
+                      <p>Credits, eligible refunds and wallet payments will appear here automatically.</p>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Explore salons' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="wallet-guide-title">
+                  <p class="wallet-section-kicker">How it works</p>
+                  <h2 id="wallet-guide-title">Know your wallet</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>Credits</strong><small>Eligible credits are added to your available balance.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Refunds</strong><small>Wallet refunds appear in history after they are processed.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Payments</strong><small>Wallet use depends on the salon, service and invoice.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
+                    Payment and wallet help
+                    <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </a>
+                </aside>
+              </div>
+            } @else {
+              <section class="wallet-state" aria-labelledby="wallet-unavailable-title">
+                <div class="wallet-state-icon"><ion-icon name="wallet-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="wallet-unavailable-title">Wallet details are unavailable</h2>
+                <p>We didn’t receive wallet details for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Refresh wallet</ion-button>
+              </section>
+            }
+          </section>
+        } @else if (invoicesMode()) {
+          <section class="wallet-screen" aria-labelledby="invoices-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura invoices</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="invoices-title">Invoices</h1>
+                </div>
+                <p class="wallet-intro">Track due payments, past invoices and your payment history.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/wallet')" aria-label="View wallet">
+                <ion-icon class="wallet-header-receipt" name="wallet-outline" aria-hidden="true"></ion-icon>
+                <span>View wallet</span>
+                <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved invoice details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (!marketplace.isAuthenticated()) {
+              <section class="wallet-state" aria-labelledby="invoices-login-title">
+                <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="invoices-login-title">Log in to see your invoices</h2>
+                <p>Your invoices and payment records are private to your Aura account.</p>
+                <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/invoices' }">Log in</ion-button>
+              </section>
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <section class="wallet-loading" role="status" aria-live="polite">
+                <span class="sr-only">Loading invoices</span>
+                <div class="wallet-balance-skeleton skeleton-block"></div>
+                <div class="wallet-content-grid">
+                  <div class="wallet-list-skeleton">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </section>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="invoices-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="invoices-error-title">We couldn’t load your invoices</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else if (invoices(); as invoiceList) {
+              <section class="wallet-balance-card" aria-labelledby="invoices-summary-label">
+                <div class="wallet-balance-copy">
+                  <div class="wallet-status-row">
+                    <span class="wallet-status"><span aria-hidden="true"></span>{{ invoiceList.length }} {{ invoiceList.length === 1 ? "invoice" : "invoices" }} on record</span>
+                    <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+                  </div>
+                  <p id="invoices-summary-label">Total outstanding</p>
+                  <strong>{{ money(invoiceTotalOutstanding()) }}</strong>
+                  <small>{{ invoiceDueCount() }} {{ invoiceDueCount() === 1 ? "invoice" : "invoices" }} with balance due</small>
+                </div>
+                <div class="wallet-actions" aria-label="Invoice actions">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/wallet')">
+                    <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon>
+                    View wallet
+                  </a>
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
+                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                    Explore services
+                  </a>
+                </div>
+              </section>
+
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="invoices-list-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">History</p>
+                      <h2 id="invoices-list-title">Invoices</h2>
+                    </div>
+                    @if (invoiceList.length) {
+                      <span>{{ invoiceDueCount() }} pending</span>
+                    }
+                  </div>
+
+                  @if (invoiceList.length) {
+                    <div class="wallet-transactions">
+                      @for (invoice of invoiceList; track invoice.id) {
+                        <article class="wallet-transaction" [class.invoice-due]="invoice.balancePaise > 0">
+                          <div class="transaction-icon" [class.transaction-debit]="invoice.status === 'paid'">
+                            <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ invoice.invoiceNumber || invoice.id }}</strong>
+                            <span>{{ invoice.status }}</span>
+                            <small>{{ invoiceDateLabel(invoice.createdAt) }}</small>
+                          </div>
+                          <div class="invoice-amount-group">
+                            <div class="transaction-value">
+                              <strong [class.text-danger]="invoice.balancePaise > 0">{{ money(invoice.totalPaise) }}</strong>
+                              @if (invoice.balancePaise > 0) {
+                                <small class="invoice-due-label">{{ money(invoice.balancePaise) }} due</small>
+                              } @else {
+                                <small>Paid</small>
+                              }
+                            </div>
+                            @if (invoice.balancePaise > 0) {
+                              <button type="button" class="invoice-pay-button" (click)="createPaymentLink(invoice.id)" [disabled]="actionLoading()">
+                                <ion-icon name="card-outline" aria-hidden="true"></ion-icon>
+                                Pay
+                              </button>
+                            }
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>No invoices yet</h3>
+                      <p>Your booking invoices will appear here automatically after each completed visit.</p>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="invoices-guide-title">
+                  <p class="wallet-section-kicker">Payment guide</p>
+                  <h2 id="invoices-guide-title">Know your invoices</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>Invoice generation</strong><small>Invoices are created after a completed booking with a billable service.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Payment options</strong><small>Use wallet, UPI, or invoice payment link to settle balances.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Due invoices</strong><small>Payments can be split across multiple visits and invoices.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
+                    Invoice and payment help
+                    <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </a>
+                </aside>
+              </div>
+            } @else {
+              <section class="wallet-state" aria-labelledby="invoices-unavailable-title">
+                <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="invoices-unavailable-title">Invoice details are unavailable</h2>
+                <p>We didn’t receive invoice data for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Refresh invoices</ion-button>
+              </section>
+            }
+          </section>
+        } @else if (paymentsMode()) {
+          <section class="wallet-screen" aria-labelledby="payments-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura payments</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="payments-title">Payments</h1>
+                </div>
+                <p class="wallet-intro">Every payment across your bookings and invoices, in one secure place.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/invoices')" aria-label="View invoices">
+                <ion-icon class="wallet-header-receipt" name="receipt-outline" aria-hidden="true"></ion-icon>
+                <span>View invoices</span>
+                <ion-icon class="wallet-header-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved payment details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (!marketplace.isAuthenticated()) {
+              <section class="wallet-state" aria-labelledby="payments-login-title">
+                <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-login-title">Log in to see your payments</h2>
+                <p>Your payment history is private to your Aura account.</p>
+                <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/payments' }">Log in</ion-button>
+              </section>
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <section class="wallet-loading" role="status" aria-live="polite">
+                <span class="sr-only">Loading your payments</span>
+                <div class="wallet-balance-skeleton skeleton-block"></div>
+                <div class="wallet-content-grid">
+                  <div class="wallet-list-skeleton">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </section>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="payments-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-error-title">We couldn’t load your payments</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else if (paymentsList(); as paymentList) {
+              <section class="wallet-balance-card" aria-labelledby="payments-summary-label">
+                <div class="wallet-balance-copy">
+                  <div class="wallet-status-row">
+                    <span class="wallet-status"><span aria-hidden="true"></span>{{ paymentList.length }} {{ paymentList.length === 1 ? "payment" : "payments" }} on record</span>
+                    <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+                  </div>
+                  <p id="payments-summary-label">Total paid</p>
+                  <strong>{{ money(paymentTotalPaid()) }}</strong>
+                  <small>{{ paymentLatestLabel() }}</small>
+                </div>
+                <div class="wallet-actions" aria-label="Payment actions">
+                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/invoices')">
+                    <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
+                    View invoices
+                  </a>
+                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
+                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                    Explore services
+                  </a>
+                </div>
+              </section>
+
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="payments-history-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">History</p>
+                      <h2 id="payments-history-title">Payment activity</h2>
+                    </div>
+                    @if (paymentList.length) {
+                      <span>{{ paymentList.length }} {{ paymentList.length === 1 ? "record" : "records" }}</span>
+                    }
+                  </div>
+
+                  @if (paymentList.length) {
+                    <div class="wallet-transactions">
+                      @for (payment of paymentList; track payment.id) {
+                        <article class="wallet-transaction">
+                          <div class="transaction-icon transaction-debit">
+                            <ion-icon [name]="paymentModeIcon(payment.mode)" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ paymentModeLabel(payment.mode) }}</strong>
+                            <span>{{ paymentReferenceLabel(payment) }}</span>
+                            <small>{{ paymentDateLabel(payment.createdAt) }}</small>
+                          </div>
+                          <div class="transaction-value">
+                            <strong>{{ paymentAmount(payment.amountPaise) }}</strong>
+                            <small>{{ payment.invoiceNumber ? 'Invoice ' + payment.invoiceNumber : 'Booking payment' }}</small>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>No payments yet</h3>
+                      <p>Your booking and invoice payments will appear here automatically after each settlement.</p>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="payments-guide-title">
+                  <p class="wallet-section-kicker">Payment guide</p>
+                  <h2 id="payments-guide-title">Know your payments</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>Payment methods</strong><small>UPI, card, wallet and cash are accepted wherever the salon enables them.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Payment links</strong><small>Invoice balances can be settled anytime from a secure payment link.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Refunds</strong><small>Eligible refunds move back to your wallet and appear in history here.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'payment' }">
+                    Payment and wallet help
+                    <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </a>
+                </aside>
+              </div>
+            } @else {
+              <section class="wallet-state" aria-labelledby="payments-unavailable-title">
+                <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="payments-unavailable-title">Payment details are unavailable</h2>
+                <p>We didn’t receive payment data for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Refresh payments</ion-button>
+              </section>
+            }
+          </section>
+        } @else if (rewardsMode()) {
+          <section class="wallet-screen" aria-labelledby="rewards-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura rewards</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="rewards-title">Rewards</h1>
+                </div>
+                <p class="wallet-intro">Points, tier and booking rewards from your activity.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
+                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                <span>Book now</span>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved reward details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (rewardsData(); as rewards) {
+              <section class="wallet-balance-card" aria-labelledby="rewards-balance-label">
+                <div class="wallet-balance-copy">
+                  <p id="rewards-balance-label">Loyalty points</p>
+                  <strong>{{ rewards.loyaltyPoints }}</strong>
+                  <small><span class="wallet-status"><span aria-hidden="true"></span>{{ rewards.tier }} tier</span></small>
+                </div>
+                <div class="wallet-actions" aria-label="Reward action">
+                  @if (rewardEarned()) {
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/home')">
+                      <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
+                      View tier benefits
+                    </a>
+                  } @else {
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                      <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                      Book & earn
+                    </a>
+                  }
+                </div>
+              </section>
+
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="rewards-history-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">History</p>
+                      <h2 id="rewards-history-title">Reward activity</h2>
+                    </div>
+                    @if (rewards.history.length) {
+                      <span>{{ rewards.history.length }} entries</span>
+                    }
+                  </div>
+
+                  @if (rewards.history.length) {
+                    <div class="wallet-transactions">
+                      @for (item of rewards.history; track item.id) {
+                        <article class="wallet-transaction">
+                          <div class="transaction-icon" [class.transaction-debit]="item.points < 0">
+                            <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ item.type }}</strong>
+                            <span>{{ item.description }}</span>
+                            <small>{{ walletTransactionDate(item.createdAt) }}</small>
+                          </div>
+                          <div class="transaction-value">
+                            <strong [class.text-danger]="item.points < 0">{{ item.points > 0 ? '+' : '' }}{{ item.points }}</strong>
+                            <small>pts</small>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>You haven’t earned rewards yet</h3>
+                      <p>Points are earned from completed bookings and referrals. Book a service to start earning.</p>
+                      <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="rewards-guide-title">
+                  <p class="wallet-section-kicker">How it works</p>
+                  <h2 id="rewards-guide-title">About rewards</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>Earn points</strong><small>Every completed booking earns loyalty points. Higher tiers earn more per visit.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Tiers & benefits</strong><small>Progress through Bronze, Silver and Gold tiers to unlock exclusive perks and discounts.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Referral rewards</strong><small>Invite friends to earn bonus points when they complete their first booking.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">04</span>
+                      <p><strong>Points expiry</strong><small>Points are valid for 12 months from the date they are earned.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'rewards' }">
+                    <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                    Help with rewards
+                  </a>
+                </aside>
+              </div>
+            } @else if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <div class="wallet-loading" role="status">
+                <div class="wallet-skeleton">
+                  <div class="skeleton-block skeleton-balance"></div>
+                  <div class="skeleton-transactions">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </div>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="rewards-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="rewards-error-title">Rewards are temporarily unavailable</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
+              </section>
+            } @else {
+              <section class="wallet-state" aria-labelledby="rewards-unavailable-title">
+                <div class="wallet-state-icon"><ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="rewards-unavailable-title">Rewards are temporarily unavailable</h2>
+                <p>We didn’t receive reward details for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
+              </section>
+            }
+          </section>
+        } @else if (membershipsMode()) {
+          <section class="wallet-screen" aria-labelledby="memberships-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura memberships</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="memberships-title">Memberships</h1>
+                </div>
+                <p class="wallet-intro">Active plans, benefits and available memberships.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
+                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                <span>Book now</span>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved membership details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <div class="wallet-loading" role="status">
+                <div class="wallet-skeleton">
+                  <div class="skeleton-block skeleton-balance"></div>
+                  <div class="skeleton-transactions">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </div>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="memberships-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="memberships-error-title">We couldn&rsquo;t load your memberships</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else {
+              @if (membershipsList(); as membershipList) {
+                @if (membershipList.length) {
+                  <section class="wallet-balance-card" aria-labelledby="memberships-count-label">
+                    <div class="wallet-balance-copy">
+                      <p id="memberships-count-label">Active memberships</p>
+                      <strong>{{ membershipList.length }}</strong>
+                      <small><span class="wallet-status"><span aria-hidden="true"></span>{{ membershipList[0].status }}</span></small>
+                    </div>
+                    <div class="wallet-actions" aria-label="Membership actions">
+                        <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                        <ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon>
+                        Explore plans
+                      </a>
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'memberships' }">
+                        <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                        Help
+                      </a>
+                    </div>
+                  </section>
+                }
+
+                <div class="wallet-content-grid">
+                  <section class="wallet-activity" aria-labelledby="memberships-list-title">
+                    <div class="wallet-section-heading">
+                      <div>
+                        <p class="wallet-section-kicker">Your plans</p>
+                        <h2 id="memberships-list-title">Memberships</h2>
+                      </div>
+                      @if (membershipList.length) {
+                        <span>{{ membershipList.length }} active</span>
+                      }
+                    </div>
+
+                    @if (membershipList.length) {
+                      <div class="wallet-transactions">
+                        @for (item of membershipList; track item.id) {
+                          <article class="wallet-transaction">
+                            <div class="transaction-icon">
+                              <ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon>
+                            </div>
+                            <div class="transaction-copy">
+                              <strong>{{ item.planName }}</strong>
+                              <span>{{ item.status }} &middot; {{ item.creditsRemaining }}/{{ item.planCredits }} credits</span>
+                              <small>Bought {{ walletTransactionDate(item.createdAt) }}</small>
+                            </div>
+                            <div class="transaction-value">
+                              <strong>{{ money(item.pricePaise) }}</strong>
+                              @if (item.autoRenew) {
+                                <small>Auto-renew</small>
+                              }
+                            </div>
+                          </article>
+                        }
+                      </div>
+                    } @else {
+                      <div class="wallet-empty">
+                        <div class="wallet-state-icon"><ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon></div>
+                        <h3>No memberships yet</h3>
+                        <p>Purchase a membership plan to unlock exclusive benefits, discounts and credits.</p>
+                        <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Browse plans' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      </div>
+                    }
+                  </section>
+
+                  <aside class="wallet-guide" aria-labelledby="memberships-guide-title">
+                    <p class="wallet-section-kicker">Plans & benefits</p>
+                    <h2 id="memberships-guide-title">Available plans</h2>
+
+                    @if (actionMessage()) {
+                      <div class="wallet-state" style="padding:12px 0">
+                        <p style="font-size:0.84rem;color:var(--success);font-weight:600">{{ actionMessage() }}</p>
+                      </div>
+                    }
+
+                    <div class="plan-listing">
+                      <button type="button" class="plan-load-button" (click)="loadPlans()" [disabled]="plansLoading()">
+                        <ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon>
+                        {{ plansLoading() ? 'Loading plans…' : 'Explore membership plans' }}
+                      </button>
+
+                      @if (plansLoading()) {
+                        <div class="plan-loading" role="status" aria-live="polite">
+                          <span class="skeleton-line skeleton-title"></span>
+                          <span class="skeleton-line"></span>
+                          <span class="skeleton-line"></span>
+                        </div>
+                      } @else if (marketplace.membershipPlans().length) {
+                        <div class="plan-list">
+                          @for (plan of marketplace.membershipPlans(); track plan.id) {
+                            <article class="plan-card">
+                              <div class="plan-card-head">
+                                <div class="plan-card-name">
+                                  <strong>{{ plan.name }}</strong>
+                                  @if (plan.validityDays) {
+                                    <span>Valid {{ plan.validityDays }} days</span>
+                                  }
+                                </div>
+                                <div class="plan-price">
+                                  <strong>{{ money(plan.pricePaise) }}</strong>
+                                  <small>one-time</small>
+                                </div>
+                              </div>
+                              @if (plan.description) {
+                                <p class="plan-desc">{{ plan.description }}</p>
+                              }
+                              @if (plan.discountPercent || plan.productDiscountPercent) {
+                                <div class="plan-perks">
+                                  @if (plan.discountPercent) {
+                                    <span class="plan-perk">-{{ plan.discountPercent }}% on services</span>
+                                  }
+                                  @if (plan.productDiscountPercent) {
+                                    <span class="plan-perk">-{{ plan.productDiscountPercent }}% on products</span>
+                                  }
+                                </div>
+                              }
+                              @if (planServiceCount(plan)) {
+                                <p class="plan-services">{{ planServiceCount(plan) }} included {{ planServiceCount(plan) === 1 ? 'service' : 'services' }} in this plan</p>
+                              }
+                              @if (planTermsSummary(plan)) {
+                                <p class="plan-terms">Terms: {{ planTermsSummary(plan) }}</p>
+                              }
+                              <button type="button" class="plan-join" (click)="buyPlan(plan)">Join this plan</button>
+                            </article>
+                          }
+                        </div>
+                      } @else if (plansLoaded()) {
+                        <p class="plan-none">No membership plans are available right now. Check back soon.</p>
+                      }
+                    </div>
+
+                    <div class="wallet-guide-list" style="margin-top:16px">
+                      <div>
+                        <span class="guide-number">01</span>
+                        <p><strong>Choose a plan</strong><small>Browse membership options with credits, discounts and exclusive perks.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">02</span>
+                        <p><strong>Credits & usage</strong><small>Each membership includes plan credits you can redeem against services.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">03</span>
+                        <p><strong>Auto-renew</strong><small>Memberships can be set to auto-renew so you never lose your benefits.</small></p>
+                      </div>
+                    </div>
+
+                    <div class="wallet-vs" aria-label="Membership versus package">
+                      <div>
+                        <strong>Membership</strong>
+                        <small>Ongoing benefits for a fixed period &mdash; discounts, credits and perks.</small>
+                      </div>
+                      <div>
+                        <strong>Package</strong>
+                        <small>Prepaid service sessions you redeem as you book.</small>
+                      </div>
+                    </div>
+
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'memberships' }">
+                      <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                      Help with memberships
+                    </a>
+                  </aside>
+                </div>
+              }
+            }
+          </section>
+        } @else if (familyMode()) {
+          <section class="wallet-screen" aria-labelledby="family-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow family-eyebrow">Family booking</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="family-title">Family profiles</h1>
+                </div>
+                <p class="wallet-intro">Profiles, preferences and shared bookings for your family.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
+                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                <span>Book now</span>
+              </a>
+            </header>
+
+            <div class="wallet-content-grid">
+              <section class="wallet-activity" aria-labelledby="family-profiles-title">
+                <div class="wallet-section-heading">
+                  <div>
+                    <p class="wallet-section-kicker">Your family</p>
+                    <h2 id="family-profiles-title">Profiles</h2>
+                  </div>
+                  <span>3 members</span>
+                </div>
+
+                <div class="wallet-transactions">
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="people-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Mom profile</strong>
+                      <span>Primary contact set</span>
+                      <small>Shared profile with preferred salon notes</small>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="people-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Kids haircut preferences</strong>
+                      <span>Updated today</span>
+                      <small>Clipper length and appointment reminders saved</small>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="people-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Family grooming visit</strong>
+                      <span>3 guests</span>
+                      <small>Multi-person booking draft for the weekend</small>
+                    </div>
+                    <div class="transaction-value">
+                      <strong>{{ money(420000) }}</strong>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <aside class="wallet-guide" aria-labelledby="family-guide-title">
+                <p class="wallet-section-kicker">Getting started</p>
+                <h2 id="family-guide-title">Family & shared bookings</h2>
+                <div class="wallet-guide-list">
+                  <div>
+                    <span class="guide-number">01</span>
+                    <p><strong>Add a profile</strong><small>Create profiles for each family member with their service preferences and notes.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">02</span>
+                    <p><strong>Book together</strong><small>Schedule multi-person appointments in a single booking for the same time slot.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">03</span>
+                    <p><strong>Shared history</strong><small>View past visits and preferences for every family member from one account.</small></p>
+                  </div>
+                </div>
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'family' }">
+                  <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                  Help with family bookings
+                </a>
+              </aside>
+            </div>
+          </section>
+        } @else if (referralsMode()) {
+          <section class="wallet-screen" aria-labelledby="referrals-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Refer & earn</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="referrals-title">Referrals</h1>
+                </div>
+                <p class="wallet-intro">Invite friends and earn rewards when they book.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Invite friends">
+                <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                <span>Invite now</span>
+              </a>
+            </header>
+
+            <section class="wallet-balance-card" aria-labelledby="referrals-balance-label">
+              <div class="wallet-balance-copy">
+                <p id="referrals-balance-label">Your referral code</p>
+                <strong>AURA-SHINE</strong>
+                <small><span class="wallet-status"><span aria-hidden="true"></span>Share with friends to unlock booking rewards</span></small>
+              </div>
+              <div class="wallet-actions" aria-label="Referral actions">
+                <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                  <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                  Share code
+                </a>
+                <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'referrals' }">
+                  <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                  How it works
+                </a>
+              </div>
+            </section>
+
+            <div class="wallet-content-grid">
+              <section class="wallet-activity" aria-labelledby="referrals-history-title">
+                <div class="wallet-section-heading">
+                  <div>
+                    <p class="wallet-section-kicker">Activity</p>
+                    <h2 id="referrals-history-title">Referral history</h2>
+                  </div>
+                  <span>5 referrals</span>
+                </div>
+
+                <div class="wallet-transactions">
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon transaction-debit">
+                      <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Ready</strong>
+                      <span>Invite code AURA-SHINE sent</span>
+                      <small>Share with friends to unlock booking rewards</small>
+                    </div>
+                    <div class="transaction-value">
+                      <small>Reusable code</small>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Pending</strong>
+                      <span>Riya's first booking</span>
+                      <small>Reward unlocks when the referred booking is completed</small>
+                    </div>
+                    <div class="transaction-value">
+                      <strong>{{ money(20000) }}</strong>
+                      <small>Referral bonus</small>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="share-social-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Earned</strong>
+                      <span>Referral credit added</span>
+                      <small>Credit added after a successful referral</small>
+                    </div>
+                    <div class="transaction-value">
+                      <strong>{{ money(30000) }}</strong>
+                      <small>12 Jun 2026</small>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <aside class="wallet-guide" aria-labelledby="referrals-guide-title">
+                <p class="wallet-section-kicker">How it works</p>
+                <h2 id="referrals-guide-title">Referral rewards</h2>
+                <div class="wallet-guide-list">
+                  <div>
+                    <span class="guide-number">01</span>
+                    <p><strong>Share your code</strong><small>Send your unique referral code AURA-SHINE to friends and family.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">02</span>
+                    <p><strong>They book</strong><small>When a referred friend completes their first booking, you earn a reward.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">03</span>
+                    <p><strong>Get rewarded</strong><small>Credits are added to your wallet automatically once the booking is completed.</small></p>
+                  </div>
+                </div>
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'referrals' }">
+                  <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                  Help with referrals
+                </a>
+              </aside>
+            </div>
+          </section>
+        } @else if (giftCardsMode()) {
+          <section class="wallet-screen" aria-labelledby="giftcards-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Gift cards</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="giftcards-title">Gift cards</h1>
+                </div>
+                <p class="wallet-intro">Purchase, redeem and track your gift card balances.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Browse services">
+                <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
+                <span>Buy a gift card</span>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved gift card details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <div class="wallet-loading" role="status">
+                <div class="wallet-skeleton">
+                  <div class="skeleton-block skeleton-balance"></div>
+                  <div class="skeleton-transactions">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </div>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="giftcards-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="giftcards-error-title">We couldn&rsquo;t load your gift cards</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else {
+              @if (giftCardsList(); as gcList) {
+                @if (gcList.length) {
+                  <section class="wallet-balance-card" aria-labelledby="giftcards-balance-label">
+                    <div class="wallet-balance-copy">
+                      <p id="giftcards-balance-label">Gift cards</p>
+                      <strong>{{ gcList.length }}</strong>
+                      <small><span class="wallet-status"><span aria-hidden="true"></span>{{ gcList[0].status }}</span></small>
+                    </div>
+                    <div class="wallet-actions" aria-label="Gift card actions">
+                      <a class="wallet-action wallet-action-primary" (click)="purchaseGiftCard()">
+                        <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
+                        Buy new
+                      </a>
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'gift-cards' }">
+                        <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                        Help
+                      </a>
+                    </div>
+                  </section>
+                }
+
+                <div class="wallet-content-grid">
+                  <section class="wallet-activity" aria-labelledby="giftcards-list-title">
+                    <div class="wallet-section-heading">
+                      <div>
+                        <p class="wallet-section-kicker">Your cards</p>
+                        <h2 id="giftcards-list-title">Gift cards</h2>
+                      </div>
+                      @if (gcList.length) {
+                        <span>{{ gcList.length }} card{{ gcList.length === 1 ? '' : 's' }}</span>
+                      }
+                    </div>
+
+                    @if (gcList.length) {
+                      <div class="wallet-transactions">
+                        @for (card of gcList; track card.id) {
+                          <article class="wallet-transaction">
+                            <div class="transaction-icon">
+                              <ion-icon name="gift-outline" aria-hidden="true"></ion-icon>
+                            </div>
+                            <div class="transaction-copy">
+                              <strong>{{ card.code }}</strong>
+                              <span>{{ card.status }}</span>
+                              <small>Expires {{ walletTransactionDate(card.expiryDate) }}</small>
+                            </div>
+                            <div class="transaction-value">
+                              <strong>{{ money(card.balancePaise) }}</strong>
+                              <small>{{ money(card.initialValuePaise) }} issued</small>
+                            </div>
+                          </article>
+                        }
+                      </div>
+                    } @else {
+                      <div class="wallet-empty">
+                        <div class="wallet-state-icon"><ion-icon name="gift-outline" aria-hidden="true"></ion-icon></div>
+                        <h3>No gift cards yet</h3>
+                        <p>Gift cards can be purchased for yourself or as a gift for someone else.</p>
+                        <a (click)="purchaseGiftCard()">Buy a gift card <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      </div>
+                    }
+                  </section>
+
+                  <aside class="wallet-guide" aria-labelledby="giftcards-guide-title">
+                    <p class="wallet-section-kicker">About gift cards</p>
+                    <h2 id="giftcards-guide-title">How gift cards work</h2>
+                    <div class="wallet-guide-list">
+                      <div>
+                        <span class="guide-number">01</span>
+                        <p><strong>Purchase</strong><small>Buy a gift card for any amount starting from &rsquo;100. Instant digital delivery.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">02</span>
+                        <p><strong>Redeem</strong><small>Use the gift card code at checkout when booking services or buying products.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">03</span>
+                        <p><strong>Track balance</strong><small>Your remaining balance and transaction history are always visible here.</small></p>
+                      </div>
+                    </div>
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'gift-cards' }">
+                      <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                      Help with gift cards
+                    </a>
+                  </aside>
+                </div>
+              }
+            }
+          </section>
+        } @else if (corporateMode()) {
+          <section class="wallet-screen" aria-labelledby="corporate-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Corporate benefits</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="corporate-title">Corporate</h1>
+                </div>
+                <p class="wallet-intro">Workplace benefits, packages and reimbursements.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Browse services">
+                <ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon>
+                <span>Explore</span>
+              </a>
+            </header>
+
+            <div class="wallet-content-grid">
+              <section class="wallet-activity" aria-labelledby="corporate-list-title">
+                <div class="wallet-section-heading">
+                  <div>
+                    <p class="wallet-section-kicker">Eligibility</p>
+                    <h2 id="corporate-list-title">Corporate benefits</h2>
+                  </div>
+                </div>
+
+                <div class="wallet-empty">
+                  <div class="wallet-state-icon"><ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon></div>
+                  <h3>No corporate benefits linked</h3>
+                  <p>Corporate benefits appear here only when your account is linked to a partner organisation through your employer&rsquo;s wellness program. If your company offers Aura benefits, ask your HR or contact support to link your account.</p>
+                  <a class="wallet-empty-primary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'corporate' }">How to check eligibility</a>
+                </div>
+              </section>
+
+              <aside class="wallet-guide" aria-labelledby="corporate-guide-title">
+                <p class="wallet-section-kicker">How it works</p>
+                <h2 id="corporate-guide-title">Benefits & reimbursements</h2>
+                <div class="wallet-guide-list">
+                  <div>
+                    <span class="guide-number">01</span>
+                    <p><strong>Verify eligibility</strong><small>Confirm your corporate benefit through your employer&rsquo;s wellness program before it appears here.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">02</span>
+                    <p><strong>Use your benefits</strong><small>Redeem subsidized appointments and packages as part of your corporate plan.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">03</span>
+                    <p><strong>Reimbursement status</strong><small>Submitted invoices move through Pending, then Approved and Paid &mdash; or Rejected if the company declines them.</small></p>
+                  </div>
+                </div>
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'corporate' }">
+                  <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                  Help with corporate benefits
+                </a>
+              </aside>
+            </div>
+          </section>
+        } @else if (goalsMode()) {
+          <section class="wallet-screen" aria-labelledby="goals-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Beauty goals</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="goals-title">Goals</h1>
+                </div>
+                <p class="wallet-intro">Track your treatment plans, routines and progress.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Find services">
+                <ion-icon name="color-palette-outline" aria-hidden="true"></ion-icon>
+                <span>Discover</span>
+              </a>
+            </header>
+
+            <div class="wallet-content-grid">
+              <section class="wallet-activity" aria-labelledby="goals-list-title">
+                <div class="wallet-section-heading">
+                  <div>
+                    <p class="wallet-section-kicker">Your goals</p>
+                    <h2 id="goals-list-title">Beauty goals</h2>
+                  </div>
+                  <span>3 goals</span>
+                </div>
+
+                <div class="wallet-transactions">
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="color-palette-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Hair repair plan</strong>
+                      <span>Week 2</span>
+                      <small>Four-week routine with hydration and trim reminders</small>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon">
+                      <ion-icon name="color-palette-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Pre-event glow plan</strong>
+                      <span>Next step due</span>
+                      <small>Recommended facial schedule and product reminders</small>
+                    </div>
+                    <div class="transaction-value">
+                      <strong>{{ money(520000) }}</strong>
+                    </div>
+                  </article>
+                  <article class="wallet-transaction">
+                    <div class="transaction-icon transaction-debit">
+                      <ion-icon name="color-palette-outline" aria-hidden="true"></ion-icon>
+                    </div>
+                    <div class="transaction-copy">
+                      <strong>Consistency streak</strong>
+                      <span>3 of 3</span>
+                      <small>Three planned self-care visits completed this quarter</small>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <aside class="wallet-guide" aria-labelledby="goals-guide-title">
+                <p class="wallet-section-kicker">Getting started</p>
+                <h2 id="goals-guide-title">Set your goals</h2>
+                <div class="wallet-guide-list">
+                  <div>
+                    <span class="guide-number">01</span>
+                    <p><strong>Define a goal</strong><small>Choose a beauty or wellness target like hair repair, skin glow or fitness.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">02</span>
+                    <p><strong>Follow the plan</strong><small>Get a curated routine with recommended services and product reminders.</small></p>
+                  </div>
+                  <div>
+                    <span class="guide-number">03</span>
+                    <p><strong>Track progress</strong><small>Mark visits as completed and watch your goal progress grow over time.</small></p>
+                  </div>
+                </div>
+                <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'goals' }">
+                  <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                  Help with beauty goals
+                </a>
+              </aside>
+            </div>
+          </section>
+        } @else if (packagesMode()) {
+          <section class="wallet-screen" aria-labelledby="packages-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura packages</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="packages-title">Packages</h1>
+                </div>
+                <p class="wallet-intro">Sessions, balances and package redemptions.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/tabs/search')" aria-label="Book a service">
+                <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                <span>Book now</span>
+              </a>
+            </header>
+
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved package details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loadingForSkeleton() && !cachedModule()) {
+              <div class="wallet-loading" role="status">
+                <div class="wallet-skeleton">
+                  <div class="skeleton-block skeleton-balance"></div>
+                  <div class="skeleton-transactions">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2, 3]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </div>
+            } @else if (marketplace.error() && !cachedModule()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="packages-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="packages-error-title">We couldn&rsquo;t load your packages</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else {
+              @if (packagesList(); as packageList) {
+                @if (packageList.length) {
+                  <section class="wallet-balance-card" aria-labelledby="packages-count-label">
+                    <div class="wallet-balance-copy">
+                      <p id="packages-count-label">Active packages</p>
+                      <strong>{{ packageList.length }}</strong>
+                      <small><span class="wallet-status"><span aria-hidden="true"></span>{{ packageList[0].status }}</span></small>
+                    </div>
+                    <div class="wallet-actions" aria-label="Package actions">
+                        <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                        <ion-icon name="ticket-outline" aria-hidden="true"></ion-icon>
+                        Browse packages
+                      </a>
+                        <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'packages' }">
+                        <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                        Help
+                      </a>
+                    </div>
+                  </section>
+                }
+
+                <div class="wallet-content-grid">
+                  <section class="wallet-activity" aria-labelledby="packages-list-title">
+                    <div class="wallet-section-heading">
+                      <div>
+                        <p class="wallet-section-kicker">Your packages</p>
+                        <h2 id="packages-list-title">Packages</h2>
+                      </div>
+                      @if (packageList.length) {
+                        <span>{{ packageList.length }} active</span>
+                      }
+                    </div>
+
+                    @if (packageList.length) {
+                      <div class="wallet-transactions">
+                        @for (item of packageList; track item.id) {
+                          <article class="wallet-transaction">
+                            <div class="transaction-icon">
+                              <ion-icon name="ticket-outline" aria-hidden="true"></ion-icon>
+                            </div>
+                            <div class="transaction-copy">
+                              <strong>{{ item.name }}</strong>
+                              <span>{{ item.status }}</span>
+                              @if (item.createdAt) {
+                                <small>Bought {{ walletTransactionDate(item.createdAt) }}</small>
+                              }
+                            </div>
+                            <div class="transaction-value">
+                              <strong>{{ money(item.pricePaise) }}</strong>
+                              @if (item.creditsRemaining !== undefined) {
+                                <small>{{ item.creditsRemaining }} credits left</small>
+                              }
+                            </div>
+                          </article>
+                        }
+                      </div>
+                    } @else {
+                      <div class="wallet-empty">
+                        <div class="wallet-state-icon"><ion-icon name="ticket-outline" aria-hidden="true"></ion-icon></div>
+                        <h3>No packages yet</h3>
+                        <p>Purchase a service package for discounted rates on your favourite treatments.</p>
+                        <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Browse packages' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      </div>
+                    }
+                  </section>
+
+                  <aside class="wallet-guide" aria-labelledby="packages-guide-title">
+                    <p class="wallet-section-kicker">How it works</p>
+                    <h2 id="packages-guide-title">About packages</h2>
+                    <div class="wallet-guide-list">
+                      <div>
+                        <span class="guide-number">01</span>
+                        <p><strong>Choose a package</strong><small>Select from available service bundles with prepaid credits at discounted rates.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">02</span>
+                        <p><strong>Redeem credits</strong><small>Credits are automatically applied when you book a service covered by the package.</small></p>
+                      </div>
+                      <div>
+                        <span class="guide-number">03</span>
+                        <p><strong>Track balance</strong><small>Your remaining credits and package status are always visible in this section.</small></p>
+                      </div>
+                    </div>
+
+                    <div class="wallet-vs" aria-label="Package versus membership">
+                      <div>
+                        <strong>Package</strong>
+                        <small>Prepaid service sessions you redeem as you book.</small>
+                      </div>
+                      <div>
+                        <strong>Membership</strong>
+                        <small>Ongoing benefits for a fixed period &mdash; discounts, credits and perks.</small>
+                      </div>
+                    </div>
+
+                    <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'packages' }">
+                      <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                      Help with packages
+                    </a>
+                  </aside>
+                </div>
+              }
+            }
+          </section>
+        } @else if (slug() === "support") {
+          <section class="wallet-screen" aria-labelledby="support-title">
+            <header class="wallet-heading">
+              <div>
+                <p class="wallet-eyebrow">Aura support</p>
+                <div class="wallet-title-row">
+                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
+                  <h1 id="support-title">Help & support</h1>
+                </div>
+                <p class="wallet-intro">Your support tickets and help resources.</p>
+              </div>
+              <a class="wallet-header-link" [routerLink]="hubRoute('/help')" aria-label="Help centre">
+                <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                <span>Help centre</span>
+                <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+              </a>
+            </header>
+
+            @if (!marketplace.isAuthenticated()) {
+              <section class="wallet-state" aria-labelledby="support-login-title">
+                <div class="wallet-state-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="support-login-title">Login required</h2>
+                <p>Sign in to view your support tickets and contact history.</p>
+                <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/support' }">Log in</ion-button>
+              </section>
+            } @else if (marketplace.loading()) {
+              <div class="wallet-loading" role="status">
+                <div class="wallet-skeleton">
+                  <div class="skeleton-block skeleton-balance"></div>
+                  <div class="skeleton-transactions">
+                    <div class="skeleton-line skeleton-title"></div>
+                    @for (item of [1, 2]; track item) {
+                      <div class="skeleton-transaction">
+                        <span class="skeleton-circle"></span>
+                        <span class="skeleton-line"></span>
+                        <span class="skeleton-line skeleton-amount"></span>
+                      </div>
+                    }
+                  </div>
+                  <div class="wallet-guide-skeleton skeleton-block"></div>
+                </div>
+              </div>
+            } @else if (marketplace.error()) {
+              <section class="wallet-state wallet-error" role="alert" aria-labelledby="support-error-title">
+                <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
+                <h2 id="support-error-title">Could not load support data</h2>
+                <p>{{ marketplace.error() }}</p>
+                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+              </section>
+            } @else {
+              <div class="wallet-content-grid">
+                <section class="wallet-activity" aria-labelledby="tickets-list-title">
+                  <div class="wallet-section-heading">
+                    <div>
+                      <p class="wallet-section-kicker">Your requests</p>
+                      <h2 id="tickets-list-title">Support tickets</h2>
+                    </div>
+                    @if (supportTickets().length) {
+                      <span>{{ supportTickets().length }} total</span>
+                    }
+                  </div>
+
+                  @if (supportHistoryLoading()) {
+                    <div class="wallet-loading" role="status">
+                      <div class="wallet-skeleton">
+                        @for (item of [1, 2]; track item) {
+                          <div class="skeleton-transaction">
+                            <span class="skeleton-circle"></span>
+                            <span class="skeleton-line"></span>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  } @else if (supportHistoryError()) {
+                    <div class="wallet-state wallet-error" role="alert">
+                      <h3>Could not load tickets</h3>
+                      <p>{{ supportHistoryError() }}</p>
+                      <ion-button fill="outline" class="secondary-button" (click)="loadSupportHistory()">Retry</ion-button>
+                    </div>
+                  } @else if (supportTickets().length) {
+                    <div class="wallet-transactions">
+                      @for (ticket of supportTickets(); track ticket.id) {
+                        <article
+                          class="wallet-transaction"
+                          [routerLink]="ticket.bookingId ? hubRoute('/bookings/' + ticket.bookingId) : undefined"
+                          [attr.aria-label]="'Support ticket for ' + supportCategoryLabel(ticket.category) + ', ' + supportStatusLabel(ticket.status)"
+                        >
+                          <div class="transaction-icon">
+                            <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
+                          </div>
+                          <div class="transaction-copy">
+                            <strong>{{ supportCategoryLabel(ticket.category) }}</strong>
+                            <span class="ticket-status" [class]="supportStatusClass(ticket.status)">{{ supportStatusLabel(ticket.status) }}</span>
+                            <small>Updated {{ supportTicketDate(ticket.updatedAt || ticket.createdAt) }}</small>
+                          </div>
+                          <div class="transaction-value">
+                            <small class="ticket-response">{{ supportExpectedResponse(ticket.status) }}</small>
+                          </div>
+                        </article>
+                      }
+                    </div>
+                  } @else {
+                    <div class="wallet-empty">
+                      <div class="wallet-state-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
+                      <h3>No support tickets yet</h3>
+                      <p>When you raise a request from a booking, your ticket appears here with its status and expected reply time.</p>
+                      <a class="wallet-empty-primary" [routerLink]="hubRoute('/help')">Start a support request</a>
+                      <a class="wallet-empty-secondary" [routerLink]="hubRoute('/tabs/bookings')">View my bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+
+                  @if (supportTickets().length > 0) {
+                    <div class="wallet-empty" style="margin-top:12px">
+                      <p>Need help with a specific booking? Use the help option on any booking detail page.</p>
+                      <a [routerLink]="hubRoute('/tabs/bookings')">Go to bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                    </div>
+                  }
+                </section>
+
+                <aside class="wallet-guide" aria-labelledby="support-guide-title">
+                  <p class="wallet-section-kicker">How it works</p>
+                  <h2 id="support-guide-title">Getting help</h2>
+                  <div class="wallet-guide-list">
+                    <div>
+                      <span class="guide-number">01</span>
+                      <p><strong>From a booking</strong><small>Open any booking and choose the support option to send a request linked to that appointment.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">02</span>
+                      <p><strong>Track your ticket</strong><small>Every request creates a ticket you can follow here. Check status and updates in real time.</small></p>
+                    </div>
+                    <div>
+                      <span class="guide-number">03</span>
+                      <p><strong>Help centre</strong><small>Browse FAQs and guides for common topics like payments, cancellations and account management.</small></p>
+                    </div>
+                  </div>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/help')">
+                    <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+                    Visit help centre
+                  </a>
+                  <a class="wallet-help-link" [routerLink]="hubRoute('/tabs/bookings')" style="margin-top:6px">
+                    <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                    View my bookings
+                  </a>
+                </aside>
+              </div>
+            }
+          </section>
+        } @else {
+          <section class="hub-hero">
           <div class="hero-icon"><ion-icon [name]="config().icon"></ion-icon></div>
           <p>{{ config().eyebrow }}</p>
           <h1>{{ config().title }}</h1>
           <span>{{ config().subtitle }}</span>
           <div class="hero-actions">
-            <ion-button class="primary-gradient" routerLink="/tabs/search">
+            <ion-button class="primary-gradient" [routerLink]="hubRoute('/tabs/search')">
               <ion-icon name="search-outline" slot="start"></ion-icon>
               Discover salons
             </ion-button>
-            <ion-button fill="outline" class="secondary-button" routerLink="/tabs/home">Back to home</ion-button>
+            <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/tabs/home')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Back to home' }}</ion-button>
           </div>
         </section>
 
         <section class="hub-grid" aria-label="Customer hub sections">
           @for (item of hubModules; track item.route) {
-            <a class="premium-card hub-tile" [class.active]="slug() === item.slug" [routerLink]="item.route">
+            <a class="premium-card hub-tile" [class.active]="slug() === item.slug" [routerLink]="hubRoute(item.route)">
               <ion-icon [name]="item.icon"></ion-icon>
               <strong>{{ item.label }}</strong>
               <small>{{ item.copy }}</small>
@@ -164,7 +1953,7 @@ const hubConfigs: Record<string, HubConfig> = {
         @if (!marketplace.isAuthenticated()) {
           <section class="premium-card state-card">
             <h2>Login required</h2>
-            <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: config().route }">Log in</ion-button>
+            <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: hubRoute(config().route) }">Log in</ion-button>
           </section>
         } @else {
           @if (marketplace.loading()) {
@@ -192,7 +1981,7 @@ const hubConfigs: Record<string, HubConfig> = {
             </article>
             <article class="metric-card count-metric premium-card">
               <span>Loyalty</span>
-              <strong>{{ marketplace.customer()?.loyaltyPoints ?? 0 }} pts</strong>
+              <strong>{{ loyaltyMetricLabel() }}</strong>
             </article>
           </section>
 
@@ -217,7 +2006,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <small>{{ record.date }}</small>
                   }
                   @if (record.route) {
-                    <ion-button fill="outline" class="secondary-button record-action" [routerLink]="record.route">
+                    <ion-button fill="outline" class="secondary-button record-action" [routerLink]="hubRoute(record.route)">
                       Open section
                     </ion-button>
                   }
@@ -231,33 +2020,14 @@ const hubConfigs: Record<string, HubConfig> = {
             </section>
           }
 
-          @if (slug() === "memberships") {
-            <section class="premium-card action-card">
-              <div>
-                <h2>Membership plans</h2>
-              </div>
-              <ion-button class="primary-gradient" (click)="loadPlans()">Load live plans</ion-button>
-            </section>
-            @if (marketplace.membershipPlans().length) {
-              <section class="records-grid" aria-label="Live membership plans">
-                @for (plan of marketplace.membershipPlans(); track plan.id) {
-                  <article class="premium-card record-card">
-                    <span>{{ plan.validityDays }} days</span>
-                    <strong>{{ plan.name }}</strong>
-                    <small>{{ money(plan.pricePaise) }}</small>
-                    <ion-button fill="outline" class="secondary-button" (click)="buyPlan(plan)">Buy membership</ion-button>
-                  </article>
-                }
-              </section>
-            }
+          @if (slug() === "support" && supportHistoryLoading()) {
+            <section class="premium-card state-card" role="status"><h2>Loading support requests</h2></section>
           }
-
-          @if (slug() === "gift-cards") {
-            <section class="premium-card action-card">
-              <div>
-                <h2>Purchase gift card</h2>
-              </div>
-              <ion-button class="primary-gradient" (click)="purchaseGiftCard()">Enter amount</ion-button>
+          @if (slug() === "support" && supportHistoryError()) {
+            <section class="premium-card state-card error" role="alert">
+              <h2>Could not load support requests</h2>
+              <p>{{ supportHistoryError() }}</p>
+              <ion-button class="primary-gradient" (click)="loadSupportHistory()">Retry</ion-button>
             </section>
           }
 
@@ -275,6 +2045,7 @@ const hubConfigs: Record<string, HubConfig> = {
               <p class="muted">{{ stateCopy() }}</p>
             </div>
           </section>
+        }
         }
       </main>
     </ion-content>
@@ -317,7 +2088,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .hub-hero p {
       color: rgba(255, 255, 255, 0.76);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -367,10 +2138,10 @@ const hubConfigs: Record<string, HubConfig> = {
     }
 
     .hub-tile.active {
-      color: #120D05 !important;
-      border-color: transparent !important;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A 58%, #9B6B22) !important;
-      box-shadow: 0 18px 44px rgba(214, 169, 74, 0.24) !important;
+      color: #FFFFFF;
+      border-color: transparent;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary) 58%, var(--brand-800));
+      box-shadow: 0 18px 44px rgba(99, 102, 241, 0.24);
     }
 
     .hub-tile ion-icon {
@@ -378,16 +2149,18 @@ const hubConfigs: Record<string, HubConfig> = {
       height: 44px;
       padding: 11px;
       border-radius: 16px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .hub-tile.active ion-icon {
-      background: rgba(255, 249, 236, 0.58);
+      color: var(--primary);
+      background: rgba(255, 255, 255, 0.68);
     }
 
     .hub-tile small {
-      color: var(--muted);
+      color: inherit;
+      opacity: 0.72;
       font-weight: 800;
       line-height: 1.35;
     }
@@ -422,7 +2195,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .metric-card span,
     .record-card span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -453,7 +2226,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .record-card small,
     .state-card p {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       line-height: 1.4;
     }
@@ -461,11 +2234,11 @@ const hubConfigs: Record<string, HubConfig> = {
     .demo-chip {
       width: fit-content;
       padding: 4px 9px;
-      border: 1px solid rgba(214, 169, 74, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.32);
       border-radius: 999px;
-      color: #8A5B08 !important;
+      color: #8A5B08;
       background: rgba(246, 217, 148, 0.34);
-      font-size: 0.68rem !important;
+      font-size: 0.78rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       white-space: nowrap;
@@ -524,7 +2297,1298 @@ const hubConfigs: Record<string, HubConfig> = {
       color: var(--danger);
     }
 
+    .wallet-screen {
+      display: grid;
+      gap: clamp(18px, 3vw, 28px);
+      color: var(--text);
+    }
+
+    .wallet-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 4px 2px 0;
+    }
+
+    .wallet-heading p,
+    .wallet-heading h1 {
+      margin: 0;
+    }
+
+    .wallet-eyebrow,
+    .wallet-section-kicker {
+      color: var(--primary);
+      font-size: 0.80rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .wallet-heading h1 {
+      margin-top: 5px;
+      color: var(--brand-950);
+      font-size: clamp(2.35rem, 7vw, 4.4rem);
+      font-weight: 900;
+      letter-spacing: -0.055em;
+      line-height: 0.95;
+    }
+
+    .wallet-title-row {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 0;
+      margin-left: 30px;
+    }
+
+    .wallet-title-row h1 {
+      margin-top: 0;
+    }
+
+    .wallet-heading .wallet-eyebrow {
+      margin-left: 30px;
+      line-height: 1;
+    }
+
+    .content-back-button {
+      position: absolute;
+      left: -44px;
+      top: -21px;
+      width: 38px;
+      height: 38px;
+      min-width: 38px;
+      --color: var(--brand-950);
+      --icon-font-size: 25px;
+      --background: transparent;
+      --border-radius: 12px;
+      --padding-start: 0;
+      --padding-end: 0;
+      filter: drop-shadow(0.45px 0 0 var(--brand-950));
+    }
+
+    .wallet-heading .wallet-intro {
+      max-width: 580px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: clamp(0.95rem, 2vw, 1.06rem);
+      line-height: 1.55;
+    }
+
+    .wallet-header-link,
+    .wallet-help-link {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      color: var(--primary);
+      font-size: 0.88rem;
+      font-weight: 850;
+      text-decoration: none;
+    }
+
+    .wallet-header-link ion-icon,
+    .wallet-help-link ion-icon,
+    .wallet-empty a ion-icon {
+      flex: 0 0 auto;
+      font-size: 1rem;
+      transition: transform var(--motion-fast);
+    }
+
+    .wallet-header-receipt {
+      display: none;
+    }
+
+    .wallet-balance-card {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      display: grid;
+      gap: 28px;
+      padding: clamp(22px, 4vw, 38px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: clamp(22px, 4vw, 32px);
+      color: #FFFFFF;
+      background: var(--brand-900);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.2);
+    }
+
+    .wallet-balance-card::after {
+      position: absolute;
+      z-index: -1;
+      top: -90px;
+      right: -55px;
+      width: 250px;
+      height: 250px;
+      border: 44px solid rgba(255, 255, 255, 0.045);
+      border-radius: 50%;
+      content: "";
+      pointer-events: none;
+    }
+
+    .wallet-balance-copy {
+      min-width: 0;
+    }
+
+    .wallet-status-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: clamp(24px, 5vw, 42px);
+    }
+
+    .wallet-status,
+    .wallet-secure {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.84rem;
+      font-weight: 800;
+    }
+
+    .wallet-status > span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #5EE2A0;
+      box-shadow: 0 0 0 4px rgba(94, 226, 160, 0.12);
+    }
+
+    .wallet-secure ion-icon {
+      font-size: 1rem;
+    }
+
+    .wallet-balance-copy > p,
+    .wallet-balance-copy > small {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.68);
+      font-weight: 750;
+    }
+
+    .wallet-balance-copy > p {
+      font-size: 0.84rem;
+      letter-spacing: 0.025em;
+    }
+
+    .wallet-balance-copy > strong {
+      display: block;
+      margin: 7px 0 10px;
+      color: #FFFFFF;
+      font-size: clamp(2.65rem, 8vw, 5.4rem);
+      font-weight: 850;
+      letter-spacing: -0.065em;
+      line-height: 0.95;
+      overflow-wrap: anywhere;
+    }
+
+    .wallet-balance-copy > small {
+      display: block;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .wallet-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 10px;
+    }
+
+    .wallet-action {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 17px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      font-size: 0.88rem;
+      font-weight: 850;
+      text-decoration: none;
+      transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+    }
+
+    .wallet-action ion-icon {
+      font-size: 1rem;
+    }
+
+    .wallet-action-primary {
+      color: var(--brand-950);
+      background: var(--surface);
+    }
+
+    .wallet-action-secondary {
+      color: #FFFFFF;
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .wallet-cached-note {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+
+    .wallet-cached-note a {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-weight: 850;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .wallet-zero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      padding: clamp(18px, 3vw, 26px);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+
+    .wallet-zero-icon {
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-size: 1.2rem;
+    }
+
+    .wallet-zero-copy {
+      min-width: 0;
+      flex: 1 1 220px;
+    }
+
+    .wallet-zero-copy h2,
+    .wallet-zero-copy p {
+      margin: 0;
+    }
+
+    .wallet-zero-copy h2 {
+      color: var(--brand-950);
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .wallet-zero-copy p {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .plan-listing {
+      display: grid;
+      gap: 12px;
+    }
+
+    .plan-load-button {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      color: #FFFFFF;
+      background: var(--brand-700);
+      font-size: 0.88rem;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background var(--motion-fast), transform var(--motion-fast), opacity var(--motion-fast);
+    }
+
+    .plan-load-button:hover {
+      background: var(--brand-800);
+    }
+
+    .plan-load-button:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+
+    .plan-loading {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .plan-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .plan-card {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .plan-card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .plan-card-name {
+      min-width: 0;
+    }
+
+    .plan-card-name strong,
+    .plan-price strong {
+      display: block;
+      margin: 0;
+      color: var(--brand-950);
+      font-size: 0.98rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .plan-card-name span,
+    .plan-price small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .plan-price {
+      flex: 0 0 auto;
+      text-align: right;
+    }
+
+    .plan-desc {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    .plan-perks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .plan-perk {
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--success-text, var(--brand-700));
+      background: var(--primary-soft);
+      font-size: 0.82rem;
+      font-weight: 850;
+    }
+
+    .plan-services,
+    .plan-terms {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .plan-join {
+      min-height: 42px;
+      border: 1px solid var(--brand-700);
+      border-radius: 12px;
+      color: var(--brand-700);
+      background: transparent;
+      font-size: 0.84rem;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background var(--motion-fast), color var(--motion-fast);
+    }
+
+    .plan-join:hover {
+      color: #FFFFFF;
+      background: var(--brand-700);
+    }
+
+    .plan-none {
+      margin: 0;
+      padding: 14px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-align: center;
+    }
+
+    .wallet-vs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .wallet-vs > div {
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: var(--primary-soft);
+    }
+
+    .wallet-vs strong,
+    .wallet-vs small {
+      display: block;
+    }
+
+    .wallet-vs strong {
+      color: var(--brand-900);
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .wallet-vs small {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .wallet-content-grid {
+      display: grid;
+      gap: 16px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .wallet-activity,
+    .wallet-guide,
+    .wallet-state,
+    .wallet-list-skeleton,
+    .wallet-guide-skeleton {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 14px 36px rgba(28, 28, 28, 0.08);
+    }
+
+    .wallet-activity {
+      overflow: hidden;
+    }
+
+    .wallet-section-heading {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      padding: clamp(18px, 3vw, 26px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .wallet-section-heading p,
+    .wallet-section-heading h2,
+    .wallet-guide > p,
+    .wallet-guide > h2 {
+      margin: 0;
+    }
+
+    .wallet-section-heading h2,
+    .wallet-guide > h2 {
+      margin-top: 4px;
+      color: var(--brand-950);
+      font-size: clamp(1.25rem, 3vw, 1.65rem);
+      font-weight: 900;
+      letter-spacing: -0.035em;
+      line-height: 1.1;
+    }
+
+    .wallet-section-heading > span {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 800;
+    }
+
+    .wallet-transactions {
+      display: grid;
+    }
+
+    .wallet-transaction {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      padding: 17px clamp(16px, 3vw, 26px);
+    }
+
+    .wallet-transaction + .wallet-transaction {
+      border-top: 1px solid rgba(203, 213, 225, 0.74);
+    }
+
+    .transaction-icon {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      color: #087443;
+      background: #E8F8F0;
+      font-size: 1.12rem;
+    }
+
+    .transaction-icon.transaction-debit {
+      color: var(--brand-700);
+      background: var(--primary-soft);
+    }
+
+    .transaction-copy,
+    .transaction-value {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .transaction-copy strong,
+    .transaction-value strong {
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 850;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .transaction-copy span,
+    .transaction-copy small,
+    .transaction-value small {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .transaction-value {
+      grid-column: 2;
+      justify-items: start;
+    }
+
+    .transaction-value strong {
+      color: #087443;
+      white-space: nowrap;
+    }
+
+    .transaction-value.transaction-value-debit strong {
+      color: var(--text);
+    }
+
+    .transaction-copy .ticket-status {
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: var(--brand-700);
+      background: var(--primary-soft);
+      font-size: 0.76rem;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .transaction-copy .ticket-status.is-open {
+      color: var(--warning);
+      background: var(--warning-soft);
+    }
+
+    .transaction-copy .ticket-status.is-pending {
+      color: var(--muted);
+      background: var(--surface-soft);
+    }
+
+    .transaction-copy .ticket-status.is-progress {
+      color: var(--brand-700);
+      background: var(--primary-soft);
+    }
+
+    .transaction-copy .ticket-status.is-escalated {
+      color: var(--error);
+      background: var(--error-soft);
+    }
+
+    .transaction-copy .ticket-status.is-resolved,
+    .transaction-copy .ticket-status.is-closed {
+      color: var(--success);
+      background: var(--success-soft);
+    }
+
+    .transaction-value small.ticket-response {
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .wallet-guide {
+      padding: clamp(20px, 3vw, 26px);
+    }
+
+    .wallet-guide-list {
+      display: grid;
+      margin-top: 22px;
+    }
+
+    .wallet-guide-list > div {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      padding: 15px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .guide-number {
+      color: var(--primary);
+      font-size: 0.80rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+    }
+
+    .wallet-guide-list p,
+    .wallet-guide-list strong,
+    .wallet-guide-list small {
+      margin: 0;
+    }
+
+    .wallet-guide-list p {
+      display: grid;
+      gap: 4px;
+    }
+
+    .wallet-guide-list strong {
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    .wallet-guide-list small {
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .wallet-help-link {
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 6px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .wallet-empty,
+    .wallet-state {
+      display: grid;
+      justify-items: start;
+    }
+
+    .wallet-empty {
+      padding: clamp(28px, 6vw, 54px) clamp(18px, 4vw, 30px);
+    }
+
+    .wallet-state {
+      justify-items: center;
+      padding: clamp(32px, 7vw, 68px) clamp(20px, 5vw, 40px);
+      text-align: center;
+    }
+
+    .wallet-state-icon {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 17px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-size: 1.35rem;
+    }
+
+    .wallet-empty h3,
+    .wallet-empty p,
+    .wallet-state h2,
+    .wallet-state p {
+      margin: 0;
+    }
+
+    .wallet-empty h3,
+    .wallet-state h2 {
+      margin-top: 17px;
+      color: var(--brand-950);
+      font-size: clamp(1.2rem, 3vw, 1.55rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+    }
+
+    .wallet-empty p,
+    .wallet-state p {
+      max-width: 520px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .wallet-empty a {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      color: var(--primary);
+      font-size: 0.86rem;
+      font-weight: 850;
+      text-decoration: none;
+    }
+
+    .wallet-empty a.wallet-empty-primary {
+      justify-content: center;
+      margin-top: 16px;
+      padding: 0 18px;
+      border-radius: 13px;
+      color: #FFFFFF;
+      background: var(--brand-700);
+    }
+
+    .wallet-empty a.wallet-empty-secondary {
+      margin-top: 2px;
+    }
+
+    .wallet-state ion-button {
+      margin-top: 18px;
+    }
+
+    .wallet-error .wallet-state-icon {
+      color: #B42318;
+      background: #FEECE9;
+    }
+
+    .wallet-loading {
+      display: grid;
+      gap: 16px;
+    }
+
+    .wallet-balance-skeleton {
+      min-height: 300px;
+      border-radius: clamp(22px, 4vw, 32px);
+    }
+
+    .wallet-list-skeleton {
+      display: grid;
+      gap: 18px;
+      padding: 24px;
+    }
+
+    .wallet-guide-skeleton {
+      min-height: 300px;
+    }
+
+    .skeleton-block,
+    .skeleton-line,
+    .skeleton-circle {
+      background: #EBEBEC;
+      animation: wallet-skeleton 1.4s ease-in-out infinite;
+    }
+
+    .skeleton-line {
+      width: 56%;
+      height: 12px;
+      border-radius: 999px;
+    }
+
+    .skeleton-title {
+      width: 42%;
+      height: 20px;
+    }
+
+    .skeleton-transaction {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) minmax(60px, 0.25fr);
+      align-items: center;
+      gap: 12px;
+    }
+
+    .skeleton-circle {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+    }
+
+    .skeleton-transaction .skeleton-line {
+      width: 72%;
+    }
+
+    .skeleton-transaction .skeleton-amount {
+      width: 100%;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @keyframes wallet-skeleton {
+      0%, 100% { opacity: 0.58; }
+      50% { opacity: 1; }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .wallet-header-link:hover ion-icon,
+      .wallet-help-link:hover ion-icon,
+      .wallet-empty a:hover ion-icon {
+        transform: translateX(3px);
+      }
+
+      .wallet-action-primary:hover {
+        background: #EAF2F8;
+      }
+
+      .wallet-action-secondary:hover {
+        border-color: rgba(255, 255, 255, 0.48);
+        background: rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    .invoice-amount-group {
+      grid-column: 2;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .invoice-pay-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--surface);
+      font-size: 0.84rem;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .invoice-pay-button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .invoice-pay-button ion-icon {
+      font-size: 1rem;
+    }
+
+    .invoice-due-label {
+      color: #B42318;
+    }
+
+    .text-danger {
+      color: #B42318;
+    }
+
+    .invoice-due .transaction-icon {
+      color: #B42318;
+      background: #FEECE9;
+    }
+
+    .booking-support {
+      width: min(100%, 680px);
+      display: grid;
+      gap: 14px;
+      margin-inline: auto;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-bottom: calc(92px + env(safe-area-inset-bottom));
+    }
+
+    .support-heading {
+      display: grid;
+      gap: 7px;
+      padding: 16px;
+      border-radius: var(--radius-lg);
+      color: #FFFFFF;
+      background: linear-gradient(145deg, var(--brand-900), var(--brand-800));
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.15);
+    }
+
+    .support-heading .hero-icon { width: 42px; height: 42px; border-radius: 14px; font-size: 1.18rem; }
+    .support-title-line { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 9px; margin-left: 0; }
+    .support-heading .content-back-button {
+      position: static;
+      left: auto;
+      top: auto;
+      --color: #FFFFFF;
+      filter: none;
+    }
+    .support-back-button {
+      display: grid;
+      place-items: center;
+      border: 0;
+      color: #FFFFFF;
+      background: transparent;
+      cursor: pointer;
+    }
+    .support-back-button ion-icon { font-size: 1.35rem; }
+    .support-heading h1, .support-heading p, .support-heading span { margin: 0; color: #FFFFFF; }
+    .support-heading h1 { font-size: clamp(1.45rem, 6vw, 2rem); letter-spacing: -0.04em; line-height: 1.08; }
+    .support-heading span { display: block; margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 0.86rem; line-height: 1.4; }
+    .support-heading .support-eyebrow { margin-bottom: 4px; color: rgba(255, 255, 255, 0.82); font-size: 0.80rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
+    .support-status { display: grid; gap: 12px; }
+    .support-panel, .support-form {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+    .support-panel h2, .support-panel p { margin: 0; }
+    .support-panel h2 { font-size: 1.2rem; letter-spacing: -0.025em; }
+    .support-panel p { margin-top: 7px; color: var(--muted); line-height: 1.5; }
+    .support-inline-loader {
+      margin: 0;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1.2;
+      justify-self: start;
+    }
+    .support-error { border-color: rgba(180, 35, 24, 0.28); }
+    .support-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .support-inline-actions ion-button { min-height: 44px; margin: 0; text-transform: none; }
+    .support-success { display: grid; gap: 12px; }
+    .support-success dl { display: grid; gap: 8px; margin: 0; }
+    .support-success dl div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 10px; }
+    .support-success dt { color: var(--muted); font-size: 0.8rem; font-weight: 800; }
+    .support-success dd { margin: 0; overflow-wrap: anywhere; }
+    .support-booking-card {
+      overflow: hidden;
+      border: 1px solid rgba(11, 47, 85, 0.24);
+      border-radius: var(--radius-md);
+      color: #FFFFFF;
+      background: var(--brand-900);
+      box-shadow: 0 14px 34px rgba(28, 28, 28, 0.14);
+    }
+    .support-booking-card > div { padding: 12px 14px 9px; }
+    .support-booking-card h2 { margin: 7px 0 2px; color: #FFFFFF; font-size: 1.08rem; letter-spacing: -0.03em; overflow-wrap: anywhere; }
+    .support-booking-card p { margin: 0; color: rgba(255, 255, 255, 0.78); font-size: 0.84rem; overflow-wrap: anywhere; }
+    .support-booking-card dl { display: grid; margin: 0; background: rgba(99, 102, 241, 0.36); }
+    .support-booking-card dl div { min-width: 0; padding: 9px 14px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+    .support-booking-card dt { color: rgba(255, 255, 255, 0.74); font-size: 0.76rem; font-weight: 800; }
+    .support-booking-card dd { margin: 2px 0 0; color: #FFFFFF; font-size: 0.84rem; font-weight: 750; overflow-wrap: anywhere; }
+    .support-booking-card .support-reference dt, .support-booking-card .support-reference dd { color: rgba(255, 255, 255, 0.68); }
+    .support-booking-card .status-pill { text-transform: capitalize; }
+    .support-booking-card .status-pill.status-pending { color: #92600A; background: rgba(251, 191, 36, 0.14); }
+    .support-booking-card .status-pill.status-confirmed { color: #047857; background: rgba(16, 185, 129, 0.13); }
+    .support-booking-card .status-pill.status-completed { color: #1D4ED8; background: rgba(59, 130, 246, 0.12); }
+    .support-booking-card .status-pill.status-cancelled { color: #B91C1C; background: rgba(239, 68, 68, 0.11); }
+    .support-form { display: grid; gap: 15px; }
+    .support-context-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: -2px 0 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 12px;
+      color: var(--brand-800);
+      background: var(--primary-soft);
+      font-size: 0.8rem;
+      font-weight: 750;
+      line-height: 1.45;
+    }
+    .support-context-note ion-icon { flex: none; margin-top: 2px; font-size: 1rem; }
+    .field-group { min-width: 0; display: grid; gap: 7px; }
+    .field-group label { color: var(--text); font-size: 0.84rem; font-weight: 850; }
+    .required-label, .optional-label { color: var(--muted); font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+    .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .field-label-row span { color: var(--muted); font-size: 0.82rem; font-weight: 750; }
+    .field-group select, .field-group textarea, .attachment-control {
+      width: 100%;
+      min-width: 0;
+      min-height: 44px;
+      padding: 11px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      background: var(--surface);
+      font: inherit;
+      line-height: 1.4;
+    }
+    .field-group textarea { min-height: 132px; resize: vertical; }
+    .field-group select:focus-visible, .field-group textarea:focus-visible, .attachment-control:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
+    .field-hint { color: var(--muted); font-size: 0.78rem; font-weight: 700; line-height: 1.35; }
+    .attachment-control { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+    .attachment-control ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 1.05rem; }
+    .attachment-control span { min-width: 0; overflow-wrap: anywhere; }
+    .attachment-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .support-field-grid { display: grid; gap: 12px; }
+    .support-form ion-button { min-height: 46px; margin: 0; text-transform: none; }
+    .response-time { margin: -3px 0 0; color: var(--muted); font-size: 0.82rem; font-weight: 750; line-height: 1.4; }
+    .support-submit-bar {
+      position: sticky;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      z-index: 4;
+      margin: 2px -6px -6px;
+      padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), var(--surface) 34%);
+      backdrop-filter: blur(10px);
+    }
+    .form-error { margin: -3px 0 0; color: #B42318; font-size: 0.84rem; font-weight: 750; line-height: 1.4; }
+    .support-live { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
     @media (max-width: 599px) {
+      .wallet-hub-page {
+        padding-top: calc(14px + env(safe-area-inset-top));
+      }
+
+      .wallet-screen {
+        gap: 10px;
+      }
+
+      .wallet-heading {
+        align-items: start;
+        gap: 10px;
+        padding-top: 0;
+      }
+
+      .wallet-eyebrow,
+      .wallet-section-kicker {
+        font-size: 0.74rem;
+      }
+
+      .wallet-heading h1 {
+        margin-top: 3px;
+        font-size: 1.55rem;
+        line-height: 1;
+      }
+
+      .booking-support {
+        padding-top: calc(16px + env(safe-area-inset-top));
+        padding-bottom: calc(96px + env(safe-area-inset-bottom));
+      }
+
+      .wallet-heading .wallet-intro {
+        margin-top: 5px;
+        font-size: 0.80rem;
+        line-height: 1.35;
+      }
+
+      .wallet-header-link {
+        width: 40px;
+        height: 40px;
+        min-height: 40px;
+        flex: 0 0 40px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+
+      .wallet-header-link span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+      }
+
+      .wallet-header-receipt {
+        display: block;
+        font-size: 1.05rem;
+      }
+
+      .wallet-header-chevron {
+        display: none;
+      }
+
+      .wallet-status-row {
+        margin-bottom: 12px;
+        gap: 8px;
+      }
+
+      .wallet-vs {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-zero {
+        align-items: start;
+      }
+
+      .wallet-status,
+      .wallet-secure {
+        font-size: 0.78rem;
+      }
+
+      .wallet-balance-card {
+        gap: 12px;
+        padding: 14px;
+        border-radius: 19px;
+      }
+
+      .wallet-balance-copy > strong {
+        margin-block: 3px 0;
+        font-size: 2rem;
+      }
+
+      .wallet-balance-copy > p {
+        font-size: 0.7rem;
+      }
+
+      .wallet-balance-copy > small {
+        display: none;
+      }
+
+      .wallet-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        gap: 8px;
+      }
+
+      .wallet-action {
+        min-height: 38px;
+        padding-inline: 7px;
+        font-size: 0.78rem;
+        white-space: nowrap;
+      }
+
+      .wallet-section-heading {
+        padding: 12px 14px;
+      }
+
+      .wallet-section-heading h2,
+      .wallet-guide > h2 {
+        font-size: 1rem;
+      }
+
+      .wallet-transaction {
+        grid-template-columns: 38px minmax(0, 1fr);
+        gap: 10px;
+        padding: 13px 15px;
+      }
+
+      .transaction-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+      }
+
+      .transaction-copy strong,
+      .transaction-value strong {
+        font-size: 0.8rem;
+      }
+
+      .transaction-copy span,
+      .transaction-copy small,
+      .transaction-value small {
+        font-size: 0.76rem;
+      }
+
+      .wallet-guide {
+        padding: 14px;
+      }
+
+      .wallet-guide-list {
+        margin-top: 10px;
+      }
+
+      .wallet-guide-list > div {
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 8px;
+        padding: 8px 0;
+      }
+
+      .wallet-guide-list strong {
+        font-size: 0.84rem;
+      }
+
+      .wallet-guide-list small {
+        font-size: 0.76rem;
+        line-height: 1.35;
+      }
+
+      .wallet-empty,
+      .wallet-state {
+        padding: 20px 16px;
+      }
+
+      .wallet-empty .wallet-state-icon,
+      .wallet-state .wallet-state-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+        font-size: 1.1rem;
+      }
+
+      .wallet-empty h3,
+      .wallet-state h2 {
+        margin-top: 11px;
+        font-size: 1rem;
+      }
+
+      .wallet-empty p,
+      .wallet-state p {
+        margin-top: 5px;
+        font-size: 0.82rem;
+        line-height: 1.4;
+      }
+
+      .wallet-empty a {
+        min-height: 38px;
+        margin-top: 6px;
+        font-size: 0.82rem;
+      }
+
+      .wallet-help-link {
+        min-height: 38px;
+        padding-top: 6px;
+        font-size: 0.82rem;
+      }
+
       .hub-hero {
         min-height: 310px;
         padding: 22px;
@@ -541,9 +3605,35 @@ const hubConfigs: Record<string, HubConfig> = {
       .action-card {
         display: grid;
       }
+
+      .invoice-amount-group {
+        gap: 4px;
+      }
+
+      .invoice-pay-button {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+        font-size: 0.7rem;
+      }
     }
 
     @media (min-width: 768px) {
+      .wallet-balance-card {
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+      }
+
+      .wallet-transaction {
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+      }
+
+      .transaction-value {
+        grid-column: auto;
+        justify-items: end;
+        text-align: right;
+      }
+
       .hub-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
@@ -555,6 +3645,9 @@ const hubConfigs: Record<string, HubConfig> = {
       .records-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .support-booking-card dl, .support-field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .support-booking-card dl div + div { border-left: 1px solid rgba(255, 255, 255, 0.1); }
     }
 
     @media (max-width: 1023px) {
@@ -566,15 +3659,117 @@ const hubConfigs: Record<string, HubConfig> = {
         min-height: 96px;
       }
     }
+
+    @media (min-width: 1024px) {
+      .wallet-content-grid {
+        grid-template-columns: minmax(0, 1.75fr) minmax(280px, 0.75fr);
+      }
+
+      .wallet-guide {
+        position: sticky;
+        top: calc(var(--page-top) + 8px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .booking-support, .support-panel, .support-form, .support-booking-card, .skeleton-block, .skeleton-line, .skeleton-circle { animation: none; transition: none; }
+    }
   `]
 })
 export class CustomerHubPage implements OnInit {
   readonly slug = computed(() => this.route.snapshot.data["hub"] as string || "rewards");
+  readonly walletMode = computed(() => this.slug() === "wallet");
+  readonly invoicesMode = computed(() => this.slug() === "invoices");
+  readonly paymentsMode = computed(() => this.slug() === "payments");
+  readonly hubBackHref = computed(() => (this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/profile"));
+  readonly rewardsMode = computed(() => this.slug() === "rewards");
+  readonly membershipsMode = computed(() => this.slug() === "memberships");
+  readonly packagesMode = computed(() => this.slug() === "packages");
+  readonly familyMode = computed(() => this.slug() === "family");
+  readonly referralsMode = computed(() => this.slug() === "referrals");
+  readonly giftCardsMode = computed(() => this.slug() === "gift-cards");
+  readonly corporateMode = computed(() => this.slug() === "corporate");
+  readonly goalsMode = computed(() => this.slug() === "goals");
+  readonly bookingSupportMode = computed(() => this.slug() === "support" && this.route.snapshot.queryParamMap.get("mode") === "booking" && !!this.route.snapshot.queryParamMap.get("bookingId"));
   readonly config = computed(() => hubConfigs[this.slug()] ?? hubConfigs["rewards"]);
   readonly customerName = computed(() => this.marketplace.customer()?.name || "Customer");
-  readonly liveRecords = computed(() => this.recordsFor(this.marketplace.accountModule()));
-  readonly demoMode = computed(() => this.marketplace.isAuthenticated() && !this.marketplace.loading() && this.liveRecords().length === 0);
+  readonly cachedModule = computed(() => this.marketplace.cachedModule(this.slug()));
+  readonly rewardEarned = computed(() => (this.rewardsData()?.loyaltyPoints ?? 0) > 0);
+  readonly wallet = computed<CustomerWallet | null>(() => {
+    const data = this.marketplace.accountModule();
+    if (data && this.isWallet(data)) return data;
+    const cached = this.cachedModule();
+    return cached && this.isWallet(cached) ? cached : null;
+  });
+  readonly invoices = computed<CustomerInvoice[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "invoiceNumber" in data[0]) return data as CustomerInvoice[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "invoiceNumber" in cached[0]) return cached as CustomerInvoice[];
+    return [];
+  });
+  readonly invoiceTotalOutstanding = computed(() => this.invoices().reduce((sum, inv) => sum + (inv.balancePaise || 0), 0));
+  readonly invoiceDueCount = computed(() => this.invoices().filter((inv) => inv.balancePaise > 0).length);
+  readonly paymentsList = computed<CustomerPayment[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "invoiceId" in data[0] && "amountPaise" in data[0]) return data as CustomerPayment[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "invoiceId" in cached[0] && "amountPaise" in cached[0]) return cached as CustomerPayment[];
+    return [];
+  });
+  readonly paymentTotalPaid = computed(() => this.paymentsList().reduce((sum, payment) => sum + (Number(payment.amountPaise) || 0), 0));
+  readonly paymentLatest = computed<CustomerPayment | null>(() =>
+    this.paymentsList().reduce<CustomerPayment | null>(
+      (latest, payment) => !latest || this.paymentDateValue(payment.createdAt) > this.paymentDateValue(latest.createdAt) ? payment : latest,
+      null
+    )
+  );
+  readonly rewardsData = computed<CustomerRewardSummary | null>(() => {
+    const data = this.marketplace.accountModule();
+    if (data && this.isRewards(data)) return data;
+    const cached = this.cachedModule();
+    return cached && this.isRewards(cached) ? cached : null;
+  });
+  readonly membershipsList = computed<CustomerMembership[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "planName" in data[0]) return data as CustomerMembership[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "planName" in cached[0]) return cached as CustomerMembership[];
+    return [];
+  });
+  readonly packagesList = computed<CustomerPackage[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "name" in data[0] && "pricePaise" in data[0] && !("planName" in data[0])) return data as CustomerPackage[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "name" in cached[0] && "pricePaise" in cached[0] && !("planName" in cached[0])) return cached as CustomerPackage[];
+    return [];
+  });
+  readonly giftCardsList = computed<CustomerGiftCard[]>(() => {
+    const data = this.marketplace.accountModule();
+    if (Array.isArray(data) && data.length && typeof data[0] === "object" && "initialValuePaise" in data[0]) return data as CustomerGiftCard[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "initialValuePaise" in cached[0]) return cached as CustomerGiftCard[];
+    return [];
+  });
+  readonly liveRecords = computed(() => {
+    const live = this.recordsFor(this.marketplace.accountModule());
+    if (live.length) return live;
+    return this.recordsFor(this.cachedModule());
+  });
+  readonly supportTickets = signal<CustomerBookingSupportTicket[]>([]);
+  readonly supportHistoryLoading = signal(false);
+  readonly supportHistoryError = signal("");
+  readonly supportRecords = computed<HubRecord[]>(() => this.supportTickets().map((ticket) => ({
+    key: ticket.id,
+    status: ticket.status,
+    title: this.supportCategoryLabel(ticket.category),
+    description: ticket.message,
+    date: this.supportTicketDate(ticket.updatedAt || ticket.createdAt),
+    route: ticket.bookingId ? `/bookings/${ticket.bookingId}` : undefined
+  })));
+  readonly demoMode = computed(() => this.slug() !== "support" && this.marketplace.isAuthenticated() && !this.marketplace.loading() && this.liveRecords().length === 0);
   readonly records = computed(() => {
+    if (this.slug() === "support") return this.supportRecords();
     const live = this.liveRecords();
     if (live.length) return live;
     if (!this.marketplace.isAuthenticated() || this.marketplace.loading()) return [];
@@ -582,9 +3777,38 @@ export class CustomerHubPage implements OnInit {
   });
   readonly recordCount = computed(() => this.records().length);
   readonly actionMessage = signal("");
+  readonly actionLoading = signal(false);
+  readonly plansLoading = signal(false);
+  readonly plansLoaded = signal(false);
+  readonly supportBooking = signal<Booking | null>(null);
+  readonly supportTicket = signal<CustomerBookingSupportTicket | null>(null);
+  readonly supportLoading = signal(false);
+  readonly supportSubmitting = signal(false);
+  readonly supportLoadError = signal("");
+  readonly supportSubmitError = signal("");
+  supportIssue: SupportIssueValue = "";
+  supportMessage = "";
+  supportAttachmentName = "";
+  preferredContact: CustomerBookingSupportPreferredContact = "in_app";
+  supportPriority: CustomerBookingSupportPriority = "medium";
+  readonly supportIssues: { value: Exclude<SupportIssueValue, "">; label: string; category: CustomerBookingSupportCategory }[] = [
+    { value: "reschedule_problem", label: "Reschedule problem", category: "reschedule" },
+    { value: "payment_issue", label: "Payment issue", category: "payment" },
+    { value: "salon_no_response", label: "Salon did not respond", category: "salon_unavailable" },
+    { value: "service_issue", label: "Service issue", category: "other" },
+    { value: "refund_issue", label: "Refund issue", category: "payment" },
+    { value: "other", label: "Other", category: "other" }
+  ];
+  readonly supportCategories: { value: CustomerBookingSupportCategory; label: string }[] = [
+    { value: "reschedule", label: "Edit appointment" },
+    { value: "cancellation", label: "Cancellation" },
+    { value: "payment", label: "Payment" },
+    { value: "salon_unavailable", label: "Salon unavailable" },
+    { value: "other", label: "Other" }
+  ];
   readonly hubModules = [
-    { slug: "rewards", label: "Rewards", copy: "Points, tier and booking rewards.", icon: "ribbon-outline", route: "/tabs/rewards" },
-    { slug: "wallet", label: "Wallet", copy: "Credits, refunds and invoice payments.", icon: "wallet-outline", route: "/tabs/wallet" },
+    { slug: "rewards", label: "Aura Rewards", copy: "Points, tier and booking rewards.", icon: "ribbon-outline", route: "/tabs/rewards" },
+    { slug: "wallet", label: "Aura Wallet", copy: "Credits, refunds and invoice payments.", icon: "wallet-outline", route: "/tabs/wallet" },
     { slug: "memberships", label: "Memberships", copy: "Active plans and benefit usage.", icon: "heart-circle-outline", route: "/tabs/memberships" },
     { slug: "packages", label: "Packages", copy: "Sessions, balances and redemptions.", icon: "ticket-outline", route: "/tabs/packages" },
     { slug: "gift-cards", label: "Gift cards", copy: "Purchase, redeem and track balances.", icon: "gift-outline", route: "/tabs/gift-cards" },
@@ -592,43 +3816,312 @@ export class CustomerHubPage implements OnInit {
     { slug: "referrals", label: "Referrals", copy: "Invite friends and track rewards.", icon: "share-social-outline", route: "/tabs/referrals" },
     { slug: "gallery", label: "Gallery", copy: "Saved looks and before/after photos.", icon: "images-outline", route: "/tabs/gallery" },
     { slug: "family", label: "Family", copy: "Profiles for shared bookings.", icon: "people-outline", route: "/tabs/family" },
-    { slug: "corporate", label: "Corporate", copy: "Workplace benefits and packages.", icon: "briefcase-outline", route: "/tabs/corporate" },
     { slug: "goals", label: "Beauty goals", copy: "Plans, routines and treatment goals.", icon: "color-palette-outline", route: "/tabs/goals" },
     { slug: "payments", label: "Payments", copy: "UPI, card and invoice payment records.", icon: "wallet-outline", route: "/tabs/payments" },
     { slug: "invoices", label: "Invoices", copy: "Bills, balances and payment status.", icon: "ticket-outline", route: "/tabs/invoices" },
     { slug: "notifications", label: "Notifications", copy: "Booking and account updates.", icon: "chatbubbles-outline", route: "/notifications" }
   ];
 
-  constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService, private readonly alerts: AlertController) {
+  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly api: CustomerApiService) {
     addIcons({
+      arrowUndoOutline,
       briefcaseOutline,
       calendarOutline,
+      cardOutline,
+      cashOutline,
       chatbubblesOutline,
+      chevronForwardOutline,
       colorPaletteOutline,
       giftOutline,
       heartCircleOutline,
       imagesOutline,
+      informationCircleOutline,
+      linkOutline,
       peopleOutline,
+      phonePortraitOutline,
+      receiptOutline,
       ribbonOutline,
       searchOutline,
       shareSocialOutline,
+      shieldCheckmarkOutline,
       ticketOutline,
+      trendingDownOutline,
+      trendingUpOutline,
       walletOutline
     });
+  }
+
+  hubRoute(route: string | undefined): string | undefined {
+    if (!route || !this.marketplace.salonMode()) return route;
+    if (route.startsWith("/tabs/")) {
+      const segment = route.slice("/tabs/".length);
+      return segment === "home" || segment === "search" ? this.marketplace.salonModeUrl() : this.marketplace.salonModeUrl(segment);
+    }
+    if (route.startsWith("/bookings/")) return this.marketplace.salonModeUrl("bookings", route.slice("/bookings/".length));
+    if (route === "/help" || route === "/settings" || route === "/notifications") return this.marketplace.salonModeUrl(route.slice(1));
+    return route;
   }
 
   ngOnInit() {
     this.reload();
   }
 
+  @HostListener("document:visibilitychange")
+  persistDraftOnBackground(): void {
+    if (document.visibilityState === "hidden") this.persistSupportDraft();
+  }
+
   reload() {
+    if (this.bookingSupportMode()) {
+      void this.loadBookingSupportContext();
+      return;
+    }
     if (!this.marketplace.isAuthenticated()) return;
     this.actionMessage.set("");
     void Promise.all([
       this.marketplace.loadCustomer(),
       this.marketplace.loadBookings(),
-      this.marketplace.loadAccountModule(this.slug())
+      this.marketplace.loadAccountModule(this.slug()),
+      this.slug() === "support" ? this.loadSupportHistory() : Promise.resolve()
     ]).catch(() => undefined);
+  }
+
+  async loadSupportHistory() {
+    if (!this.marketplace.isAuthenticated()) return;
+    this.supportHistoryLoading.set(true);
+    this.supportHistoryError.set("");
+    try {
+      this.supportTickets.set(await firstValueFrom(this.api.listCustomerSupportTickets({ limit: 20 })));
+    } catch {
+      this.supportHistoryError.set("Your support history could not be loaded. Please try again.");
+    } finally {
+      this.supportHistoryLoading.set(false);
+    }
+  }
+
+  async loadBookingSupportContext() {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    this.supportTicket.set(null);
+    this.supportLoadError.set("");
+    this.supportSubmitError.set("");
+    if (!bookingId) {
+      this.supportBooking.set(null);
+      this.supportLoadError.set("We couldn't verify a booking for this support request. Please use general help instead.");
+      return;
+    }
+
+    const cachedBooking = this.marketplace.findBooking(bookingId);
+    if (cachedBooking) {
+      this.supportBooking.set(cachedBooking);
+      this.restoreSupportDraft();
+      this.supportLoading.set(false);
+      return;
+    }
+
+    this.supportBooking.set(null);
+    this.supportLoading.set(true);
+    try {
+      this.supportBooking.set(await this.marketplace.loadBooking(bookingId));
+      this.restoreSupportDraft();
+    } catch {
+      this.supportLoadError.set("We couldn't verify this booking. Please retry or use general help.");
+    } finally {
+      this.supportLoading.set(false);
+    }
+  }
+
+  supportFormValid(): boolean {
+    const length = this.supportMessage.trim().length;
+    return !!this.supportBooking() && !!this.supportIssue && length >= 10 && length <= 1200;
+  }
+
+  captureSupportAttachment(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.supportAttachmentName = input.files?.[0]?.name || "";
+    this.persistSupportDraft();
+  }
+
+  persistSupportDraft(): void {
+    if (!this.bookingSupportMode() || this.supportTicket()) return;
+    const key = this.supportDraftKey();
+    if (!key) return;
+    const draft: SupportDraft = {
+      issue: this.supportIssue,
+      message: this.supportMessage,
+      preferredContact: this.preferredContact,
+      priority: this.supportPriority,
+      attachmentName: this.supportAttachmentName
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify(draft));
+    } catch {
+      return;
+    }
+  }
+
+  async submitBookingSupport(event: Event) {
+    event.preventDefault();
+    const booking = this.supportBooking();
+    if (!booking || this.supportSubmitting()) return;
+    if (!this.supportFormValid()) {
+      this.supportSubmitError.set("Select an issue and add at least 10 characters in the message.");
+      return;
+    }
+    this.supportSubmitting.set(true);
+    this.supportSubmitError.set("");
+    try {
+      const ticket = await firstValueFrom(this.api.createBookingSupportTicket(booking.id, {
+        category: this.supportCategoryForIssue(),
+        message: this.supportMessage.trim(),
+        preferredContact: this.preferredContact,
+        priority: this.supportPriority
+      }));
+      this.supportTicket.set(ticket);
+      this.clearSupportDraft();
+      this.supportTickets.update((items) => [ticket, ...items.filter((item) => item.id !== ticket.id)]);
+    } catch {
+      this.supportSubmitError.set("Your support request could not be sent. Review the details and try again.");
+    } finally {
+      this.supportSubmitting.set(false);
+    }
+  }
+
+  private supportCategoryForIssue(): CustomerBookingSupportCategory {
+    return this.supportIssues.find((issue) => issue.value === this.supportIssue)?.category || "other";
+  }
+
+  async goBackFromSupport(): Promise<void> {
+    if (!(await this.canLeaveSupportSubflow())) return;
+    await this.router.navigateByUrl(this.supportBackHref());
+  }
+
+  private supportBackHref(): string {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    if (!bookingId) return this.hubBackHref();
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", bookingId) : `/bookings/${encodeURIComponent(bookingId)}`;
+  }
+
+  async canLeaveSupportSubflow(): Promise<boolean> {
+    if (!this.bookingSupportMode() || !this.hasSupportDraft() || this.supportTicket()) return true;
+    const alert = await this.alerts.create({
+      header: "Discard support draft?",
+      message: "Your draft is saved on this device. Leave this form only if you want to discard it.",
+      buttons: [
+        { text: "Keep editing", role: "cancel" },
+        { text: "Discard", role: "destructive" }
+      ]
+    });
+    await alert.present();
+    const result = await alert.onDidDismiss();
+    const discard = result.role === "destructive";
+    if (discard) this.clearSupportDraft();
+    return discard;
+  }
+
+  private restoreSupportDraft(): void {
+    const key = this.supportDraftKey();
+    if (!key || this.supportTicket()) return;
+    try {
+      const draft = JSON.parse(localStorage.getItem(key) || "null") as Partial<SupportDraft> | null;
+      if (!draft) return;
+      this.supportIssue = this.isSupportIssue(draft.issue) ? draft.issue : "";
+      this.supportMessage = typeof draft.message === "string" ? draft.message : "";
+      this.preferredContact = this.isPreferredContact(draft.preferredContact) ? draft.preferredContact : "in_app";
+      this.supportPriority = this.isSupportPriority(draft.priority) ? draft.priority : "medium";
+      this.supportAttachmentName = typeof draft.attachmentName === "string" ? draft.attachmentName : "";
+    } catch {
+      return;
+    }
+  }
+
+  private hasSupportDraft(): boolean {
+    return !!this.supportIssue || this.supportMessage.trim().length > 0 || !!this.supportAttachmentName || this.preferredContact !== "in_app" || this.supportPriority !== "medium";
+  }
+
+  private clearSupportDraft(): void {
+    const key = this.supportDraftKey();
+    if (key) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        return;
+      }
+    }
+    this.supportIssue = "";
+    this.supportMessage = "";
+    this.supportAttachmentName = "";
+    this.preferredContact = "in_app";
+    this.supportPriority = "medium";
+  }
+
+  private supportDraftKey(): string {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    return bookingId ? `auraCustomerSupportDraft:${bookingId}` : "";
+  }
+
+  private isSupportIssue(value: unknown): value is SupportIssueValue {
+    return value === "" || this.supportIssues.some((issue) => issue.value === value);
+  }
+
+  private isPreferredContact(value: unknown): value is CustomerBookingSupportPreferredContact {
+    return value === "in_app" || value === "phone" || value === "email";
+  }
+
+  private isSupportPriority(value: unknown): value is CustomerBookingSupportPriority {
+    return value === "low" || value === "medium" || value === "high";
+  }
+
+  supportCategoryLabel(category: CustomerBookingSupportCategory): string {
+    return this.supportCategories.find((item) => item.value === category)?.label || "Booking support";
+  }
+
+  supportTicketDate(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
+  }
+
+  supportStatusLabel(status: string): string {
+    return status.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toLocaleUpperCase());
+  }
+
+  supportStatusClass(status: string): string {
+    const classes: Record<string, string> = {
+      open: "is-open",
+      pending: "is-pending",
+      in_progress: "is-progress",
+      escalated: "is-escalated",
+      resolved: "is-resolved",
+      closed: "is-closed"
+    };
+    return classes[status] ?? "is-pending";
+  }
+
+  supportExpectedResponse(status: string): string {
+    if (status === "resolved" || status === "closed") return "Completed";
+    const replyHours: Record<string, string> = { open: "4h", pending: "8h", in_progress: "12h", escalated: "6h" };
+    const reply = replyHours[status];
+    return reply ? `Replies within ${reply}` : "We'll get back to you";
+  }
+
+  hubStatusLabel(status: string): string {
+    if (!status) return "Pending";
+    const labels: Record<string, string> = { pending: "Pending", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled" };
+    return labels[status.toLowerCase()] || status.toLowerCase().replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  }
+
+  supportAppointmentDisplay(): string {
+    const booking = this.supportBooking();
+    const raw = String(booking?.displayStartAt || booking?.startsAt || booking?.startAt || "");
+    const date = raw ? new Date(raw) : null;
+    if (!date || !Number.isFinite(date.getTime())) return raw;
+    try {
+      const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short" }).format(date);
+      const time = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(date).toUpperCase();
+      return `${day} · ${time}`;
+    } catch {
+      return raw;
+    }
   }
 
   stateTitle(): string {
@@ -655,11 +4148,67 @@ export class CustomerHubPage implements OnInit {
     return this.marketplace.formatMoney(pricePaise);
   }
 
-  async loadPlans() {
-    await this.marketplace.loadMembershipPlans();
-    if (!this.marketplace.membershipPlans().length) {
-      this.actionMessage.set("No active membership plans are currently available for online purchase.");
+  loyaltyMetricLabel(): string {
+    const points = this.marketplace.customer()?.loyaltyPoints;
+    return typeof points === "number" && Number.isFinite(points) ? `${points} pts` : "—";
+  }
+
+  walletTransactionAmount(amountPaise: number): number {
+    return Math.abs(amountPaise);
+  }
+
+  walletTransactionIsCredit(transaction: CustomerWalletTransaction): boolean {
+    if (transaction.amountPaise < 0) return false;
+    return !/(?:debit|payment|paid|purchase|redeem|spend|charge|used)/i.test(transaction.type);
+  }
+
+  walletTransactionLabel(type: string): string {
+    const label = type.replace(/[_-]+/g, " ").trim();
+    return label ? label.replace(/\b\w/g, (character) => character.toUpperCase()) : "Wallet activity";
+  }
+
+  walletTransactionDescription(transaction: CustomerWalletTransaction): string {
+    if (transaction.notes?.trim()) return transaction.notes.trim();
+    if (transaction.referenceType && transaction.referenceId) {
+      return `${this.walletTransactionLabel(transaction.referenceType)} · ${transaction.referenceId}`;
     }
+    if (transaction.referenceId) return `Reference · ${transaction.referenceId}`;
+    return "Wallet balance updated";
+  }
+
+  walletTransactionDate(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    }).format(date);
+  }
+
+  async loadPlans() {
+    if (this.plansLoading()) return;
+    this.plansLoading.set(true);
+    this.plansLoaded.set(false);
+    try {
+      await this.marketplace.loadMembershipPlans();
+      this.plansLoaded.set(true);
+    } finally {
+      this.plansLoading.set(false);
+    }
+  }
+
+  planServiceCount(plan: CustomerMembershipPlan): number {
+    return Array.isArray(plan.includedServices) ? plan.includedServices.length : 0;
+  }
+
+  planTermsSummary(plan: CustomerMembershipPlan): string {
+    const keys = Object.keys(plan.benefitRules || {}).filter((key) => key.trim());
+    if (!keys.length) return "";
+    return keys.slice(0, 2).map((key) => key.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())).join(" · ");
   }
 
   async buyPlan(plan: CustomerMembershipPlan) {
@@ -699,8 +4248,82 @@ export class CustomerHubPage implements OnInit {
   }
 
   async createPaymentLink(invoiceId: string) {
-    const link = await this.marketplace.createInvoicePaymentLink(invoiceId);
-    this.actionMessage.set(link.url || link.shortUrl ? `Payment link is ready: ${link.url || link.shortUrl}` : "Payment link created for this invoice.");
+    if (this.actionLoading()) return;
+    this.actionLoading.set(true);
+    try {
+      const link = await this.marketplace.createInvoicePaymentLink(invoiceId);
+      this.actionMessage.set(link.url || link.shortUrl ? `Payment link is ready: ${link.url || link.shortUrl}` : "Payment link created for this invoice.");
+    } finally {
+      this.actionLoading.set(false);
+    }
+  }
+
+  invoiceDateLabel(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    }).format(date);
+  }
+
+  paymentAmount(paise: number): string {
+    const amount = Number(paise);
+    return Number.isFinite(amount) ? this.money(amount) : "—";
+  }
+
+  paymentModeLabel(mode: string | null | undefined): string {
+    const key = String(mode || "").toLowerCase();
+    const labels: Record<string, string> = {
+      upi: "UPI",
+      card: "Card",
+      netbanking: "Net banking",
+      wallet: "Wallet",
+      cash: "Cash",
+      "payment_link": "Payment link",
+      link: "Payment link",
+      emi: "EMI"
+    };
+    if (labels[key]) return labels[key];
+    if (!key) return "Payment";
+    return key.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  paymentModeIcon(mode: string | null | undefined): string {
+    const key = String(mode || "").toLowerCase();
+    if (key === "cash") return "cash-outline";
+    if (key === "upi" || key === "wallet") return "phone-portrait-outline";
+    if (key === "link" || key === "payment_link") return "link-outline";
+    return "card-outline";
+  }
+
+  paymentReferenceLabel(payment: CustomerPayment): string {
+    if (payment.reference && String(payment.reference).trim()) return "Ref · " + String(payment.reference).trim();
+    if (payment.invoiceNumber && String(payment.invoiceNumber).trim()) return "Invoice " + String(payment.invoiceNumber).trim();
+    return "Payment recorded";
+  }
+
+  paymentDateLabel(value: string): string {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return value;
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  private paymentDateValue(value: string): number {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+
+  paymentLatestLabel(): string {
+    const latest = this.paymentLatest();
+    return latest ? "Latest payment · " + this.paymentDateLabel(latest.createdAt) : "Payments appear here after each booking settlement";
   }
 
   private recordsFor(data: CustomerAccountModule | null): HubRecord[] {

@@ -15,6 +15,11 @@ import {
   CreateBookingPayload,
   CreateReviewPayload,
   CustomerFavorite,
+  CreateCustomerBookingSupportTicketPayload,
+  CustomerBookingSupportTicket,
+  CustomerBookingChatMessage,
+  CustomerBookingChatMessagesResponse,
+  CustomerBookingChatThread,
   CustomerDeviceInfo,
   CustomerDeviceSession,
   CustomerGiftCard,
@@ -26,16 +31,18 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPrimarySalon,
-  MySalonDashboard,
   CustomerProfile,
+  CustomerPushDevicePayload,
   CustomerRewardSummary,
   CustomerSalonsResponse,
   CustomerWallet,
   CustomerWaitlistEntry,
+  CustomerSupportTicketQuery,
   FirebaseAuthPayload,
   JoinWaitlistPayload,
   LiveConsultationRequest,
   LiveConsultationResponse,
+  MySalonDashboard,
   OtpRequestResponse,
   PublicOffersResponse,
   PurchaseGiftCardPayload,
@@ -43,7 +50,10 @@ import {
   RedeemGiftCardResponse,
   RescheduleBookingPayload,
   SearchBusinessesParams,
+  SendCustomerBookingChatMessagePayload,
   ServiceItem,
+  SlotHold,
+  SlotHoldPayload,
   StaffMember,
   BusinessReview
 } from "./api.types";
@@ -228,37 +238,85 @@ export class CustomerApiService {
 
   listBookings(status?: "upcoming" | "past" | "cancelled"): Observable<Booking[]> {
     return this.http.get<ApiResponse<Booking[] | ApiList<Booking>>>(`${this.baseUrl}/customer/bookings`, { params: this.toParams({ status }) }).pipe(
-      map((response) => this.unwrapList<Booking>(response))
+      map((response) => this.unwrapList<Booking>(response).map((booking) => this.normalizeBooking(booking)))
     );
   }
 
   getBooking(id: string): Observable<Booking> {
     return this.http.get<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(id)}`).pipe(
-      map((response) => this.unwrap<Booking>(response))
+      map((response) => this.normalizeBooking(this.unwrap<Booking>(response)))
     );
   }
 
   createBooking(payload: CreateBookingPayload): Observable<Booking> {
     return this.http.post<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings`, payload).pipe(
-      map((response) => this.unwrap<Booking>(response))
+      map((response) => this.normalizeBooking(this.unwrap<Booking>(response)))
     );
   }
 
   cancelBooking(id: string, payload: CancelBookingPayload = {}): Observable<Booking> {
     return this.http.post<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(id)}/cancel`, payload).pipe(
-      map((response) => this.unwrap<Booking>(response))
+      map((response) => this.normalizeBooking(this.unwrap<Booking>(response)))
     );
   }
 
   rescheduleBooking(id: string, payload: RescheduleBookingPayload): Observable<Booking> {
     return this.http.post<ApiResponse<Booking>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(id)}/reschedule`, payload).pipe(
-      map((response) => this.unwrap<Booking>(response))
+      map((response) => this.normalizeBooking(this.unwrap<Booking>(response)))
     );
   }
 
-  joinBookingWaitlist(id: string, payload: JoinWaitlistPayload = {}): Observable<CustomerWaitlistEntry> {
+  getOrCreateBookingChat(bookingId: string): Observable<CustomerBookingChatThread> {
+    return this.http.post<ApiResponse<CustomerBookingChatThread>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(bookingId)}/chat`, {}).pipe(
+      map((response) => this.unwrap<CustomerBookingChatThread>(response))
+    );
+  }
+
+  getBookingChatMessages(conversationId: string, query: { after?: string; limit?: number } = {}): Observable<CustomerBookingChatMessagesResponse> {
+    return this.http.get<ApiResponse<CustomerBookingChatMessagesResponse>>(`${this.baseUrl}/customer/salon-chat/conversations/${encodeURIComponent(conversationId)}/messages`, { params: this.toParams(query) }).pipe(
+      map((response) => this.unwrap<CustomerBookingChatMessagesResponse>(response))
+    );
+  }
+
+  sendBookingChatMessage(conversationId: string, payload: SendCustomerBookingChatMessagePayload): Observable<CustomerBookingChatMessage> {
+    return this.http.post<ApiResponse<CustomerBookingChatMessage>>(`${this.baseUrl}/customer/salon-chat/conversations/${encodeURIComponent(conversationId)}/messages`, payload).pipe(
+      map((response) => this.unwrap<CustomerBookingChatMessage>(response))
+    );
+  }
+
+  markBookingChatRead(conversationId: string): Observable<{ ok: true }> {
+    return this.http.post<ApiResponse<{ ok: true }>>(`${this.baseUrl}/customer/salon-chat/conversations/${encodeURIComponent(conversationId)}/read`, {}).pipe(
+      map((response) => this.unwrap<{ ok: true }>(response))
+    );
+  }
+
+  createBookingSupportTicket(bookingId: string, payload: CreateCustomerBookingSupportTicketPayload): Observable<CustomerBookingSupportTicket> {
+    return this.http.post<ApiResponse<CustomerBookingSupportTicket>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(bookingId)}/support`, payload).pipe(
+      map((response) => this.unwrap<CustomerBookingSupportTicket>(response))
+    );
+  }
+
+  listCustomerSupportTickets(query: CustomerSupportTicketQuery = {}): Observable<CustomerBookingSupportTicket[]> {
+    return this.http.get<ApiResponse<CustomerBookingSupportTicket[] | ApiList<CustomerBookingSupportTicket>>>(`${this.baseUrl}/customer/support`, { params: this.toParams(query) }).pipe(
+      map((response) => this.unwrapList<CustomerBookingSupportTicket>(response))
+    );
+  }
+
+joinBookingWaitlist(id: string, payload: JoinWaitlistPayload = {}): Observable<CustomerWaitlistEntry> {
     return this.http.post<ApiResponse<CustomerWaitlistEntry>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(id)}/waitlist`, payload).pipe(
       map((response) => this.unwrap<CustomerWaitlistEntry>(response))
+    );
+  }
+
+  createSlotHold(payload: SlotHoldPayload): Observable<SlotHold> {
+    return this.http.post<ApiResponse<SlotHold>>(`${this.baseUrl}/customer/slot-holds`, payload).pipe(
+      map((response) => this.unwrap<SlotHold>(response))
+    );
+  }
+
+  releaseSlotHold(holdId: string): Observable<{ ok: true }> {
+    return this.http.delete<ApiResponse<{ ok: true }>>(`${this.baseUrl}/customer/slot-holds/${encodeURIComponent(holdId)}`).pipe(
+      map((response) => this.unwrap<{ ok: true }>(response))
     );
   }
 
@@ -276,6 +334,24 @@ export class CustomerApiService {
 
   removeFavorite(businessId: string): Observable<void> {
     return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/customer/favorites/${encodeURIComponent(businessId)}`).pipe(
+      map(() => undefined)
+    );
+  }
+
+  listSavedSalons(): Observable<CustomerFavorite[]> {
+    return this.http.get<ApiResponse<CustomerFavorite[] | ApiList<CustomerFavorite>>>(`${this.baseUrl}/customer/saved-salons`).pipe(
+      map((response) => this.unwrapList<CustomerFavorite>(response))
+    );
+  }
+
+  saveSalon(businessId: string): Observable<CustomerFavorite> {
+    return this.http.post<ApiResponse<CustomerFavorite>>(`${this.baseUrl}/customer/saved-salons/${encodeURIComponent(businessId)}`, {}).pipe(
+      map((response) => this.unwrap<CustomerFavorite>(response))
+    );
+  }
+
+  removeSavedSalon(businessId: string): Observable<void> {
+    return this.http.delete<ApiResponse<void>>(`${this.baseUrl}/customer/saved-salons/${encodeURIComponent(businessId)}`).pipe(
       map(() => undefined)
     );
   }
@@ -364,6 +440,30 @@ export class CustomerApiService {
     );
   }
 
+  updateNotificationStatus(id: string, status: "read" | "unread"): Observable<CustomerNotification> {
+    return this.http.patch<ApiResponse<CustomerNotification>>(`${this.baseUrl}/customer/notifications/${encodeURIComponent(id)}`, { status }).pipe(
+      map((response) => this.unwrap<CustomerNotification>(response))
+    );
+  }
+
+  markAllNotificationsRead(): Observable<{ updated: number; readAt: string }> {
+    return this.http.patch<ApiResponse<{ updated: number; readAt: string }>>(`${this.baseUrl}/customer/notifications/read-all`, {}).pipe(
+      map((response) => this.unwrap<{ updated: number; readAt: string }>(response))
+    );
+  }
+
+  registerPushDevice(deviceId: string, payload: CustomerPushDevicePayload): Observable<void> {
+    return this.http.put<ApiResponse<unknown>>(`${this.baseUrl}/customer/push-devices/${encodeURIComponent(deviceId)}`, payload).pipe(
+      map(() => undefined)
+    );
+  }
+
+  unregisterPushDevice(deviceId: string): Observable<void> {
+    return this.http.delete<ApiResponse<unknown>>(`${this.baseUrl}/customer/push-devices/${encodeURIComponent(deviceId)}`).pipe(
+      map(() => undefined)
+    );
+  }
+
   // ─── Customer-Salon Relationships ────────────────────────────────
   getMySalons(): Observable<CustomerSalonsResponse> {
     return this.http.get<ApiResponse<CustomerSalonsResponse>>(`${this.baseUrl}/customer/salons`).pipe(
@@ -432,6 +532,21 @@ export class CustomerApiService {
     const value = this.unwrap<T[] | ApiList<T>>(response);
     if (Array.isArray(value)) return value;
     return value.rows ?? value.items ?? value.data ?? [];
+  }
+
+  private normalizeBooking(booking: Booking): Booking {
+    const rawStart = booking.startsAt || booking.startAt;
+    if (!rawStart) return booking;
+    const date = new Date(rawStart);
+    if (!Number.isFinite(date.getTime())) return booking;
+    return {
+      ...booking,
+      displayStartAt: new Intl.DateTimeFormat("en-IN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Kolkata"
+      }).format(date)
+    };
   }
 
   private isEnvelope<T>(response: ApiResponse<T>): response is ApiEnvelope<T> {

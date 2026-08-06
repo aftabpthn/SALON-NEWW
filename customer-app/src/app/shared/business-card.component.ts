@@ -2,9 +2,10 @@ import { Component, EventEmitter, Input, OnInit, Output } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { heart, heartOutline, locationOutline, timeOutline } from "ionicons/icons";
+import { bookmark, bookmarkOutline, globeOutline, heart, heartOutline, locationOutline, star, timeOutline } from "ionicons/icons";
 import { Business } from "../core/api.types";
 import { ClockService } from "../core/clock.service";
+import { CustomerFeedbackService } from "../core/customer-feedback.service";
 import { MarketplaceService } from "../core/marketplace.service";
 
 @Component({
@@ -16,10 +17,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       class="business-card"
       [class.featured]="featured"
       [class.highlighted]="highlighted"
+      [class.variant-personal]="variant === 'personal'"
+      [class.variant-discovery]="variant === 'discovery'"
+      [class.variant-rail]="variant === 'rail' || variant === 'miniRail'"
+      [class.variant-mini-rail]="variant === 'miniRail'"
       tabindex="0"
       (click)="openCard()"
       (keydown.enter)="openCard()"
-      (keydown.space)="openCard()">
+      (keydown.space)="$event.preventDefault(); openCard()">
       <div class="cover">
         @if (displayImage()) {
           <img class="image-fill" [src]="displayImage()" [alt]="business.businessName + ' salon interior'" loading="lazy" (error)="markImageFailed()" />
@@ -29,10 +34,15 @@ import { MarketplaceService } from "../core/marketplace.service";
             <small>{{ business.category || 'Salon' }}</small>
           </div>
         }
-        <span class="rating-pill">Star {{ ratingText() }}</span>
-        <button class="favorite" [class.saved]="isSaved()" type="button" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
-          <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
-        </button>
+        <span class="rating-pill">{{ ratingText() }}{{ ratingCountText() }}</span>
+        <div class="cover-actions">
+          <button class="favorite" [class.saved]="isSaved()" type="button" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
+            <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
+          </button>
+          <button class="save-salon" [class.saved]="isSalonSaved()" type="button" [disabled]="savedSalonPending" [attr.aria-label]="isSalonSaved() ? 'Remove saved salon' : 'Save salon'" (click)="toggleSavedSalon($event)">
+            <ion-icon [name]="isSalonSaved() ? 'bookmark' : 'bookmark-outline'"></ion-icon>
+          </button>
+        </div>
         @if (business.hasOffer) {
           <span class="offer-pill">{{ business.offerText }}</span>
         }
@@ -40,19 +50,42 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       <div class="content">
         <div class="topline">
-          <span class="status-pill" [class.closed]="!isOpenNow()">{{ isOpenNow() ? "Open now" : "Closed" }}</span>
-          <span class="countdown-pill" [class.warning]="isClosingSoon()" [class.closed]="!isOpenNow()">{{ timingStatus() }}</span>
-          <span><ion-icon name="location-outline"></ion-icon>{{ distanceLabel() }}</span>
+          <span class="status-pill" [class.closed]="!isOpenNow()">{{ statusLabel() }}</span>
         </div>
         <h3>{{ business.businessName }}</h3>
-        <p class="category">{{ business.category }}</p>
-        <p class="address">{{ business.address }}</p>
-        <div class="service-row">
-          <span>{{ business.popularService || business.categories[0] || "Service" }}</span>
-          <strong>from {{ money(business.startingPricePaise) }}</strong>
+        @if (featuredServiceLabel()) {
+          <p class="featured-service">{{ featuredServiceLabel() }}</p>
+        }
+        <p class="business-meta">
+          <span class="business-rating" [class.is-new]="isNewSalon()">
+            @if (!isNewSalon()) { <ion-icon name="star"></ion-icon> }
+            {{ ratingLabel() }}
+          </span>
+          @if (locationSummary()) {
+            <span class="business-location">{{ locationSummary() }}</span>
+          }
+          @if (distanceLabel()) {
+            <span class="business-distance">{{ distanceLabel() }}</span>
+          }
+        </p>
+        <div class="category-row">
+          @if (categoryChipLabel()) {
+            <span class="business-category-chip">{{ categoryChipLabel() }}</span>
+          }
         </div>
+        @if (priceLabel()) {
+          <div class="service-row">
+            <strong>{{ priceLabel() }}</strong>
+          </div>
+        }
+        @if (timingLabel()) {
+          <div class="booking-row">
+            <ion-icon name="time-outline"></ion-icon>
+            <span class="booking-status" [class.closed]="!isOpenNow()">{{ timingLabel() }}</span>
+          </div>
+        }
         <div class="footer-row">
-          <span><ion-icon name="time-outline"></ion-icon>{{ business.hoursLabel || business.nextAvailableSlot || "Hours updating" }}</span>
+          <span>{{ nextAvailabilityLabel() }}</span>
           <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
         </div>
       </div>
@@ -61,12 +94,15 @@ import { MarketplaceService } from "../core/marketplace.service";
   styles: [`
     .business-card {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
+      grid-template-columns: 112px minmax(0, 1fr);
+      grid-template-rows: auto;
+      align-items: stretch;
+      min-height: 132px;
       overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 236, 0.96)), var(--surface);
-      box-shadow: var(--shadow-soft);
+      background: var(--surface);
+      box-shadow: 0 6px 18px rgba(28, 28, 28, 0.045);
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
     }
@@ -75,24 +111,63 @@ import { MarketplaceService } from "../core/marketplace.service";
       transform: scale(0.99);
     }
 
+    .business-card:focus-visible {
+      outline: 3px solid rgba(99, 102, 241, 0.4);
+      outline-offset: 3px;
+    }
+
     .business-card.highlighted {
-      border-color: rgba(214, 169, 74, 0.72);
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18), 0 0 36px rgba(214, 169, 74, 0.16);
+      border-color: rgba(99, 102, 241, 0.62);
+      box-shadow: 0 24px 54px rgba(28, 28, 28, 0.16), 0 0 36px rgba(99, 102, 241, 0.14);
     }
 
     .cover {
       position: relative;
       overflow: hidden;
-      aspect-ratio: var(--card-image-ratio);
+      width: 112px;
+      height: 100%;
+      min-height: 132px;
+      aspect-ratio: auto;
       background: var(--surface-soft);
+    }
+
+    .business-card.variant-rail,
+    .business-card.variant-mini-rail {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-height: 0;
+    }
+
+    .business-card.variant-rail .cover,
+    .business-card.variant-mini-rail .cover {
+      width: 100%;
+      height: auto;
+      min-height: 0;
+      aspect-ratio: var(--card-image-ratio);
     }
 
     .cover::after {
       position: absolute;
       inset: 0;
       content: "";
-      background: linear-gradient(180deg, rgba(35, 25, 13, 0.02), rgba(35, 25, 13, 0.38));
+      background: linear-gradient(180deg, rgba(28, 28, 28, 0.02), rgba(28, 28, 28, 0.28));
       pointer-events: none;
+    }
+
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .cover::after,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .rating-pill,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .cover-actions,
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill {
+      display: none;
+    }
+
+    .business-card.variant-personal {
+      box-shadow: 0 6px 18px rgba(28, 28, 28, 0.045);
+    }
+
+    .business-card.variant-discovery {
+      border-color: rgba(99, 102, 241, 0.2);
+      box-shadow: 0 12px 28px rgba(28, 28, 28, 0.085);
     }
 
     .cover-fallback {
@@ -100,34 +175,28 @@ import { MarketplaceService } from "../core/marketplace.service";
       inset: 0;
       display: grid;
       place-items: center;
-      gap: 8px;
+      gap: 4px;
       text-align: center;
-      background:
-        radial-gradient(circle at 50% 22%, rgba(255,255,255,0.56), transparent 24%),
-        linear-gradient(145deg, #dff3fb, #bde6f7 42%, #7cd0e8 100%);
-      color: #0f4f65;
+      background: linear-gradient(135deg, #4b1238 0%, #6d1b4d 55%, #c98f9f 100%);
+      color: #fff;
     }
 
     .cover-fallback span {
-      width: 88px;
-      height: 88px;
+      width: 40px;
+      height: 40px;
       display: grid;
       place-items: center;
-      border-radius: 28px;
-      background: rgba(255,255,255,0.82);
-      box-shadow: 0 18px 34px rgba(15, 79, 101, 0.12);
-      font-size: 1.9rem;
-      font-weight: 1000;
-      letter-spacing: -0.04em;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: none;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
     }
 
     .cover-fallback small {
-      padding: 0 14px;
-      color: rgba(15, 79, 101, 0.84);
-      font-size: 0.74rem;
-      font-weight: 950;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      display: none;
     }
 
     .rating-pill {
@@ -135,30 +204,39 @@ import { MarketplaceService } from "../core/marketplace.service";
       top: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 14px 26px rgba(92, 65, 28, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
     }
 
-    .favorite {
+    .cover-actions {
       position: absolute;
       top: 12px;
       right: 12px;
       z-index: 2;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .favorite,
+    .save-salon {
+      position: relative;
+      inset: auto;
       width: 44px;
       height: 44px;
       display: grid;
       place-items: center;
-      border: 1px solid rgba(244, 213, 141, 0.32);
+      border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: var(--text);
-      background: rgba(255, 249, 236, 0.84);
-      box-shadow: 0 14px 28px rgba(92, 65, 28, 0.18);
-      backdrop-filter: blur(14px);
+      background: var(--glass);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
+      backdrop-filter: none;
     }
 
     .favorite.saved {
-      color: #120D05;
-      border-color: rgba(244, 213, 141, 0.42);
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #FFFFFF;
+      border-color: rgba(99, 102, 241, 0.42);
+      background: linear-gradient(135deg, var(--brand-600), var(--primary));
     }
 
     .offer-pill {
@@ -166,12 +244,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       bottom: 14px;
       left: 14px;
       z-index: 2;
-      box-shadow: 0 10px 24px rgba(92, 65, 28, 0.16);
+      box-shadow: 0 6px 16px rgba(28, 28, 28, 0.1);
     }
 
     .content {
       display: grid;
-      gap: 8px;
+      gap: 6px;
+      align-content: center;
+      min-width: 0;
       padding: 16px;
     }
 
@@ -189,133 +269,292 @@ import { MarketplaceService } from "../core/marketplace.service";
       justify-content: flex-start;
     }
 
+    .status-pill {
+      min-height: 24px;
+      padding: 0 10px;
+      white-space: nowrap;
+    }
+
     .topline > span:not(.status-pill):not(.countdown-pill),
     .footer-row > span {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      color: var(--muted);
-      font-size: 0.82rem;
+      color: #5f6877;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
-    .countdown-pill {
-      display: inline-flex;
+    .booking-row {
+      display: flex;
       align-items: center;
-      min-height: 28px;
-      padding: 0 10px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
-      border-radius: 999px;
-      color: #6D4915;
-      background: linear-gradient(135deg, rgba(255, 249, 236, 0.9), rgba(214, 169, 74, 0.14));
-      font-size: 0.76rem;
-      font-weight: 900;
-      white-space: nowrap;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
     }
 
-    .countdown-pill.warning {
-      color: #7A5019;
-      border-color: rgba(214, 169, 74, 0.3);
-      background: linear-gradient(135deg, rgba(255, 249, 236, 0.92), rgba(244, 213, 141, 0.24));
+    .booking-row > ion-icon {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-size: 0.9rem;
     }
 
-    .countdown-pill.closed {
-      color: #7A5019;
-      border-color: rgba(125, 89, 32, 0.18);
-      background: rgba(125, 89, 32, 0.08);
+    .booking-status {
+      min-width: 0;
+      color: var(--text);
+      font-size: 0.86rem;
+      font-weight: 850;
+      line-height: 1.25;
+    }
+
+    .booking-status.warning {
+      color: var(--primary);
+    }
+
+    .booking-status.closed {
+      color: var(--muted);
     }
 
     h3 {
-      margin: 4px 0 0;
+      margin: 0;
       color: var(--text);
-      font-size: 1.22rem;
-      font-weight: 900;
+      font-size: 1.08rem;
+      font-weight: 950;
       letter-spacing: -0.035em;
       line-height: 1.1;
     }
 
-    .category,
-    .address {
+    .featured-service {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .business-meta {
+      min-height: 19px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
       margin: 0;
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.86rem;
       line-height: 1.35;
     }
 
-    .service-row {
-      margin-top: 6px;
-      padding: 12px;
-      border-radius: 18px;
-      border: 1px solid rgba(214, 169, 74, 0.14);
-      background: rgba(255, 249, 236, 0.9);
+    .favorite:disabled,
+    .save-salon:disabled {
+      cursor: wait;
+      opacity: 0.7;
     }
 
-    .service-row span {
+    .business-meta > span {
       min-width: 0;
-      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .business-rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: var(--primary-2);
+      font-size: 0.86rem;
       font-weight: 900;
+    }
+
+    .business-rating.is-new {
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 900;
+    }
+
+    .business-rating ion-icon { color: var(--primary); font-size: 0.8rem; }
+
+    .business-location {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .business-distance {
+      color: var(--muted);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .business-rating + .business-location::before,
+    .business-location + .business-distance::before,
+    .business-rating + .business-distance::before {
+      content: "·";
+      color: rgba(82, 101, 121, 0.68);
+    }
+
+    .category-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 24px;
+    }
+
+    .business-category-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid rgba(75, 18, 56, 0.14);
+      border-radius: 999px;
+      color: #4b1238;
+      background: rgba(75, 18, 56, 0.08);
+      font-size: 0.82rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .service-row {
+      margin-top: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
     }
 
     .service-row strong {
       flex: 0 0 auto;
       color: var(--primary-2);
       font-size: 0.88rem;
+      font-weight: 950;
     }
 
     .footer-row {
-      padding-top: 6px;
+      padding-top: 0;
     }
 
-    ion-button {
-      min-width: 86px;
+    .footer-row ion-button {
+      min-width: 62px;
+      height: 40px;
+      min-height: 40px;
+      --padding-start: 10px;
+      --padding-end: 10px;
+      font-size: 0.84rem;
+      white-space: nowrap;
     }
 
     @media (hover: hover) and (pointer: fine) {
       .business-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(214, 169, 74, 0.34);
+        border-color: rgba(99, 102, 241, 0.34);
         box-shadow: var(--shadow-card);
       }
     }
 
     @media (max-width: 599px) {
-      :host-context(.business-rail) .business-card {
-        grid-template-columns: 42px minmax(0, 1fr) 26px;
-        grid-template-rows: auto auto auto;
-        gap: 3px 8px;
-        align-items: center;
-        width: min(178px, 47vw);
-        height: 68px;
-        min-height: 68px;
-        padding: 7px;
-        border-radius: 14px;
+      .business-card:not(.variant-rail):not(.variant-mini-rail) {
+        grid-template-columns: 96px minmax(0, 1fr);
+        grid-template-rows: auto;
+        align-items: stretch;
+        min-height: 118px;
+        border-radius: 18px;
       }
 
-      :host-context(.business-rail) .cover {
-        grid-row: span 3;
-        width: 42px;
-        height: 42px;
-        border-radius: 14px;
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover {
+        width: 96px;
+        height: 100%;
+        min-height: 118px;
+        aspect-ratio: auto;
       }
 
-      :host-context(.business-rail) .content {
-        display: contents;
-      }
-
-      :host-context(.business-rail) .rating-pill,
-      :host-context(.business-rail) .favorite,
-      :host-context(.business-rail) .offer-pill,
-      :host-context(.business-rail) .topline,
-      :host-context(.business-rail) .address,
-      :host-context(.business-rail) .service-row strong,
-      :host-context(.business-rail) .footer-row > span {
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover::after,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .rating-pill,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .cover-actions,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .topline {
         display: none;
       }
 
-      :host-context(.business-rail) h3,
-      :host-context(.business-rail) .category,
-      :host-context(.business-rail) .service-row {
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .content {
+        align-content: center;
+        min-width: 0;
+        padding: 10px 10px 10px 12px;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) h3 {
+        font-size: 0.98rem;
+        line-height: 1.15;
+        -webkit-line-clamp: 1;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .service-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-top: 2px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .service-row span,
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding-top: 0;
+      }
+
+      .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row ion-button {
+        min-width: 62px;
+        height: 40px;
+        min-height: 40px;
+      }
+
+      .business-card.variant-rail {
+        grid-template-columns: 68px minmax(0, 1fr) 44px;
+        grid-template-rows: auto auto auto;
+        gap: 3px 8px;
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: 92px;
+        padding: 8px;
+        border-radius: 16px;
+      }
+
+      .business-card.variant-rail .cover {
+        grid-row: span 3;
+        width: 68px;
+        height: 68px;
+        border-radius: 14px;
+      }
+
+      .business-card.variant-rail .content {
+        display: contents;
+      }
+
+      .business-card.variant-rail .rating-pill,
+      .business-card.variant-rail .cover-actions,
+      .business-card.variant-rail .offer-pill,
+      .business-card.variant-rail .topline,
+      .business-card.variant-rail .booking-row,
+      .business-card.variant-rail .service-row strong,
+      .business-card.variant-rail .footer-row > span {
+        display: none;
+      }
+
+      .business-card.variant-rail h3,
+      .business-card.variant-rail .business-meta,
+      .business-card.variant-rail .service-row {
         min-width: 0;
         margin: 0;
         padding: 0;
@@ -326,63 +565,69 @@ import { MarketplaceService } from "../core/marketplace.service";
         white-space: nowrap;
       }
 
-      :host-context(.business-rail) h3 {
+      .business-card.variant-rail h3 {
         grid-column: 2;
+        min-height: 0;
+        display: block;
         color: var(--text);
         font-size: 0.86rem;
         line-height: 1.05;
       }
 
-      :host-context(.business-rail) .category,
-      :host-context(.business-rail) .service-row span {
+      .business-card.variant-rail .business-meta,
+      .business-card.variant-rail .service-row span {
         color: var(--muted);
         font-size: 0.72rem;
         font-weight: 900;
       }
 
-      :host-context(.business-rail) .footer-row {
+      .business-card.variant-rail .footer-row {
         grid-column: 3;
         grid-row: 1 / span 3;
         display: grid;
         padding: 0;
       }
 
-      :host-context(.business-rail) .footer-row ion-button {
-        width: 26px;
-        min-width: 26px;
-        height: 26px;
-        min-height: 26px;
+      .business-card.variant-rail .footer-row ion-button {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
         --padding-start: 0;
         --padding-end: 0;
         font-size: 0;
       }
 
+      .business-card.variant-rail .business-location {
+        display: none;
+      }
+
       .business-card {
-        border-radius: 18px;
+        border-radius: 16px;
       }
 
       .cover {
         aspect-ratio: auto;
         width: 100%;
-        height: 138px;
+        height: 92px;
       }
 
       .cover-fallback span {
-        width: 60px;
-        height: 60px;
-        border-radius: 20px;
-        font-size: 1.25rem;
+        width: 52px;
+        height: 52px;
+        border-radius: 18px;
+        font-size: 1.12rem;
       }
 
       .cover-fallback small {
-        font-size: 0.62rem;
+        font-size: 0.72rem;
       }
 
       .cover img,
       .cover .image-fill {
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: cover !important;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .rating-pill {
@@ -390,43 +635,61 @@ import { MarketplaceService } from "../core/marketplace.service";
         left: 10px;
       }
 
-      .favorite {
+      .cover-actions {
         top: 10px;
         right: 10px;
-        width: 36px;
-        height: 36px;
+        gap: 5px;
+      }
+
+      .favorite,
+      .save-salon {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
       }
 
       .content {
-        gap: 5px;
-        padding: 10px 12px 12px;
+        gap: 4px;
+        padding: 8px 10px 10px;
       }
 
       .topline {
         gap: 6px;
       }
 
-      h3 {
-        margin-top: 2px;
-        font-size: 1.05rem;
+      .status-pill,
+      .countdown-pill,
+      .rating-pill,
+      .offer-pill {
+        min-height: 24px;
+        padding-inline: 8px;
+        font-size: 0.75rem;
       }
 
-      .category,
-      .address {
-        font-size: 0.78rem;
+      h3 {
+        margin-top: 0;
+        font-size: 0.98rem;
+        min-height: 0;
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .business-meta {
+        font-size: 0.8rem;
         line-height: 1.2;
       }
 
-      .address {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+      .service-row {
+        margin-top: 3px;
+        padding: 7px 9px;
+        border-radius: 12px;
       }
 
-      .service-row {
-        margin-top: 4px;
-        padding: 9px 10px;
-        border-radius: 14px;
+      .service-row strong {
+        font-size: 0.84rem;
       }
 
       .service-row span {
@@ -438,16 +701,30 @@ import { MarketplaceService } from "../core/marketplace.service";
       .footer-row {
         align-items: center;
         flex-direction: row;
-        gap: 8px;
-        padding-top: 4px;
+        gap: 6px;
+        padding-top: 2px;
       }
 
       .footer-row ion-button {
         width: auto;
-        min-width: 92px;
-        min-height: 36px;
+        min-width: 62px;
+        min-height: 40px;
         margin: 0;
       }
+
+      .footer-row > span {
+        min-width: 0;
+        font-size: 0.8rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    .save-salon.saved {
+      color: #fff;
+      border-color: var(--primary);
+      background: var(--primary);
     }
 
     @media (min-width: 1024px) {
@@ -466,6 +743,269 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding: 24px;
       }
     }
+
+    @media (min-width: 600px) and (max-width: 900px) {
+      .business-card.variant-rail {
+        grid-template-rows: minmax(104px, auto);
+        grid-template-columns: 76px minmax(0, 1fr);
+        align-items: stretch;
+        width: 100%;
+        min-width: 0;
+        height: auto;
+        min-height: 104px;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 16px;
+      }
+
+      .business-card.variant-rail .cover {
+        grid-row: 1;
+        width: 76px;
+        height: 100%;
+        min-height: 104px;
+        aspect-ratio: auto;
+        border-radius: 0;
+      }
+
+      .business-card.variant-rail .content {
+        display: grid;
+        align-content: center;
+        gap: 4px;
+        min-width: 0;
+        padding: 8px 9px;
+      }
+
+      .business-card.variant-rail .rating-pill,
+      .business-card.variant-rail .cover-actions,
+      .business-card.variant-rail .offer-pill,
+      .business-card.variant-rail .topline,
+      .business-card.variant-rail .booking-row {
+        display: none;
+      }
+
+      .business-card.variant-rail h3 {
+        display: block;
+        grid-column: auto;
+        min-height: 0;
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.9rem;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-rail .business-meta {
+        display: flex;
+        margin: 0;
+        overflow: hidden;
+        font-size: 0.76rem;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-rail .service-row span,
+      .business-card.variant-rail .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-rail .footer-row {
+        display: grid;
+        grid-column: auto;
+        grid-row: auto;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 5px;
+        padding-top: 0;
+      }
+
+      .business-card.variant-rail .service-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px;
+        margin-top: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font-size: 0.76rem;
+      }
+
+      .business-card.variant-rail .service-row strong,
+      .business-card.variant-rail .footer-row > span {
+        display: inline-flex;
+      }
+
+      .business-card.variant-rail .footer-row ion-button {
+        width: 68px;
+        min-width: 68px;
+        height: 44px;
+        min-height: 44px;
+        margin: 0;
+        --padding-start: 9px;
+        --padding-end: 9px;
+        font-size: 0.78rem;
+      }
+
+    }
+
+    @media (max-width: 599px) {
+
+      .business-card.variant-discovery {
+        width: 100%;
+        min-width: 0;
+        border-radius: 18px;
+        box-shadow: 0 8px 22px rgba(28, 28, 28, 0.08);
+      }
+
+      .business-card.variant-discovery .cover {
+        height: 124px;
+      }
+
+      .business-card.variant-discovery .content {
+        gap: 5px;
+        padding: 10px 12px 12px;
+      }
+
+      .business-card.variant-discovery .booking-status {
+        font-size: 0.8rem;
+      }
+
+      .business-card.variant-discovery h3 {
+        min-height: 0;
+        margin-top: 0;
+        font-size: 1.02rem;
+        line-height: 1.12;
+      }
+
+      .business-card.variant-discovery .business-meta {
+        font-size: 0.82rem;
+      }
+
+      .business-card.variant-discovery .service-row {
+        margin-top: 2px;
+        padding: 8px 10px;
+        border-radius: 13px;
+      }
+
+      .business-card.variant-discovery .footer-row {
+        gap: 8px;
+        padding-top: 2px;
+      }
+
+      .business-card.variant-discovery .content,
+      .business-card.variant-discovery .topline,
+      .business-card.variant-discovery h3,
+      .business-card.variant-discovery .business-meta,
+      .business-card.variant-discovery .service-row,
+      .business-card.variant-discovery .footer-row,
+      .business-card.variant-discovery .service-row span,
+      .business-card.variant-discovery .footer-row > span {
+        min-width: 0;
+      }
+
+      .business-card.variant-discovery .service-row,
+      .business-card.variant-discovery .footer-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+
+      .business-card.variant-discovery .service-row span,
+      .business-card.variant-discovery .footer-row > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-discovery .service-row strong {
+        width: auto;
+        min-width: max-content;
+        max-width: 100%;
+      }
+
+      .business-card.variant-discovery .footer-row ion-button {
+        width: 92px;
+        min-width: 92px;
+        max-width: 100%;
+        min-height: 44px;
+        margin: 0;
+      }
+
+      .business-card.variant-mini-rail {
+        grid-template-columns: 52px minmax(0, 1fr);
+        grid-template-rows: 74px;
+        align-items: stretch;
+        min-height: 74px;
+        max-height: 74px;
+        border-radius: 14px;
+      }
+
+      .business-card.variant-mini-rail .cover {
+        grid-row: 1;
+        width: 52px;
+        height: 74px;
+        min-height: 0;
+      }
+
+      .business-card.variant-mini-rail .content {
+        align-content: center;
+        gap: 3px;
+        padding: 7px 8px;
+      }
+
+      .business-card.variant-mini-rail h3 {
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.85rem;
+        line-height: 1.12;
+        white-space: normal;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .business-card.variant-mini-rail .business-meta {
+        display: block;
+        overflow: hidden;
+        font-size: 0.72rem;
+        line-height: 1.15;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .business-card.variant-mini-rail .rating-pill,
+      .business-card.variant-mini-rail .cover-actions,
+      .business-card.variant-mini-rail .offer-pill,
+      .business-card.variant-mini-rail .topline,
+      .business-card.variant-mini-rail .booking-row,
+      .business-card.variant-mini-rail .service-row,
+      .business-card.variant-mini-rail .footer-row {
+        display: none;
+      }
+
+      .business-card.variant-mini-rail .cover-fallback {
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+        padding: 0;
+      }
+
+      .business-card.variant-mini-rail .cover-fallback span {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        font-size: 0.85rem;
+      }
+
+      .business-card.variant-mini-rail .cover-fallback small {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .business-card { transition: none; }
+    }
   `]
 })
 export class BusinessCardComponent implements OnInit {
@@ -473,22 +1013,56 @@ export class BusinessCardComponent implements OnInit {
   @Input() featured = false;
   @Input() selectable = false;
   @Input() highlighted = false;
+  @Input() variant: "default" | "personal" | "discovery" | "rail" | "miniRail" = "default";
   @Input() displayDistanceKm: number | null | undefined = undefined;
   @Input() userLocation: { lat: number; lng: number } | null = null;
   @Output() cardSelect = new EventEmitter<Business>();
   private readonly savedUserLocation = this.savedLocation();
   private imageFailed = false;
+  favoritePending = false;
+  savedSalonPending = false;
 
-  constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService) {
-    addIcons({ heart, heartOutline, locationOutline, timeOutline });
+  constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService, private readonly feedback: CustomerFeedbackService) {
+    addIcons({ bookmark, bookmarkOutline, globeOutline, heart, heartOutline, locationOutline, star, timeOutline });
   }
 
   ngOnInit() {
     void this.marketplace.ensureFavorites().catch(() => undefined);
+    void this.marketplace.ensureSavedSalons().catch(() => undefined);
   }
 
   money(pricePaise: number): string {
     return this.marketplace.formatMoney(pricePaise);
+  }
+
+  priceLabel(): string {
+    const price = this.realStartingPricePaise();
+    return price > 0 ? `Services from ${this.money(price)}` : "";
+  }
+
+  ratingCountText(): string {
+    if (this.isNewSalon()) return "";
+    const count = Number(this.business.ratingCount || 0);
+    return count > 0 ? ` · ${count}` : "";
+  }
+
+  ratingLabel(): string {
+    return this.isNewSalon() ? "New salon" : `${this.ratingText()}${this.ratingCountText()}`;
+  }
+
+  isNewSalon(): boolean {
+    return this.isNewForRating();
+  }
+
+  supportsOnlineBooking(): boolean {
+    const hasOnlineMode = Array.isArray(this.business.paymentModes) && this.business.paymentModes.includes("online");
+    const hasServices = Array.isArray(this.business.services) && this.business.services.length > 0;
+    return hasOnlineMode && (hasServices || !!this.business.popularService || !!this.business.nextAvailableSlot);
+  }
+
+  statusLabel(): string {
+    if (this.supportsOnlineBooking()) return "Online booking available";
+    return this.isOpenNow() ? "Open today" : "Closed";
   }
 
   private get now(): number {
@@ -528,22 +1102,23 @@ export class BusinessCardComponent implements OnInit {
     return this.isOpenNow() && closeAt !== null && closeAt > this.now && closeAt - this.now <= 2 * 60 * 60 * 1000;
   }
 
-  timingStatus(): string {
-    if (this.isOpenNow()) {
-      const closeAt = this.timestamp(this.business.nextCloseAt);
-      if (closeAt && closeAt > this.now && closeAt - this.now <= 2 * 60 * 60 * 1000) {
-        return `Closing in ${this.durationLabel(closeAt - this.now)}`;
-      }
-      return "Taking bookings";
-    }
+  timingLabel(): string {
+    const hours = this.hoursRangeLabel();
+    if (this.isOpenNow()) return hours ? `Open today · ${hours}` : "";
     const openAt = this.nextOpeningTimestamp();
-    return openAt && openAt > this.now ? `Opening in ${this.durationLabel(openAt - this.now)}` : "Closed now";
+    return openAt && openAt > this.now ? `Closed · Opens ${this.timeLabel(openAt)}` : "";
   }
 
   distanceLabel(): string {
     const distance = this.realDistanceKm();
-    if (distance !== null) return `${this.decimalText(distance)} km`;
-    return this.business.area || this.business.city || this.business.address || "Location unavailable";
+    return distance !== null ? `${this.decimalText(distance)} km` : "";
+  }
+
+  locationSummary(): string {
+    const parts = [this.shortAddress(), this.business.area, this.business.city]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return [...new Set(parts)].join(", ");
   }
 
   ratingText(): string {
@@ -572,7 +1147,7 @@ export class BusinessCardComponent implements OnInit {
     if (this.displayDistanceKm !== null && this.displayDistanceKm !== undefined && Number.isFinite(Number(this.displayDistanceKm))) {
       return Number(this.displayDistanceKm);
     }
-    if (this.business.distanceKm !== null && this.business.distanceKm !== undefined && Number.isFinite(Number(this.business.distanceKm))) {
+    if (this.business.distanceKm !== null && this.business.distanceKm !== undefined && Number.isFinite(Number(this.business.distanceKm)) && Number(this.business.distanceKm) >= 0) {
       return Number(this.business.distanceKm);
     }
     const userLocation = this.userLocation || this.savedUserLocation;
@@ -627,7 +1202,6 @@ export class BusinessCardComponent implements OnInit {
   }
 
   openCard() {
-    this.recordRecentlyViewed();
     if (this.selectable) {
       this.cardSelect.emit(this.business);
       return;
@@ -639,30 +1213,115 @@ export class BusinessCardComponent implements OnInit {
     return this.marketplace.isFavorite(this.business.id) || this.marketplace.isFavorite(this.business.slug);
   }
 
-  toggleSave(event: Event) {
+  featuredServiceLabel(): string {
+    const service = this.displayName(String(this.business.popularService || "").trim());
+    const category = this.displayName(String(this.business.category || "").trim());
+    return service && service.toLowerCase() !== category.toLowerCase() && service.toLowerCase() !== "service" ? service : "";
+  }
+
+  categoryChipLabel(): string {
+    return this.displayName(String(this.business.category || this.business.categories?.[0] || "").trim());
+  }
+
+  nextAvailabilityLabel(): string {
+    const next = String(this.business.nextAvailableSlot || "").trim();
+    if (next) return next;
+    return this.isOpenNow() ? "Available today" : "Check availability";
+  }
+
+  private realStartingPricePaise(): number {
+    const servicePrices = (this.business.services || [])
+      .filter((service) => service.active !== false)
+      .map((service) => Number(service.pricePaise || 0))
+      .filter((price) => Number.isFinite(price) && price > 0 && price < 100000000);
+    if (servicePrices.length) return Math.min(...servicePrices);
+    const fallback = Number(this.business.startingPricePaise || 0);
+    return Number.isFinite(fallback) && fallback > 0 && fallback < 100000000 ? fallback : 0;
+  }
+
+  private shortAddress(): string {
+    const raw = String(this.business.address || "").trim();
+    if (!raw) return "";
+    return raw.split(",")[0]?.trim() || raw;
+  }
+
+  private displayName(value: string): string {
+    const raw = String(value || "").trim().replace(/\s+/g, " ");
+    if (!raw) return "";
+    const normalized = raw.replace(/\bcompliment\s*ory\b/i, "Complimentary");
+    const upper = normalized.toUpperCase();
+    if (/^(CLEAN|SERVICE|SERVICES|GENERAL|MISC|OTHER|OTHERS|NA|N\/A)$/.test(upper)) return "";
+    if (upper === "COLOURS") return "Hair Colour";
+    if (upper === "D-TANS") return "Detan";
+    if (upper === "MENS") return "Men’s Grooming";
+    if (upper === "PARTY") return "Party Makeup";
+    if (upper === "ROOT") return "Root Touch-up";
+    if (upper === "WASH") return "Hair Wash";
+    if (upper === "HAIRS") return "Hair";
+    if (upper === "NAILS") return "Nails";
+    if (upper === "SKINS") return "Skin";
+    return normalized.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  private hoursRangeLabel(): string {
+    const open = this.timeOfDayLabel(this.business.openingTime);
+    const close = this.timeOfDayLabel(this.business.closingTime);
+    return open && close ? `${open}–${close}` : "";
+  }
+
+  private timeLabel(timestamp: number): string {
+    return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(timestamp));
+  }
+
+  private timeOfDayLabel(value?: string): string {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return raw;
+    const date = new Date();
+    date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: undefined, hour12: true }).format(date).replace(":00", "");
+  }
+
+  isSalonSaved(): boolean {
+    return this.marketplace.isSalonSaved(this.business.id);
+  }
+
+  async toggleSavedSalon(event: Event) {
+    event.preventDefault();
     event.stopPropagation();
+    if (this.savedSalonPending) return;
     if (!this.marketplace.isAuthenticated()) {
       void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
       return;
     }
-    void this.marketplace.toggleFavorite(this.business.id).catch(() => undefined);
-  }
-
-  private recordRecentlyViewed() {
+    this.savedSalonPending = true;
     try {
-      const key = "aura_customer_recently_viewed_businesses";
-      const current = JSON.parse(localStorage.getItem(key) || "[]") as Array<{ id?: string; slug?: string }>;
-      const next = [
-        {
-          id: this.business.id,
-          slug: this.business.slug,
-          viewedAt: new Date().toISOString()
-        },
-        ...current.filter((item) => item.id !== this.business.id && item.slug !== this.business.slug)
-      ].slice(0, 12);
-      localStorage.setItem(key, JSON.stringify(next));
+      const saved = await this.marketplace.toggleSavedSalon(this.business.id);
+      await this.feedback.success(saved ? "Added to saved salons" : "Removed from saved salons");
     } catch {
-      // Browsing history is optional; booking and search must still work if storage is blocked.
+      await this.feedback.error(this.marketplace.error() || "Could not update saved salons. Please try again.");
+    } finally {
+      this.savedSalonPending = false;
     }
   }
+
+  async toggleSave(event: Event) {
+    event.stopPropagation();
+    if (this.favoritePending) return;
+    if (!this.marketplace.isAuthenticated()) {
+      void this.router.navigate(["/login"], { queryParams: { returnUrl: this.router.url } });
+      return;
+    }
+    this.favoritePending = true;
+    try {
+      const saved = await this.marketplace.toggleFavorite(this.business.id);
+      await this.feedback.success(saved ? "Added to favorites / wishlist" : "Removed from favorites / wishlist");
+    } catch {
+      await this.feedback.error(this.marketplace.error() || "Could not update favorites. Please try again.");
+    } finally {
+      this.favoritePending = false;
+    }
+  }
+
 }

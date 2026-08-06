@@ -10,6 +10,13 @@ import {
 
 export const customerMySalonRouter = Router();
 
+function salonContext(req) {
+  return {
+    tenantId: req.get("x-tenant-id") || "",
+    branchId: req.get("x-branch-id") || "",
+  };
+}
+
 // All routes require customer authentication
 customerMySalonRouter.use("/customer/my-salon", authenticateJwt());
 
@@ -26,7 +33,7 @@ customerMySalonRouter.use("/customer/my-salon", authenticateJwt());
 customerMySalonRouter.get(
   "/customer/my-salon/dashboard",
   asyncHandler((req, res) => {
-    const result = getMySalonDashboard(req.access);
+    const result = getMySalonDashboard(req.access, salonContext(req));
     res.json(result);
   })
 );
@@ -38,7 +45,7 @@ customerMySalonRouter.get(
 customerMySalonRouter.get(
   "/customer/my-salon/services",
   asyncHandler((req, res) => {
-    res.json(getMySalonServices(req.access));
+    res.json(getMySalonServices(req.access, salonContext(req)));
   })
 );
 
@@ -49,7 +56,7 @@ customerMySalonRouter.get(
 customerMySalonRouter.get(
   "/customer/my-salon/staff",
   asyncHandler((req, res) => {
-    res.json(getMySalonStaff(req.access));
+    res.json(getMySalonStaff(req.access, salonContext(req)));
   })
 );
 
@@ -60,6 +67,6 @@ customerMySalonRouter.get(
 customerMySalonRouter.get(
   "/customer/my-salon/offers",
   asyncHandler((req, res) => {
-    res.json(getMySalonOffers(req.access));
+    res.json(getMySalonOffers(req.access, salonContext(req)));
   })
 );
