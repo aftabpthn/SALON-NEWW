@@ -95,19 +95,8 @@ interface QuickFilterChip {
               <ion-icon name="arrow-back-outline"></ion-icon>
             </button>
             <div class="search-command-input-wrap">
+              <ion-icon class="search-command-leading-icon" name="search-outline"></ion-icon>
               <input class="search-command-input" type="search" [placeholder]="placeholder()" [value]="query()" (focus)="setKeyboardFocus(true)" (blur)="setKeyboardFocus(false)" (input)="setQuery($any($event.target).value || '')" aria-label="Search salons" />
-              <div class="search-command-actions" aria-label="Search filters and sorting">
-                  <button type="button" class="search-command-action" [class.active]="filterPanelOpen() || activeFilterCount()" [attr.data-count]="activeFilterCount() || null" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()" aria-label="Filter results">
-                    <ion-icon name="options-outline"></ion-icon>
-                    <span>Filter{{ activeFilterCount() ? " · " + activeFilterCount() : "" }}</span>
-                    <small>{{ filterButtonLabel() }}</small>
-                  </button>
-                  <button type="button" class="search-command-action" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()" aria-label="Sort results">
-                    <ion-icon name="swap-vertical-outline"></ion-icon>
-                    <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
-                    <small>{{ sortDescription(sort()) }}</small>
-                  </button>
-              </div>
               @if (suggestions().length) {
                 <div class="suggestion-panel" role="listbox" aria-label="Search suggestions">
                   @for (suggestion of suggestions(); track suggestion.key) {
@@ -122,6 +111,28 @@ interface QuickFilterChip {
               }
             </div>
             </div>
+            <button type="button" class="selected-area-row location-chooser" (click)="openLocationChooser()" aria-label="Choose location">
+              <span>
+                <ion-icon name="location-outline"></ion-icon>
+                <strong>{{ locationRowHeading() }}</strong>
+                <small>{{ locationRowValue() }}</small>
+              </span>
+              <ion-icon name="chevron-forward-outline"></ion-icon>
+            </button>
+            <div class="search-control-row" aria-label="Search controls">
+              <button type="button" class="search-control-button" [class.active]="filterPanelOpen() || activeFilterCount() > 0" [attr.data-count]="activeFilterCount() || null" (click)="toggleFilterPanel()" [attr.aria-expanded]="filterPanelOpen()">
+                <ion-icon name="options-outline"></ion-icon>
+                <span>Filter</span>
+              </button>
+              <button type="button" class="search-control-button" [class.active]="sortPanelOpen() || sort() !== 'recommended'" (click)="toggleSortPanel()" [attr.aria-expanded]="sortPanelOpen()">
+                <ion-icon name="swap-vertical-outline"></ion-icon>
+                <span>{{ sort() === "recommended" ? "Sort" : sortButtonLabel() }}</span>
+              </button>
+              <button type="button" class="search-control-button" [class.active]="showMap()" (click)="toggleMapPanel()" [attr.aria-pressed]="showMap()">
+                <ion-icon [name]="showMap() ? 'business-outline' : 'map-outline'"></ion-icon>
+                <span>{{ showMap() ? "List" : "Map" }}</span>
+              </button>
+            </div>
           </section>
 
           <nav class="premium-chip-row" aria-label="Quick filters">
@@ -132,12 +143,12 @@ interface QuickFilterChip {
 
           <div class="premium-result-row">
             <div>
-              <strong>{{ resultCount() }} salons near you</strong>
-              <span>Sorted by <button type="button" (click)="toggleSortPanel()">Distance</button></span>
+              <strong>{{ resultsHeading() }}</strong>
+              <span>{{ resultCount() }} {{ resultNoun() }} · Sorted by <button type="button" (click)="toggleSortPanel()">{{ sortButtonLabel() }}</button></span>
             </div>
-            <button class="premium-map-switch" type="button" (click)="toggleMapPanel()">
-              <ion-icon name="map-outline"></ion-icon>
-              Map view
+            <button class="premium-map-switch" type="button" [class.active]="showMap()" (click)="toggleMapPanel()">
+              <ion-icon [name]="showMap() ? 'business-outline' : 'map-outline'"></ion-icon>
+              {{ showMap() ? "List view" : "Map view" }}
             </button>
           </div>
 
@@ -377,7 +388,7 @@ interface QuickFilterChip {
               </section>
             }
 
-            @if (marketplace.loading()) {
+            @if (marketplace.loadingForSkeleton() && !marketplace.businesses().length) {
               <section class="empty premium-card"><h2>Searching salons</h2></section>
             }
             @if (marketplace.error()) {
@@ -469,6 +480,8 @@ interface QuickFilterChip {
       z-index: 10;
       width: 100%;
       min-height: 52px;
+      display: grid;
+      gap: 10px;
       margin: 0;
       padding: 4px;
       border: 1px solid var(--border);
@@ -514,6 +527,13 @@ interface QuickFilterChip {
       align-items: center;
       min-width: 0;
       min-height: 44px;
+      padding-left: 10px;
+    }
+
+    .search-command-leading-icon {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 1rem;
     }
 
     .search-command-input {
@@ -522,7 +542,7 @@ interface QuickFilterChip {
       min-width: 0;
       min-height: 44px;
       margin: 0;
-      padding: 0 8px 0 10px;
+      padding: 0 10px;
       border: 0;
       outline: 0;
       color: var(--text);
@@ -536,37 +556,37 @@ interface QuickFilterChip {
       opacity: 0.68;
     }
 
-    .search-command-actions {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 0;
-      margin-left: auto;
+    .search-control-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
     }
 
-    .search-command-action {
+    .search-control-button {
       position: relative;
-      width: 44px;
-      height: 44px;
-      border-radius: 6px;
-      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid rgba(75, 18, 56, 0.18);
+      border-radius: 14px;
+      color: var(--text);
+      background: #fff;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 900;
     }
 
-    .search-command-action ion-icon {
-      width: 18px;
-      height: 18px;
-      margin: 0;
-      font-size: 18px;
+    .search-control-button ion-icon {
+      font-size: 1rem;
     }
 
-    .search-command-action.active {
-      color: var(--primary);
-      background: var(--primary-soft);
-    }
-
-    .search-command-action span,
-    .search-command-action small {
-      display: none;
+    .search-control-button.active {
+      color: #4b1238;
+      border-color: rgba(75, 18, 56, 0.28);
+      background: rgba(75, 18, 56, 0.1);
     }
 
     .search-page.keyboard-open .premium-discovery-top {
@@ -589,16 +609,15 @@ interface QuickFilterChip {
       overscroll-behavior: contain;
     }
 
-    .search-command-action[data-count]::after {
+    .search-control-button[data-count]::after {
       position: absolute;
-      top: 2px;
-      right: 2px;
+      top: 3px;
+      right: 6px;
       display: grid;
       place-items: center;
-      min-width: 15px;
-      height: 15px;
-      padding: 0 3px;
-      border: 2px solid #ffffff;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
       border-radius: 999px;
       color: #ffffff;
       background: var(--primary);
@@ -750,12 +769,53 @@ interface QuickFilterChip {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      min-height: 44px;
       padding: 12px 14px;
       border: 1px solid rgba(99, 102, 241, 0.16);
       border-radius: 22px;
       color: var(--text);
       background: rgba(231, 240, 248, 0.78);
       font-weight: 900;
+    }
+
+    .location-chooser {
+      width: 100%;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .location-chooser span {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 1px 8px;
+      align-items: center;
+    }
+
+    .location-chooser strong,
+    .location-chooser small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .location-chooser strong {
+      font-size: 0.95rem;
+    }
+
+    .location-chooser small {
+      grid-column: 2;
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .location-chooser > ion-icon {
+      color: var(--primary);
+      font-size: 1rem;
     }
 
     .selected-area-row span,
@@ -1384,20 +1444,20 @@ interface QuickFilterChip {
 
       .premium-chip-row button {
         flex: 0 0 auto;
-        min-height: 36px;
+        min-height: 44px;
         padding: 0 12px;
-        border: 1px solid var(--border);
+        border: 1px solid rgba(75, 18, 56, 0.18);
         border-radius: 999px;
-        color: var(--text);
+        color: #463449;
         background: var(--surface);
         font-size: 0.84rem;
-        font-weight: 850;
+        font-weight: 900;
       }
 
       .premium-chip-row button.selected {
-        color: #FFFFFF;
-        border-color: var(--primary);
-        background: var(--primary);
+        color: #4b1238;
+        border-color: rgba(75, 18, 56, 0.24);
+        background: rgba(75, 18, 56, 0.12);
       }
 
       .result-meta {
@@ -1464,6 +1524,12 @@ interface QuickFilterChip {
 
       .premium-map-switch ion-icon {
         font-size: 0.92rem;
+      }
+
+      .premium-map-switch.active {
+        color: #4b1238;
+        border-color: rgba(75, 18, 56, 0.28);
+        background: rgba(75, 18, 56, 0.12);
       }
 
       .results {
@@ -2810,19 +2876,10 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "reviews", label: "Most reviewed" }
   ];
   readonly quickFilterChips: QuickFilterChip[] = [
-    { label: "Venues", filter: "salons", mode: "salons" },
-    { label: "Treatments", filter: "services", mode: "services" },
-    { label: "Professionals", filter: "staff", mode: "staff" },
-    { label: "Open Now", filter: "open" },
-    { label: "Offers", filter: "deals" },
-    { label: "Premium", filter: "premium" },
-    { label: "Women", query: "Women", mode: "services" },
-    { label: "Men", query: "Men", mode: "services" },
-    { label: "Spa", query: "Spa", mode: "services" },
-    { label: "Hair", query: "Hair", mode: "services" },
-    { label: "Facial", query: "Facial", mode: "services" },
-    { label: "Massage", query: "Massage", mode: "services" },
-    { label: "Nails", query: "Nail", mode: "services" }
+    { label: "Near me", filter: "nearest", sort: "distance" },
+    { label: "Open now", filter: "open" },
+    { label: "Top rated", filter: "top", sort: "rating" },
+    { label: "Offers", filter: "deals" }
   ];
   readonly flatFilterOptions = computed(() => this.filterSections().flatMap((section) => section.options));
   readonly activeFilterCount = computed(() => {
@@ -3076,7 +3133,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly initialLocation = this.savedLocation();
   readonly location = signal<{ lat: number; lng: number } | null>(this.initialLocation);
   readonly areaLabel = signal(this.savedAreaLabel(this.initialLocation));
-  readonly locationDisplayLabel = computed(() => this.location() ? this.areaLabel() : "Current location");
+  readonly locationDisplayLabel = computed(() => this.location() ? this.areaLabel() : "Choose location");
   readonly activeFilterSummary = computed(() => {
     const labels = this.activeFilters()
       .map((key) => key === "nearest" ? this.locationDisplayLabel() : this.flatFilterOptions().find((option) => option.key === key)?.label)
@@ -3534,7 +3591,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   clearSelectedArea() {
     this.location.set(null);
-    this.areaLabel.set("Current location");
+    this.areaLabel.set("Choose location");
     this.mapPickMode.set(false);
     this.mapFullscreen.set(false);
     this.locationRetryAvailable.set(false);
@@ -3604,6 +3661,32 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   openFilterSection() {
     this.toggleFilterPanel();
+  }
+
+  openLocationChooser() {
+    if (this.location()) {
+      this.openFullMap();
+      return;
+    }
+    if (this.mapErrorTitle() === "Location permission blocked") {
+      this.mapPanelOpen.set(true);
+      this.mapPickMode.set(true);
+      this.locationNotice.set("Pick an area on the map or enter a city manually.");
+      return;
+    }
+    this.useLocation();
+  }
+
+  locationRowHeading(): string {
+    return this.location() ? this.areaLabel() : "Choose location";
+  }
+
+  locationRowValue(): string {
+    return this.location() ? "Tap to change your selected area" : "Use current location or pick an area manually";
+  }
+
+  resultsHeading(): string {
+    return this.location() ? `Salons near ${this.areaLabel()}` : "Recommended salons";
   }
 
   applyAnyTime() {
@@ -3743,7 +3826,7 @@ useLocation(isManualRetry = false) {
   }
 
   isLocationPermissionBlocked(): boolean {
-    return this.mapErrorTitle() === "Location permission blocked" || !this.hasUsableLocation();
+    return this.mapErrorTitle() === "Location permission blocked";
   }
 
   openLocationSettings() {
@@ -4078,7 +4161,7 @@ useLocation(isManualRetry = false) {
     } catch {
       // Fall through to a deterministic coordinate label.
     }
-    return location ? `Current location ${this.coordinateLabel(location)}` : "Current location";
+    return location ? `Current location ${this.coordinateLabel(location)}` : "Choose location";
   }
 
   private coordinateLabel(coordinates: { lat: number; lng: number }): string {

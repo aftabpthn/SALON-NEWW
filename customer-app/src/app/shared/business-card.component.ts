@@ -50,40 +50,41 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       <div class="content">
         <div class="topline">
-          <span class="status-pill" [class.closed]="!isOpenNow()">{{ isOpenNow() ? "Open now" : "Closed" }}</span>
+          <span class="status-pill" [class.closed]="!isOpenNow()">{{ statusLabel() }}</span>
         </div>
         <h3>{{ business.businessName }}</h3>
+        @if (featuredServiceLabel()) {
+          <p class="featured-service">{{ featuredServiceLabel() }}</p>
+        }
         <p class="business-meta">
-          @if (variant !== 'miniRail' && variant !== 'rail') {
-            @if (ratingText() === 'New') {
-              <span class="business-rating is-new">New</span>
-            } @else {
-              <span class="business-rating"><ion-icon name="star"></ion-icon>{{ ratingText() }}{{ ratingCountText() }}</span>
-            }
+          <span class="business-rating" [class.is-new]="isNewSalon()">
+            @if (!isNewSalon()) { <ion-icon name="star"></ion-icon> }
+            {{ ratingLabel() }}
+          </span>
+          @if (locationSummary()) {
+            <span class="business-location">{{ locationSummary() }}</span>
           }
-          @if (variant === 'miniRail' && business.popularService) {
-            <span class="business-category">{{ business.popularService }}</span>
-          } @else if (business.category) {
-            <span class="business-category">{{ business.category }}</span>
-          }
-          @if (distanceLabel(); as location) {
-            <span class="business-location"><ion-icon name="location-outline"></ion-icon>{{ location }}</span>
+          @if (distanceLabel()) {
+            <span class="business-distance">{{ distanceLabel() }}</span>
           }
         </p>
-        <div class="service-row">
-          <span>{{ business.popularService || business.categories[0] || "Service" }}</span>
-          <strong>{{ priceLabel() }}</strong>
-        </div>
-        <div class="booking-row">
-          <ion-icon name="time-outline"></ion-icon>
-          <span class="booking-status" [class.warning]="isClosingSoon()" [class.closed]="!isOpenNow()">{{ timingStatus() }}</span>
-          @if (supportsOnlineBooking()) {
-            <span class="booking-online"><ion-icon name="globe-outline"></ion-icon>Online booking</span>
+        <div class="category-row">
+          @if (categoryChipLabel()) {
+            <span class="business-category-chip">{{ categoryChipLabel() }}</span>
           }
         </div>
+        @if (priceLabel()) {
+          <div class="service-row">
+            <strong>{{ priceLabel() }}</strong>
+          </div>
+        }
+        <div class="booking-row">
+          <ion-icon name="time-outline"></ion-icon>
+          <span class="booking-status" [class.closed]="!isOpenNow()">{{ timingLabel() }}</span>
+        </div>
         <div class="footer-row">
-          <span>{{ business.nextAvailableSlot || business.hoursLabel || "Availability updating" }}</span>
-          <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book now</ion-button>
+          <span>{{ nextAvailabilityLabel() }}</span>
+          <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
         </div>
       </div>
     </article>
@@ -99,7 +100,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background: var(--surface);
-      box-shadow: 0 8px 24px rgba(28, 28, 28, 0.05);
+      box-shadow: 0 6px 18px rgba(28, 28, 28, 0.045);
       cursor: pointer;
       transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
     }
@@ -154,18 +155,17 @@ import { MarketplaceService } from "../core/marketplace.service";
     .business-card:not(.variant-rail):not(.variant-mini-rail) .cover::after,
     .business-card:not(.variant-rail):not(.variant-mini-rail) .rating-pill,
     .business-card:not(.variant-rail):not(.variant-mini-rail) .cover-actions,
-    .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill,
-    .business-card:not(.variant-rail):not(.variant-mini-rail) .topline {
+    .business-card:not(.variant-rail):not(.variant-mini-rail) .offer-pill {
       display: none;
     }
 
     .business-card.variant-personal {
-      box-shadow: 0 8px 22px rgba(28, 28, 28, 0.05);
+      box-shadow: 0 6px 18px rgba(28, 28, 28, 0.045);
     }
 
     .business-card.variant-discovery {
       border-color: rgba(99, 102, 241, 0.2);
-      box-shadow: 0 18px 42px rgba(28, 28, 28, 0.11);
+      box-shadow: 0 12px 28px rgba(28, 28, 28, 0.085);
     }
 
     .cover-fallback {
@@ -175,8 +175,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       place-items: center;
       gap: 4px;
       text-align: center;
-      background: linear-gradient(135deg, #eef0ff 0%, #d9dcfb 50%, #b8bcf8 100%);
-      color: var(--primary-2);
+      background: linear-gradient(135deg, #4b1238 0%, #6d1b4d 55%, #c98f9f 100%);
+      color: #fff;
     }
 
     .cover-fallback span {
@@ -185,21 +185,16 @@ import { MarketplaceService } from "../core/marketplace.service";
       display: grid;
       place-items: center;
       border-radius: 12px;
-      background: var(--surface);
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.14);
-      color: var(--primary-2);
+      background: rgba(255, 255, 255, 0.14);
+      box-shadow: none;
+      color: #fff;
       font-size: 1rem;
       font-weight: 900;
       letter-spacing: -0.02em;
     }
 
     .cover-fallback small {
-      padding: 0 14px;
-      color: rgba(67, 56, 202, 0.82);
-      font-size: 0.8rem;
-      font-weight: 950;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+      display: none;
     }
 
     .rating-pill {
@@ -252,7 +247,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .content {
       display: grid;
-      gap: 8px;
+      gap: 6px;
       align-content: center;
       min-width: 0;
       padding: 16px;
@@ -272,13 +267,19 @@ import { MarketplaceService } from "../core/marketplace.service";
       justify-content: flex-start;
     }
 
+    .status-pill {
+      min-height: 24px;
+      padding: 0 10px;
+      white-space: nowrap;
+    }
+
     .topline > span:not(.status-pill):not(.countdown-pill),
     .footer-row > span {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      color: var(--muted);
-      font-size: 0.82rem;
+      color: #5f6877;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -298,8 +299,8 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .booking-status {
       min-width: 0;
-      color: var(--brand-800);
-      font-size: 0.84rem;
+      color: var(--text);
+      font-size: 0.86rem;
       font-weight: 850;
       line-height: 1.25;
     }
@@ -312,41 +313,33 @@ import { MarketplaceService } from "../core/marketplace.service";
       color: var(--muted);
     }
 
-    .booking-online {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      min-height: 24px;
-      padding: 0 9px;
-      border: 1px solid rgba(99, 102, 241, 0.22);
-      border-radius: 999px;
-      color: var(--primary-2);
-      background: var(--primary-soft);
-      font-size: 0.78rem;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-
     h3 {
       margin: 0;
       color: var(--text);
-      font-size: 1.02rem;
-      font-weight: 900;
+      font-size: 1.08rem;
+      font-weight: 950;
       letter-spacing: -0.035em;
       line-height: 1.1;
+    }
+
+    .featured-service {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.88rem;
+      font-weight: 900;
+      line-height: 1.25;
     }
 
     .business-meta {
       min-height: 19px;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 6px;
       margin: 0;
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.86rem;
       line-height: 1.35;
-      overflow: hidden;
-      white-space: nowrap;
     }
 
     .favorite:disabled,
@@ -363,20 +356,17 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .business-rating {
       display: inline-flex;
-      flex: 0 0 auto;
       align-items: center;
       gap: 3px;
       color: var(--primary-2);
       font-size: 0.86rem;
       font-weight: 900;
-      white-space: nowrap;
     }
 
     .business-rating.is-new {
       color: var(--muted);
-      font-size: 0.8rem;
-      font-weight: 850;
-      letter-spacing: 0.02em;
+      font-size: 0.84rem;
+      font-weight: 900;
     }
 
     .business-rating ion-icon { color: var(--primary); font-size: 0.8rem; }
@@ -385,21 +375,44 @@ import { MarketplaceService } from "../core/marketplace.service";
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
-    .business-category + .business-location::before {
+    .business-distance {
+      color: var(--muted);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .business-rating + .business-location::before,
+    .business-location + .business-distance::before,
+    .business-rating + .business-distance::before {
       content: "·";
       color: rgba(82, 101, 121, 0.68);
     }
 
-    .business-rating + .business-category::before,
-    .business-rating + .business-location::before {
-      content: "·";
-      color: rgba(82, 101, 121, 0.68);
+    .category-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 24px;
     }
 
-    .business-location ion-icon {
-      flex: 0 0 auto;
+    .business-category-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid rgba(75, 18, 56, 0.14);
+      border-radius: 999px;
+      color: #4b1238;
+      background: rgba(75, 18, 56, 0.08);
+      font-size: 0.82rem;
+      font-weight: 900;
+      white-space: nowrap;
     }
 
     .service-row {
@@ -410,16 +423,11 @@ import { MarketplaceService } from "../core/marketplace.service";
       background: transparent;
     }
 
-    .service-row span {
-      min-width: 0;
-      color: var(--text);
-      font-weight: 900;
-    }
-
     .service-row strong {
       flex: 0 0 auto;
       color: var(--primary-2);
       font-size: 0.88rem;
+      font-weight: 950;
     }
 
     .footer-row {
@@ -427,12 +435,13 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .footer-row ion-button {
-      min-width: 84px;
+      min-width: 76px;
       height: 44px;
       min-height: 44px;
-      --padding-start: 14px;
-      --padding-end: 14px;
-      font-size: 0.85rem;
+      --padding-start: 12px;
+      --padding-end: 12px;
+      font-size: 0.88rem;
+      white-space: nowrap;
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -1024,23 +1033,34 @@ export class BusinessCardComponent implements OnInit {
     return this.marketplace.formatMoney(pricePaise);
   }
 
-  /** Never surface "from ₹0" — hide the price until a real starting price exists. */
   priceLabel(): string {
-    const price = Number(this.business.startingPricePaise);
-    return price > 0 ? `from ${this.money(price)}` : "View prices";
+    const price = this.realStartingPricePaise();
+    return price > 0 ? `Services from ${this.money(price)}` : "";
   }
 
-  /** Review count beside the rating, e.g. "4.5 · 120". */
   ratingCountText(): string {
-    if (this.ratingText() === "New") return "";
+    if (this.isNewSalon()) return "";
     const count = Number(this.business.ratingCount || 0);
     return count > 0 ? ` · ${count}` : "";
+  }
+
+  ratingLabel(): string {
+    return this.isNewSalon() ? "New salon" : `${this.ratingText()}${this.ratingCountText()}`;
+  }
+
+  isNewSalon(): boolean {
+    return this.isNewForRating();
   }
 
   supportsOnlineBooking(): boolean {
     const hasOnlineMode = Array.isArray(this.business.paymentModes) && this.business.paymentModes.includes("online");
     const hasServices = Array.isArray(this.business.services) && this.business.services.length > 0;
     return hasOnlineMode && (hasServices || !!this.business.popularService || !!this.business.nextAvailableSlot);
+  }
+
+  statusLabel(): string {
+    if (this.supportsOnlineBooking()) return "Online booking available";
+    return this.isOpenNow() ? "Open today" : "Closed";
   }
 
   private get now(): number {
@@ -1080,22 +1100,23 @@ export class BusinessCardComponent implements OnInit {
     return this.isOpenNow() && closeAt !== null && closeAt > this.now && closeAt - this.now <= 2 * 60 * 60 * 1000;
   }
 
-  timingStatus(): string {
-    if (this.isOpenNow()) {
-      const closeAt = this.timestamp(this.business.nextCloseAt);
-      if (closeAt && closeAt > this.now && closeAt - this.now <= 2 * 60 * 60 * 1000) {
-        return `Closing in ${this.durationLabel(closeAt - this.now)}`;
-      }
-      return "Taking bookings";
-    }
+  timingLabel(): string {
+    const hours = this.hoursRangeLabel();
+    if (this.isOpenNow()) return hours ? `Open today · ${hours}` : "Open today";
     const openAt = this.nextOpeningTimestamp();
-    return openAt && openAt > this.now ? `Opening in ${this.durationLabel(openAt - this.now)}` : "Closed now";
+    return openAt && openAt > this.now ? `Closed · Opens ${this.timeLabel(openAt)}` : "Closed today";
   }
 
   distanceLabel(): string {
     const distance = this.realDistanceKm();
-    if (distance !== null) return `${this.decimalText(distance)} km`;
-    return String(this.business.area || this.business.city || this.business.address || "").trim();
+    return distance !== null ? `${this.decimalText(distance)} km` : "";
+  }
+
+  locationSummary(): string {
+    const parts = [this.shortAddress(), this.business.area, this.business.city]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return [...new Set(parts)].join(", ");
   }
 
   ratingText(): string {
@@ -1188,6 +1209,73 @@ export class BusinessCardComponent implements OnInit {
 
   isSaved(): boolean {
     return this.marketplace.isFavorite(this.business.id) || this.marketplace.isFavorite(this.business.slug);
+  }
+
+  featuredServiceLabel(): string {
+    const service = this.displayName(String(this.business.popularService || "").trim());
+    const category = this.displayName(String(this.business.category || "").trim());
+    return service && service.toLowerCase() !== category.toLowerCase() && service.toLowerCase() !== "service" ? service : "";
+  }
+
+  categoryChipLabel(): string {
+    return this.displayName(String(this.business.category || this.business.categories?.[0] || "").trim());
+  }
+
+  nextAvailabilityLabel(): string {
+    const next = String(this.business.nextAvailableSlot || "").trim();
+    if (next) return next;
+    return this.isOpenNow() ? "Book now" : "Availability updating";
+  }
+
+  private realStartingPricePaise(): number {
+    const servicePrices = (this.business.services || [])
+      .filter((service) => service.active !== false)
+      .map((service) => Number(service.pricePaise || 0))
+      .filter((price) => Number.isFinite(price) && price > 0);
+    if (servicePrices.length) return Math.min(...servicePrices);
+    const fallback = Number(this.business.startingPricePaise || 0);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+  }
+
+  private shortAddress(): string {
+    const raw = String(this.business.address || "").trim();
+    if (!raw) return "";
+    return raw.split(",")[0]?.trim() || raw;
+  }
+
+  private displayName(value: string): string {
+    const raw = String(value || "").trim().replace(/\s+/g, " ");
+    if (!raw) return "";
+    const normalized = raw.replace(/\bcompliment\s*ory\b/i, "Complimentary");
+    const upper = normalized.toUpperCase();
+    if (upper === "CLEAN") return "";
+    if (upper === "COLOURS") return "Hair Colour";
+    if (upper === "D-TANS") return "Detan";
+    if (upper === "MENS") return "Men’s Grooming";
+    if (upper === "PARTY") return "Party Makeup";
+    if (upper === "ROOT") return "Root Touch-up";
+    if (upper === "WASH") return "Hair Wash";
+    return normalized.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  private hoursRangeLabel(): string {
+    const open = this.timeOfDayLabel(this.business.openingTime);
+    const close = this.timeOfDayLabel(this.business.closingTime);
+    return open && close ? `${open}–${close}` : "";
+  }
+
+  private timeLabel(timestamp: number): string {
+    return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true }).format(new Date(timestamp));
+  }
+
+  private timeOfDayLabel(value?: string): string {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return raw;
+    const date = new Date();
+    date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+    return new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: undefined, hour12: true }).format(date).replace(":00", "");
   }
 
   isSalonSaved(): boolean {

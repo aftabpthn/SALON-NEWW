@@ -38,6 +38,8 @@ export type SalonModeContext = { tenantId: string; branchId: string; businessId?
 
 @Injectable({ providedIn: "root" })
 export class MarketplaceService {
+  private static readonly PUBLIC_BUSINESSES_CACHE_KEY = "aura_cached_public_businesses";
+  private static readonly PUBLIC_BUSINESSES_CACHE_TTL_MS = 15 * 60_000;
   private readonly loadingCount = signal(0);
   readonly loading = computed(() => this.loadingCount() > 0);
   readonly offline = signal(false);
@@ -97,6 +99,7 @@ export class MarketplaceService {
       this.salonModeStore.set(false);
       this.salonModeContextStore.set(null);
     }
+    this.hydrateBusinessesCache();
     this.initOfflineTracking();
   }
 
@@ -158,6 +161,35 @@ export class MarketplaceService {
     return parsed.tenantId && parsed.branchId ? { ...parsed, tenantId: parsed.tenantId, branchId: parsed.branchId } : null;
   }
 
+  private setBusinesses(rows: Business[]) {
+    this.businesses.set(rows);
+    this.persistBusinessesCache(rows);
+  }
+
+  private hydrateBusinessesCache(): void {
+    try {
+      const raw = localStorage.getItem(MarketplaceService.PUBLIC_BUSINESSES_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { at?: number; rows?: Business[] };
+      if (!parsed?.at || !Array.isArray(parsed.rows)) return;
+      if (parsed.at < Date.now() - MarketplaceService.PUBLIC_BUSINESSES_CACHE_TTL_MS) return;
+      const rows = parsed.rows.map((business) => this.normalizeBusiness(business));
+      if (!rows.length) return;
+      this.businesses.set(rows);
+      this.publicBusinessesLoadedAt = parsed.at;
+    } catch {
+      // localStorage can be unavailable or corrupted.
+    }
+  }
+
+  private persistBusinessesCache(rows: Business[]): void {
+    try {
+      localStorage.setItem(MarketplaceService.PUBLIC_BUSINESSES_CACHE_KEY, JSON.stringify({ at: Date.now(), rows }));
+    } catch {
+      // localStorage can be unavailable.
+    }
+  }
+
   async loadPublicBusinesses(params: SearchBusinessesParams = {}): Promise<Business[]> {
     return this.run("Unable to load businesses", async () => {
       const isDefault = Object.keys(params).length === 0;
@@ -167,7 +199,7 @@ export class MarketplaceService {
       const requestId = ++this.businessesRequestCounter;
       const rows = (await firstValueFrom(this.api.listPublicBusinesses(params))).map((business) => this.normalizeBusiness(business));
       if (requestId !== this.businessesRequestCounter) return this.businesses();
-      this.businesses.set(rows);
+      this.setBusinesses(rows);
       if (isDefault) this.publicBusinessesLoadedAt = Date.now();
       return rows;
     });
@@ -178,7 +210,7 @@ export class MarketplaceService {
       const requestId = ++this.businessesRequestCounter;
       const rows = (await firstValueFrom(this.api.searchPublicBusinesses(params))).map((business) => this.normalizeBusiness(business));
       if (requestId !== this.businessesRequestCounter) return this.businesses();
-      this.businesses.set(rows);
+      this.setBusinesses(rows);
       return rows;
     });
   }
@@ -212,6 +244,7 @@ export class MarketplaceService {
         if (index === -1) return [profile, ...rows];
         return rows.map((row, rowIndex) => rowIndex === index ? profile : row);
       });
+      this.persistBusinessesCache(this.businesses());
       return profile;
     });
   }

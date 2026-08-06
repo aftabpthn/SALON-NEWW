@@ -276,10 +276,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
         right: 8px;
         bottom: calc(8px + env(safe-area-inset-bottom));
         width: auto;
-        height: calc(52px + env(safe-area-inset-bottom));
-        min-height: calc(52px + env(safe-area-inset-bottom));
+        height: calc(48px + env(safe-area-inset-bottom));
+        min-height: calc(48px + env(safe-area-inset-bottom));
         margin: 0;
-        border-radius: 16px;
+        border-radius: 14px;
         box-sizing: border-box;
         overflow: hidden;
       }
@@ -353,10 +353,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
     ion-tab-bar {
       --background: var(--glass);
       --border: 1px solid rgba(99, 102, 241, 0.16);
-      height: calc(54px + env(safe-area-inset-bottom));
-      min-height: calc(54px + env(safe-area-inset-bottom));
-      padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
-      box-shadow: 0 -8px 24px rgba(28, 28, 28, 0.08);
+      height: calc(50px + env(safe-area-inset-bottom));
+      min-height: calc(50px + env(safe-area-inset-bottom));
+      padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
+      box-shadow: 0 -4px 14px rgba(28, 28, 28, 0.05);
       backdrop-filter: blur(18px);
     }
 
@@ -366,15 +366,15 @@ import { MarketplaceService } from "../../core/marketplace.service";
       --ripple-color: rgba(99, 102, 241, 0.18);
       min-width: 0;
       min-height: 44px;
-      border-radius: 12px;
-      font-size: 0.76rem;
+      border-radius: 10px;
+      font-size: 0.75rem;
       font-weight: 850;
     }
 
     ion-tab-button ion-icon {
-      padding: 4px 14px;
+      padding: 3px 12px;
       border-radius: 999px;
-      font-size: 1.16rem;
+      font-size: 1.1rem;
       transition: background-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
     }
 
@@ -391,6 +391,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
       ion-tabs {
         padding-top: 0;
+        padding-bottom: calc(50px + env(safe-area-inset-bottom) + 16px);
       }
     }
 
