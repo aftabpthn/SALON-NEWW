@@ -2075,7 +2075,9 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     }
     this.clearPendingIntent();
     const successUrl = this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success";
-    this.router.navigateByUrl(successUrl, { state: this.buildSuccessState() });
+    const successState = this.buildSuccessState();
+    try { sessionStorage.setItem("aura_booking_success", JSON.stringify(successState)); } catch { /* session storage unavailable */ }
+    this.router.navigateByUrl(successUrl, { state: successState });
   }
 
   backHref(): string {

@@ -454,16 +454,31 @@ interface SuccessState {
 export class BookingSuccessPage {
   readonly booking = computed(() => this.marketplace.latestBooking());
   readonly copied = signal(false);
+  private persistedState: SuccessState | null | undefined;
 
   constructor(readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, checkmarkDoneOutline, checkmarkOutline, copyOutline, homeOutline, navigateOutline });
   }
 
-  /** Full appointment context: router state from the booking flow, with single-booking fallback. */
+  /** Router state is lost on refresh; fall back to the session-persisted confirmation context. */
+  private readPersistedState(): SuccessState | null {
+    if (this.persistedState !== undefined) return this.persistedState;
+    try {
+      const raw = sessionStorage.getItem("aura_booking_success");
+      this.persistedState = raw ? (JSON.parse(raw) as SuccessState) : null;
+    } catch {
+      this.persistedState = null;
+    }
+    return this.persistedState;
+  }
+
+  /** Full appointment context: router state from the booking flow, with session-persisted and single-booking fallbacks. */
   readonly display = computed<SuccessContext | null>(() => {
     const state = (history.state ?? {}) as SuccessState;
-    const stateServices = Array.isArray(state.services) && state.services.length ? state.services : null;
-    if (stateServices) {
+    const persisted = this.readPersistedState();
+    const effective = state && Array.isArray(state.services) && state.services.length ? state : persisted;
+    if (effective && Array.isArray(effective.services) && effective.services.length) {
+      const stateServices = effective.services;
       const services: SuccessServiceRow[] = stateServices.map((row) => ({
         name: row.name || "Service",
         staff: row.staff || "Any available professional",
@@ -474,23 +489,23 @@ export class BookingSuccessPage {
         timeLabel: this.formatTime(row.startIso || "")
       }));
       const booking = this.booking();
-      const businessName = state.businessName || booking?.businessName || "";
-      const area = state.area || "";
-      const city = state.city || "";
-      const address = state.address || booking?.address || (area ? `${area}${city ? ", " + city : ""}` : businessName || "Salon address");
-      const reference = state.reference || booking?.reference || "";
-      const startIso = state.startIso || services[0]?.startIso || "";
-      const endIso = state.endIso || services[services.length - 1]?.endIso || "";
+      const businessName = effective.businessName || booking?.businessName || "";
+      const area = effective.area || "";
+      const city = effective.city || "";
+      const address = effective.address || booking?.address || (area ? `${area}${city ? ", " + city : ""}` : businessName || "Salon address");
+      const reference = effective.reference || booking?.reference || "";
+      const startIso = effective.startIso || services[0]?.startIso || "";
+      const endIso = effective.endIso || services[services.length - 1]?.endIso || "";
       const location = area || businessName || "the salon";
       return {
         services,
         title: `${services.length} service${services.length === 1 ? "" : "s"} at ${location}`,
-        statusLabel: this.statusLabel(state.status || booking?.status || "confirmed"),
+        statusLabel: this.statusLabel(effective.status || booking?.status || "confirmed"),
         address,
         reference,
         referenceLabel: this.referenceLabel(reference),
         visitRange: this.visitRange(startIso, endIso),
-        dueLabel: state.dueLabel || "",
+        dueLabel: effective.dueLabel || "",
         cancellationCutoff: this.cancellationCutoff(startIso),
         startIso,
         endIso,
