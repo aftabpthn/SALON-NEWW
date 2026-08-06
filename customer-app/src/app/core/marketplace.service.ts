@@ -319,12 +319,36 @@ export class MarketplaceService {
   }
 
   async toggleFavorite(businessId: string): Promise<boolean> {
-    if (this.isFavorite(businessId)) {
-      await this.removeFavorite(businessId);
-      return false;
-    }
-    await this.addFavorite(businessId);
-    return true;
+    return this.run("Unable to update saved salon", async () => {
+      const wasFavorite = this.isFavorite(businessId);
+      const placeholder = this.optimisticFavorite(businessId);
+      this.favorites.update((rows) => wasFavorite
+        ? this.withoutFavorite(rows, businessId)
+        : [placeholder, ...rows]);
+      this.favoritesLoaded = true;
+      try {
+        if (wasFavorite) {
+          await firstValueFrom(this.api.removeFavorite(businessId));
+          return false;
+        }
+        const favorite = await firstValueFrom(this.api.addFavorite(businessId));
+        this.favorites.update((rows) => [favorite, ...this.withoutFavorite(rows, businessId)]);
+        return true;
+      } catch (error) {
+        this.favorites.update((rows) => wasFavorite
+          ? [placeholder, ...this.withoutFavorite(rows, businessId)]
+          : this.withoutFavorite(rows, businessId));
+        throw error;
+      }
+    });
+  }
+
+  private optimisticFavorite(businessId: string): CustomerFavorite {
+    return { businessId, business: { id: businessId } as Business, createdAt: new Date().toISOString() };
+  }
+
+  private withoutFavorite(rows: CustomerFavorite[], businessId: string): CustomerFavorite[] {
+    return rows.filter((row) => row.businessId !== businessId && row.business?.id !== businessId && row.business?.slug !== businessId);
   }
 
   async ensureSavedSalons(): Promise<CustomerFavorite[]> {
@@ -342,16 +366,26 @@ export class MarketplaceService {
 
   async toggleSavedSalon(businessId: string): Promise<boolean> {
     return this.run("Unable to update saved salons", async () => {
-      if (this.isSalonSaved(businessId)) {
-        await firstValueFrom(this.api.removeSavedSalon(businessId));
-        this.savedSalons.update((rows) => rows.filter((row) => row.businessId !== businessId && row.business?.id !== businessId && row.business?.slug !== businessId));
-        this.savedSalonsLoaded = true;
-        return false;
-      }
-      const saved = await firstValueFrom(this.api.saveSalon(businessId));
-      this.savedSalons.update((rows) => [saved, ...rows.filter((row) => row.businessId !== saved.businessId)]);
+      const wasSaved = this.isSalonSaved(businessId);
+      const placeholder = this.optimisticFavorite(businessId);
+      this.savedSalons.update((rows) => wasSaved
+        ? this.withoutFavorite(rows, businessId)
+        : [placeholder, ...rows]);
       this.savedSalonsLoaded = true;
-      return true;
+      try {
+        if (wasSaved) {
+          await firstValueFrom(this.api.removeSavedSalon(businessId));
+          return false;
+        }
+        const saved = await firstValueFrom(this.api.saveSalon(businessId));
+        this.savedSalons.update((rows) => [saved, ...this.withoutFavorite(rows, businessId)]);
+        return true;
+      } catch (error) {
+        this.savedSalons.update((rows) => wasSaved
+          ? [placeholder, ...this.withoutFavorite(rows, businessId)]
+          : this.withoutFavorite(rows, businessId));
+        throw error;
+      }
     });
   }
 
