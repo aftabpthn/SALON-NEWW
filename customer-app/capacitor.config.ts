@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: "com.aura.customer",
   appName: "Aura Booking",
   webDir: "www/browser",
-  bundledWebRuntime: false,
   server: {
     androidScheme: "https"
   },

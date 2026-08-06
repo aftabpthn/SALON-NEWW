@@ -6,6 +6,7 @@ import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
 import { Capacitor } from "@capacitor/core";
+import { SettingsLauncher } from "@capawesome/capacitor-settings-launcher";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
@@ -3753,7 +3754,12 @@ useLocation(isManualRetry = false) {
 
   async openDeviceSettings() {
     if (Capacitor.isNativePlatform()) {
-      this.mapError.set("Open Settings > App permissions for this app and allow Location, then come back and tap Retry location.");
+      try {
+        await SettingsLauncher.openAppSettings();
+        return;
+      } catch {
+        this.mapError.set("Open Settings > App permissions for this app and allow Location, then come back and tap Retry location.");
+      }
     } else {
       this.mapError.set("Open your browser's site settings for this app and allow location access, then retry. You can also pick an area on the map or enter a city manually.");
     }
