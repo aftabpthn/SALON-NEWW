@@ -314,15 +314,15 @@ export class SettingsPage implements OnInit {
   };
   devices: CustomerDeviceSession[] = [];
   message = "";
-  themeMode: "system" | "light" | "dark" = "system";
+  themeMode: "system" | "light" | "dark" = "light";
 
   constructor(readonly marketplace: MarketplaceService, readonly auth: AuthService, private readonly router: Router) {
     addIcons({ contrastOutline, fingerPrintOutline, moonOutline, phonePortraitOutline, sunnyOutline, trashOutline });
     try {
       const saved = localStorage.getItem("aura-theme");
-      if (saved === "light" || saved === "dark") this.themeMode = saved;
+      if (saved === "light" || saved === "dark" || saved === "system") this.themeMode = saved;
     } catch {
-      this.themeMode = "system";
+      this.themeMode = "light";
     }
   }
 
@@ -349,13 +349,8 @@ export class SettingsPage implements OnInit {
   setTheme(mode: "system" | "light" | "dark") {
     this.themeMode = mode;
     try {
-      if (mode === "system") {
-        localStorage.removeItem("aura-theme");
-        document.documentElement.removeAttribute("data-theme");
-      } else {
-        localStorage.setItem("aura-theme", mode);
-        document.documentElement.setAttribute("data-theme", mode);
-      }
+      localStorage.setItem("aura-theme", mode);
+      document.documentElement.setAttribute("data-theme", mode);
     } catch {
       // storage unavailable — theme still applies for this session
     }

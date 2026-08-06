@@ -1731,7 +1731,7 @@ ion-button:active,
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root[data-theme="system"] {
     --customer-bg-premium:
       radial-gradient(circle at 92% 2%, rgba(99, 102, 241, 0.2), transparent 32%),
       radial-gradient(circle at 8% 36%, rgba(244, 114, 182, 0.1), transparent 34%),

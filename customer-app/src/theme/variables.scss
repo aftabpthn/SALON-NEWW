@@ -173,7 +173,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root[data-theme="system"] {
     @include aura-dark-mode;
   }
 }

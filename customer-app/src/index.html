@@ -7,15 +7,17 @@
     <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="format-detection" content="telephone=no" />
     <meta name="msapplication-tap-highlight" content="no" />
-    <meta name="theme-color" content="#1C1C1C" />
+    <meta name="theme-color" content="#FFFAF6" />
     <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg" />
     <link rel="manifest" href="manifest.webmanifest" />
     <script>
       // Restore the user's chosen theme before the app paints (no flash).
       try {
         var auraTheme = localStorage.getItem("aura-theme");
-        if (auraTheme === "light" || auraTheme === "dark") {
+        if (auraTheme === "light" || auraTheme === "dark" || auraTheme === "system") {
           document.documentElement.setAttribute("data-theme", auraTheme);
+        } else {
+          document.documentElement.setAttribute("data-theme", "light");
         }
       } catch (e) {}
     </script>
