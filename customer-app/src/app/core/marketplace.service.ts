@@ -13,6 +13,7 @@ import {
   CustomerInvoice,
   CustomerMembership,
   CustomerMembershipPlan,
+  CustomerPackage,
   CustomerPaymentLink,
   CustomerPrimarySalon,
   CustomerProfile,
@@ -26,7 +27,9 @@ import {
   RedeemGiftCardPayload,
   RedeemGiftCardResponse,
   RescheduleBookingPayload,
-  SearchBusinessesParams
+  SearchBusinessesParams,
+  SlotHold,
+  SlotHoldPayload
 } from "./api.types";
 import { AuthService } from "./auth.service";
 import { CustomerApiService } from "./customer-api.service";
@@ -288,6 +291,17 @@ export class MarketplaceService {
     });
   }
 
+  async createSlotHold(payload: SlotHoldPayload): Promise<SlotHold> {
+    return this.run("Unable to reserve slot", async () => {
+      const hold = await firstValueFrom(this.api.createSlotHold(payload));
+      return hold;
+    });
+  }
+
+  async releaseSlotHold(holdId: string): Promise<void> {
+    await firstValueFrom(this.api.releaseSlotHold(holdId));
+  }
+
   async joinBookingWaitlist(id: string, payload: JoinWaitlistPayload = {}): Promise<CustomerWaitlistEntry> {
     return this.run("Unable to join waitlist", () => firstValueFrom(this.api.joinBookingWaitlist(id, payload)));
   }
@@ -465,6 +479,13 @@ export class MarketplaceService {
     return this.run("Unable to load memberships", async () => {
       const rows = await firstValueFrom(this.api.listMembershipPlans({ branchId }));
       this.membershipPlans.set(rows);
+      return rows;
+    });
+  }
+
+  async loadMyPackages(): Promise<CustomerPackage[]> {
+    return this.run("Unable to load packages", async () => {
+      const rows = await firstValueFrom(this.api.listPackages());
       return rows;
     });
   }

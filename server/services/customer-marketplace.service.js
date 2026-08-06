@@ -1,5 +1,6 @@
 import { columnsFor, db } from "../db.js";
 import { badRequest, notFound } from "../utils/app-error.js";
+import { enrichServicesWithHappyHours } from "../utils/happy-hours-portal-enrichment.js";
 
 const DEFAULT_TIMEZONE = "Asia/Kolkata";
 const DEFAULT_OPEN = "10:00";
@@ -560,7 +561,8 @@ export const customerMarketplaceService = {
 
   services(slug) {
     const business = resolveBusiness(slug);
-    return serviceRows(business.tenantId, business.branchId).map((service) => serviceItem(service, business.branchId));
+    const services = serviceRows(business.tenantId, business.branchId).map((service) => serviceItem(service, business.branchId));
+    return enrichServicesWithHappyHours(services, { tenantId: business.tenantId, branchId: business.branchId });
   },
 
   staff(slug) {

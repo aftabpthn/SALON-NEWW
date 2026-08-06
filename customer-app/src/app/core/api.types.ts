@@ -47,6 +47,15 @@ export interface ServiceItem {
   category: string;
   popular?: boolean;
   active?: boolean;
+  happyHour?: {
+    id: string;
+    name: string;
+    discountPaise: number;
+    finalPricePaise: number;
+    discountType: string;
+    discountValue: number;
+    timeRange: string;
+  } | null;
 }
 
 export interface StaffMember {
@@ -567,6 +576,7 @@ export interface CustomerPackage {
   status: string;
   createdAt?: string;
   updatedAt?: string;
+  serviceIds?: string[];
 }
 
 export interface CustomerGiftCard {
@@ -844,6 +854,26 @@ export interface MySalonDashboardNotification {
   message: string;
   createdAt: string;
   readAt?: string | null;
+}
+
+export interface SlotHoldPayload {
+  serviceIds: string[];
+  staffId?: string | null;
+  branchId?: string;
+  startAt: string;
+  durationMinutes?: number;
+}
+
+export interface SlotHold {
+  holdId: string;
+  serviceIds: string[];
+  staffId: string | null;
+  branchId: string;
+  startAt: string;
+  endAt: string;
+  expiresAt: string;
+  status: "active" | "expired" | "converted" | "released";
+  createdAt: string;
 }
 
 export interface MySalonDashboard {

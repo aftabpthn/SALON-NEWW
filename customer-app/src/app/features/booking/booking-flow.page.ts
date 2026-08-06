@@ -4,7 +4,7 @@ import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { alertCircleOutline, arrowBackOutline, calendarOutline, callOutline, chatbubbleOutline, checkmarkCircleOutline, checkmarkOutline, chevronBackOutline, chevronDownOutline, chevronForwardOutline, flashOutline, locationOutline, personOutline, searchOutline, sparklesOutline, storefrontOutline, timeOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
-import { AvailabilityDay, AvailabilitySlot, ServiceItem, StaffMember } from "../../core/api.types";
+import { AvailabilityDay, AvailabilitySlot, ServiceItem, StaffMember, CustomerPackage, SlotHold, SlotHoldPayload } from "../../core/api.types";
 import { BookingProgressComponent, BookingProgressStepId } from "./booking-progress.component";
 import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-header.component";
 
@@ -92,7 +92,7 @@ type BookingFlowItem = {
                     <ion-icon name="chevron-down-outline" aria-hidden="true"></ion-icon>
                   </button>
                   @if (!groupCollapsed(group.label)) {
-                    <div class="service-list">
+<div class="service-list">
                       @for (service of group.services; track service.id) {
                         <div class="service-card premium-card" [class.selected]="isServiceSelected(service.id)" [class.expanded]="expandedServiceId() === service.id">
                           <button type="button" class="service-card-main" (click)="toggleServiceDetails(service.id)" [attr.aria-expanded]="expandedServiceId() === service.id">
@@ -100,9 +100,16 @@ type BookingFlowItem = {
                               <strong class="service-name">{{ formatServiceName(service.name) }}</strong>
                               @if (service.popular) { <span class="offer-pill">Popular</span> }
                               @if (service.durationMinutes >= 120) { <span class="offer-pill extended">Extended visit</span> }
+                              @if (packageCoverageLabel(service); as label) { <span class="offer-pill package-tag">{{ label }}</span> }
                             </span>
-                            <span class="service-price-row">
-                              <strong>{{ money(service.pricePaise) }}</strong>
+<span class="service-price-row">
+                              @if (getHappyHour(service); as hh) {
+                                <span class="original-price">{{ money(service.pricePaise) }}</span>
+                                <strong class="discounted-price">{{ money(hh.finalPricePaise) }}</strong>
+                                <span class="discount-badge">{{ hh.discountValue }}{{ hh.discountType === 'percent' ? '%' : '₹' }} off</span>
+                              } @else {
+                                <strong>{{ money(service.pricePaise) }}</strong>
+                              }
                               <span>{{ service.durationMinutes || 0 }} min</span>
                             </span>
                             <span class="service-desc">{{ serviceDescription(service) }}</span>
@@ -116,9 +123,14 @@ type BookingFlowItem = {
                           @if (expandedServiceId() === service.id) {
                             <div class="service-details">
                               <p>{{ service.description || serviceDescription(service) }}</p>
-                              <dl>
+<dl>
                                 <div><dt>Duration</dt><dd>{{ service.durationMinutes || 0 }} min</dd></div>
-                                <div><dt>Price</dt><dd>{{ money(service.pricePaise) }}</dd></div>
+                                @if (getHappyHour(service); as hh) {
+                                  <div><dt>Original price</dt><dd class="original-price">{{ money(service.pricePaise) }}</dd></div>
+                                  <div><dt>Happy hour price</dt><dd class="discounted-price">{{ money(hh.finalPricePaise) }}</dd></div>
+                                } @else {
+                                  <div><dt>Price</dt><dd>{{ money(service.pricePaise) }}</dd></div>
+                                }
                                 <div><dt>Eligible professionals</dt><dd>{{ eligibleStaffLabel(service) }}</dd></div>
                               </dl>
                             </div>
@@ -332,12 +344,12 @@ type BookingFlowItem = {
                     }
                   } @else {
                     @for (date of visibleAvailabilityDays(); track date.date) {
-                      <button
+<button
                         class="date-card"
-                        [class.selected]="activeItem()?.date === date.date"
+                        [class.selected]="getActiveItemDate() === date.date"
                         [class.full]="dateAvailabilityClass(date) === 'full'"
                         [attr.aria-label]="dateCardLabel(date)"
-                        [attr.aria-pressed]="activeItem()?.date === date.date"
+                        [attr.aria-pressed]="getActiveItemDate() === date.date"
                         (click)="setDate(date.date)">
                         <span class="date-dot" [class]="dateAvailabilityClass(date)"></span>
                         <strong>{{ date.dayLabel }}</strong>
@@ -1085,7 +1097,11 @@ type BookingFlowItem = {
     .service-price-row strong { color: var(--primary); font-size: 0.9rem; font-weight: 950; }
     .service-price-row span { color: var(--muted); font-size: 0.88rem; font-weight: 850; }
     .service-desc { display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 0.82rem; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .offer-pill.extended { color: var(--muted); border-color: var(--border); background: var(--surface-soft); }
+.offer-pill.extended { color: var(--muted); border-color: var(--border); background: var(--surface-soft); }
+    .offer-pill.package-tag { color: #059669; border-color: #D1FAE5; background: #ECFDF5; }
+    .service-price-row .original-price { text-decoration: line-through; color: var(--muted); font-weight: 800; }
+    .service-price-row .discounted-price { color: #059669; font-size: 0.92rem; }
+    .discount-badge { font-size: 0.72rem; font-weight: 900; padding: 2px 6px; border-radius: 4px; color: #059669; background: #ECFDF5; }
     .service-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .service-eligibility { min-width: 0; overflow: hidden; color: var(--muted); font-size: 0.84rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
     .add-service-btn { min-width: 84px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px; border: 1.5px solid rgba(99, 102, 241, 0.45); border-radius: 999px; color: var(--primary); background: var(--surface); font-size: 0.84rem; font-weight: 950; }
@@ -1468,7 +1484,7 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     return `${minutes} min`;
   }
 
-  readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.initialServiceIds().length ? 2 : 1)));
+readonly step = signal(Number(this.route.snapshot.queryParamMap.get("step") || (this.initialServiceIds().length ? 2 : 1)));
   readonly bookingItems = signal<BookingFlowItem[]>(this.initialServiceIds().map((serviceId) => ({
     serviceId,
     staffId: this.route.snapshot.queryParamMap.get("staffId") || null,
@@ -1486,6 +1502,8 @@ export class BookingFlowPage implements OnInit, OnDestroy {
   readonly assignmentMode = signal<"auto" | "manual">("auto");
   readonly activeGenderFilter = signal("");
   readonly pendingStaffChange = signal<{ index: number; staffId: string | null } | null>(null);
+  readonly myPackages = signal<CustomerPackage[]>([]);
+  readonly activeHoldId = signal<string | null>(null);
   private readonly slug = signal(this.route.snapshot.paramMap.get("slug"));
   readonly business = computed(() => this.marketplace.findBusiness(this.slug()));
   readonly selectedServices = computed(() => this.bookingItems().map((item) => this.serviceById(item.serviceId)).filter((service): service is ServiceItem => !!service));
@@ -1513,6 +1531,18 @@ export class BookingFlowPage implements OnInit, OnDestroy {
   }
 
   readonly hasBookableServices = computed(() => (this.business()?.services?.length ?? 0) > 0);
+
+  readonly servicePackageCoverage = computed(() => {
+    const packages = this.myPackages();
+    if (!packages.length) return new Set<string>();
+    const covered = new Set<string>();
+    for (const pkg of packages) {
+      if (pkg.serviceIds?.length) {
+        for (const id of pkg.serviceIds) covered.add(id);
+      }
+    }
+    return covered;
+  });
 
   readonly otherBranches = computed(() => {
     const current = this.business();
@@ -1612,6 +1642,21 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     return count > 0 ? `${count} professional${count === 1 ? "" : "s"} available` : "Any available professional";
   }
 
+  packageCoverageLabel(service: ServiceItem): string | null {
+    const coveredIds = this.servicePackageCoverage();
+    if (!coveredIds.has(service.id)) return null;
+    const pkg = this.myPackages().find((p) => p.serviceIds?.includes(service.id));
+    return pkg ? `Covered by ${pkg.name}` : "Package eligible";
+  }
+
+  getHappyHour(service: ServiceItem): NonNullable<ServiceItem["happyHour"]> | null {
+    return service.happyHour ?? null;
+  }
+
+  getActiveItemDate(): string | null {
+    return this.activeItem()?.date ?? null;
+  }
+
   onServiceSearch(event: Event) {
     this.serviceQuery.set(String((event.target as HTMLInputElement).value));
   }
@@ -1646,9 +1691,12 @@ export class BookingFlowPage implements OnInit, OnDestroy {
       clearInterval(this.holdTimerInterval);
       this.holdTimerInterval = null;
     }
+    if (this.activeHoldId()) {
+      this.marketplace.releaseSlotHold(this.activeHoldId()!).catch(() => {});
+    }
   }
 
-  async reload() {
+async reload() {
     const slug = await this.resolveBusinessSlug();
     if (!slug) return;
     this.slug.set(slug);
@@ -1658,6 +1706,9 @@ export class BookingFlowPage implements OnInit, OnDestroy {
       this.slug.set(fallbackSlug);
       await this.marketplace.loadBusiness(fallbackSlug).catch(() => undefined);
     });
+    if (this.marketplace.isAuthenticated()) {
+      this.marketplace.loadMyPackages().then((pkgs) => this.myPackages.set(pkgs)).catch(() => this.myPackages.set([]));
+    }
     if (!this.isRescheduling()) this.restorePendingIntent();
     if (!this.route.snapshot.queryParamMap.has("step")) {
       this.step.set(this.bookingItems().length ? 2 : 1);
@@ -2069,13 +2120,17 @@ export class BookingFlowPage implements OnInit, OnDestroy {
         });
         createdCount += 1;
       }
-    } catch {
+} catch {
       const remaining = items.length - createdCount;
       this.marketplace.error.set(createdCount > 0
         ? `${createdCount} service${createdCount === 1 ? "" : "s"} were booked, but ${remaining} could not be completed. Please check My bookings before trying again.`
         : this.marketplace.error() || "Could not complete booking. Please try again.");
       this.step.set(4);
       return;
+    }
+    if (this.activeHoldId()) {
+      await this.marketplace.releaseSlotHold(this.activeHoldId()!).catch(() => {});
+      this.activeHoldId.set(null);
     }
     this.clearPendingIntent();
     const successUrl = this.marketplace.salonMode() ? this.marketplace.salonModeUrl("booking", "success") : "/booking/success";
@@ -2273,30 +2328,80 @@ export class BookingFlowPage implements OnInit, OnDestroy {
     this.flowWarning.set("No other dates with continuously available times were found in this window. Try another day or branch.");
   }
 
-  formatHoldTimer(seconds: number): string {
+formatHoldTimer(seconds: number): string {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
 
-  startHoldTimer() {
+  async startHoldTimer() {
     this.slotHoldSeconds.set(300);
     this.slotExpiredWarning.set("");
     if (this.holdTimerInterval) clearInterval(this.holdTimerInterval);
-    this.holdTimerInterval = setInterval(() => {
-      const current = this.slotHoldSeconds();
-      if (current === null || current <= 1) {
-        clearInterval(this.holdTimerInterval);
-        this.slotHoldSeconds.set(null);
-        this.slotExpiredWarning.set("Your 5-minute slot reservation expired. Please pick a slot again.");
-      } else {
-        this.slotHoldSeconds.set(current - 1);
-      }
-    }, 1000);
+
+    const business = this.business();
+    const items = this.bookingItems();
+    if (!business || !items.length) return;
+
+    const firstItem = items[0];
+    const serviceIds = items.map((i) => i.serviceId);
+    const staffId = firstItem.staffId || undefined;
+    const startAt = firstItem.slotStartAt;
+    const durationMinutes = items.reduce((acc, item) => {
+      const service = this.serviceById(item.serviceId);
+      return acc + (service?.durationMinutes || 20);
+    }, 0) + items.length * 5;
+
+    try {
+      const hold = await this.marketplace.createSlotHold({
+        serviceIds,
+        staffId,
+        branchId: business.id,
+        startAt,
+        durationMinutes
+      });
+      this.activeHoldId.set(hold.holdId);
+      const expiresAt = new Date(hold.expiresAt).getTime();
+      const updateTimer = () => {
+        const now = Date.now();
+        const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
+        this.slotHoldSeconds.set(remaining);
+        if (remaining <= 1) {
+          clearInterval(this.holdTimerInterval);
+          this.slotHoldSeconds.set(null);
+          this.activeHoldId.set(null);
+          this.slotExpiredWarning.set("Your slot reservation expired. Please pick a slot again.");
+        }
+      };
+      updateTimer();
+      this.holdTimerInterval = setInterval(updateTimer, 1000);
+    } catch (error) {
+      console.warn("Slot hold failed, using local timer:", error);
+      this.holdTimerInterval = setInterval(() => {
+        const current = this.slotHoldSeconds();
+        if (current === null || current <= 1) {
+          clearInterval(this.holdTimerInterval);
+          this.slotHoldSeconds.set(null);
+          this.slotExpiredWarning.set("Your 5-minute slot reservation expired. Please pick a slot again.");
+        } else {
+          this.slotHoldSeconds.set(current - 1);
+        }
+      }, 1000);
+    }
   }
 
-  selectActiveSlot(slot: AvailabilitySlot) {
+async selectActiveSlot(slot: AvailabilitySlot) {
     if (!this.isSlotSelectable(slot)) return;
+    if (this.activeHoldId()) {
+      await this.marketplace.releaseSlotHold(this.activeHoldId()!).catch(() => {});
+      this.activeHoldId.set(null);
+    }
+    if (this.holdTimerInterval) {
+      clearInterval(this.holdTimerInterval);
+      this.holdTimerInterval = null;
+    }
+    this.slotHoldSeconds.set(null);
+    this.slotExpiredWarning.set("");
     const selectedDate = this.activeItem()?.date || slot.startAt.slice(0, 10);
 
     if (this.continuousVisitMode()) {

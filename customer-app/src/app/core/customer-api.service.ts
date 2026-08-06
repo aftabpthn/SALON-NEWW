@@ -31,9 +31,8 @@ import {
   CustomerPayment,
   CustomerPaymentLink,
   CustomerPrimarySalon,
-  CustomerPushDevicePayload,
-  MySalonDashboard,
   CustomerProfile,
+  CustomerPushDevicePayload,
   CustomerRewardSummary,
   CustomerSalonsResponse,
   CustomerWallet,
@@ -43,6 +42,7 @@ import {
   JoinWaitlistPayload,
   LiveConsultationRequest,
   LiveConsultationResponse,
+  MySalonDashboard,
   OtpRequestResponse,
   PublicOffersResponse,
   PurchaseGiftCardPayload,
@@ -52,6 +52,8 @@ import {
   SearchBusinessesParams,
   SendCustomerBookingChatMessagePayload,
   ServiceItem,
+  SlotHold,
+  SlotHoldPayload,
   StaffMember,
   BusinessReview
 } from "./api.types";
@@ -300,9 +302,21 @@ export class CustomerApiService {
     );
   }
 
-  joinBookingWaitlist(id: string, payload: JoinWaitlistPayload = {}): Observable<CustomerWaitlistEntry> {
+joinBookingWaitlist(id: string, payload: JoinWaitlistPayload = {}): Observable<CustomerWaitlistEntry> {
     return this.http.post<ApiResponse<CustomerWaitlistEntry>>(`${this.baseUrl}/customer/bookings/${encodeURIComponent(id)}/waitlist`, payload).pipe(
       map((response) => this.unwrap<CustomerWaitlistEntry>(response))
+    );
+  }
+
+  createSlotHold(payload: SlotHoldPayload): Observable<SlotHold> {
+    return this.http.post<ApiResponse<SlotHold>>(`${this.baseUrl}/customer/slot-holds`, payload).pipe(
+      map((response) => this.unwrap<SlotHold>(response))
+    );
+  }
+
+  releaseSlotHold(holdId: string): Observable<{ ok: true }> {
+    return this.http.delete<ApiResponse<{ ok: true }>>(`${this.baseUrl}/customer/slot-holds/${encodeURIComponent(holdId)}`).pipe(
+      map((response) => this.unwrap<{ ok: true }>(response))
     );
   }
 

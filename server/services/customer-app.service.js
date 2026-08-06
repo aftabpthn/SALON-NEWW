@@ -506,7 +506,8 @@ function packages(access) {
     creditsRemaining: 0,
     status: item.status || "active",
     createdAt: item.createdAt || "",
-    updatedAt: item.updatedAt || ""
+    updatedAt: item.updatedAt || "",
+    serviceIds: JSON.parse(item.serviceIds || "[]")
   }));
 }
 

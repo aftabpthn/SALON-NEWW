@@ -3,6 +3,7 @@ import { authenticateJwt } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/async-handler.js";
 import { customerAppService } from "../services/customer-app.service.js";
 import { customerNotificationService } from "../services/customer-notification.service.js";
+import { slotReservationService } from "../services/slot-reservation.service.js";
 
 export const customerAppRouter = Router();
 
@@ -151,3 +152,26 @@ customerAppRouter.delete("/customer/devices", asyncHandler((req, res) => {
 customerAppRouter.delete("/customer/me", asyncHandler((req, res) => {
   res.json(customerAppService.deleteMe(req.access));
 }));
+
+customerAppRouter.post("/customer/slot-holds", asyncHandler((req, res) => {
+  const { serviceIds, staffId, branchId, startAt, durationMinutes } = req.body || {};
+  if (!serviceIds?.length || !startAt) {
+    return res.status(400).json({ error: "serviceIds and startAt are required" });
+  }
+  const hold = slotReservationService.createHold({
+    serviceIds,
+    staffId: staffId || null,
+    branchId: branchId || req.access.branchId,
+    startAt: new Date(startAt).toISOString(),
+    durationMinutes: durationMinutes || 30,
+    tenantId: req.access.tenantId,
+    clientId: req.access.userId,
+    source: "customer-app"
+  }, req.access);
+  res.status(201).json(hold);
+}));
+
+customerAppRouter.delete("/customer/slot-holds/:holdId", asyncHandler((req, res) => {
+  const released = slotReservationService.releaseHold(req.params.holdId, req.access);
+  res.json(released);
+}));;
