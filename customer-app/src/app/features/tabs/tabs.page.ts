@@ -3,7 +3,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive } from "@angular/ro
 import { filter } from "rxjs";
 import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, compass, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import { calendarOutline, chevronBackOutline, chevronForwardOutline, closeOutline, compassOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
 import { AuthService } from "../../core/auth.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
@@ -155,7 +155,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       @if (!salonModeActive()) {
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="search" href="/tabs/search">
-          <ion-icon name="compass"></ion-icon>
+          <ion-icon name="compass-outline"></ion-icon>
           <ion-label>Explore</ion-label>
         </ion-tab-button>
         <ion-tab-button tab="bookings" href="/tabs/bookings">
@@ -841,7 +841,7 @@ export class TabsPage implements OnInit {
   private swipeTracking = false;
 
   constructor(readonly auth: AuthService, private readonly router: Router, private readonly marketplace: MarketplaceService) {
-    addIcons({ compass, compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+    addIcons({ compassOutline, homeOutline, searchOutline, sparklesOutline, calendarOutline, chevronBackOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
   }
 
   ngOnInit(): void {
