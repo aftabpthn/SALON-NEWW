@@ -232,6 +232,32 @@ h2 {
 .compact-record-list > :is(button, span) { justify-content: space-between; text-align: left; }
 .compact-record-list small { color: var(--set-muted); }
 
+.website-builder { gap: 14px; }
+.website-toolbar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; padding: 10px; border: 1px solid var(--set-line); border-radius: 10px; background: var(--set-soft); }
+.website-toolbar label { display: grid; gap: 5px; min-width: 180px; color: var(--set-muted); font-size: 12px; font-weight: 700; }
+.website-toolbar :is(input, select), .section-add-row select, .website-page-fields textarea, .website-section textarea { min-height: 40px; padding: 8px 12px; border: 1px solid #c9d5e5; border-radius: 8px; background: #fff; color: var(--set-ink); font: inherit; }
+.website-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px; }
+.website-pages { display: grid; align-content: start; gap: 6px; }
+.website-pages button { display: grid; width: 100%; justify-items: start; padding: 8px 10px; text-align: left; }
+.website-pages button.is-active { border-color: #2563eb; background: #f3f8ff; }
+.website-pages span { color: inherit; text-transform: none; }
+.website-pages small { color: var(--set-muted); }
+.website-editor, .website-sections { display: grid; gap: 10px; min-width: 0; }
+.website-page-fields { padding: 10px; border: 1px solid var(--set-line); border-radius: 10px; }
+.wide-field { flex: 1 1 100%; }
+.wide-field textarea { width: 100%; min-height: 78px; resize: vertical; }
+.check-field { display: flex !important; min-width: 0 !important; align-items: center; gap: 7px !important; color: var(--set-ink) !important; }
+.check-field input { width: 16px; min-height: 16px; padding: 0; }
+.section-add-row, .section-actions { display: flex; align-items: center; gap: 6px; }
+.website-section { min-height: 0; cursor: grab; }
+.website-section > header { align-items: center; }
+.website-section .form-grid { align-items: start; }
+
+@media (max-width: 760px) {
+  .website-layout { grid-template-columns: 1fr; }
+  .website-pages { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+}
+
 .role-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);

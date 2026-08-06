@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const baselineVersion = '2026.08.02-baseline.1';
+const baselineVersion = '2026.08.06-parity-refresh.1';
 const read = (path) => readFileSync(resolve(root, path), 'utf8');
 const normalizePath = (path) => path.replace(/\{[^}]+\}|:[A-Za-z_][A-Za-z0-9_]*/g, ':id').replace(/\/$/, '') || '/';
 const hash = (algorithm, value) => createHash(algorithm).update(value).digest('hex');

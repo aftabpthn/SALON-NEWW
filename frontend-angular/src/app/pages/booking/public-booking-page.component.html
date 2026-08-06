@@ -1,4 +1,35 @@
-<main class="booking-shell">
+@if (website && websitePage) {
+  <header class="site-header" [ngClass]="'template-' + website.template">
+    <strong>{{ website.siteName || tenant.name }}</strong>
+    <nav aria-label="Website navigation">
+      @for (page of websitePages; track page.id) {
+        <button type="button" [class.active]="websitePageSlug === page.slug" (click)="selectWebsitePage(page.slug)">{{ page.navigationLabel || page.title }}</button>
+      }
+    </nav>
+  </header>
+  <section class="site-content" [ngClass]="'template-' + website.template">
+    @for (section of websiteSections; track section.id) {
+      @if (section.type !== 'booking') {
+        <section class="site-section" [ngClass]="'section-' + section.type">
+          @if (section.imageUrl) { <img [src]="section.imageUrl" [alt]="section.heading || website.siteName" /> }
+          <div>
+            @if (section.heading) { <h1>{{ section.heading }}</h1> }
+            @if (section.body) { <p>{{ section.body }}</p> }
+            @if (section.type === 'services' && services.length) {
+              <div class="site-service-grid">@for (service of services; track service.id) { <article><strong>{{ service.name }}</strong><span>{{ money(service.pricePaise) }} · {{ service.durationMinutes }} min</span></article> }</div>
+            }
+            @if (section.type === 'contact' && branches.length) {
+              <div class="site-contact-grid">@for (branch of branches; track branch.id) { <article><strong>{{ branch.name }}</strong><span>{{ branch.address }}</span></article> }</div>
+            }
+            @if (section.buttonLabel && section.buttonUrl) { <a class="site-action" [href]="sectionLink(section)">{{ section.buttonLabel }}</a> }
+          </div>
+        </section>
+      }
+    }
+  </section>
+}
+
+<main id="booking" class="booking-shell" [hidden]="!showBookingWorkspace">
   <aside class="booking-nav" aria-label="Booking navigation">
     <div class="brand">{{ tenant.name || 'AuraShine' }}</div>
     <button class="nav-item" [class.active]="!showMyBookings" type="button" (click)="closeMyBookings()"><i class="bi bi-calendar2-check"></i><span>Public Booking</span></button>

@@ -190,6 +190,8 @@ pub struct Settings {
     pub connector_google_client_id: Option<String>,
     pub connector_google_client_secret: Option<String>,
     pub connector_google_redirect_uri: Option<String>,
+    pub actions_center_username: Option<String>,
+    pub actions_center_password: Option<String>,
     pub aws_region: Option<String>,
     pub aws_s3_bucket: Option<String>,
     pub cors_allowed_origins: Vec<String>,
@@ -350,6 +352,13 @@ impl Settings {
                 "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured together"
             ));
         }
+        let actions_center_username = optional_value("ACTIONS_CENTER_USERNAME");
+        let actions_center_password = optional_secure_secret("ACTIONS_CENTER_PASSWORD")?;
+        if actions_center_username.is_some() != actions_center_password.is_some() {
+            return Err(anyhow!(
+                "ACTIONS_CENTER_USERNAME and ACTIONS_CENTER_PASSWORD must be configured together"
+            ));
+        }
 
         Ok(Settings {
             app_env,
@@ -409,6 +418,8 @@ impl Settings {
                 "CONNECTOR_GOOGLE_CLIENT_SECRET",
             )?,
             connector_google_redirect_uri: optional_value("CONNECTOR_GOOGLE_REDIRECT_URI"),
+            actions_center_username,
+            actions_center_password,
             aws_region: std::env::var("AWS_REGION").ok().filter(|v| !v.is_empty()),
             aws_s3_bucket: std::env::var("AWS_S3_BUCKET")
                 .ok()

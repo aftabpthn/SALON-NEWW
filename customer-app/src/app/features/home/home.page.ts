@@ -1,7 +1,7 @@
 import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink } from "@angular/router";
-import { IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar } from "@ionic/angular/standalone";
+import { IonButton, IonContent, IonIcon, IonSearchbar } from "@ionic/angular/standalone";
 import { firstValueFrom } from "rxjs";
 import { addIcons } from "ionicons";
 import { environment } from "../../../environments/environment";
@@ -11,9 +11,6 @@ import {
   chatbubblesOutline,
   chevronForwardOutline,
   locationOutline,
-  navigateOutline,
-  notificationsOutline,
-  optionsOutline,
   personCircleOutline,
   pricetagOutline,
   ribbonOutline,
@@ -41,50 +38,17 @@ interface ConsultationChatMessage {
 
 @Component({
   standalone: true,
-  imports: [FormsModule, RouterLink, IonButton, IonContent, IonHeader, IonIcon, IonSearchbar, IonToolbar, BusinessCardComponent],
+  imports: [FormsModule, RouterLink, IonButton, IonContent, IonIcon, IonSearchbar, BusinessCardComponent],
   template: `
-    <ion-header class="ion-no-border">
-      <ion-toolbar>
-        <div class="home-toolbar app-container">
-          <span class="aura-shine-brand" aria-label="Aura Shine"><img src="assets/branding/aurashine-logo.png" alt="Aura Shine" /></span>
-          <div class="location-copy">
-            <span>Near you</span>
-            <div class="location-row">
-              <strong><ion-icon name="location-outline"></ion-icon> {{ areaLabel() }}</strong>
-              @if (!mobileHome()) {
-              <button type="button" class="near-you-button" [disabled]="locating()" (click)="useCurrentLocation()">
-                <ion-icon name="navigate-outline"></ion-icon>
-                {{ locating() ? "Detecting" : "Use current location" }}
-              </button>
-              }
-            </div>
-          </div>
-          <div class="toolbar-actions">
-            @if (!mobileHome()) {
-              <ion-button fill="clear" shape="round" class="staff-toolbar-button" [href]="staffAppUrl">Staff?</ion-button>
-            }
-            <ion-button fill="clear" shape="round" routerLink="/notifications" aria-label="Open notifications">
-              <ion-icon name="notifications-outline"></ion-icon>
-            </ion-button>
-            <ion-button fill="clear" shape="round" routerLink="/tabs/profile" aria-label="Open profile">
-              <ion-icon name="person-circle-outline"></ion-icon>
-            </ion-button>
-          </div>
-        </div>
-      </ion-toolbar>
-    </ion-header>
-
     <ion-content>
       <main class="page home-page">
         <section class="hero">
           <div class="hero-copy">
-            @if (!mobileHome()) {
-              <h1 class="page-title">Find and book your next self-care visit</h1>
-            }
+            <h1 class="page-title">Book local self-care services</h1>
             <div class="search-panel">
               <div class="home-search-wrap">
                 <ion-searchbar
-                  placeholder="Search services or salons"
+                  placeholder="All treatments"
                   [value]="query()"
                   (ionInput)="setQuery($any($event.target).value || '')"
                   (ionSearch)="search()">
@@ -109,17 +73,12 @@ interface ConsultationChatMessage {
                   <ion-icon name="time-outline"></ion-icon>
                   <span>Any time</span>
                 </button>
-                <button type="button" class="home-control-button map" aria-label="More search filters" title="More filters" (click)="openDiscoverPanel('filter')">
-                  <ion-icon name="options-outline"></ion-icon>
-                  <span>Filters</span>
-                </button>
               </div>
               <ion-button class="primary-gradient" (click)="search()">
                 <ion-icon name="search-outline" slot="start"></ion-icon>
-                Search
+                Search Aura Shine
               </ion-button>
             </div>
-            @if (!mobileHome()) {
             <div class="category-strip hero-category-strip">
               <button class="pill" [class.active]="categoryFilter() === ''" type="button" (click)="setCategory('')">All</button>
               @for (category of marketplace.categories(); track category.id || category.slug) {
@@ -128,7 +87,6 @@ interface ConsultationChatMessage {
                 </button>
               }
             </div>
-            }
             @if (!mobileHome() && locationNotice()) {
               <p class="location-notice">{{ locationNotice() }}</p>
             }
@@ -246,6 +204,7 @@ interface ConsultationChatMessage {
           }
         </section>
 
+        @if (marketplace.isAuthenticated()) {
         <section class="aura-dashboard" aria-label="Personalized Aura dashboard">
           <article class="welcome-card">
             <h2>{{ greeting() }}</h2>
@@ -279,6 +238,7 @@ interface ConsultationChatMessage {
             }
           </div>
         </section>
+        }
 
         @if (!searchActive() && recentlyVisited().length) {
           <section class="mobile-secondary-section">
@@ -320,10 +280,10 @@ interface ConsultationChatMessage {
           </section>
         }
 
-        @if (!searchActive()) {
+        @if (!searchActive() && !marketplace.loading()) {
           <div class="section-heading priority-heading">
             <div>
-              <h2 class="section-title">Recommendations</h2>
+              <h2 class="section-title">Recommended near you</h2>
             </div>
             <a routerLink="/tabs/search">Explore all</a>
           </div>
@@ -363,11 +323,11 @@ interface ConsultationChatMessage {
           </div>
         }
 
-        @if (!searchActive()) {
+        @if (!searchActive() && !marketplace.loading()) {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">Recommended businesses</h2>
+              <h2 class="section-title">More places to explore</h2>
           </div>
           <a routerLink="/tabs/search">See all</a>
         </div>
@@ -381,7 +341,7 @@ interface ConsultationChatMessage {
         </section>
         }
 
-        @if (!searchActive()) {
+        @if (!searchActive() && !marketplace.loading()) {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
@@ -399,7 +359,7 @@ interface ConsultationChatMessage {
         </section>
         }
 
-        @if (!searchActive()) {
+        @if (!searchActive() && !marketplace.loading()) {
         <section class="mobile-secondary-section">
         <div class="section-heading">
           <div>
@@ -419,6 +379,13 @@ interface ConsultationChatMessage {
         </div>
         </section>
         }
+
+        <footer class="public-footer" aria-label="Customer links">
+          <a routerLink="/tabs/home">Customer app</a>
+          <a routerLink="/help">Help</a>
+          <a [href]="businessAppUrl">For business</a>
+          <span>English (IN)</span>
+        </footer>
       </main>
     </ion-content>
   `,
@@ -1654,10 +1621,193 @@ interface ConsultationChatMessage {
       }
     }
 
+    /* Approved Phase 1 public marketplace skin: reuse the existing data flow,
+       but match the compact Appointment UI baseline. */
+    ion-header,
+    .live-consultation-card {
+      display: none !important;
+    }
+
+    .home-page {
+      gap: 18px;
+      padding-top: 24px;
+    }
+
+    .hero {
+      display: block;
+      min-height: 0 !important;
+      padding: 28px;
+      border: 1px solid #d8e0ea;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, .08);
+    }
+
+    .hero-copy { gap: 14px; }
+
+    .page-title {
+      display: block !important;
+      max-width: none;
+      color: #071832;
+      font-size: clamp(1.8rem, 4vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.08;
+      letter-spacing: -.035em;
+      text-align: center;
+    }
+
+    .search-panel {
+      max-width: none;
+      display: grid;
+      grid-template-columns: minmax(220px, 1.25fr) minmax(300px, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid #d8e0ea;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+    }
+
+    .home-search-wrap ion-searchbar {
+      min-height: 38px;
+      padding: 0;
+      --background: #fff;
+      --border-radius: 8px;
+      --box-shadow: inset 0 0 0 1px #c9d5e5;
+      --color: #071832;
+      --placeholder-color: #5d6b82;
+    }
+
+    .home-control-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, 1fr));
+      gap: 8px;
+    }
+
+    .home-control-button {
+      min-height: 38px;
+      justify-content: flex-start;
+      padding: 0 12px;
+      overflow: hidden;
+      border: 1px solid #c9d5e5;
+      border-radius: 8px;
+      color: #071832;
+      background: #fff;
+      box-shadow: none;
+      font-size: .86rem;
+      font-weight: 600;
+    }
+
+    .home-control-button span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .home-control-button:hover,
+    .home-control-button:focus-visible {
+      border-color: #2563eb;
+      outline: 2px solid #93c5fd;
+      outline-offset: 2px;
+    }
+
+    .search-panel .primary-gradient {
+      min-height: 38px;
+      margin: 0;
+      --background: #071832;
+      --background-hover: #102a50;
+      --background-activated: #020b18;
+      --color: #fff;
+      --box-shadow: none;
+      font-weight: 600;
+      text-transform: none;
+    }
+
+    .hero-category-strip {
+      display: flex !important;
+      justify-content: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .hero-category-strip .pill {
+      min-height: 36px;
+      padding: 0 16px;
+      border: 1px solid #c9d5e5;
+      border-radius: 999px;
+      color: #071832;
+      background: #fff;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .hero-category-strip .pill.active {
+      border-color: #2563eb;
+      color: #174ea6;
+      background: #eaf2ff;
+    }
+
+    .section-title {
+      color: #071832;
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+
+    .state-card,
+    .welcome-card,
+    .metric-card,
+    .customer-quick-actions a {
+      border-color: #d8e0ea;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+    }
+
+    .public-footer {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border: 1px solid #d8e0ea;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .public-footer a,
+    .public-footer span {
+      min-height: 48px;
+      display: grid;
+      place-items: center;
+      padding: 0 10px;
+      border-right: 1px solid #e8edf4;
+      color: #071832;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      text-align: center;
+    }
+
+    .public-footer > :last-child { border-right: 0; }
+
+    @media (max-width: 767px) {
+      .home-page { gap: 14px; padding-top: 16px; }
+      .hero { padding: 16px; border-radius: 10px; background: #fff; box-shadow: 0 8px 20px rgba(15, 23, 42, .06); }
+      .hero-copy { gap: 12px; }
+      .page-title { font-size: 1.7rem; text-align: left; }
+      .search-panel { grid-template-columns: 1fr; padding: 12px; border-radius: 10px; }
+      .home-control-row { grid-template-columns: 1fr; }
+      .home-control-button { width: 100%; }
+      .hero-category-strip { justify-content: flex-start; }
+      .location-notice { display: block !important; margin: 0; }
+      .public-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .public-footer a, .public-footer span { border-bottom: 1px solid #e8edf4; }
+    }
+
   `]
 })
 export class HomePage implements OnInit {
-  readonly staffAppUrl = environment.staffAppUrl;
+  readonly businessAppUrl = environment.businessAppUrl;
   readonly query = signal("");
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");
@@ -1740,9 +1890,6 @@ export class HomePage implements OnInit {
       chatbubblesOutline,
       chevronForwardOutline,
       locationOutline,
-      navigateOutline,
-      notificationsOutline,
-      optionsOutline,
       personCircleOutline,
       pricetagOutline,
       ribbonOutline,

@@ -43,6 +43,10 @@ Source content hashes and access timestamps are stored in the JSON register. Sal
 - [Inventory parity register](./INVENTORY_ZENOTI_PARITY_REGISTER.md)
 - [Staff App parity register](./STAFF_APP_ZENOTI_PARITY_REGISTER.md)
 
+## Source-mapping triage
+
+All **2561** unmapped rows now have a ranked review record in [Zenoti parity triage](./ZENOTI_PARITY_TRIAGE.md). Current bands: high **822**, medium **1227**, schema-only **100**, low **181**, and no-match **231**. These are search candidates, not parity evidence; no row becomes Complete until UI, API/data and test/UAT evidence is reviewed.
+
 ## Product-owner gate
 
 Phase 0 technical register gate: **PASS**.
@@ -51,4 +55,4 @@ Phase 1 authorization: **APPROVED**.
 Product owner: ____________________
 Decision: **APPROVED_BY_USER_INSTRUCTION_2026-08-02**
 Date: ____________________
-Baseline hash: `a9da9638d57b5b3df01dbbc942478279463ed252c34a54e552f750c4b733c5d7`
+Baseline hash: `1455ad5a00dca9241590a2ab9320a47d4d5a8f6cbff7a85cab4e97545c56262f`

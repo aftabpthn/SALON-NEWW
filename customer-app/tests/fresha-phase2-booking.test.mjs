@@ -42,3 +42,38 @@ test("approved Phase 2 booking surface uses the existing CRM blue tokens", () =>
   assert.match(flow, /background: var\(--accent-2\)/);
   assert.doesNotMatch(flow, /#F4D58D|#D6A94A|#9B6B22|rgba\(214, 169, 74/);
 });
+
+test("Phase 2 marketplace filters and cards use persisted location, hours, reviews and offers", () => {
+  const route = read("../backend-rust/src/routes/customer_portal.rs");
+  const repository = read("../backend-rust/src/repositories/customer_portal_repository.rs");
+  const search = read("src/app/features/search/search.page.ts");
+
+  for (const field of ["radius_km", "open_now", "top_rated", "offers", "available_today", "min_price_paise", "max_price_paise", "staff_gender", "sort"]) {
+    assert.match(route, new RegExp(`${field}: Option`));
+  }
+  assert.match(repository, /branch_operating_hours/);
+  assert.match(repository, /customer_booking_reviews/);
+  assert.match(repository, /client_review_links/);
+  assert.match(repository, /show_in_customer_app=TRUE/);
+  assert.match(repository, /distance_km/);
+  assert.match(search, /openNow: filters\.includes\("open"\)/);
+  assert.match(search, /availableToday: filters\.includes\("today"\)/);
+});
+
+test("customer booking writes canonical tenant and branch ids", () => {
+  const route = read("../backend-rust/src/routes/customer_portal.rs");
+
+  assert.match(route, /let booking_tenant_id = public_tenant_id;/);
+  assert.match(route, /let booking_branch_id = public_branch_id;/);
+  assert.match(route, /headers\.insert\(\s*"x-tenant-id"/);
+  assert.match(route, /headers\.insert\(\s*"x-branch-id"/);
+});
+
+test("booking history formats persisted timestamps for customers", () => {
+  const list = read("src/app/features/bookings/bookings.page.ts");
+  const detail = read("src/app/features/bookings/booking-detail.page.ts");
+
+  assert.match(list, /bookingDateTime\(booking\)/);
+  assert.match(list, /month: "2-digit", year: "numeric"/);
+  assert.match(detail, /dateTimeLabel\(booking\.displayStartAt/);
+});

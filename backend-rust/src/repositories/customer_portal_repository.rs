@@ -599,10 +599,166 @@ pub async fn businesses(
     db: &PgPool,
     query: &str,
     category: &str,
+    area: &str,
+    city: &str,
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    radius_km: Option<f64>,
+    open_now: bool,
+    top_rated: bool,
+    offers: bool,
+    available_today: bool,
+    min_price_paise: Option<i64>,
+    max_price_paise: Option<i64>,
+    staff_gender: &str,
+    sort: &str,
     limit: i64,
 ) -> Result<Vec<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',b.id::TEXT,'branchId',b.id::TEXT,'slug',b.id::TEXT,'tenantId',t.id::TEXT,'tenantSlug',COALESCE(t.slug,t.id::TEXT),'businessName',t.name,'branchName',b.name,'branchCode',COALESCE(b.code,''),'address',COALESCE(b.address,''),'latitude',b.latitude,'longitude',b.longitude,'bookingDepositPercent',b.booking_deposit_percent,'categories',COALESCE(x.categories,'[]'::JSONB),'startingPricePaise',COALESCE(x.starting_price,0),'ratingAverage',0,'ratingCount',0,'isOpen',TRUE,'hasOffer',FALSE) FROM branches b JOIN tenants t ON t.id=b.tenant_id LEFT JOIN LATERAL (SELECT jsonb_agg(DISTINCT s.category) FILTER (WHERE s.category<>'') categories,MIN(s.price_paise) starting_price FROM services s WHERE s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) AND s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND s.active=TRUE) x ON TRUE WHERE b.active=TRUE AND t.status='active' AND ($1='' OR LOWER(t.name||' '||b.name||' '||COALESCE(b.code,'')) LIKE '%'||LOWER($1)||'%') AND ($2='' OR EXISTS(SELECT 1 FROM services s WHERE s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) AND s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND s.active=TRUE AND LOWER(s.category)=LOWER($2))) ORDER BY t.name,b.name LIMIT $3")
-        .bind(query).bind(category).bind(limit).fetch_all(db).await
+    sqlx::query_scalar(
+        r#"SELECT jsonb_build_object(
+          'id',b.id::TEXT,'branchId',b.id::TEXT,'slug',b.id::TEXT,
+          'tenantId',t.id::TEXT,'tenantSlug',COALESCE(t.slug,t.id::TEXT),
+          'businessName',t.name,'branchName',b.name,'branchCode',COALESCE(b.code,''),
+          'address',COALESCE(b.address,''),'latitude',b.latitude,'longitude',b.longitude,
+          'distanceKm',CASE WHEN geo.distance_km IS NULL THEN NULL ELSE ROUND(geo.distance_km::NUMERIC,2) END,
+          'bookingDepositPercent',b.booking_deposit_percent,
+          'categories',COALESCE(catalog.categories,'[]'::JSONB),
+          'startingPricePaise',COALESCE(catalog.starting_price,0),
+          'ratingAverage',COALESCE(reviews.rating_average,0),
+          'ratingCount',COALESCE(reviews.rating_count,0),
+          'isOpen',COALESCE(hours.is_open,FALSE),
+          'openingTime',COALESCE(TO_CHAR(hours.opens_at,'HH24:MI'),''),
+          'closingTime',COALESCE(TO_CHAR(hours.closes_at,'HH24:MI'),''),
+          'hoursLabel',CASE WHEN hours.opens_at IS NULL THEN '' ELSE TO_CHAR(hours.opens_at,'HH12:MI AM')||' - '||TO_CHAR(hours.closes_at,'HH12:MI AM') END,
+          'hasOffer',COALESCE(offer.has_offer,FALSE),'offerText',COALESCE(offer.title,'')
+        )
+        FROM branches b
+        JOIN tenants t ON t.id=b.tenant_id
+        LEFT JOIN LATERAL (
+          SELECT JSONB_AGG(DISTINCT service.category) FILTER (WHERE service.category<>'') categories,
+                 MIN(service.price_paise) starting_price
+          FROM services service
+          WHERE service.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+            AND service.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name)
+            AND service.active=TRUE
+            AND COALESCE((service.channel_availability_json->>'customerApp')::BOOLEAN,FALSE)=TRUE
+        ) catalog ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT ROUND(AVG(review.rating)::NUMERIC,2) rating_average,COUNT(*) rating_count
+          FROM (
+            SELECT link.rating::DOUBLE PRECISION rating
+            FROM client_review_links link
+            WHERE link.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND link.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name)
+              AND link.rating IS NOT NULL AND link.platform IN ('google','facebook','instagram')
+              AND link.external_review_id<>''
+            UNION ALL
+            SELECT customer.rating::DOUBLE PRECISION
+            FROM customer_booking_reviews customer
+            WHERE customer.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND customer.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name)
+          ) review
+        ) reviews ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT TRUE has_offer,COALESCE(NULLIF(coupon.title,''),coupon.code) title
+          FROM pos_coupons coupon
+          WHERE coupon.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+            AND coupon.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name)
+            AND coupon.active=TRUE AND coupon.approval_status='approved'
+            AND coupon.show_in_customer_app=TRUE AND coupon.target_client_id IS NULL
+            AND (coupon.starts_at IS NULL OR coupon.starts_at<=NOW())
+            AND (coupon.ends_at IS NULL OR coupon.ends_at>=NOW())
+          ORDER BY COALESCE(coupon.ends_at,coupon.starts_at,coupon.created_at),coupon.id
+          LIMIT 1
+        ) offer ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT effective.opens_at,effective.closes_at,
+                 NOT effective.closed
+                   AND (NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::TIME>=effective.opens_at
+                   AND (NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::TIME<effective.closes_at is_open
+          FROM (
+            SELECT COALESCE(holiday.opens_at,regular.opens_at) opens_at,
+                   COALESCE(holiday.closes_at,regular.closes_at) closes_at,
+                   COALESCE(holiday.closed,regular.closed) closed
+            FROM branch_operating_hours regular
+            LEFT JOIN branch_holidays holiday ON holiday.tenant_id=regular.tenant_id
+              AND holiday.branch_id=regular.branch_id
+              AND holiday.holiday_date=(NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::DATE
+            WHERE regular.tenant_id=b.tenant_id AND regular.branch_id=b.id
+              AND regular.weekday=EXTRACT(DOW FROM NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::SMALLINT
+          ) effective
+        ) hours ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT EXISTS(
+            SELECT 1 FROM staff professional
+            JOIN staff_availability schedule
+              ON schedule.tenant_id=professional.tenant_id
+              AND schedule.branch_id=professional.branch_id
+              AND schedule.staff_id=professional.id
+            WHERE professional.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND professional.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name)
+              AND professional.active=TRUE AND schedule.is_available=TRUE
+              AND schedule.weekday=EXTRACT(DOW FROM NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::SMALLINT
+              AND schedule.end_time>(NOW() AT TIME ZONE COALESCE(NULLIF(b.time_zone,''),'Asia/Kolkata'))::TIME
+          ) has_today
+        ) availability ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT CASE WHEN $5::DOUBLE PRECISION IS NULL OR $6::DOUBLE PRECISION IS NULL OR b.latitude IS NULL OR b.longitude IS NULL THEN NULL
+            ELSE 6371.0*ACOS(LEAST(1.0,GREATEST(-1.0,
+              COS(RADIANS($5))*COS(RADIANS(b.latitude))*COS(RADIANS(b.longitude)-RADIANS($6))
+              +SIN(RADIANS($5))*SIN(RADIANS(b.latitude))))) END distance_km
+        ) geo ON TRUE
+        WHERE b.active=TRUE AND t.status='active'
+          AND ($1='' OR LOWER(CONCAT_WS(' ',t.name,b.id::TEXT,b.name,b.code,b.address)) LIKE '%'||LOWER($1)||'%'
+            OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND service.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND service.active=TRUE
+              AND LOWER(service.name||' '||service.category) LIKE '%'||LOWER($1)||'%')
+            OR EXISTS(SELECT 1 FROM staff professional WHERE professional.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND professional.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND professional.active=TRUE
+              AND LOWER(CONCAT_WS(' ',professional.appointment_display_name,professional.first_name,professional.last_name,professional.job_title)) LIKE '%'||LOWER($1)||'%'))
+          AND ($2='' OR EXISTS(SELECT 1 FROM services service WHERE service.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+            AND service.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND service.active=TRUE
+            AND COALESCE((service.channel_availability_json->>'customerApp')::BOOLEAN,FALSE)=TRUE AND LOWER(service.category)=LOWER($2)))
+          AND ($3='' OR LOWER(COALESCE(b.address,'')) LIKE '%'||LOWER($3)||'%')
+          AND ($4='' OR LOWER(COALESCE(b.address,'')) LIKE '%'||LOWER($4)||'%')
+          AND ($7::DOUBLE PRECISION IS NULL OR geo.distance_km<=$7)
+          AND (NOT $8 OR COALESCE(hours.is_open,FALSE))
+          AND (NOT $9 OR COALESCE(reviews.rating_count,0)>0 AND COALESCE(reviews.rating_average,0)>=4.5)
+          AND (NOT $10 OR COALESCE(offer.has_offer,FALSE))
+          AND (NOT $11 OR COALESCE(availability.has_today,FALSE))
+          AND ($12::BIGINT IS NULL OR COALESCE(catalog.starting_price,0)>=$12)
+          AND ($13::BIGINT IS NULL OR COALESCE(catalog.starting_price,0)<=$13)
+          AND ($14='' OR EXISTS(SELECT 1 FROM staff professional
+            JOIN staff_profiles profile ON profile.tenant_id=professional.tenant_id AND profile.branch_id=professional.branch_id AND profile.staff_id=professional.id
+            WHERE professional.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name)
+              AND professional.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND professional.active=TRUE AND profile.gender=$14))
+        ORDER BY
+          CASE WHEN $15='distance' THEN geo.distance_km END ASC NULLS LAST,
+          CASE WHEN $15='rating' THEN reviews.rating_average END DESC NULLS LAST,
+          CASE WHEN $15='price' THEN catalog.starting_price END ASC NULLS LAST,
+          CASE WHEN $15='recommended' THEN reviews.rating_average END DESC NULLS LAST,
+          CASE WHEN $15='recommended' THEN reviews.rating_count END DESC NULLS LAST,
+          t.name,b.name
+        LIMIT $16"#,
+    )
+    .bind(query)
+    .bind(category)
+    .bind(area)
+    .bind(city)
+    .bind(latitude)
+    .bind(longitude)
+    .bind(radius_km)
+    .bind(open_now)
+    .bind(top_rated)
+    .bind(offers)
+    .bind(available_today)
+    .bind(min_price_paise)
+    .bind(max_price_paise)
+    .bind(staff_gender)
+    .bind(sort)
+    .bind(limit)
+    .fetch_all(db)
+    .await
 }
 
 pub async fn categories(db: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
@@ -611,8 +767,32 @@ pub async fn categories(db: &PgPool) -> Result<Vec<Value>, sqlx::Error> {
 }
 
 pub async fn business(db: &PgPool, branch_id: &str) -> Result<Option<Value>, sqlx::Error> {
-    sqlx::query_scalar("SELECT jsonb_build_object('id',b.id::TEXT,'branchId',b.id::TEXT,'slug',b.id::TEXT,'tenantId',t.id::TEXT,'tenantSlug',COALESCE(t.slug,t.id::TEXT),'businessName',t.name,'branchName',b.name,'branchCode',COALESCE(b.code,''),'address',COALESCE(b.address,''),'latitude',b.latitude,'longitude',b.longitude,'bookingDepositPercent',b.booking_deposit_percent,'active',b.active,'ratingAverage',0,'ratingCount',0,'isOpen',TRUE,'hasOffer',FALSE,'startingPricePaise',COALESCE((SELECT MIN(s.price_paise) FROM services s WHERE s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) AND s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND s.active=TRUE),0),'categories',COALESCE((SELECT jsonb_agg(DISTINCT s.category) FILTER (WHERE s.category<>'') FROM services s WHERE s.tenant_id IN (t.id::TEXT,COALESCE(t.slug,''),t.name) AND s.branch_id IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND s.active=TRUE),'[]'::JSONB)) FROM branches b JOIN tenants t ON t.id=b.tenant_id WHERE $1 IN (b.id::TEXT,COALESCE(b.code,''),b.name) AND b.active=TRUE AND t.status='active'")
-        .bind(branch_id).fetch_optional(db).await
+    Ok(businesses(
+        db,
+        branch_id,
+        "",
+        "",
+        "",
+        None,
+        None,
+        None,
+        false,
+        false,
+        false,
+        false,
+        None,
+        None,
+        "",
+        "recommended",
+        100,
+    )
+    .await?
+    .into_iter()
+    .find(|business| {
+        ["id", "branchId", "branchCode", "branchName"]
+            .iter()
+            .any(|key| business.get(key).and_then(Value::as_str) == Some(branch_id))
+    }))
 }
 
 pub async fn business_services(db: &PgPool, branch_id: &str) -> Result<Vec<Value>, sqlx::Error> {

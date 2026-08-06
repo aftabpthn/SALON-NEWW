@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -260,8 +260,12 @@ function summary(register, truth, inventory) {
 
 function reconciledSummary(register, truth, inventory) {
   const routeCounts = Object.fromEntries(['mounted', 'future', 'external', 'retired'].map((state) => [state, truth.claims.filter((claim) => claim.state === state).length]));
+  const triagePath = resolve(evidenceDir, 'zenoti-parity-candidates.json');
+  const triage = existsSync(triagePath) ? JSON.parse(readFileSync(triagePath, 'utf8')) : null;
+  const triageSection = triage ? `## Source-mapping triage\n\nAll **${triage.unmappedRows}** unmapped rows now have a ranked review record in [Zenoti parity triage](./ZENOTI_PARITY_TRIAGE.md). Current bands: high **${triage.confidence.high}**, medium **${triage.confidence.medium}**, schema-only **${triage.confidence['schema-only']}**, low **${triage.confidence.low}**, and no-match **${triage.confidence.none}**. These are search candidates, not parity evidence; no row becomes Complete until UI, API/data and test/UAT evidence is reviewed.\n\n` : '';
   return summary(register, truth, inventory)
     .replace(/README endpoint claims: \*\*\d+\*\*; mounted exact: \*\*\d+\*\*; ghost exact: \*\*\d+\*\*\. Dynamic\/generated paths are not silently called mounted\./, `README endpoint claims: **${truth.claims.length}**; mounted **${routeCounts.mounted}**, future **${routeCounts.future}**, external **${routeCounts.external}**, retired **${routeCounts.retired}**. Unknown classifications: **0**.`)
+    .replace('## Product-owner gate', `${triageSection}## Product-owner gate`)
     .replace('Phase 1 authorization: **BLOCKED_PENDING_PRODUCT_OWNER_SIGNOFF**.', `Phase 1 authorization: **${register.exitGate.phase1Authorization}**.`)
     .replace('Decision: APPROVED / CHANGES REQUIRED', `Decision: **${register.exitGate.productOwnerSignoff}**`);
 }

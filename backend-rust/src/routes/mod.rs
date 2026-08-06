@@ -14,6 +14,7 @@ use axum::{
 };
 use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
+pub mod actions_center;
 pub mod ai_concierge;
 pub mod ai_copilot;
 pub mod appointment_activity;
@@ -62,6 +63,7 @@ pub mod saas;
 pub mod scim;
 pub mod security;
 pub mod services;
+pub mod social_publishing;
 pub mod staff;
 pub mod staff_advance;
 pub mod staff_advanced;
@@ -84,6 +86,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/health", axum::routing::get(health::health))
         .route("/", axum::routing::get(health::root))
         .merge(auth::router())
+        .merge(actions_center::public_router())
         .merge(ai_concierge::public_router())
         .merge(booking_portal::router())
         .merge(booking_portal_v2::router())
@@ -108,6 +111,7 @@ pub fn build_router(state: AppState) -> Router {
 
     let protected_api = Router::new()
         .merge(auth::protected_router())
+        .merge(actions_center::router())
         .merge(ai_concierge::router())
         .merge(ai_copilot::router())
         .merge(balance_sheet::router())
@@ -125,6 +129,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(staff_payroll::router())
         .merge(staff_schedule::router())
         .merge(staff_scribe::router())
+        .merge(social_publishing::router())
         .merge(services::router())
         .merge(wallets::router())
         .merge(appointment_activity::router())

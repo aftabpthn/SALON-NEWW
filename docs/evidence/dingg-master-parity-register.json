@@ -1,0 +1,3924 @@
+{
+  "vendor": "DINGG",
+  "generatedAt": "2026-08-06T14:21:16.506Z",
+  "sources": [
+    {
+      "url": "https://api.dingg.app/api/v1/help/menu?app_type=web",
+      "sha256": "3657a1bd5c582f55e1fbffc4235bda369c3d65e9174c19839e0a23189ba91312",
+      "categories": 11
+    },
+    {
+      "url": "https://dingg.app/us",
+      "sha256": "30b0247a02963ea61af99051b0498bc77956788f7744e42e8ca80bb33c985e50"
+    }
+  ],
+  "rows": [
+    {
+      "id": "DIN-0001",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Gift Cards",
+      "officialUrl": "https://dingg.app/features/beauty-salon-gift-cards",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/beauty-salon-gift-cards",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0002",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "DINGG AI Genius",
+      "officialUrl": "https://dingg.app/features/dingg-ai-salon-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/dingg-ai-salon-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0003",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Forms & Surveys",
+      "officialUrl": "https://dingg.app/features/forms-and-surveys",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/forms-and-surveys",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0004",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Multi-Location Support",
+      "officialUrl": "https://dingg.app/features/salon-chain-management-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-chain-management-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0005",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Client Feedback",
+      "officialUrl": "https://dingg.app/features/salon-client-feedback-system",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-client-feedback-system",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0006",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Personalized Profiles",
+      "officialUrl": "https://dingg.app/features/salon-client-profile-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-client-profile-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0007",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Customer Segmentation",
+      "officialUrl": "https://dingg.app/features/salon-client-segmentation",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-client-segmentation",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0008",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Inventory Control",
+      "officialUrl": "https://dingg.app/features/salon-inventory-management-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-inventory-management-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0009",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Easy Invoices",
+      "officialUrl": "https://dingg.app/features/salon-invoicing-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-invoicing-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0010",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Loyalty Rewards",
+      "officialUrl": "https://dingg.app/features/salon-loyalty-program",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-loyalty-program",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0011",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Targeted Marketing",
+      "officialUrl": "https://dingg.app/features/salon-marketing-software-targeted-campaigns",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-marketing-software-targeted-campaigns",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0012",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Membership Programs",
+      "officialUrl": "https://dingg.app/features/salon-membership-program",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-membership-program",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0013",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "24/7 Online Booking",
+      "officialUrl": "https://dingg.app/features/salon-online-booking-system",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-online-booking-system",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0014",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Real-Time Reports",
+      "officialUrl": "https://dingg.app/features/salon-reporting-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-reporting-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0015",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Smart Scheduling",
+      "officialUrl": "https://dingg.app/features/salon-scheduling-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-scheduling-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0016",
+      "vendor": "dingg",
+      "category": "Public feature",
+      "subcategory": "Feature page",
+      "feature": "Staff Management",
+      "officialUrl": "https://dingg.app/features/salon-staff-management-software",
+      "sourceType": "feature_page",
+      "sourceKey": "https://dingg.app/features/salon-staff-management-software",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0017",
+      "vendor": "dingg",
+      "category": "Booking",
+      "subcategory": "Booking",
+      "feature": "How to add block time on the calendar?",
+      "officialUrl": "https://docs.dingg.app/Booking/Booking/How_to_add_block_time_on_the_calendar?",
+      "sourceType": "help_topic",
+      "sourceKey": "238",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0018",
+      "vendor": "dingg",
+      "category": "Booking",
+      "subcategory": "Booking",
+      "feature": "How to book an appointment with your desired/requested stylist?",
+      "officialUrl": "https://docs.dingg.app/Booking/Booking/How_to_book_an_appointment_with_your_desiredrequested_stylist?",
+      "sourceType": "help_topic",
+      "sourceKey": "239",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0019",
+      "vendor": "dingg",
+      "category": "Booking",
+      "subcategory": "Booking",
+      "feature": "How to book appointment",
+      "officialUrl": "https://docs.dingg.app/Booking/Booking/How_to_book_appointment",
+      "sourceType": "help_topic",
+      "sourceKey": "179",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0020",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to add and manage client's family members ",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_add_and_manage_client's_family_members_",
+      "sourceType": "help_topic",
+      "sourceKey": "200",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0021",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to add new client",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_add_new_client",
+      "sourceType": "help_topic",
+      "sourceKey": "181",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0022",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to check client details such as invoice history, membership, package, prepaid etc.",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_check_client_details_such_as_invoice_history,_membership,_package,_prepaid_etc.",
+      "sourceType": "help_topic",
+      "sourceKey": "182",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0023",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to convert any active package to vouchers",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_convert_any_active_package_to_vouchers",
+      "sourceType": "help_topic",
+      "sourceKey": "220",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0024",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to create new forms for clients and manange it",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_create_new_forms_for_clients_and_manange_it",
+      "sourceType": "help_topic",
+      "sourceKey": "209",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0025",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to edit/delete the client ",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_editdelete_the_client_",
+      "sourceType": "help_topic",
+      "sourceKey": "189",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0026",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to import client data",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_import_client_data",
+      "sourceType": "help_topic",
+      "sourceKey": "186",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0027",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view and manage client's forms",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_and_manage_client's_forms",
+      "sourceType": "help_topic",
+      "sourceKey": "201",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0028",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view and manage client's notes",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_and_manage_client's_notes",
+      "sourceType": "help_topic",
+      "sourceKey": "192",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0029",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's history",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_history",
+      "sourceType": "help_topic",
+      "sourceKey": "193",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0030",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's invoices and it's details",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_invoices_and_it's_details",
+      "sourceType": "help_topic",
+      "sourceKey": "194",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0031",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's memberships and it's details",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_memberships_and_it's_details",
+      "sourceType": "help_topic",
+      "sourceKey": "195",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0032",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's packages, it's details and redemption history",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_packages,_it's_details_and_redemption_history",
+      "sourceType": "help_topic",
+      "sourceKey": "196",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0033",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's points and it's history",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_points_and_it's_history",
+      "sourceType": "help_topic",
+      "sourceKey": "199",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0034",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's upcoming appointments",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_upcoming_appointments",
+      "sourceType": "help_topic",
+      "sourceKey": "198",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0035",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "How to view client's vouchers, it's details and redemption history",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/How_to_view_client's_vouchers,_it's_details_and_redemption_history",
+      "sourceType": "help_topic",
+      "sourceKey": "197",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0036",
+      "vendor": "dingg",
+      "category": "Clients",
+      "subcategory": "Clients",
+      "feature": "What are customer segment based filters",
+      "officialUrl": "https://docs.dingg.app/Clients/Clients/What_are_customer_segment_based_filters",
+      "sourceType": "help_topic",
+      "sourceKey": "191",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0037",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "Add multiple services to the booking ",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/Add_multiple_services_to_the_booking_",
+      "sourceType": "help_topic",
+      "sourceKey": "88",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0038",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "Add multiple services with different stylist for same client",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/Add_multiple_services_with_different_stylist_for_same_client",
+      "sourceType": "help_topic",
+      "sourceKey": "89",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0039",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "Generate bill for completed service",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/Generate_bill_for_completed_service",
+      "sourceType": "help_topic",
+      "sourceKey": "92",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0040",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "How to add product consumption from dashboard",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/How_to_add_product_consumption_from_dashboard",
+      "sourceType": "help_topic",
+      "sourceKey": "211",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0041",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "How to check in customer",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/How_to_check_in_customer",
+      "sourceType": "help_topic",
+      "sourceKey": "94",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0042",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "How to confirm the tentative booking",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/How_to_confirm_the_tentative_booking",
+      "sourceType": "help_topic",
+      "sourceKey": "95",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0043",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "How to view notifications",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/How_to_view_notifications",
+      "sourceType": "help_topic",
+      "sourceKey": "87",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0044",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "Move service from complete to upcoming / undo complete service",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/Move_service_from_complete_to_upcoming__undo_complete_service",
+      "sourceType": "help_topic",
+      "sourceKey": "93",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0045",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "Start & complete service",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/Start_&_complete_service",
+      "sourceType": "help_topic",
+      "sourceKey": "91",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0046",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Booking Events",
+      "feature": "What all booking status are available and how to change it",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Booking_Events/What_all_booking_status_are_available_and_how_to_change_it",
+      "sourceType": "help_topic",
+      "sourceKey": "90",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0047",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "Drop an appointment",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/Drop_an_appointment",
+      "sourceType": "help_topic",
+      "sourceKey": "222",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0048",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to add or view the service comment",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_add_or_view_the_service_comment",
+      "sourceType": "help_topic",
+      "sourceKey": "187",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0049",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to arrange stylists in calendar",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_arrange_stylists_in_calendar",
+      "sourceType": "help_topic",
+      "sourceKey": "67",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0050",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to assign appointment to other staff",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_assign_appointment_to_other_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "74",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0051",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to change color of service status",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_change_color_of_service_status",
+      "sourceType": "help_topic",
+      "sourceKey": "76",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0052",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to change Staff Panel / Default Panel",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_change_Staff_Panel__Default_Panel",
+      "sourceType": "help_topic",
+      "sourceKey": "224",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0053",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to change the time of appointment",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_change_the_time_of_appointment",
+      "sourceType": "help_topic",
+      "sourceKey": "73",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0054",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to do reset Stylist if staff name not visible",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_do_reset_Stylist_if_staff_name_not_visible",
+      "sourceType": "help_topic",
+      "sourceKey": "228",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0055",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to filter appointments by service status",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_filter_appointments_by_service_status",
+      "sourceType": "help_topic",
+      "sourceKey": "77",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0056",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to increase or decrease service time",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_increase_or_decrease_service_time",
+      "sourceType": "help_topic",
+      "sourceKey": "72",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0057",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to know more about the appointment",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_know_more_about_the_appointment",
+      "sourceType": "help_topic",
+      "sourceKey": "78",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0058",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to quickly change the status of the service from the calendar slot",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_quickly_change_the_status_of_the_service_from_the_calendar_slot",
+      "sourceType": "help_topic",
+      "sourceKey": "81",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0059",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to show/hide stylist in calendar",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_showhide_stylist_in_calendar",
+      "sourceType": "help_topic",
+      "sourceKey": "68",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0060",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "How to split bill for multiple services ",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/How_to_split_bill_for_multiple_services_",
+      "sourceType": "help_topic",
+      "sourceKey": "80",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0061",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "What orange color line indicates in calendar",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/What_orange_color_line_indicates_in_calendar",
+      "sourceType": "help_topic",
+      "sourceKey": "75",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0062",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Calendar",
+      "feature": "What other options are available for the booked slot in calendar",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Calendar/What_other_options_are_available_for_the_booked_slot_in_calendar",
+      "sourceType": "help_topic",
+      "sourceKey": "79",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0063",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Expense",
+      "feature": "How to add expense type",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Expense/How_to_add_expense_type",
+      "sourceType": "help_topic",
+      "sourceKey": "227",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0064",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Expense",
+      "feature": "How to add expenses",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Expense/How_to_add_expenses",
+      "sourceType": "help_topic",
+      "sourceKey": "180",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0065",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Expense",
+      "feature": "How to edit the expenses",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Expense/How_to_edit_the_expenses",
+      "sourceType": "help_topic",
+      "sourceKey": "203",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0066",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "How to change location/branch",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/How_to_change_locationbranch",
+      "sourceType": "help_topic",
+      "sourceKey": "61",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0067",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "How to expand or collapse the navigation side bar",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/How_to_expand_or_collapse_the_navigation_side_bar",
+      "sourceType": "help_topic",
+      "sourceKey": "60",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0068",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "How to logout of the software",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/How_to_logout_of_the_software",
+      "sourceType": "help_topic",
+      "sourceKey": "55",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0069",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "Reach out for help from DINGG Support Team (Chat)",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/Reach_out_for_help_from_DINGG_Support_Team_(Chat)",
+      "sourceType": "help_topic",
+      "sourceKey": "62",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0070",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "View Profile",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/View_Profile",
+      "sourceType": "help_topic",
+      "sourceKey": "56",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0071",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Home",
+      "feature": "View Subscription",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Home/View_Subscription",
+      "sourceType": "help_topic",
+      "sourceKey": "57",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0072",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Language",
+      "feature": "How to change the language",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Language/How_to_change_the_language",
+      "sourceType": "help_topic",
+      "sourceKey": "86",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0073",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Login/Logout",
+      "feature": "How to log in DINGG?",
+      "officialUrl": "https://docs.dingg.app/Dashboard/LoginLogout/How_to_log_in_DINGG?",
+      "sourceType": "help_topic",
+      "sourceKey": "177",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0074",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Login/Logout",
+      "feature": "How to reset the password?",
+      "officialUrl": "https://docs.dingg.app/Dashboard/LoginLogout/How_to_reset_the_password?",
+      "sourceType": "help_topic",
+      "sourceKey": "178",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0075",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Stats",
+      "feature": "How to fetch today's report",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Stats/How_to_fetch_today's_report",
+      "sourceType": "help_topic",
+      "sourceKey": "85",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0076",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Stats",
+      "feature": "How to know current month financial stats",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Stats/How_to_know_current_month_financial_stats",
+      "sourceType": "help_topic",
+      "sourceKey": "83",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0077",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Stats",
+      "feature": "What all financial and booking stats are available",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Stats/What_all_financial_and_booking_stats_are_available",
+      "sourceType": "help_topic",
+      "sourceKey": "82",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0078",
+      "vendor": "dingg",
+      "category": "Dashboard",
+      "subcategory": "Stats",
+      "feature": "What are segments and how to hide/show it",
+      "officialUrl": "https://docs.dingg.app/Dashboard/Stats/What_are_segments_and_how_to_hideshow_it",
+      "sourceType": "help_topic",
+      "sourceKey": "84",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0079",
+      "vendor": "dingg",
+      "category": "Enquiry",
+      "subcategory": "Enquiry",
+      "feature": "How to add enquiry",
+      "officialUrl": "https://docs.dingg.app/Enquiry/Enquiry/How_to_add_enquiry",
+      "sourceType": "help_topic",
+      "sourceKey": "183",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0080",
+      "vendor": "dingg",
+      "category": "Enquiry",
+      "subcategory": "Enquiry",
+      "feature": "How to edit/delete the enquiry",
+      "officialUrl": "https://docs.dingg.app/Enquiry/Enquiry/How_to_editdelete_the_enquiry",
+      "sourceType": "help_topic",
+      "sourceKey": "208",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0081",
+      "vendor": "dingg",
+      "category": "Enquiry",
+      "subcategory": "Enquiry",
+      "feature": "Understanding Enquiry Management Window",
+      "officialUrl": "https://docs.dingg.app/Enquiry/Enquiry/Understanding_Enquiry_Management_Window",
+      "sourceType": "help_topic",
+      "sourceKey": "207",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0082",
+      "vendor": "dingg",
+      "category": "Enquiry",
+      "subcategory": "Followups",
+      "feature": "How to follow up an enquiry",
+      "officialUrl": "https://docs.dingg.app/Enquiry/Followups/How_to_follow_up_an_enquiry",
+      "sourceType": "help_topic",
+      "sourceKey": "184",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0083",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Auto Consumption",
+      "feature": "Add auto consumption for a service",
+      "officialUrl": "https://docs.dingg.app/Inventory/Auto_Consumption/Add_auto_consumption_for_a_service",
+      "sourceType": "help_topic",
+      "sourceKey": "117",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0084",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Auto Consumption",
+      "feature": "How to change default issue settings",
+      "officialUrl": "https://docs.dingg.app/Inventory/Auto_Consumption/How_to_change_default_issue_settings",
+      "sourceType": "help_topic",
+      "sourceKey": "118",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0085",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Auto Consumption",
+      "feature": "How to enable/disable Auto Consumption",
+      "officialUrl": "https://docs.dingg.app/Inventory/Auto_Consumption/How_to_enabledisable_Auto_Consumption",
+      "sourceType": "help_topic",
+      "sourceKey": "116",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0086",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "Filter the orders by different parameters",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/Filter_the_orders_by_different_parameters",
+      "sourceType": "help_topic",
+      "sourceKey": "113",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0087",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "How to cancel the placed order",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/How_to_cancel_the_placed_order",
+      "sourceType": "help_topic",
+      "sourceKey": "110",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0088",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "How to edit the entry of placed order",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/How_to_edit_the_entry_of_placed_order",
+      "sourceType": "help_topic",
+      "sourceKey": "109",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0089",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "How to export the order",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/How_to_export_the_order",
+      "sourceType": "help_topic",
+      "sourceKey": "111",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0090",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "How to place a new order",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/How_to_place_a_new_order",
+      "sourceType": "help_topic",
+      "sourceKey": "108",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0091",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Orders",
+      "feature": "How to receive the order",
+      "officialUrl": "https://docs.dingg.app/Inventory/Orders/How_to_receive_the_order",
+      "sourceType": "help_topic",
+      "sourceKey": "112",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0092",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "Add consumption for a product and see consumption history",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/Add_consumption_for_a_product_and_see_consumption_history",
+      "sourceType": "help_topic",
+      "sourceKey": "101",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0093",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "Export your inventory",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/Export_your_inventory",
+      "sourceType": "help_topic",
+      "sourceKey": "103",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0094",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to add a new product",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_add_a_new_product",
+      "sourceType": "help_topic",
+      "sourceKey": "96",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0095",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to delete the product",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_delete_the_product",
+      "sourceType": "help_topic",
+      "sourceKey": "104",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0096",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to edit the product",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_edit_the_product",
+      "sourceType": "help_topic",
+      "sourceKey": "98",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0097",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to import inventory",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_import_inventory",
+      "sourceType": "help_topic",
+      "sourceKey": "210",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0098",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to issue a product and see issue history",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_issue_a_product_and_see_issue_history",
+      "sourceType": "help_topic",
+      "sourceKey": "99",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0099",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to know product stock history",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_know_product_stock_history",
+      "sourceType": "help_topic",
+      "sourceKey": "100",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0100",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to manage stock of the products",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_manage_stock_of_the_products",
+      "sourceType": "help_topic",
+      "sourceKey": "102",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0101",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "How to search products and apply filter",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/How_to_search_products_and_apply_filter",
+      "sourceType": "help_topic",
+      "sourceKey": "97",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0102",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Product",
+      "feature": "What would happen to the auto consumption of a product for a service when that service invoice is cancelled",
+      "officialUrl": "https://docs.dingg.app/Inventory/Product/What_would_happen_to_the_auto_consumption_of_a_product_for_a_service_when_that_service_invoice_is_cancelled",
+      "sourceType": "help_topic",
+      "sourceKey": "219",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0103",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Stock Adjustment",
+      "feature": "Adjust stock through Excel file",
+      "officialUrl": "https://docs.dingg.app/Inventory/Stock_Adjustment/Adjust_stock_through_Excel_file",
+      "sourceType": "help_topic",
+      "sourceKey": "115",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0104",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Stock Adjustment",
+      "feature": "How to adjust the stock",
+      "officialUrl": "https://docs.dingg.app/Inventory/Stock_Adjustment/How_to_adjust_the_stock",
+      "sourceType": "help_topic",
+      "sourceKey": "114",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0105",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Supplier",
+      "feature": "How to add Supplier",
+      "officialUrl": "https://docs.dingg.app/Inventory/Supplier/How_to_add_Supplier",
+      "sourceType": "help_topic",
+      "sourceKey": "105",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0106",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Supplier",
+      "feature": "How to edit or delete Supplier",
+      "officialUrl": "https://docs.dingg.app/Inventory/Supplier/How_to_edit_or_delete_Supplier",
+      "sourceType": "help_topic",
+      "sourceKey": "106",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0107",
+      "vendor": "dingg",
+      "category": "Inventory",
+      "subcategory": "Supplier",
+      "feature": "How to mark supplier as \"Active\"",
+      "officialUrl": "https://docs.dingg.app/Inventory/Supplier/How_to_mark_supplier_as_%22Active%22",
+      "sourceType": "help_topic",
+      "sourceKey": "107",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0108",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to add multiple payment mode for an invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_add_multiple_payment_mode_for_an_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "122",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0109",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to add or remove services in the invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_add_or_remove_services_in_the_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "138",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0110",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to add tip amount to the invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_add_tip_amount_to_the_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "120",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0111",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to apply Coupon",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_apply_Coupon",
+      "sourceType": "help_topic",
+      "sourceKey": "229",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0112",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to apply discount in invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_apply_discount_in_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "121",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0113",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to cancel the invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_cancel_the_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "129",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0114",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to change default selected item and default selected stylist",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_change_default_selected_item_and_default_selected_stylist",
+      "sourceType": "help_topic",
+      "sourceKey": "141",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0115",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to change payment mode after generating invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_change_payment_mode_after_generating_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "125",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0116",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to choose multiple payment mode to show up on the invoice page",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_choose_multiple_payment_mode_to_show_up_on_the_invoice_page",
+      "sourceType": "help_topic",
+      "sourceKey": "137",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0117",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to edit services/products line items particulars",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_edit_servicesproducts_line_items_particulars",
+      "sourceType": "help_topic",
+      "sourceKey": "151",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0118",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to edit the invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_edit_the_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "128",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0119",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to make a partially paid invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_make_a_partially_paid_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "131",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0120",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to make a simple invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_make_a_simple_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "119",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0121",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to make past date invoices",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_make_past_date_invoices",
+      "sourceType": "help_topic",
+      "sourceKey": "188",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0122",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to make scan option available",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_make_scan_option_available",
+      "sourceType": "help_topic",
+      "sourceKey": "136",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0123",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to pay previous dues",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_pay_previous_dues",
+      "sourceType": "help_topic",
+      "sourceKey": "150",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0124",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to redeem package",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_redeem_package",
+      "sourceType": "help_topic",
+      "sourceKey": "153",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0125",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to redeem points",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_redeem_points",
+      "sourceType": "help_topic",
+      "sourceKey": "134",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0126",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to redeem voucher/prepaid",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_redeem_voucherprepaid",
+      "sourceType": "help_topic",
+      "sourceKey": "132",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0127",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to redeem wallet amount",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_redeem_wallet_amount",
+      "sourceType": "help_topic",
+      "sourceKey": "133",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0128",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to show price with service and product name during invoicing",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_show_price_with_service_and_product_name_during_invoicing",
+      "sourceType": "help_topic",
+      "sourceKey": "123",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0129",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "How to split service commission between stylist",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/How_to_split_service_commission_between_stylist",
+      "sourceType": "help_topic",
+      "sourceKey": "130",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0130",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "Understanding Invoice generation window",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/Understanding_Invoice_generation_window",
+      "sourceType": "help_topic",
+      "sourceKey": "152",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0131",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "What are different default invoice settings available on the invoice generation page",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/What_are_different_default_invoice_settings_available_on_the_invoice_generation_page",
+      "sourceType": "help_topic",
+      "sourceKey": "142",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0132",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Invoice",
+      "feature": "What are the different invoice printing options available",
+      "officialUrl": "https://docs.dingg.app/Invoice/Invoice/What_are_the_different_invoice_printing_options_available",
+      "sourceType": "help_topic",
+      "sourceKey": "126",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0133",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Previous Invoice",
+      "feature": "How to download or print the invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Previous_Invoice/How_to_download_or_print_the_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "144",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0134",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Previous Invoice",
+      "feature": "How to email a generated invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Previous_Invoice/How_to_email_a_generated_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "145",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0135",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Previous Invoice",
+      "feature": "How to get a feedback from a customer",
+      "officialUrl": "https://docs.dingg.app/Invoice/Previous_Invoice/How_to_get_a_feedback_from_a_customer",
+      "sourceType": "help_topic",
+      "sourceKey": "147",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0136",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Previous Invoice",
+      "feature": "How to view or access previous invoices",
+      "officialUrl": "https://docs.dingg.app/Invoice/Previous_Invoice/How_to_view_or_access_previous_invoices",
+      "sourceType": "help_topic",
+      "sourceKey": "143",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0137",
+      "vendor": "dingg",
+      "category": "Invoice",
+      "subcategory": "Previous Invoice",
+      "feature": "How to view payment status of an invoice",
+      "officialUrl": "https://docs.dingg.app/Invoice/Previous_Invoice/How_to_view_payment_status_of_an_invoice",
+      "sourceType": "help_topic",
+      "sourceKey": "146",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0138",
+      "vendor": "dingg",
+      "category": "Marketing",
+      "subcategory": "Campaign",
+      "feature": "How to set a campaign or how to send promotional messages",
+      "officialUrl": "https://docs.dingg.app/Marketing/Campaign/How_to_set_a_campaign_or_how_to_send_promotional_messages",
+      "sourceType": "help_topic",
+      "sourceKey": "155",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0139",
+      "vendor": "dingg",
+      "category": "Marketing",
+      "subcategory": "Campaign",
+      "feature": "Understanding Campaign Window",
+      "officialUrl": "https://docs.dingg.app/Marketing/Campaign/Understanding_Campaign_Window",
+      "sourceType": "help_topic",
+      "sourceKey": "212",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0140",
+      "vendor": "dingg",
+      "category": "Marketing",
+      "subcategory": "Loyalty",
+      "feature": "How to set Loyalty",
+      "officialUrl": "https://docs.dingg.app/Marketing/Loyalty/How_to_set_Loyalty",
+      "sourceType": "help_topic",
+      "sourceKey": "176",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0141",
+      "vendor": "dingg",
+      "category": "Marketing",
+      "subcategory": "Segment",
+      "feature": "Understanding Segment Window",
+      "officialUrl": "https://docs.dingg.app/Marketing/Segment/Understanding_Segment_Window",
+      "sourceType": "help_topic",
+      "sourceKey": "213",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0142",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Attendance",
+      "feature": "How to generate staff attendance report",
+      "officialUrl": "https://docs.dingg.app/Reports/Attendance/How_to_generate_staff_attendance_report",
+      "sourceType": "help_topic",
+      "sourceKey": "168",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0143",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Expense",
+      "feature": "How to generate Expense Report",
+      "officialUrl": "https://docs.dingg.app/Reports/Expense/How_to_generate_Expense_Report",
+      "sourceType": "help_topic",
+      "sourceKey": "166",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0144",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Feedback",
+      "feature": "How to check feedback report",
+      "officialUrl": "https://docs.dingg.app/Reports/Feedback/How_to_check_feedback_report",
+      "sourceType": "help_topic",
+      "sourceKey": "169",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0145",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Invoice",
+      "feature": " How to generate invoice/tax detail invoice report",
+      "officialUrl": "https://docs.dingg.app/Reports/Invoice/_How_to_generate_invoicetax_detail_invoice_report",
+      "sourceType": "help_topic",
+      "sourceKey": "157",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0146",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Membership",
+      "feature": "How to generate Membership Sales report",
+      "officialUrl": "https://docs.dingg.app/Reports/Membership/How_to_generate_Membership_Sales_report",
+      "sourceType": "help_topic",
+      "sourceKey": "161",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0147",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Package",
+      "feature": "How to generate Package Sales report",
+      "officialUrl": "https://docs.dingg.app/Reports/Package/How_to_generate_Package_Sales_report",
+      "sourceType": "help_topic",
+      "sourceKey": "162",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0148",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Prepaid/Voucher",
+      "feature": "How to generate Prepaid/Voucher Sales report",
+      "officialUrl": "https://docs.dingg.app/Reports/PrepaidVoucher/How_to_generate_PrepaidVoucher_Sales_report",
+      "sourceType": "help_topic",
+      "sourceKey": "163",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0149",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Product",
+      "feature": " How to generate Product Sales report ",
+      "officialUrl": "https://docs.dingg.app/Reports/Product/_How_to_generate_Product_Sales_report_",
+      "sourceType": "help_topic",
+      "sourceKey": "159",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0150",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Sales Trends",
+      "feature": "How to check Sales Trends or Client Trends",
+      "officialUrl": "https://docs.dingg.app/Reports/Sales_Trends/How_to_check_Sales_Trends_or_Client_Trends",
+      "sourceType": "help_topic",
+      "sourceKey": "170",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0151",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Sales",
+      "feature": "How to generate Daily Sales report for a Day or Week or Month or for Custom Range",
+      "officialUrl": "https://docs.dingg.app/Reports/Sales/How_to_generate_Daily_Sales_report_for_a_Day_or_Week_or_Month_or_for_Custom_Range",
+      "sourceType": "help_topic",
+      "sourceKey": "156",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0152",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Service",
+      "feature": "How to generate service report",
+      "officialUrl": "https://docs.dingg.app/Reports/Service/How_to_generate_service_report",
+      "sourceType": "help_topic",
+      "sourceKey": "158",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0153",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "SMS",
+      "feature": "How to generate SMS Report",
+      "officialUrl": "https://docs.dingg.app/Reports/SMS/How_to_generate_SMS_Report",
+      "sourceType": "help_topic",
+      "sourceKey": "165",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0154",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Staff",
+      "feature": "How to check Staff Performance ",
+      "officialUrl": "https://docs.dingg.app/Reports/Staff/How_to_check_Staff_Performance_",
+      "sourceType": "help_topic",
+      "sourceKey": "164",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0155",
+      "vendor": "dingg",
+      "category": "Reports",
+      "subcategory": "Staff",
+      "feature": "How to generate particular Staff Performance",
+      "officialUrl": "https://docs.dingg.app/Reports/Staff/How_to_generate_particular_Staff_Performance",
+      "sourceType": "help_topic",
+      "sourceKey": "167",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0156",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Business Hours",
+      "feature": "How to setup non working day in a week",
+      "officialUrl": "https://docs.dingg.app/Settings/Business_Hours/How_to_setup_non_working_day_in_a_week",
+      "sourceType": "help_topic",
+      "sourceKey": "10",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0157",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Business Hours",
+      "feature": "How to setup the Business Hours",
+      "officialUrl": "https://docs.dingg.app/Settings/Business_Hours/How_to_setup_the_Business_Hours",
+      "sourceType": "help_topic",
+      "sourceKey": "8",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0158",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Business Hours",
+      "feature": "How to split the day as per Business Hours",
+      "officialUrl": "https://docs.dingg.app/Settings/Business_Hours/How_to_split_the_day_as_per_Business_Hours",
+      "sourceType": "help_topic",
+      "sourceKey": "9",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0159",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "GST Update",
+      "feature": "GST Update for Products",
+      "officialUrl": "https://docs.dingg.app/Settings/GST_Update/GST_Update_for_Products",
+      "sourceType": "help_topic",
+      "sourceKey": "240",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0160",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to create new tax and tax group",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_create_new_tax_and_tax_group",
+      "sourceType": "help_topic",
+      "sourceKey": "7",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0161",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to customize invoice template",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_customize_invoice_template",
+      "sourceType": "help_topic",
+      "sourceKey": "185",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0162",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to enable or disable GST",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_enable_or_disable_GST",
+      "sourceType": "help_topic",
+      "sourceKey": "1",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0163",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to set or enter GST Number",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_set_or_enter_GST_Number",
+      "sourceType": "help_topic",
+      "sourceKey": "4",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0164",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to set price of services tax inclusive",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_set_price_of_services_tax_inclusive",
+      "sourceType": "help_topic",
+      "sourceKey": "6",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0165",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Invoice Settings",
+      "feature": "How to set product price tax inclusive",
+      "officialUrl": "https://docs.dingg.app/Settings/Invoice_Settings/How_to_set_product_price_tax_inclusive",
+      "sourceType": "help_topic",
+      "sourceKey": "5",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0166",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Feedback",
+      "feature": "How to create questionaire for the Feedback",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Feedback/How_to_create_questionaire_for_the_Feedback",
+      "sourceType": "help_topic",
+      "sourceKey": "35",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0167",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Membership",
+      "feature": "How to create a Membership with point system",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Membership/How_to_create_a_Membership_with_point_system",
+      "sourceType": "help_topic",
+      "sourceKey": "33",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0168",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Membership",
+      "feature": "How to create or modify or delete a Membership",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Membership/How_to_create_or_modify_or_delete_a_Membership",
+      "sourceType": "help_topic",
+      "sourceKey": "30",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0169",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Membership",
+      "feature": "How to sale a Membership / Prepaid or Voucher",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Membership/How_to_sale_a_Membership__Prepaid_or_Voucher",
+      "sourceType": "help_topic",
+      "sourceKey": "31",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0170",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Membership",
+      "feature": "What is Weekday and Weekend discount",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Membership/What_is_Weekday_and_Weekend_discount",
+      "sourceType": "help_topic",
+      "sourceKey": "32",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0171",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "Does deletion or modification of any sold Package will affect existing customers",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/Does_deletion_or_modification_of_any_sold_Package_will_affect_existing_customers",
+      "sourceType": "help_topic",
+      "sourceKey": "29",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0172",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "How to create a Package with all services",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/How_to_create_a_Package_with_all_services",
+      "sourceType": "help_topic",
+      "sourceKey": "28",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0173",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "How to create a Package with selected service",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/How_to_create_a_Package_with_selected_service",
+      "sourceType": "help_topic",
+      "sourceKey": "27",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0174",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "How to create or modify or delete a Package",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/How_to_create_or_modify_or_delete_a_Package",
+      "sourceType": "help_topic",
+      "sourceKey": "21",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0175",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "How to sale a Package",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/How_to_sale_a_Package",
+      "sourceType": "help_topic",
+      "sourceKey": "22",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0176",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "What all categories available in a Package",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/What_all_categories_available_in_a_Package",
+      "sourceType": "help_topic",
+      "sourceKey": "23",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0177",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "What all Service Group type available in the Package",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/What_all_Service_Group_type_available_in_the_Package",
+      "sourceType": "help_topic",
+      "sourceKey": "25",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0178",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "What is Count, Time and Money Service group Type",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/What_is_Count,_Time_and_Money_Service_group_Type",
+      "sourceType": "help_topic",
+      "sourceKey": "26",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0179",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Packages",
+      "feature": "What is the difference between Services and Service group in Package",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Packages/What_is_the_difference_between_Services_and_Service_group_in_Package",
+      "sourceType": "help_topic",
+      "sourceKey": "24",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0180",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Prepaid/Vouchers",
+      "feature": "Does deletion or modification of any sold Prepaid or Voucher will affect existing customers",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_PrepaidVouchers/Does_deletion_or_modification_of_any_sold_Prepaid_or_Voucher_will_affect_existing_customers",
+      "sourceType": "help_topic",
+      "sourceKey": "20",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0181",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Prepaid/Vouchers",
+      "feature": "How to create or modify or delete a Prepaid or Voucher",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_PrepaidVouchers/How_to_create_or_modify_or_delete_a_Prepaid_or_Voucher",
+      "sourceType": "help_topic",
+      "sourceKey": "16",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0182",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Prepaid/Vouchers",
+      "feature": "How to sale Prepaid or Voucher",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_PrepaidVouchers/How_to_sale_Prepaid_or_Voucher",
+      "sourceType": "help_topic",
+      "sourceKey": "19",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0183",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Prepaid/Vouchers",
+      "feature": "What is the difference between actual price and offer price",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_PrepaidVouchers/What_is_the_difference_between_actual_price_and_offer_price",
+      "sourceType": "help_topic",
+      "sourceKey": "18",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0184",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to create a Service under Category",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_create_a_Service_under_Category",
+      "sourceType": "help_topic",
+      "sourceKey": "12",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0185",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to create Category for a Service",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_create_Category_for_a_Service",
+      "sourceType": "help_topic",
+      "sourceKey": "11",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0186",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to delete a Category or Service",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_delete_a_Category_or_Service",
+      "sourceType": "help_topic",
+      "sourceKey": "14",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0187",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to export the services and categories",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_export_the_services_and_categories",
+      "sourceType": "help_topic",
+      "sourceKey": "206",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0188",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to import the services and categories",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_import_the_services_and_categories",
+      "sourceType": "help_topic",
+      "sourceKey": "205",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0189",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to modify service name, price and serving time",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_modify_service_name,_price_and_serving_time",
+      "sourceType": "help_topic",
+      "sourceKey": "13",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0190",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Manage Services",
+      "feature": "How to print the service menu",
+      "officialUrl": "https://docs.dingg.app/Settings/Manage_Services/How_to_print_the_service_menu",
+      "sourceType": "help_topic",
+      "sourceKey": "204",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0191",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Online Booking",
+      "feature": "How to enable or disable customer web booking",
+      "officialUrl": "https://docs.dingg.app/Settings/Online_Booking/How_to_enable_or_disable_customer_web_booking",
+      "sourceType": "help_topic",
+      "sourceKey": "43",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0192",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Online Booking",
+      "feature": "How to enable or disable Offer, Packages, Price and Stylist on the booking webpage",
+      "officialUrl": "https://docs.dingg.app/Settings/Online_Booking/How_to_enable_or_disable_Offer,_Packages,_Price_and_Stylist_on_the_booking_webpage",
+      "sourceType": "help_topic",
+      "sourceKey": "46",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0193",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Online Booking",
+      "feature": "How to get QR code for the Digital Menu",
+      "officialUrl": "https://docs.dingg.app/Settings/Online_Booking/How_to_get_QR_code_for_the_Digital_Menu",
+      "sourceType": "help_topic",
+      "sourceKey": "44",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0194",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Online Booking",
+      "feature": "How to get URL for the Facebook and Webstie integration",
+      "officialUrl": "https://docs.dingg.app/Settings/Online_Booking/How_to_get_URL_for_the_Facebook_and_Webstie_integration",
+      "sourceType": "help_topic",
+      "sourceKey": "45",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0195",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to add / edit a service",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_add__edit_a_service",
+      "sourceType": "help_topic",
+      "sourceKey": "230",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0196",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to allow online booking",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_allow_online_booking",
+      "sourceType": "help_topic",
+      "sourceKey": "49",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0197",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to change the Password",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_change_the_Password",
+      "sourceType": "help_topic",
+      "sourceKey": "48",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0198",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to Create an Account",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_Create_an_Account",
+      "sourceType": "help_topic",
+      "sourceKey": "231",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0199",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to reset opening cash ",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_reset_opening_cash_",
+      "sourceType": "help_topic",
+      "sourceKey": "3",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0200",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to set booking limit",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_set_booking_limit",
+      "sourceType": "help_topic",
+      "sourceKey": "51",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0201",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Other Settings",
+      "feature": "How to set queue limit",
+      "officialUrl": "https://docs.dingg.app/Settings/Other_Settings/How_to_set_queue_limit",
+      "sourceType": "help_topic",
+      "sourceKey": "50",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0202",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "SMS Setting",
+      "feature": "How to enable or disable SMS settings and Alerts",
+      "officialUrl": "https://docs.dingg.app/Settings/SMS_Setting/How_to_enable_or_disable_SMS_settings_and_Alerts",
+      "sourceType": "help_topic",
+      "sourceKey": "36",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0203",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "SMS Setting",
+      "feature": "How to enable OTP SMS for the prepaid or voucher or package redemption",
+      "officialUrl": "https://docs.dingg.app/Settings/SMS_Setting/How_to_enable_OTP_SMS_for_the_prepaid_or_voucher_or_package_redemption",
+      "sourceType": "help_topic",
+      "sourceKey": "37",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0204",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "SMS Setting",
+      "feature": "What all SMS settings are available",
+      "officialUrl": "https://docs.dingg.app/Settings/SMS_Setting/What_all_SMS_settings_are_available",
+      "sourceType": "help_topic",
+      "sourceKey": "38",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0205",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Staff Commission",
+      "feature": "What is flat and multilevel commissions and how to setup a multilevel profile",
+      "officialUrl": "https://docs.dingg.app/Settings/Staff_Commission/What_is_flat_and_multilevel_commissions_and_how_to_setup_a_multilevel_profile",
+      "sourceType": "help_topic",
+      "sourceKey": "216",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0206",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Third Party Integration",
+      "feature": "How to enable Tippy and configure it for collecting tips",
+      "officialUrl": "https://docs.dingg.app/Settings/Third_Party_Integration/How_to_enable_Tippy_and_configure_it_for_collecting_tips",
+      "sourceType": "help_topic",
+      "sourceKey": "225",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0207",
+      "vendor": "dingg",
+      "category": "Settings",
+      "subcategory": "Third Party Integration",
+      "feature": "How to get access token for integrating Tippy with DINGG",
+      "officialUrl": "https://docs.dingg.app/Settings/Third_Party_Integration/How_to_get_access_token_for_integrating_Tippy_with_DINGG",
+      "sourceType": "help_topic",
+      "sourceKey": "226",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0208",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Manage Staff",
+      "feature": "How to Add New Staff?",
+      "officialUrl": "https://docs.dingg.app/Staff/Manage_Staff/How_to_Add_New_Staff?",
+      "sourceType": "help_topic",
+      "sourceKey": "171",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0209",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Manage Staff",
+      "feature": "How to assign Category/Services to a Staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Manage_Staff/How_to_assign_CategoryServices_to_a_Staff",
+      "sourceType": "help_topic",
+      "sourceKey": "172",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0210",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Permissions",
+      "feature": "How to assign permission to the staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Permissions/How_to_assign_permission_to_the_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "175",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0211",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Permissions",
+      "feature": "How to create or edit Login Credentials of a staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Permissions/How_to_create_or_edit_Login_Credentials_of_a_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "214",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0212",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Salary",
+      "feature": "How to set up a Salary and Commissions for Staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Salary/How_to_set_up_a_Salary_and_Commissions_for_Staff",
+      "sourceType": "help_topic",
+      "sourceKey": "173",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0213",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Salary",
+      "feature": "How to view or pay Salary and Commissions",
+      "officialUrl": "https://docs.dingg.app/Staff/Salary/How_to_view_or_pay_Salary_and_Commissions",
+      "sourceType": "help_topic",
+      "sourceKey": "221",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0214",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Salary",
+      "feature": "How to view salary history of a staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Salary/How_to_view_salary_history_of_a_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "215",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0215",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Schedule",
+      "feature": "How to add attendance of staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Schedule/How_to_add_attendance_of_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "218",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0216",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Schedule",
+      "feature": "How to add two shifts for a staff?",
+      "officialUrl": "https://docs.dingg.app/Staff/Schedule/How_to_add_two_shifts_for_a_staff?",
+      "sourceType": "help_topic",
+      "sourceKey": "174",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    },
+    {
+      "id": "DIN-0217",
+      "vendor": "dingg",
+      "category": "Staff",
+      "subcategory": "Schedule",
+      "feature": "How to setup a roster/schedule for a staff",
+      "officialUrl": "https://docs.dingg.app/Staff/Schedule/How_to_setup_a_rosterschedule_for_a_staff",
+      "sourceType": "help_topic",
+      "sourceKey": "217",
+      "auraShine": {
+        "ui": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "api": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "data": "NOT_EVIDENCED_IN_ATOMIC_REGISTER",
+        "testOrUat": "NOT_EVIDENCED_IN_ATOMIC_REGISTER"
+      },
+      "status": "Unmapped",
+      "blocker": "AuraShine source and UAT evidence has not been reviewed for this atomic capability."
+    }
+  ],
+  "registerHash": "444ee205c899f5869cf8f31524956599ae0014537135b05436174864cbc8d799"
+}

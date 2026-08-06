@@ -2492,7 +2492,7 @@ async fn reject_reschedule_request(
     Ok(Json(json!({"success":true})))
 }
 
-async fn validate_chair_room_availability(
+pub(crate) async fn validate_chair_room_availability(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,
@@ -2530,7 +2530,7 @@ async fn validate_chair_room_availability(
     Ok(())
 }
 
-async fn validate_service_resource_requirement(
+pub(crate) async fn validate_service_resource_requirement(
     state: &AppState,
     tenant_id: &str,
     branch_id: &str,

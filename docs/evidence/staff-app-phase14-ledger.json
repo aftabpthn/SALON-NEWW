@@ -2022,13 +2022,13 @@
     },
     "F10": {
       "workflow": "AI Scribe recording with consent",
-      "registerStatus": "MISSING",
-      "businessReason": "No complete Staff App recording/consent workflow",
+      "registerStatus": "SOURCE READY; PROVIDER/REAL-DEVICE UAT PENDING",
+      "businessReason": "",
       "regionDecision": null,
       "evidence": {
         "source": {
-          "status": "FAIL",
-          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F10: No complete Staff App recording/consent workflow",
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F10: Staff App records granted/refused consent before capture, streams bounded audio to the configured AI service, never persists audio and supports consent revocation with transcript destruction",
           "verifiedAt": "",
           "verifier": ""
         }
@@ -2036,13 +2036,13 @@
     },
     "F11": {
       "workflow": "Transcription and structured clinical summary",
-      "registerStatus": "MISSING",
-      "businessReason": "AI foundations exist outside app; Staff App Scribe workflow missing",
+      "registerStatus": "SOURCE READY; PROVIDER/ACCURACY UAT PENDING",
+      "businessReason": "",
       "regionDecision": null,
       "evidence": {
         "source": {
-          "status": "FAIL",
-          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F11: AI foundations exist outside app; Staff App Scribe workflow missing",
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F11: Mounted `/staff-scribe` routes call the governed transcription service and persist transcript, structured summary, provider/model evidence and immutable events",
           "verifiedAt": "",
           "verifier": ""
         }
@@ -2050,13 +2050,13 @@
     },
     "F12": {
       "workflow": "AI-assisted form fill with staff review/edit",
-      "registerStatus": "MISSING",
-      "businessReason": "No complete Staff App form-fill workflow",
+      "registerStatus": "SOURCE READY; AUTHENTICATED CLINICAL UAT PENDING",
+      "businessReason": "",
       "regionDecision": null,
       "evidence": {
         "source": {
-          "status": "FAIL",
-          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F12: No complete Staff App form-fill workflow",
+          "status": "REGISTERED",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F12: Provider suggestions remain drafts; the Staff App requires staff review and the Rust service writes only submitted responses through the existing versioned form workflow",
           "verifiedAt": "",
           "verifier": ""
         }
@@ -2064,13 +2064,13 @@
     },
     "F13": {
       "workflow": "Permission/license/model/audit governance for Scribe",
-      "registerStatus": "PARTIAL",
-      "businessReason": "Governed AI patterns exist; Scribe-specific controls are missing",
+      "registerStatus": "SOURCE READY; PRIVACY/PROVIDER CERTIFICATION PENDING",
+      "businessReason": "",
       "regionDecision": null,
       "evidence": {
         "source": {
           "status": "REGISTERED",
-          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F13: Governed AI patterns exist; Scribe-specific controls are missing",
+          "evidence": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md row F13: Separate read/manage permissions, consent evidence, tenant/branch/appointment scope, provider failures, immutable audit events and retention/revocation controls are wired",
           "verifiedAt": "",
           "verifier": ""
         }

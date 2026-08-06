@@ -80,7 +80,7 @@ type WaitlistDialog = {
                   <h2>{{ booking.serviceName }}</h2>
                   <p>{{ booking.businessName }}</p>
                   <div class="booking-meta">
-                    <span><ion-icon name="time-outline"></ion-icon>{{ booking.displayStartAt || booking.startsAt || booking.startAt }}</span>
+                    <span><ion-icon name="time-outline"></ion-icon>{{ bookingDateTime(booking) }}</span>
                     <span><ion-icon name="location-outline"></ion-icon>{{ booking.address }}</span>
                   </div>
                   <div class="actions">
@@ -969,8 +969,22 @@ export class BookingsPage implements OnDestroy, OnInit {
   dateParts(booking: Booking) {
     const label = booking.displayStartAt || booking.startsAt || booking.startAt || "";
     if (label.toLowerCase().includes("today")) return { month: "Today", day: "Now" };
+    const date = new Date(label);
+    if (!Number.isNaN(date.getTime())) {
+      return {
+        month: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date),
+        day: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date)
+      };
+    }
     const match = label.match(/(\d{1,2})\s+([A-Za-z]{3})/);
     return { month: match?.[2] ?? "Soon", day: match?.[1] ?? "Next" };
+  }
+
+  bookingDateTime(booking: Booking): string {
+    const value = booking.displayStartAt || booking.startsAt || booking.startAt || "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return `${date.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })} · ${date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}`;
   }
 
   async cancel(event: Event, id: string) {

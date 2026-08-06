@@ -52,6 +52,7 @@ type LeadScore = {
 };
 type MarketingGovernance = { settings: { frequencyCapDays: number; quietStart: string; quietEnd: string; timezone: string; offerApprovalThresholdBps: number; controlGroupBps: number; attributionWindowDays: number }; exclusions: { clientId: string; clientName: string }[] };
 type MarketingOutboxItem = { id: string; campaignId: string; clientId: string; channel: string; status: string; attempts: number; maxAttempts: number; lastError: string; nextAttemptAt: string; deadLetteredAt?: string; updatedAt?: string };
+type SocialPublication = { id: string; provider: 'facebook' | 'instagram'; caption: string; mediaUrl: string; scheduledAt: string; status: string; providerPostId: string; attempts: number; maxAttempts: number; lastError: string; createdAt: string; publishedAt?: string };
 
 @Component({
     selector: 'page-marketing-leads',
@@ -95,13 +96,15 @@ export class MarketingLeadsPageComponent implements OnInit {
   attribution: MarketingAttribution = { campaigns: [], branchPerformance: [] };
   governance: MarketingGovernance = { settings: { frequencyCapDays: 7, quietStart: '20:00', quietEnd: '09:00', timezone: 'Asia/Kolkata', offerApprovalThresholdBps: 1000, controlGroupBps: 0, attributionWindowDays: 30 }, exclusions: [] };
   marketingOutbox: MarketingOutboxItem[] = [];
+  socialPublications: SocialPublication[] = [];
+  socialDraft = { provider: 'instagram' as 'facebook' | 'instagram', caption: '', mediaUrl: '', scheduledDate: '', scheduledTime: '09:00' };
   exclusionClientId = '';
   templateChannel = 'all';
   templateLanguage = 'all';
   selectedSegment = 'inactive_30';
   segmentStaff = 'all';
   segmentService = 'all';
-  activeSection: 'overview' | 'opportunities' | 'segments' | 'campaigns' | 'automations' | 'offers' | 'templates' | 'outbox' | 'leads' | 'analytics' | 'governance' = 'overview';
+  activeSection: 'overview' | 'opportunities' | 'segments' | 'campaigns' | 'automations' | 'offers' | 'templates' | 'outbox' | 'social' | 'leads' | 'analytics' | 'governance' = 'overview';
   leadSection: 'pipeline' | 'priority' | 'followups' | 'sources' = 'pipeline';
   inactivityDays = 60;
   clientSearch = '';
@@ -164,7 +167,7 @@ export class MarketingLeadsPageComponent implements OnInit {
     this.loading = true;
     this.error = '';
     try {
-      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, offerPerformance, automations, templates, attribution, leadAdvice, governance, whatsappPlans, marketingOutbox] = await Promise.all([
+      const [campaigns, leads, owners, insights, providers, winBack, results, intelligence, offers, offerPerformance, automations, templates, attribution, leadAdvice, governance, whatsappPlans, marketingOutbox, socialPublications] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<any>>('/notifications?notificationType=marketing_campaign&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<Lead[]>>('/marketing/leads?page=1&pageSize=200')),
         firstValueFrom(this.api.get<ApiEnvelope<LeadOwner[]>>('/marketing/leads/owners')),
@@ -182,6 +185,7 @@ export class MarketingLeadsPageComponent implements OnInit {
         firstValueFrom(this.api.get<ApiEnvelope<MarketingGovernance>>('/marketing/governance')).catch(() => ({ data: this.governance })),
         firstValueFrom(this.api.get<ApiEnvelope<WhatsAppCampaignPlan[]>>('/whatsapp-campaign-planner/plans')).catch(() => ({ data: [] as WhatsAppCampaignPlan[] })),
         firstValueFrom(this.api.get<ApiEnvelope<MarketingOutboxItem[]>>('/notifications/marketing-outbox')).catch(() => ({ data: [] as MarketingOutboxItem[] })),
+        firstValueFrom(this.api.get<ApiEnvelope<SocialPublication[]>>('/marketing/social-publications')).catch(() => ({ data: [] as SocialPublication[] })),
       ]);
       this.campaigns = Array.isArray(campaigns.data?.data) ? campaigns.data.data : [];
       this.leads = Array.isArray(leads.data) ? leads.data : [];
@@ -200,6 +204,7 @@ export class MarketingLeadsPageComponent implements OnInit {
       this.governance = governance.data || this.governance;
       this.whatsappPlans = Array.isArray(whatsappPlans.data) ? whatsappPlans.data : [];
       this.marketingOutbox = Array.isArray(marketingOutbox.data) ? marketingOutbox.data : [];
+      this.socialPublications = Array.isArray(socialPublications.data) ? socialPublications.data : [];
       const routeLead = this.leads.find((lead) => lead.id === this.route.snapshot.queryParamMap.get('leadId'));
       if (routeLead && this.selectedLead?.id !== routeLead.id) {
         this.activeSection = 'leads';
@@ -611,6 +616,39 @@ export class MarketingLeadsPageComponent implements OnInit {
     finally { this.busy = false; }
   }
 
+  async queueSocialPublication() {
+    if (this.busy || (!this.socialDraft.caption.trim() && !this.socialDraft.mediaUrl.trim())) return;
+    if (this.socialDraft.provider === 'instagram' && !this.socialDraft.mediaUrl.trim()) { this.error = 'Instagram requires a public HTTPS media URL'; return; }
+    const scheduledAt = this.socialSchedule();
+    if (this.socialDraft.scheduledDate && !scheduledAt) { this.error = 'A valid publication date and time are required'; return; }
+    this.busy = true; this.error = '';
+    try {
+      await firstValueFrom(this.api.post('/marketing/social-publications', {
+        provider: this.socialDraft.provider, caption: this.socialDraft.caption.trim(), mediaUrl: this.socialDraft.mediaUrl.trim() || null,
+        scheduledAt: scheduledAt || null, idempotencyKey: `social-${Date.now()}-${crypto.randomUUID()}`,
+      }));
+      this.socialDraft = { provider: this.socialDraft.provider, caption: '', mediaUrl: '', scheduledDate: '', scheduledTime: '09:00' };
+      await this.reload();
+    } catch (error) { this.error = this.message(error, 'Social publication could not be queued'); }
+    finally { this.busy = false; }
+  }
+
+  async cancelSocialPublication(row: SocialPublication) {
+    if (this.busy) return;
+    this.busy = true; this.error = '';
+    try { await firstValueFrom(this.api.post(`/marketing/social-publications/${row.id}/cancel`, {})); await this.reload(); }
+    catch (error) { this.error = this.message(error, 'Social publication could not be cancelled'); }
+    finally { this.busy = false; }
+  }
+
+  async retrySocialPublication(row: SocialPublication) {
+    if (this.busy || !confirm(row.status === 'uncertain' ? 'Meta may already have published this post. Retry anyway?' : 'Retry this publication?')) return;
+    this.busy = true; this.error = '';
+    try { await firstValueFrom(this.api.post(`/marketing/social-publications/${row.id}/retry`, {})); await this.reload(); }
+    catch (error) { this.error = this.message(error, 'Social publication could not be retried'); }
+    finally { this.busy = false; }
+  }
+
   async saveGovernance() {
     if (this.busy) return;
     this.busy = true; this.error = '';
@@ -686,6 +724,11 @@ export class MarketingLeadsPageComponent implements OnInit {
   private campaignSchedule() {
     if (!this.campaignDraft.scheduledDate) return '';
     const value = new Date(`${this.toIsoDate(this.campaignDraft.scheduledDate)}T${this.campaignDraft.scheduledTime || '09:00'}:00`);
+    return Number.isNaN(value.getTime()) ? '' : value.toISOString();
+  }
+  private socialSchedule() {
+    if (!this.socialDraft.scheduledDate) return '';
+    const value = new Date(`${this.toIsoDate(this.socialDraft.scheduledDate)}T${this.socialDraft.scheduledTime || '09:00'}:00`);
     return Number.isNaN(value.getTime()) ? '' : value.toISOString();
   }
   private emptyLead() { return { name: '', phone: '', email: '', source: '', captureChannel: 'other', externalSourceId: '', slaHours: '24', followUp: '', ownerUserId: '', qualificationStatus: 'unqualified', score: '' }; }

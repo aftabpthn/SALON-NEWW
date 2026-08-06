@@ -561,6 +561,16 @@ pub async fn connector_credential(
         .bind(tenant_id).bind(branch_id).bind(provider).fetch_optional(db).await
 }
 
+pub async fn connected_connector_credential(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: &str,
+    provider: &str,
+) -> Result<Option<ConnectorCredential>, sqlx::Error> {
+    sqlx::query_as("SELECT id,access_token_ciphertext,refresh_token_ciphertext,token_expires_at,external_account_id,config_json FROM integration_connector_connections WHERE tenant_id=$1 AND branch_id=$2 AND provider=$3 AND status='connected'")
+        .bind(tenant_id).bind(branch_id).bind(provider).fetch_optional(db).await
+}
+
 pub async fn update_connector_access_token(
     db: &PgPool,
     id: &str,

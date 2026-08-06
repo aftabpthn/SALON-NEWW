@@ -4,7 +4,7 @@
   }
   <section class="workspace">
     <header class="page-head"><h1>Marketing & Messaging</h1><button class="primary" type="button" (click)="openCampaign()">Create campaign</button></header>
-    <nav class="tabs" aria-label="Marketing sections"><button type="button" [class.active]="activeSection === 'overview'" (click)="activeSection = 'overview'">Overview</button><button type="button" [class.active]="activeSection === 'opportunities'" (click)="activeSection = 'opportunities'">AI Opportunities</button><button type="button" [class.active]="activeSection === 'segments'" (click)="activeSection = 'segments'">Segments</button><button type="button" [class.active]="activeSection === 'campaigns'" (click)="activeSection = 'campaigns'">Campaigns</button><button type="button" [class.active]="activeSection === 'automations'" (click)="activeSection = 'automations'">Automations</button><button type="button" [class.active]="activeSection === 'offers'" (click)="activeSection = 'offers'">Offers</button><button type="button" [class.active]="activeSection === 'templates'" (click)="activeSection = 'templates'">Templates</button><button type="button" [class.active]="activeSection === 'outbox'" (click)="activeSection = 'outbox'">Outbox</button><button type="button" [class.active]="activeSection === 'leads'" (click)="activeSection = 'leads'">Leads</button><button type="button" [class.active]="activeSection === 'analytics'" (click)="activeSection = 'analytics'">Analytics</button><button type="button" [class.active]="activeSection === 'governance'" (click)="activeSection = 'governance'">Governance</button></nav>
+    <nav class="tabs" aria-label="Marketing sections"><button type="button" [class.active]="activeSection === 'overview'" (click)="activeSection = 'overview'">Overview</button><button type="button" [class.active]="activeSection === 'opportunities'" (click)="activeSection = 'opportunities'">AI Opportunities</button><button type="button" [class.active]="activeSection === 'segments'" (click)="activeSection = 'segments'">Segments</button><button type="button" [class.active]="activeSection === 'campaigns'" (click)="activeSection = 'campaigns'">Campaigns</button><button type="button" [class.active]="activeSection === 'automations'" (click)="activeSection = 'automations'">Automations</button><button type="button" [class.active]="activeSection === 'offers'" (click)="activeSection = 'offers'">Offers</button><button type="button" [class.active]="activeSection === 'templates'" (click)="activeSection = 'templates'">Templates</button><button type="button" [class.active]="activeSection === 'social'" (click)="activeSection = 'social'">Social Publisher</button><button type="button" [class.active]="activeSection === 'outbox'" (click)="activeSection = 'outbox'">Outbox</button><button type="button" [class.active]="activeSection === 'leads'" (click)="activeSection = 'leads'">Leads</button><button type="button" [class.active]="activeSection === 'analytics'" (click)="activeSection = 'analytics'">Analytics</button><button type="button" [class.active]="activeSection === 'governance'" (click)="activeSection = 'governance'">Governance</button></nav>
 
     @if (activeSection === 'overview') {
       <section class="overview-workspace">
@@ -189,6 +189,22 @@
   <div class="empty">No templates yet</div>
 }</div></section>
 }
+@if (activeSection === 'social') {
+  <section class="tab-workspace social-publisher"><header><h2>Social Publisher</h2></header>
+    <form class="social-compose" (ngSubmit)="queueSocialPublication()">
+      <label>Channel<select name="socialProvider" [(ngModel)]="socialDraft.provider"><option value="instagram">Instagram</option><option value="facebook">Facebook</option></select></label>
+      <label>Media URL<input name="socialMediaUrl" type="url" placeholder="https://" [(ngModel)]="socialDraft.mediaUrl" /></label>
+      <label>Publish date<as-date-picker ariaLabel="Publication date" [(value)]="socialDraft.scheduledDate"></as-date-picker></label>
+      <label>Publish time<input name="socialTime" type="time" [(ngModel)]="socialDraft.scheduledTime" /></label>
+      <label class="social-caption">Caption<textarea name="socialCaption" rows="4" maxlength="5000" [(ngModel)]="socialDraft.caption"></textarea></label>
+      <button class="primary" type="submit" [disabled]="busy || (!socialDraft.caption.trim() && !socialDraft.mediaUrl.trim())">{{ busy ? 'Saving…' : (socialDraft.scheduledDate ? 'Schedule' : 'Publish now') }}</button>
+    </form>
+    <div class="social-table"><header><span>Channel</span><span>Schedule</span><span>Content</span><span>Status</span><span>Action</span></header>@for (row of socialPublications; track row.id) {
+      <div><strong>{{ row.provider }}</strong><span>{{ formatDate(row.scheduledAt) }}</span><span>{{ row.caption || row.mediaUrl }}</span><span><b [class.approved]="row.status === 'published'">{{ row.status }}</b>@if (row.lastError) {<small>{{ row.lastError }}</small>}</span><span class="offer-actions">@if (row.status === 'queued' || row.status === 'retry') {<button type="button" [disabled]="busy" (click)="cancelSocialPublication(row)">Cancel</button>}@if (row.status === 'failed' || row.status === 'uncertain') {<button type="button" [disabled]="busy" (click)="retrySocialPublication(row)">Retry</button>}</span></div>
+    }@if (!socialPublications.length) {<div class="empty">No social publications</div>}</div>
+  </section>
+}
+
 @if (activeSection === 'outbox') {
   <section class="tab-workspace"><header><h2>Outbox</h2></header><div class="simple-table campaigns-table"><header><span>Campaign</span><span>Channel</span><span>Attempts</span><span>Status / error</span></header>@for (item of marketingOutbox; track item.id) {
   <div><strong>{{ item.campaignId || item.id }}</strong><span>{{ item.channel }}</span><span>{{ item.attempts }} / {{ item.maxAttempts }}</span><span>{{ item.status }}{{ item.lastError ? ' · ' + item.lastError : '' }}</span></div>

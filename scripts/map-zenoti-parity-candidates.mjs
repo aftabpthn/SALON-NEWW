@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Triage helper for the Zenoti master parity register.
+// Triage helper for an official competitor master parity register.
 //
-// 2561 of its 2616 rows carry the blocker "No AuraShine evidence is mapped for
-// this public Zenoti capability." That is a statement about missing *mapping
+// Most rows carry the blocker "No AuraShine evidence is mapped for this public
+// Zenoti capability." That is a statement about missing *mapping
 // work*, not about missing product: spot checks found shipped features sitting
 // in the unmapped pile. With every row equally opaque there is no way to tell
 // the two apart, so the register cannot be used to steer roadmap decisions.
@@ -10,20 +10,26 @@
 // This script does not decide anything. For each unmapped row it searches the
 // real AuraShine surface — mounted route literals, backend module names,
 // frontend route paths, database tables — and reports what it found, so a human
-// reviews a ranked worklist instead of 2561 identical rows. Nothing here writes
+// reviews a ranked worklist instead of thousands of identical rows. Nothing here writes
 // to the register or marks a row Complete; that still requires real evidence,
 // entered by a person, exactly as the register's own rules demand.
 //
-//   node scripts/map-zenoti-parity-candidates.mjs            # write reports
-//   node scripts/map-zenoti-parity-candidates.mjs --summary  # print only
+//   node scripts/map-zenoti-parity-candidates.mjs                     # Zenoti
+//   node scripts/map-zenoti-parity-candidates.mjs --vendor salonist  # Salonist
+//   node scripts/map-zenoti-parity-candidates.mjs --vendor dingg     # DINGG
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { resolve, dirname, basename } from 'node:path';
+import { resolve, relative } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const registerPath = resolve(root, 'docs/evidence/zenoti-master-parity-register.json');
-const jsonOut = resolve(root, 'docs/evidence/zenoti-parity-candidates.json');
-const mdOut = resolve(root, 'docs/ZENOTI_PARITY_TRIAGE.md');
+const vendorFlag = process.argv.indexOf('--vendor');
+const vendor = vendorFlag >= 0 ? process.argv[vendorFlag + 1]?.toLowerCase() : 'zenoti';
+if (!['zenoti', 'salonist', 'dingg'].includes(vendor)) throw new Error(`Unsupported vendor: ${vendor}`);
+const vendorName = vendor === 'dingg' ? 'DINGG' : `${vendor[0].toUpperCase()}${vendor.slice(1)}`;
+const registerPath = resolve(root, `docs/evidence/${vendor}-master-parity-register.json`);
+const jsonOut = resolve(root, `docs/evidence/${vendor}-parity-candidates.json`);
+const mdOut = resolve(root, `docs/${vendor.toUpperCase()}_PARITY_TRIAGE.md`);
+const featureOf = (row) => row.zenotiFeature ?? row.feature;
 
 // Words that appear in nearly every Help Center title and carry no signal about
 // which part of the product a capability belongs to.
@@ -57,26 +63,31 @@ const read = (path) => readFileSync(path, 'utf8');
 
 /** Everything AuraShine actually exposes, indexed by the words in its names. */
 function auraSurface() {
-  const routeFiles = walk(resolve(root, 'backend-rust/src/routes'), (name) => name.endsWith('.rs'));
+  const routeRoot = resolve(root, 'backend-rust/src/routes');
+  const routeMod = read(resolve(routeRoot, 'mod.rs'));
+  const mountedRouteModules = new Set([
+    ...routeMod.matchAll(/\.merge\(\s*([A-Za-z0-9_]+)::[A-Za-z0-9_]*router\s*\(/g),
+  ].map((match) => match[1]));
+  const routeFiles = ['mod.rs', ...[...mountedRouteModules].map((name) => `${name}.rs`)]
+    .map((name) => resolve(routeRoot, name));
   const routes = new Set();
   for (const file of routeFiles) {
     for (const match of read(file).matchAll(/\.route\(\s*"([^"]+)"/g)) routes.add(match[1]);
   }
 
   const modules = new Set();
-  for (const dir of ['services', 'repositories', 'routes']) {
+  for (const dir of ['services', 'repositories']) {
     for (const name of readdirSync(resolve(root, 'backend-rust/src', dir))) {
       if (name.endsWith('.rs') && name !== 'mod.rs') modules.add(`${dir}/${name.replace(/\.rs$/, '')}`);
     }
   }
+  for (const name of mountedRouteModules) modules.add(`routes/${name}`);
 
   const pages = new Set();
   for (const app of ['frontend-angular', 'staff-app', 'customer-app']) {
-    const routesFile = resolve(root, app, 'src/app/app.routes.ts');
-    let source = '';
-    try { source = read(routesFile); } catch { continue; }
-    for (const match of source.matchAll(/path:\s*["']([^"']*)["']/g)) {
-      if (match[1]) pages.add(`${app}:${match[1]}`);
+    const appRoot = resolve(root, app, 'src/app');
+    for (const file of walk(appRoot, (name) => /(?:page|component)\.ts$/.test(name))) {
+      pages.add(`${app}:${relative(appRoot, file).replaceAll('\\', '/').replace(/\.ts$/, '')}`);
     }
   }
 
@@ -84,6 +95,18 @@ function auraSurface() {
   for (const file of walk(resolve(root, 'backend-rust/migrations'), (name) => name.endsWith('.sql'))) {
     for (const match of read(file).matchAll(/CREATE TABLE (?:IF NOT EXISTS )?([a-z0-9_]+)/gi)) {
       tables.add(match[1].toLowerCase());
+    }
+  }
+
+  const tests = new Set();
+  for (const app of ['frontend-angular', 'staff-app', 'customer-app']) {
+    for (const directory of ['tests', 'src/app']) {
+      const testRoot = resolve(root, app, directory);
+      try {
+        for (const file of walk(testRoot, (name) => /(?:test\.mjs|spec\.ts)$/.test(name))) {
+          tests.add(`${app}:${relative(resolve(root, app), file).replaceAll('\\', '/')}`);
+        }
+      } catch { /* The app may not own both test roots. */ }
     }
   }
 
@@ -100,7 +123,8 @@ function auraSurface() {
   for (const module of modules) add('module', module);
   for (const page of pages) add('page', page);
   for (const table of tables) add('table', table);
-  return { index, counts: { routes: routes.size, modules: modules.size, pages: pages.size, tables: tables.size } };
+  for (const test of tests) add('test', test);
+  return { index, counts: { routes: routes.size, modules: modules.size, pages: pages.size, tables: tables.size, tests: tests.size } };
 }
 
 // Counting shared words treats "manage" and "no-show" as equally informative,
@@ -123,9 +147,8 @@ function inverseFrequency(surface) {
 }
 
 // A table proves a migration ran, not that anything can reach the data. The
-// audit found staff_ai_scribe_sessions and staff_ai_scribe_events sitting in the
-// schema with no route, service or screen touching them, while the capability
-// itself is unbuilt — and a plain keyword score rates that a perfect match.
+// A migration can leave a table with no route, service or screen touching it,
+// while a plain keyword score rates that a perfect match.
 // Matches that are only tables get their own band so the pattern is visible
 // instead of being counted as progress.
 function confidenceOf(coverage, kindSet, decisive) {
@@ -142,7 +165,7 @@ function confidenceOf(coverage, kindSet, decisive) {
 }
 
 function candidatesFor(row, surface, weightOf) {
-  const words = tokenise(row.zenotiFeature);
+  const words = tokenise(featureOf(row));
   // Absent words stay in the denominator: a capability whose distinctive term
   // appears nowhere is exactly the gap we want to see.
   const totalWeight = words.reduce((sum, word) => sum + weightOf(word), 0);
@@ -175,7 +198,7 @@ function candidatesFor(row, surface, weightOf) {
   const kinds = new Set(scored.filter((hit) => hit.coverage >= best * 0.8).map((hit) => hit.kind));
   return {
     id: row.id,
-    zenotiFeature: row.zenotiFeature,
+    feature: featureOf(row),
     officialUrl: row.officialUrl,
     searchWords: words,
     matchedWords: [...matched].sort(),
@@ -211,11 +234,11 @@ if (!process.argv.includes('--summary')) {
     `## ${title} (${rows.length})`,
     '',
     ...(rows.length ? [
-      '| Zenoti capability | Matched | Strongest AuraShine candidates |',
+      `| ${vendorName} capability | Matched | Strongest AuraShine candidates |`,
       '|---|---|---|',
       ...rows.slice(0, limit).map((row) => {
         const candidates = row.candidates.slice(0, 3).map((hit) => `\`${hit.kind}: ${hit.value}\``).join('<br>') || '—';
-        return `| [${row.id}](${row.officialUrl}) ${row.zenotiFeature.replace(/\|/g, '\\|').slice(0, 70)} | ${row.matchedWords.slice(0, 4).join(', ')} | ${candidates} |`;
+        return `| [${row.id}](${row.officialUrl}) ${row.feature.replace(/\|/g, '\\|').slice(0, 70)} | ${row.matchedWords.slice(0, 4).join(', ')} | ${candidates} |`;
       }),
       ...(rows.length > limit ? ['', `_${rows.length - limit} more in the JSON report._`] : []),
     ] : ['_None._']),
@@ -223,22 +246,22 @@ if (!process.argv.includes('--summary')) {
   ].join('\n');
 
   writeFileSync(mdOut, [
-    '# Zenoti parity triage',
+    `# ${vendorName} parity triage`,
     '',
-    `Generated ${summary.generatedAt} from \`docs/evidence/zenoti-master-parity-register.json\`.`,
+    `Generated ${summary.generatedAt} from \`docs/evidence/${vendor}-master-parity-register.json\`.`,
     '',
     '**This file decides nothing.** Every row below is still `Unmapped`. The register',
     'marks a capability Complete only when a person records the real UI, API route and',
     'test behind it, and that rule does not change here. What this adds is a starting',
-    'point: the register said 2561 rows were equally unknown, and they are not.',
+    `point: the register said ${unmapped.length} rows were equally unknown, and they are not.`,
     '',
-    `AuraShine surface searched: ${surface.counts.routes} route literals, ${surface.counts.modules} backend modules, ${surface.counts.pages} frontend routes, ${surface.counts.tables} database tables.`,
+    `AuraShine surface searched: ${surface.counts.routes} mounted route literals, ${surface.counts.modules} backend modules, ${surface.counts.pages} frontend pages/components, ${surface.counts.tables} database tables, ${surface.counts.tests} focused frontend tests.`,
     '',
     '| Band | Rows | What it means |',
     '|---|---:|---|',
     `| High | ${byConfidence.high.length} | A route or screen carries the capability's most distinctive term. Very likely already built — verify and map. |`,
     `| Medium | ${byConfidence.medium.length} | Partial agreement across surfaces. Probably adjacent to something that exists. |`,
-    `| Schema-only | ${byConfidence['schema-only'].length} | Tables match but no route, module or screen does. The AI Scribe pattern: migrations ran, nothing reaches them. |`,
+    `| Schema-only | ${byConfidence['schema-only'].length} | Tables match but no route, module or screen does. Review for an incomplete flow or obsolete schema. |`,
     `| Low | ${byConfidence.low.length} | One weak signal. Treat as unknown. |`,
     `| None | ${byConfidence.none.length} | Nothing in the codebase resembles it. Most likely a genuine gap. |`,
     '',
@@ -248,14 +271,14 @@ if (!process.argv.includes('--summary')) {
     'number with a real one. **Schema-only** is the most actionable band — each row',
     'is either a feature to finish or a migration to delete, and leaving it half-done',
     'is what made the register look complete when it was not. **None** is the honest',
-    'roadmap input, but read it with judgement: it also contains Zenoti-branded',
+    `roadmap input, but read it with judgement: it also contains ${vendorName}-branded`,
     'things (their assistant, their payments status page) that are not gaps to close,',
     'and specific hardware models that belong in a support matrix rather than a',
     'feature backlog.',
     '',
     'Matching is by name only, so it misses features that exist under different',
-    'wording — "Estimate Demand and Order Quantity" is served by',
-    '`inventory_reorder_forecasts` and still lands in Low. Absence of a match is a',
+    'wording. A shipped workflow can still land in Low when its route, table and',
+    'screen use another domain term. Absence of a match is a',
     'prompt to look, not a verdict.',
     '',
     section('High confidence — verify and map', byConfidence.high, 60),

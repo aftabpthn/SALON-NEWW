@@ -264,6 +264,92 @@
   </section>
 }
 
+@if (activePanel === 'website') {
+  <section class="settings-panel website-builder" aria-label="Website builder">
+    <header>
+      <div><h2>Website builder</h2><span>{{ websitePublished ? 'Published revision ' + (websitePublished.revision || 1) : 'Not published' }}</span></div>
+      <div class="panel-actions">
+        <button type="button" [disabled]="organizationLoading || organizationSaving" (click)="loadOrganization()">Reload</button>
+        <button type="button" [disabled]="!websitePublished" (click)="openPublishedWebsite()">Open website</button>
+        <button type="button" (click)="closePanel()">Close</button>
+      </div>
+    </header>
+    @if (organizationLoading) { <span class="status">Loading…</span> }
+    @if (organizationError) { <span class="status error" role="alert">{{ organizationError }}</span> }
+    @if (!organizationLoading && organization) {
+      <section class="website-toolbar">
+        <label>Template<select [(ngModel)]="websiteDraft.template"><option value="classic">Classic</option><option value="minimal">Minimal</option><option value="editorial">Editorial</option></select></label>
+        <label>Site name<input [ngModel]="websiteDraft.siteName" (ngModelChange)="websiteDraft.siteName = titleCase($event)" maxlength="120" /></label>
+        <label>Change reason<input [(ngModel)]="websiteReason" maxlength="500" /></label>
+        <button type="button" [disabled]="organizationSaving || !websiteReason.trim()" (click)="saveWebsiteDraft()">Save draft</button>
+        <button class="primary" type="button" [disabled]="organizationSaving || !websiteReason.trim()" (click)="publishWebsite()">Publish</button>
+      </section>
+
+      <div class="website-layout">
+        <nav class="website-pages" aria-label="Website pages">
+          @for (page of websiteDraft.pages; track page.id) {
+            <button type="button" [class.is-active]="websitePageId === page.id" (click)="websitePageId = page.id"><span>{{ page.navigationLabel || page.title }}</span><small>/{{ page.slug }}</small></button>
+          }
+          <button type="button" [disabled]="websiteDraft.pages.length >= 20" (click)="addWebsitePage()">Add page</button>
+        </nav>
+
+        @if (activeWebsitePage; as page) {
+          <section class="website-editor">
+            <div class="form-grid website-page-fields">
+              <label>Page title<input [ngModel]="page.title" (ngModelChange)="page.title = titleCase($event)" maxlength="120" /></label>
+              <label>URL slug<input [(ngModel)]="page.slug" maxlength="60" /></label>
+              <label>Navigation label<input [ngModel]="page.navigationLabel" (ngModelChange)="page.navigationLabel = titleCase($event)" maxlength="40" /></label>
+              <label>SEO title<input [(ngModel)]="page.seoTitle" maxlength="70" /></label>
+              <label class="wide-field">SEO description<textarea [(ngModel)]="page.seoDescription" maxlength="160"></textarea><small>{{ page.seoDescription.length }}/160</small></label>
+              <label class="check-field"><input type="checkbox" [(ngModel)]="page.visible" />Visible</label>
+              <label class="check-field"><input type="checkbox" [(ngModel)]="page.showInNavigation" />Navigation</label>
+              <button type="button" [disabled]="page.slug === 'home' || websiteDraft.pages.length === 1" (click)="removeWebsitePage(page)">Delete page</button>
+            </div>
+
+            <div class="section-add-row">
+              <select [(ngModel)]="websiteSectionType"><option value="hero">Hero</option><option value="text">Text</option><option value="services">Services</option><option value="booking">Booking</option><option value="contact">Contact</option></select>
+              <button type="button" [disabled]="page.sections.length >= 30" (click)="addWebsiteSection()">Add section</button>
+            </div>
+
+            <div class="website-sections">
+              @for (section of page.sections; track section.id; let index = $index) {
+                <article class="website-section" draggable="true" (dragstart)="websiteDraggingSectionId = section.id" (dragover)="$event.preventDefault()" (drop)="dropWebsiteSection(section)">
+                  <header>
+                    <span>{{ index + 1 }} · {{ section.type }}</span>
+                    <div class="section-actions">
+                      <button type="button" aria-label="Move section up" [disabled]="index === 0" (click)="moveWebsiteSection(section, -1)">↑</button>
+                      <button type="button" aria-label="Move section down" [disabled]="index === page.sections.length - 1" (click)="moveWebsiteSection(section, 1)">↓</button>
+                      <button type="button" [disabled]="page.sections.length === 1" (click)="removeWebsiteSection(section)">Delete</button>
+                    </div>
+                  </header>
+                  <div class="form-grid">
+                    <label>Type<select [(ngModel)]="section.type"><option value="hero">Hero</option><option value="text">Text</option><option value="services">Services</option><option value="booking">Booking</option><option value="contact">Contact</option></select></label>
+                    <label>Heading<input [(ngModel)]="section.heading" maxlength="120" /></label>
+                    <label>Image URL<input type="url" [(ngModel)]="section.imageUrl" maxlength="500" /></label>
+                    <label>Button label<input [(ngModel)]="section.buttonLabel" maxlength="40" /></label>
+                    <label>Button URL<input [(ngModel)]="section.buttonUrl" maxlength="500" /></label>
+                    <label class="check-field"><input type="checkbox" [(ngModel)]="section.visible" />Visible</label>
+                    <label class="wide-field">Content<textarea [(ngModel)]="section.body" maxlength="4000"></textarea></label>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        }
+      </div>
+
+      <section class="compact-record-list">
+        @for (item of organization.configHistory; track item.id) {
+          @if (item.configKey === 'website') {
+            <span><b>Version {{ item.version }}</b><small>{{ item.reason }} · {{ item.active ? 'Active' : 'History' }}</small>@if (!item.active) { <button type="button" [disabled]="organizationSaving || !websiteReason.trim()" (click)="rollbackWebsite(item)">Rollback</button> }</span>
+          }
+        } @empty { <span>No website history yet</span> }
+      </section>
+      <footer><span class="status">{{ organizationStatus }}</span></footer>
+    }
+  </section>
+}
+
 @if (activePanel === 'branches') {
   <section class="settings-panel" aria-label="Branch management">
     <header>

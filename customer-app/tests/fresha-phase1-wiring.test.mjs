@@ -3,13 +3,31 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = (file) => readFileSync(new URL(`../src/app/features/${file}`, import.meta.url), 'utf8');
+const appRoutes = () => readFileSync(new URL('../src/app/app.routes.ts', import.meta.url), 'utf8');
 
-test('home exposes treatment, location, time and filter discovery controls', () => {
+test('public entry opens discovery and keeps help available before login', () => {
+  const routes = appRoutes();
+  assert.match(routes, /path: "", redirectTo: "tabs\/home"/);
+  const helpRoute = routes.slice(routes.indexOf('path: "help"'), routes.indexOf('{ path: "**"'));
+  assert.doesNotMatch(helpRoute, /customerAuthGuard/);
+});
+
+test('public shell exposes the approved customer and business actions', () => {
+  const tabs = source('tabs/tabs.page.ts');
+  for (const label of ['Log in', 'List your business', 'Download app', 'Help', 'Customer app', 'English (IN)', 'For business']) {
+    assert.ok(tabs.includes(label), `missing public action: ${label}`);
+  }
+  assert.match(tabs, /environment\.businessAppUrl/);
+});
+
+test('home exposes the approved treatment, location and time discovery controls', () => {
   const home = source('home/home.page.ts');
-  assert.match(home, /Search services or salons/);
+  assert.match(home, /Book local self-care services/);
+  assert.match(home, /All treatments/);
   assert.match(home, /Search near your current area/);
   assert.match(home, /Choose appointment time/);
-  assert.match(home, /More search filters/);
+  assert.match(home, /Search Aura Shine/);
+  assert.match(home, /marketplace\.isAuthenticated\(\)/);
 });
 
 test('search quick chips apply real filter state and report the active sort', () => {

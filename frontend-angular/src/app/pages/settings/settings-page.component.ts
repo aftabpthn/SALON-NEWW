@@ -8,7 +8,7 @@ import { ApiService } from '../../shared/services/api.service';
 import { DatePickerComponent } from '../../shared/date-picker/date-picker.component';
 import { LANGUAGE_OPTIONS, LanguageService, TenantLanguageSettings } from '../../core/i18n/language.service';
 
-type SettingsPanel = 'appointments' | 'organization' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language' | 'kiosk';
+type SettingsPanel = 'appointments' | 'organization' | 'website' | 'branches' | 'franchise' | 'roles' | 'services' | 'ai' | 'clientForms' | 'language' | 'kiosk';
 
 type SettingsSection = {
   code: string;
@@ -203,6 +203,10 @@ type OrganizationLocation = ManagedBranch & { brandId: string | null; timeZone: 
 type OrganizationUnit = { id: string; branchId: string | null; kind: 'business_unit' | 'revenue_center'; code: string; name: string; active: boolean; version: number };
 type OrganizationConfigHistory = { id: string; branchId: string | null; configKey: string; value: Record<string, unknown>; version: number; allowLocationOverride: boolean; active: boolean; reason: string; sourceVersion: number | null; createdBy: string; createdAt: string };
 type EnterpriseVerticalPolicy = { enabledVerticals: string[]; taxJurisdiction: string; dataResidencyRegion: string; terminology: { guest: string; staff: string; appointment: string; location: string } };
+type WebsiteSectionType = 'hero' | 'text' | 'services' | 'booking' | 'contact';
+type WebsiteSection = { id: string; type: WebsiteSectionType; heading: string; body: string; imageUrl: string; buttonLabel: string; buttonUrl: string; visible: boolean };
+type WebsitePage = { id: string; slug: string; title: string; navigationLabel: string; seoTitle: string; seoDescription: string; visible: boolean; showInNavigation: boolean; sections: WebsiteSection[] };
+type WebsiteDocument = { template: 'classic' | 'minimal' | 'editorial'; siteName: string; pages: WebsitePage[]; revision?: number; publishedAt?: string };
 type OrganizationSnapshot = {
   configBranchId: string;
   tenant: { id: string; name: string; slug: string; status: string; businessType: string; gracePeriodEndsAt: string | null; lifecycleReason: string; lifecycleVersion: number };
@@ -344,6 +348,12 @@ export class SettingsPageComponent implements OnInit {
   localBranding = { brandName: '', logoUrl: '', primaryColor: '' };
   centralAllowOverride = true;
   brandingReason = '';
+  websiteDraft: WebsiteDocument = this.defaultWebsiteDocument();
+  websitePublished: WebsiteDocument | null = null;
+  websitePageId = 'home';
+  websiteSectionType: WebsiteSectionType = 'text';
+  websiteReason = '';
+  websiteDraggingSectionId = '';
   centralEnterprisePolicy: EnterpriseVerticalPolicy = this.defaultEnterpriseVerticalPolicy();
   localEnterprisePolicy: EnterpriseVerticalPolicy = this.defaultEnterpriseVerticalPolicy();
   enterpriseAllowOverride = true;
@@ -370,6 +380,7 @@ export class SettingsPageComponent implements OnInit {
   readonly sections: SettingsSection[] = [
     { code: 'LANG', title: 'Language & Region', panel: 'language' },
     { code: 'ORG', title: 'Organization control plane', panel: 'organization' },
+    { code: 'WEB', title: 'Website builder', panel: 'website' },
     { code: 'BR', title: 'Branches', panel: 'branches' },
     { code: 'FR', title: 'Franchise controls', panel: 'franchise' },
     { code: 'ST', title: 'Staff', route: '/staff' },
@@ -412,6 +423,7 @@ export class SettingsPageComponent implements OnInit {
     return this.sections.filter((item) => {
       if (item.panel === 'branches' && !this.auth.hasRole('owner')) return false;
       if (item.panel === 'organization' && !this.auth.hasRole('owner', 'admin') && !this.auth.hasPermission('settings.manage')) return false;
+      if (item.panel === 'website' && !this.auth.hasRole('owner', 'admin') && !this.auth.hasPermission('settings.manage')) return false;
       if (item.panel === 'franchise' && !this.auth.hasRole('owner', 'admin')) return false;
       if (item.panel === 'roles' && !this.auth.hasRole('owner', 'admin')) return false;
       if (item.panel === 'ai' && !this.auth.hasRole('owner', 'admin', 'manager')) return false;
@@ -477,6 +489,7 @@ export class SettingsPageComponent implements OnInit {
     this.saveError = '';
     if (panel === 'branches') await this.loadBranches();
     if (panel === 'organization') await this.loadOrganization();
+    if (panel === 'website') await this.loadOrganization();
     if (panel === 'franchise') await Promise.all([this.loadFranchiseControls(), this.loadSharingPolicy()]);
     if (panel === 'roles') await this.loadRoles();
     if (panel === 'services') await this.loadServiceSettings();
@@ -760,6 +773,12 @@ export class SettingsPageComponent implements OnInit {
     this.organizationBusinessType = snapshot.tenant.businessType;
     this.centralBranding = this.brandingValue(snapshot.centralConfig['branding']);
     this.centralEnterprisePolicy = this.enterprisePolicyValue(snapshot.centralConfig['enterprise_verticals'], snapshot.tenant.businessType);
+    const website = snapshot.centralConfig['website'];
+    this.websiteDraft = this.websiteDocumentValue(website?.['draft'], snapshot.tenant.name);
+    this.websitePublished = website?.['published'] && typeof website['published'] === 'object'
+      ? this.websiteDocumentValue(website['published'], snapshot.tenant.name)
+      : null;
+    if (!this.websiteDraft.pages.some((page) => page.id === this.websitePageId)) this.websitePageId = this.websiteDraft.pages[0]?.id ?? 'home';
     const current = snapshot.locations.some((location) => location.id === this.organizationLocationId)
       ? this.organizationLocationId
       : snapshot.configBranchId || snapshot.locations[0]?.id || '';
@@ -776,6 +795,103 @@ export class SettingsPageComponent implements OnInit {
       logoUrl: String(value?.['logoUrl'] ?? ''),
       primaryColor: String(value?.['primaryColor'] ?? ''),
     };
+  }
+
+  get activeWebsitePage() {
+    return this.websiteDraft.pages.find((page) => page.id === this.websitePageId) ?? this.websiteDraft.pages[0];
+  }
+
+  addWebsitePage() {
+    if (this.websiteDraft.pages.length >= 20) return;
+    let number = this.websiteDraft.pages.length + 1;
+    while (this.websiteDraft.pages.some((page) => page.slug === `page-${number}`)) number += 1;
+    const id = `page-${crypto.randomUUID()}`;
+    this.websiteDraft.pages.push({ id, slug: `page-${number}`, title: 'New Page', navigationLabel: 'New Page', seoTitle: this.websiteDraft.siteName, seoDescription: '', visible: true, showInNavigation: true, sections: [this.newWebsiteSection('text')] });
+    this.websitePageId = id;
+  }
+
+  removeWebsitePage(page: WebsitePage) {
+    if (page.slug === 'home' || this.websiteDraft.pages.length === 1 || !window.confirm(`Delete ${page.title}?`)) return;
+    this.websiteDraft.pages = this.websiteDraft.pages.filter((item) => item.id !== page.id);
+    this.websitePageId = this.websiteDraft.pages[0].id;
+  }
+
+  addWebsiteSection() {
+    this.activeWebsitePage?.sections.push(this.newWebsiteSection(this.websiteSectionType));
+  }
+
+  removeWebsiteSection(section: WebsiteSection) {
+    const page = this.activeWebsitePage;
+    if (!page || page.sections.length === 1 || !window.confirm('Delete this section?')) return;
+    page.sections = page.sections.filter((item) => item.id !== section.id);
+  }
+
+  moveWebsiteSection(section: WebsiteSection, offset: number) {
+    const sections = this.activeWebsitePage?.sections;
+    if (!sections) return;
+    const from = sections.indexOf(section);
+    const to = from + offset;
+    if (from < 0 || to < 0 || to >= sections.length) return;
+    [sections[from], sections[to]] = [sections[to], sections[from]];
+  }
+
+  dropWebsiteSection(target: WebsiteSection) {
+    const sections = this.activeWebsitePage?.sections;
+    const source = sections?.find((section) => section.id === this.websiteDraggingSectionId);
+    if (!sections || !source || source === target) return;
+    const from = sections.indexOf(source);
+    const to = sections.indexOf(target);
+    sections.splice(to, 0, sections.splice(from, 1)[0]);
+    this.websiteDraggingSectionId = '';
+  }
+
+  async saveWebsiteDraft() {
+    if (!this.websiteReason.trim()) return;
+    await this.mutateOrganization(() => firstValueFrom(this.api.put('/api/v1/settings/organization/website/draft', {
+      draft: this.websiteDraft,
+      expectedVersion: this.configVersion(null, 'website'),
+      reason: this.websiteReason,
+    })), 'Website draft saved');
+  }
+
+  async publishWebsite() {
+    if (!this.websiteReason.trim() || !window.confirm('Publish this website version?')) return;
+    await this.mutateOrganization(() => firstValueFrom(this.api.post('/api/v1/settings/organization/website/publish', {
+      expectedVersion: this.configVersion(null, 'website'),
+      reason: this.websiteReason,
+    })), 'Website published');
+  }
+
+  async rollbackWebsite(item: OrganizationConfigHistory) {
+    if (!this.websiteReason.trim()) return;
+    await this.mutateOrganization(() => firstValueFrom(this.api.post(
+      `/api/v1/settings/organization/config/website/rollback/${item.version}`,
+      { expectedVersion: this.configVersion(null, 'website'), reason: this.websiteReason },
+    )), `Website rolled back to version ${item.version}`);
+  }
+
+  openPublishedWebsite() {
+    const slug = this.organization?.tenant.slug || this.organization?.tenant.id;
+    if (slug && this.websitePublished) window.open(`/book/${encodeURIComponent(slug)}`, '_blank', 'noopener');
+  }
+
+  private newWebsiteSection(type: WebsiteSectionType): WebsiteSection {
+    return { id: `section-${crypto.randomUUID()}`, type, heading: '', body: '', imageUrl: '', buttonLabel: '', buttonUrl: '', visible: true };
+  }
+
+  private defaultWebsiteDocument(siteName = ''): WebsiteDocument {
+    return {
+      template: 'classic', siteName,
+      pages: [{
+        id: 'home', slug: 'home', title: 'Home', navigationLabel: 'Home', seoTitle: siteName || 'Online Booking', seoDescription: '', visible: true, showInNavigation: true,
+        sections: [this.newWebsiteSection('hero'), this.newWebsiteSection('services'), this.newWebsiteSection('booking'), this.newWebsiteSection('contact')],
+      }],
+    };
+  }
+
+  private websiteDocumentValue(value: unknown, siteName: string): WebsiteDocument {
+    if (!value || typeof value !== 'object' || !Array.isArray((value as WebsiteDocument).pages)) return this.defaultWebsiteDocument(siteName);
+    return structuredClone(value as WebsiteDocument);
   }
 
   private defaultEnterpriseVerticalPolicy(businessType = 'salon'): EnterpriseVerticalPolicy {

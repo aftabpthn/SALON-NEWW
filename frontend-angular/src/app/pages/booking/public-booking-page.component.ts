@@ -33,6 +33,9 @@ type BookingPayment = {
   paidAt?: string | null;
   refundedAt?: string | null;
 };
+type WebsiteSection = { id: string; type: 'hero' | 'text' | 'services' | 'booking' | 'contact'; heading: string; body: string; imageUrl: string; buttonLabel: string; buttonUrl: string; visible: boolean };
+type WebsitePage = { id: string; slug: string; title: string; navigationLabel: string; seoTitle: string; seoDescription: string; visible: boolean; showInNavigation: boolean; sections: WebsiteSection[] };
+type PublishedWebsite = { template: 'classic' | 'minimal' | 'editorial'; siteName: string; pages: WebsitePage[]; revision: number; publishedAt: string };
 
 @Component({
     selector: 'page-public-booking',
@@ -48,6 +51,8 @@ export class PublicBookingPageComponent implements OnInit {
   private readonly title = inject(Title);
   readonly steps = ['Services', 'Staff', 'Date & time', 'Verify', 'Review', 'Confirm'];
   tenant = { id: '', name: '' };
+  website: PublishedWebsite | null = null;
+  websitePageSlug = 'home';
   branches: Branch[] = [];
   services: Service[] = [];
   staff: Staff[] = [];
@@ -101,6 +106,10 @@ export class PublicBookingPageComponent implements OnInit {
   }
 
   get selectedBranch() { return this.branches.find((branch) => branch.id === this.branchId); }
+  get websitePage() { return this.website?.pages.find((page) => page.slug === this.websitePageSlug && page.visible) ?? this.website?.pages.find((page) => page.slug === 'home' && page.visible) ?? null; }
+  get websitePages() { return this.website?.pages.filter((page) => page.visible && page.showInNavigation) ?? []; }
+  get websiteSections() { return this.websitePage?.sections.filter((section) => section.visible) ?? []; }
+  get showBookingWorkspace() { return !this.website || this.websiteSections.some((section) => section.type === 'booking'); }
   get selectedServices() { return this.services.filter((service) => this.selectedServiceIds.includes(service.id)); }
   get selectedStaff() { return this.staff.find((person) => person.id === this.staffId); }
   get totalPaise() { return this.quotedTotalPaise ?? this.selectedServices.reduce((total, service) => total + this.servicePrice(service), 0); }
@@ -136,6 +145,9 @@ export class PublicBookingPageComponent implements OnInit {
       const slug = this.route.snapshot.paramMap.get('tenantSlug') || '';
       const result = await firstValueFrom(this.http.get<any>(this.url(`/booking-portal/v2/public/${encodeURIComponent(slug)}`)));
       this.tenant = result.tenant || this.tenant;
+      this.website = result.website && typeof result.website === 'object' && Array.isArray(result.website.pages) ? result.website : null;
+      const requestedPage = (this.route.snapshot.queryParamMap.get('page') || 'home').toLowerCase();
+      this.websitePageSlug = this.website?.pages.some((page: WebsitePage) => page.slug === requestedPage && page.visible) ? requestedPage : 'home';
       this.captcha = {
         provider: String(result?.captcha?.provider || ''),
         required: result?.captcha?.required === true,
@@ -158,10 +170,10 @@ export class PublicBookingPageComponent implements OnInit {
   }
 
   private updateMetadata() {
-    const name = this.tenant.name || 'AuraShine';
-    const pageTitle = `Book an appointment | ${name}`;
+    const name = this.website?.siteName || this.tenant.name || 'AuraShine';
+    const pageTitle = this.websitePage?.seoTitle || `Book an appointment | ${name}`;
     this.title.setTitle(pageTitle);
-    this.meta.updateTag({ name: 'description', content: `Book, reschedule or cancel appointments online with ${name}.` });
+    this.meta.updateTag({ name: 'description', content: this.websitePage?.seoDescription || `Book, reschedule or cancel appointments online with ${name}.` });
     this.meta.updateTag({ property: 'og:title', content: pageTitle });
     this.meta.updateTag({ property: 'og:type', content: 'website' });
     const id = 'public-booking-structured-data';
@@ -176,6 +188,21 @@ export class PublicBookingPageComponent implements OnInit {
       location: this.branches.map((branch) => ({ '@type': 'Place', name: branch.name, address: branch.address })),
       potentialAction: { '@type': 'ReserveAction', target: this.document.location.href },
     });
+  }
+
+  selectWebsitePage(slug: string) {
+    if (!this.website?.pages.some((page) => page.slug === slug && page.visible)) return;
+    this.websitePageSlug = slug;
+    const url = new URL(this.document.location.href);
+    if (slug === 'home') url.searchParams.delete('page'); else url.searchParams.set('page', slug);
+    this.document.defaultView?.history.replaceState({}, '', url);
+    this.updateMetadata();
+    this.document.defaultView?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  sectionLink(section: WebsiteSection) {
+    if (section.buttonUrl === '#booking') return '#booking';
+    return section.buttonUrl || '#';
   }
 
   async loadCatalog() {

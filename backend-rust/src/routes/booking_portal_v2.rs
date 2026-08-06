@@ -16,7 +16,7 @@ use super::appointments::{
     ListAppointmentQuery,
 };
 use crate::{
-    services::{booking_service, invoice_delivery},
+    services::{booking_service, invoice_delivery, organization_service},
     state::AppState,
 };
 
@@ -264,6 +264,9 @@ async fn booking_portal_v2_public_tenant(
     .map_err(|_| ApiError::internal("failed to load tenant"))?
     .ok_or_else(|| ApiError::not_found(format!("tenant not found: {tenant_slug}")))?;
     let tenant_id: String = tenant.try_get("id").unwrap_or_default();
+    let website = organization_service::public_website(&state.db, &tenant_id)
+        .await
+        .map_err(|_| ApiError::internal("failed to load published website"))?;
     let branch_rows = sqlx::query("SELECT id::text as id, name, address, latitude, longitude, booking_deposit_percent, created_at FROM branches WHERE tenant_id = $1::uuid AND active = true")
         .bind(&tenant_id)
         .fetch_all(&state.db)
@@ -292,6 +295,7 @@ async fn booking_portal_v2_public_tenant(
             "name": tenant.try_get::<String,_>("name").unwrap_or_default(),
         },
         "branches": branches,
+        "website": website,
         "captcha": {
             "provider": "turnstile",
             "required": state.settings.turnstile_enabled(),
@@ -1764,6 +1768,96 @@ pub(crate) async fn marketplace_availability(
     } else {
         Value::Array(availability)
     })
+}
+
+pub(crate) async fn exact_booking_availability(
+    state: &AppState,
+    tenant_id: &str,
+    branch_id: &str,
+    service_id: &str,
+    start_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
+    requested_staff_id: Option<&str>,
+    room_id: Option<&str>,
+    exclude_appointment_id: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    if end_at <= start_at {
+        return Ok(None);
+    }
+    let duration =
+        real_booking_duration_minutes(state, tenant_id, branch_id, &[service_id.into()]).await?;
+    if duration.is_none_or(|minutes| end_at != start_at + Duration::minutes(minutes)) {
+        return Ok(None);
+    }
+    if let Err(error) = appointments::validate_branch_operating_hours(
+        state, tenant_id, branch_id, start_at, end_at, "", None,
+    )
+    .await
+    {
+        return if error.status_code() == StatusCode::CONFLICT {
+            Ok(None)
+        } else {
+            Err(error)
+        };
+    }
+    let room_id = room_id.unwrap_or_default().trim();
+    if appointments::validate_chair_room_availability(
+        state,
+        tenant_id,
+        branch_id,
+        room_id,
+        start_at,
+        end_at,
+        exclude_appointment_id,
+    )
+    .await
+    .is_err()
+        || appointments::validate_service_resource_requirement(
+            state,
+            tenant_id,
+            branch_id,
+            &[service_id.into()],
+            room_id,
+        )
+        .await
+        .is_err()
+    {
+        return Ok(None);
+    }
+    let requested_staff_id = requested_staff_id.unwrap_or_default().trim();
+    let candidates = sqlx::query_scalar::<_, String>(
+        "SELECT staff.id FROM staff WHERE staff.tenant_id=$1 AND staff.branch_id=$2 AND staff.active=TRUE AND ($4='' OR staff.id=$4) AND (EXISTS(SELECT 1 FROM staff_service_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.service_id=$3) OR EXISTS(SELECT 1 FROM staff_catalog_assignments assignment WHERE assignment.tenant_id=$1 AND assignment.branch_id=$2 AND assignment.staff_id=staff.id AND assignment.item_type='service' AND assignment.item_id=$3)) ORDER BY staff.appointment_display_name,staff.first_name LIMIT 200",
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(service_id)
+    .bind(requested_staff_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| ApiError::internal("failed to load staff availability"))?;
+    for staff_id in candidates {
+        if appointments::validate_staff_blackout(
+            state, tenant_id, branch_id, &staff_id, start_at, end_at,
+        )
+        .await
+        .is_ok()
+            && appointments::validate_staff_booking_availability(
+                state,
+                tenant_id,
+                branch_id,
+                &staff_id,
+                &[service_id.into()],
+                start_at,
+                end_at,
+                exclude_appointment_id,
+            )
+            .await
+            .is_ok()
+        {
+            return Ok(Some(staff_id));
+        }
+    }
+    Ok(None)
 }
 
 async fn generate_slots(

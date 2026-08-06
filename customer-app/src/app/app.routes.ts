@@ -6,7 +6,7 @@ export const routes: Routes = [
     path: "kiosk",
     loadComponent: () => import("./features/kiosk/kiosk.page").then((m) => m.KioskPage)
   },
-  { path: "", redirectTo: "onboarding", pathMatch: "full" },
+  { path: "", redirectTo: "tabs/home", pathMatch: "full" },
   {
     path: "onboarding",
     loadComponent: () => import("./features/onboarding/onboarding.page").then((m) => m.OnboardingPage)
@@ -209,7 +209,6 @@ export const routes: Routes = [
   },
   {
     path: "help",
-    canActivate: [customerAuthGuard],
     loadComponent: () => import("./features/utility/help.page").then((m) => m.HelpPage)
   },
   { path: "**", redirectTo: "tabs/home" }

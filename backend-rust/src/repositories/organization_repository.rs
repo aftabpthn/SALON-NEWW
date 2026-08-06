@@ -420,6 +420,24 @@ pub async fn config_version(
     .await
 }
 
+pub async fn active_config(
+    db: &PgPool,
+    tenant_id: &str,
+    branch_id: Option<&str>,
+    key: &str,
+) -> Result<Option<(Value, bool)>, sqlx::Error> {
+    sqlx::query_as(
+        r#"SELECT c.value_json,c.allow_location_override FROM organization_config_versions c
+      JOIN tenants t ON t.id=c.tenant_id WHERE (t.id::TEXT=$1 OR t.scope_id=$1)
+      AND c.branch_id IS NOT DISTINCT FROM $2::UUID AND c.config_key=$3 AND c.active=TRUE"#,
+    )
+    .bind(tenant_id)
+    .bind(branch_id)
+    .bind(key)
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn update_lifecycle(
     db: &PgPool,
     tenant_id: &str,

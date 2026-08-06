@@ -23,6 +23,9 @@ Endpoint references in this README are catalog entries, not automatic runtime cl
 - [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) — compact UI tokens referenced by UI/UX guidelines.
 - [INVENTORY_API_CONTRACTS.md](./INVENTORY_API_CONTRACTS.md) — current Rust inventory, audit, supplier, backbar, laundry and forecast contracts.
 - [ZENOTI_MASTER_PARITY_REGISTER.md](./ZENOTI_MASTER_PARITY_REGISTER.md) — locked public Zenoti capability index, Aura evidence map, route truth and product-owner gate.
+- [SALONIST_MASTER_PARITY_REGISTER.md](./SALONIST_MASTER_PARITY_REGISTER.md) — current official Salonist Help Center and feature-page atomic baseline.
+- [DINGG_MASTER_PARITY_REGISTER.md](./DINGG_MASTER_PARITY_REGISTER.md) — current official DINGG Help and advanced feature-page atomic baseline.
+- [AURASHINE_COMPETITOR_FEATURE_COVERAGE_MATRIX.md](./AURASHINE_COMPETITOR_FEATURE_COVERAGE_MATRIX.md) — current cross-competitor evidence status, genuine gaps, activation gates and do-not-rebuild list.
 - [INVENTORY_ZENOTI_PARITY_REGISTER.md](./INVENTORY_ZENOTI_PARITY_REGISTER.md) — permanent Zenoti-to-AuraShine inventory workflow and verification register.
 - [STAFF_APP_ZENOTI_PARITY_REGISTER.md](./STAFF_APP_ZENOTI_PARITY_REGISTER.md) — linked Staff App parity and certification sub-register.
 - [AI_PREDICTION_OUTCOMES.md](./AI_PREDICTION_OUTCOMES.md) — how stored predictions are checked against what happened, and how measured accuracy is reported.

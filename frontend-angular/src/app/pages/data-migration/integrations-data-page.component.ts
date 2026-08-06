@@ -11,10 +11,11 @@ import { DataMigrationStore, DuplicateDecision, ImportAnalysis, ImportAnalysisRo
 
 type Tab = 'Overview' | 'Integrations' | 'API Keys' | 'Webhooks' | 'Imports' | 'Exports';
 type Provider = { provider: string; enabled: boolean; webhookConfigured: boolean; environment: string };
-type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier' | 'zenoti' | 'dingg'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
+type ConnectorRow = { provider: 'quickbooks' | 'xero' | 'netsuite' | 'google' | 'zapier' | 'zenoti' | 'dingg' | 'meta'; label: string; category: string; authMode: string; configured: boolean; status: string; externalAccountId: string; externalAccountName: string; lastSyncedAt?: string; lastError: string };
 type ConnectorSyncJob = { id: string; provider: string; triggerSource: string; status: string; attempts: number; lastError: string; createdAt: string; completedAt?: string };
 type ConnectorAccountMapping = { localAccountCode: string; externalAccountId: string; externalAccountName: string; version: number; updatedBy: string; updatedAt: string };
 type ConnectorReconciliation = { provider: string; localJournalCount: number; localDebitPaise: number; localCreditPaise: number; syncedJournalCount: number; syncedDebitPaise: number; syncedCreditPaise: number; pendingJournalCount: number; processingJournalCount: number; failedJournalCount: number; uncertainJournalCount: number; unmappedAccountCodes: string[]; balanced: boolean; reconciled: boolean };
+type ReserveWithGoogleSettings = { merchantId: string; enabled: boolean; serverCredentialsConfigured: boolean; bookingServerPath: string; status: string };
 type ApiKeyRow = { id: string; name: string; keyPrefix: string; scopesJson: string[]; ipAllowlistJson: string[]; rateLimitPerMinute: number; status: string; lastUsedAt?: string; createdAt: string };
 type WebhookRow = { id: string; name: string; endpointUrl: string; events: string[]; active: boolean; updatedAt: string };
 type WebhookDelivery = { id: string; subscriptionId: string; eventType: string; eventId: string; status: string; attempts: number; responseStatus?: number; lastError: string; deliveredAt?: string; deadLetteredAt?: string; replayedAt?: string; replayedBy?: string; createdAt: string; updatedAt: string };
@@ -44,10 +45,13 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   webhookDraft = { name: '', endpointUrl: '', events: ['client.created'] as string[] }; revealedSecret = '';
   netsuiteAccountId = '';
   migrationConnectorDraft = { credential: '', authScheme: 'api_key', centerIds: '', startDate: '', endDate: '', exportUrl: '', sourceFileName: 'dingg-export.xlsx', mode: 'dry-run' as 'dry-run' | 'commit' };
+  metaConnectorDraft = { credential: '', pageId: '', instagramBusinessAccountId: '', graphApiBaseUrl: '' };
   selectedAccountingConnector: ConnectorRow | null = null;
   accountingMappings: ConnectorAccountMapping[] = [];
   accountingReconciliation: ConnectorReconciliation | null = null;
   accountingMappingDraft: Record<string, { externalAccountId: string; externalAccountName: string }> = {};
+  reserveWithGoogle: ReserveWithGoogleSettings = { merchantId: '', enabled: false, serverCredentialsConfigured: false, bookingServerPath: '/actions-center/v3', status: 'configuration_required' };
+  reserveWithGoogleDraft = { merchantId: '', enabled: false };
   selectedSourceFile: File | null = null; selectedSourceFileId = ''; uploadSessionId = ''; uploadProgress = 0; uploadStatus = '';
   sourceProvider = 'auto'; evidenceRetentionDays = 90; sourceProfile: MigrationSourceProfile | null = null; selectedSourceSheet = ''; selectedHeaderSourceSheet = '';
   quarantineSelected: Record<string, boolean> = {}; quarantineCorrections: Record<string, string> = {};
@@ -80,7 +84,7 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   async reload() {
     this.loading = true; this.error = '';
     try {
-      const [payments, delivery, connectors, connectorJobs, keys, hooks, hookDeliveries] = await Promise.all([
+      const [payments, delivery, connectors, connectorJobs, keys, hooks, hookDeliveries, reserveWithGoogle] = await Promise.all([
         firstValueFrom(this.api.get<ApiEnvelope<Provider[]>>('/pos/payment-providers')),
         firstValueFrom(this.api.get<ApiEnvelope<Provider[]>>('/settings/integrations/delivery-providers')),
         firstValueFrom(this.api.get<ApiEnvelope<ConnectorRow[]>>('/settings/integrations/connectors')),
@@ -94,9 +98,10 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
         this.canViewApiClients
           ? firstValueFrom(this.api.get<ApiEnvelope<WebhookDelivery[]>>('/settings/integrations/webhook-deliveries'))
           : Promise.resolve({ success: true, data: [] } as ApiEnvelope<WebhookDelivery[]>),
+        firstValueFrom(this.api.get<ApiEnvelope<ReserveWithGoogleSettings>>('/settings/integrations/reserve-with-google')),
         this.migration.reload(),
       ]);
-      this.providers = [...(delivery.data || []), ...(payments.data || [])]; this.connectors = connectors.data || []; this.connectorJobs = connectorJobs.data || []; this.apiKeys = keys.data || []; this.webhooks = hooks.data || []; this.webhookDeliveries = hookDeliveries.data || [];
+      this.providers = [...(delivery.data || []), ...(payments.data || [])]; this.connectors = connectors.data || []; this.connectorJobs = connectorJobs.data || []; this.apiKeys = keys.data || []; this.webhooks = hooks.data || []; this.webhookDeliveries = hookDeliveries.data || []; this.reserveWithGoogle = reserveWithGoogle.data || this.reserveWithGoogle; this.reserveWithGoogleDraft = { merchantId: this.reserveWithGoogle.merchantId, enabled: this.reserveWithGoogle.enabled };
     } catch (error) { this.error = this.message(error, 'Integration data could not be loaded'); }
     finally { this.loading = false; }
   }
@@ -110,6 +115,14 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   closeDrawer() { if (!this.busy) { this.drawer = ''; this.selectedJob = null; this.migration.clearGovernance(); } }
   toggleScope(scope: string) { this.apiKeyDraft.scopes = this.toggle(this.apiKeyDraft.scopes, scope); }
   toggleEvent(event: string) { this.webhookDraft.events = this.toggle(this.webhookDraft.events, event); }
+
+  async saveReserveWithGoogle() {
+    if (!this.canManageApiClients || !this.reserveWithGoogleDraft.merchantId.trim()) return;
+    await this.action(async () => {
+      const result = await firstValueFrom(this.api.put<ApiEnvelope<ReserveWithGoogleSettings>>('/settings/integrations/reserve-with-google', { merchantId: this.reserveWithGoogleDraft.merchantId.trim(), enabled: this.reserveWithGoogleDraft.enabled }));
+      if (result.data) { this.reserveWithGoogle = result.data; this.reserveWithGoogleDraft = { merchantId: result.data.merchantId, enabled: result.data.enabled }; }
+    }, 'Reserve with Google settings could not be saved');
+  }
 
   async saveCutover() {
     const draft = this.cutoverDraft;
@@ -265,6 +278,18 @@ export class IntegrationsDataPageComponent implements OnInit, OnDestroy {
   async connectConnector(row: ConnectorRow) {
     if (row.provider === 'zapier') { this.activeTab = 'API Keys'; return; }
     if (!row.configured) { this.error = `${row.label} credentials are not configured`; return; }
+    if (row.provider === 'meta') {
+      const draft = this.metaConnectorDraft;
+      if (!draft.credential.trim() || !draft.pageId.trim() || !draft.graphApiBaseUrl.trim()) { this.error = 'Meta page token, Page ID, and Graph API base URL are required'; return; }
+      await this.action(async () => {
+        await firstValueFrom(this.api.post(`/settings/integrations/connectors/${row.provider}/credentials`, {
+          credential: draft.credential.trim(), pageId: draft.pageId.trim(), instagramBusinessAccountId: draft.instagramBusinessAccountId.trim() || null, graphApiBaseUrl: draft.graphApiBaseUrl.trim(),
+        }));
+        this.metaConnectorDraft.credential = '';
+        await this.reload();
+      }, `${row.label} could not be connected`);
+      return;
+    }
     if (row.provider === 'zenoti' || row.provider === 'dingg') {
       const draft = this.migrationConnectorDraft;
       if (!draft.credential.trim()) { this.error = `${row.label} credential is required`; return; }

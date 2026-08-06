@@ -15,7 +15,8 @@ use crate::{
         organization_service::{
             self, BrandInput, ConfigInput, DepartmentInput, FeatureOverrideInput, HolidayInput,
             LocationOperationsInput, OrganizationProfileInput, OrganizationUnitInput,
-            RollbackInput, TenantLifecycleInput, UsageQuotaInput,
+            RollbackInput, TenantLifecycleInput, UsageQuotaInput, WebsiteDraftInput,
+            WebsitePublishInput,
         },
     },
     state::AppState,
@@ -57,6 +58,14 @@ pub fn router() -> Router<AppState> {
         .route(
             "/settings/organization/config/:key",
             put(save_central_config),
+        )
+        .route(
+            "/settings/organization/website/draft",
+            put(save_website_draft),
+        )
+        .route(
+            "/settings/organization/website/publish",
+            post(publish_website),
         )
         .route(
             "/settings/organization/config/:key/rollback/:version",
@@ -300,6 +309,44 @@ async fn save_central_config(
     Json(payload): Json<ConfigInput>,
 ) -> ApiResult<Value> {
     save_config(state, claims, headers, None, key, payload).await
+}
+
+async fn save_website_draft(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<WebsiteDraftInput>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        organization_service::save_website_draft(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
+}
+
+async fn publish_website(
+    State(state): State<AppState>,
+    Extension(claims): Extension<AuthClaims>,
+    headers: HeaderMap,
+    Json(payload): Json<WebsitePublishInput>,
+) -> ApiResult<Value> {
+    let (tenant_id, branch_id) = tenant_branch(&headers)?;
+    Ok(Json(ApiResponse::ok(
+        organization_service::publish_website(
+            &state.db,
+            &tenant_id,
+            &branch_id,
+            &claims.sub,
+            payload,
+        )
+        .await?,
+    )))
 }
 
 async fn save_location_config(

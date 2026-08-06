@@ -82,6 +82,7 @@ pub enum ConnectorProvider {
     Zapier,
     Zenoti,
     Dingg,
+    Meta,
 }
 
 impl ConnectorProvider {
@@ -94,6 +95,7 @@ impl ConnectorProvider {
             "zapier" => Ok(Self::Zapier),
             "zenoti" => Ok(Self::Zenoti),
             "dingg" => Ok(Self::Dingg),
+            "meta" => Ok(Self::Meta),
             _ => Err(AppError::validation("unsupported connector provider")),
         }
     }
@@ -107,6 +109,7 @@ impl ConnectorProvider {
             Self::Zapier => "zapier",
             Self::Zenoti => "zenoti",
             Self::Dingg => "dingg",
+            Self::Meta => "meta",
         }
     }
 
@@ -119,6 +122,7 @@ impl ConnectorProvider {
             Self::Zapier => "Zapier",
             Self::Zenoti => "Zenoti Migration",
             Self::Dingg => "DINGG Migration",
+            Self::Meta => "Meta Business",
         }
     }
 }
@@ -183,6 +187,9 @@ pub struct MigrationConnectorWrite {
     pub source_file_name: Option<String>,
     pub mode: Option<String>,
     pub auto_queue: Option<bool>,
+    pub page_id: Option<String>,
+    pub instagram_business_account_id: Option<String>,
+    pub graph_api_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -742,12 +749,15 @@ pub async fn list_connectors(
         ConnectorProvider::Zapier,
         ConnectorProvider::Zenoti,
         ConnectorProvider::Dingg,
+        ConnectorProvider::Meta,
     ]
     .into_iter()
     .map(|provider| {
         let record = saved.iter().find(|row| row.provider == provider.code());
         let (configured, auth_mode) = if provider == ConnectorProvider::Zapier {
             (true, "api_key_webhook")
+        } else if provider == ConnectorProvider::Meta {
+            (settings.security_encryption_key.is_some(), "partner_token")
         } else if provider == ConnectorProvider::Zenoti {
             (settings.security_encryption_key.is_some(), "api_key")
         } else if provider == ConnectorProvider::Dingg {
@@ -761,7 +771,9 @@ pub async fn list_connectors(
         ConnectorView {
             provider: provider.code().into(),
             label: provider.label().into(),
-            category: if matches!(
+            category: if provider == ConnectorProvider::Meta {
+                "marketing".into()
+            } else if matches!(
                 provider,
                 ConnectorProvider::Zenoti | ConnectorProvider::Dingg
             ) {
@@ -814,7 +826,10 @@ pub async fn begin_connector_oauth(
 ) -> Result<ConnectorAuthorize, AppError> {
     if matches!(
         provider,
-        ConnectorProvider::Zapier | ConnectorProvider::Zenoti | ConnectorProvider::Dingg
+        ConnectorProvider::Zapier
+            | ConnectorProvider::Zenoti
+            | ConnectorProvider::Dingg
+            | ConnectorProvider::Meta
     ) {
         return Err(AppError::validation(
             "Zapier uses the existing scoped API keys and signed webhooks",
@@ -883,6 +898,9 @@ pub async fn connect_migration_provider(
     provider: ConnectorProvider,
     request: MigrationConnectorWrite,
 ) -> Result<ConnectorSyncJob, AppError> {
+    if provider == ConnectorProvider::Meta {
+        return connect_meta_provider(db, settings, tenant, branch, actor, request).await;
+    }
     if !matches!(
         provider,
         ConnectorProvider::Zenoti | ConnectorProvider::Dingg
@@ -944,6 +962,111 @@ pub async fn connect_migration_provider(
     )
     .await;
     Ok(job)
+}
+
+async fn connect_meta_provider(
+    db: &PgPool,
+    settings: &Settings,
+    tenant: &str,
+    branch: &str,
+    actor: &str,
+    request: MigrationConnectorWrite,
+) -> Result<ConnectorSyncJob, AppError> {
+    let token = request.credential.trim();
+    let page_id = request.page_id.as_deref().unwrap_or("").trim();
+    let instagram_id = request
+        .instagram_business_account_id
+        .as_deref()
+        .unwrap_or("")
+        .trim();
+    let graph_base = request
+        .graph_api_base_url
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('/');
+    validate_meta_connection(token, page_id, instagram_id, graph_base)?;
+    let encryption_key = settings.security_encryption_key.as_deref().ok_or_else(|| {
+        AppError::service_unavailable(
+            "SECURITY_ENCRYPTION_NOT_CONFIGURED",
+            "connector credential encryption is not configured",
+        )
+    })?;
+    let ciphertext = security_service::encrypt_secret(encryption_key, token)?;
+    let config = json!({
+        "pageId": page_id,
+        "instagramBusinessAccountId": instagram_id,
+        "graphApiBaseUrl": graph_base
+    });
+    integration_repository::upsert_connector(
+        db,
+        tenant,
+        branch,
+        ConnectorProvider::Meta.code(),
+        ConnectorProvider::Meta.label(),
+        page_id,
+        "",
+        &ciphertext,
+        "",
+        None,
+        &json!(["pages_manage_posts", "instagram_content_publish"]),
+        &config,
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to save Meta connector"))?;
+    let job = integration_repository::enqueue_connector_sync(
+        db,
+        tenant,
+        branch,
+        ConnectorProvider::Meta.code(),
+        "credentials",
+        actor,
+    )
+    .await
+    .map_err(|_| AppError::internal("failed to queue Meta verification"))?
+    .ok_or_else(|| AppError::internal("failed to activate Meta connector"))?;
+    let _ = security_service::record_audit(
+        db,
+        tenant,
+        branch,
+        actor,
+        "integration.meta.connected",
+        json!({"pageId":page_id,"instagramBusinessAccountId":instagram_id}),
+    )
+    .await;
+    Ok(job)
+}
+
+fn validate_meta_connection(
+    token: &str,
+    page_id: &str,
+    instagram_id: &str,
+    graph_base: &str,
+) -> Result<(), AppError> {
+    if !(20..=4096).contains(&token.len())
+        || page_id.is_empty()
+        || page_id.len() > 80
+        || !page_id.chars().all(|value| value.is_ascii_digit())
+        || instagram_id.len() > 80
+        || !instagram_id.chars().all(|value| value.is_ascii_digit())
+    {
+        return Err(AppError::validation("Meta account credential is invalid"));
+    }
+    let url = reqwest::Url::parse(graph_base)
+        .map_err(|_| AppError::validation("Meta Graph API base URL is invalid"))?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("graph.facebook.com")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(AppError::validation(
+            "Meta Graph API base URL must use graph.facebook.com over HTTPS",
+        ));
+    }
+    Ok(())
 }
 
 pub async fn finish_connector_oauth(
@@ -1448,6 +1571,23 @@ async fn run_connector_check(
                 "migration connectors use the migration worker",
             ))
         }
+        ConnectorProvider::Meta => {
+            let page_id = credential
+                .config_json
+                .get("pageId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let base = credential
+                .config_json
+                .get("graphApiBaseUrl")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim_end_matches('/');
+            if page_id.is_empty() || base.is_empty() {
+                return Err(AppError::validation("Meta account mapping is missing"));
+            }
+            format!("{base}/{page_id}?fields=id,name,instagram_business_account")
+        }
     };
     let response = client
         .get(url)
@@ -1522,6 +1662,18 @@ async fn run_connector_check(
         ),
         ConnectorProvider::Zapier => (String::new(), String::new()),
         ConnectorProvider::Zenoti | ConnectorProvider::Dingg => (String::new(), String::new()),
+        ConnectorProvider::Meta => (
+            value
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+        ),
     };
     Ok((
         json!({"verified":true,"provider":provider.code()}),
@@ -2027,9 +2179,9 @@ fn connector_oauth_config<'a>(
             Ok(ConnectorOauthConfig{client_id:settings.connector_netsuite_client_id.as_deref().ok_or_else(missing)?,client_secret:settings.connector_netsuite_client_secret.as_deref().ok_or_else(missing)?,redirect_uri:settings.connector_netsuite_redirect_uri.as_deref().ok_or_else(missing)?,authorization_endpoint:format!("https://{domain}.app.netsuite.com/app/login/oauth2/authorize.nl"),token_endpoint:format!("https://{domain}.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token"),scope:"rest_webservices",credentials_in_body:false})
         }
         ConnectorProvider::Zapier => Err(AppError::validation("Zapier uses API keys and webhooks")),
-        ConnectorProvider::Zenoti | ConnectorProvider::Dingg => Err(AppError::validation(
-            "migration connectors do not use OAuth",
-        )),
+        ConnectorProvider::Zenoti | ConnectorProvider::Dingg | ConnectorProvider::Meta => Err(
+            AppError::validation("migration connectors do not use OAuth"),
+        ),
     }
 }
 
@@ -2059,6 +2211,7 @@ fn connector_provider_configured(settings: &Settings, provider: ConnectorProvide
         ConnectorProvider::Zenoti | ConnectorProvider::Dingg => {
             settings.security_encryption_key.is_some()
         }
+        ConnectorProvider::Meta => settings.security_encryption_key.is_some(),
     }
 }
 
@@ -2272,8 +2425,8 @@ mod tests {
     use super::{
         accounting_journal_payload, connector_journal_idempotency, connector_token_hash,
         ensure_source_ip_allowed, normalize_ip_allowlist, public_api_page, sign, validate_expiry,
-        validate_rate_limit, validate_scopes, validate_webhook, AccountingJournal,
-        AccountingJournalLine, ConnectorProvider,
+        validate_meta_connection, validate_rate_limit, validate_scopes, validate_webhook,
+        AccountingJournal, AccountingJournalLine, ConnectorProvider,
     };
     use chrono::{Duration, NaiveDate, Utc};
     use serde_json::json;
@@ -2311,6 +2464,20 @@ mod tests {
         );
         assert!(ConnectorProvider::parse("unknown").is_err());
         assert_eq!(connector_token_hash("state").len(), 64);
+        assert!(validate_meta_connection(
+            "01234567890123456789",
+            "123456",
+            "789012",
+            "https://graph.facebook.com/v23.0"
+        )
+        .is_ok());
+        assert!(validate_meta_connection(
+            "01234567890123456789",
+            "123456",
+            "",
+            "https://example.com/v23.0"
+        )
+        .is_err());
     }
 
     #[test]

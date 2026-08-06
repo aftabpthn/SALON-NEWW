@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use sqlx::PgPool;
 use std::collections::BTreeSet;
 use uuid::Uuid;
@@ -125,6 +125,21 @@ pub struct ConfigInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RollbackInput {
+    pub expected_version: i32,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WebsiteDraftInput {
+    pub draft: Value,
+    pub expected_version: i32,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WebsitePublishInput {
     pub expected_version: i32,
     pub reason: String,
 }
@@ -455,6 +470,89 @@ pub async fn rollback_config(
     snapshot(db, tenant_id, location_id.unwrap_or(current_branch_id)).await
 }
 
+pub async fn save_website_draft(
+    db: &PgPool,
+    tenant_id: &str,
+    current_branch_id: &str,
+    actor: &str,
+    payload: WebsiteDraftInput,
+) -> Result<Value, AppError> {
+    validate_reason(&payload.reason)?;
+    validate_website_document(&payload.draft)?;
+    let published = organization_repository::active_config(db, tenant_id, None, "website")
+        .await
+        .map_err(|_| AppError::internal("failed to load website configuration"))?
+        .map(|(value, _)| value["published"].clone())
+        .unwrap_or(Value::Null);
+    let value = json!({"draft": payload.draft, "published": published});
+    organization_repository::save_config(
+        db,
+        tenant_id,
+        None,
+        "website",
+        &value,
+        payload.expected_version,
+        false,
+        payload.reason.trim(),
+        actor,
+        None,
+    )
+    .await
+    .map_err(map_write_error)?
+    .ok_or_else(|| AppError::conflict("website draft changed; reload and try again"))?;
+    snapshot(db, tenant_id, current_branch_id).await
+}
+
+pub async fn publish_website(
+    db: &PgPool,
+    tenant_id: &str,
+    current_branch_id: &str,
+    actor: &str,
+    payload: WebsitePublishInput,
+) -> Result<Value, AppError> {
+    validate_reason(&payload.reason)?;
+    let (current, _) = organization_repository::active_config(db, tenant_id, None, "website")
+        .await
+        .map_err(|_| AppError::internal("failed to load website configuration"))?
+        .ok_or_else(|| AppError::validation("save a website draft before publishing"))?;
+    let draft = current.get("draft").cloned().unwrap_or(Value::Null);
+    validate_website_document(&draft)?;
+    let revision = current["published"]["revision"].as_i64().unwrap_or(0) + 1;
+    let mut published = draft.clone();
+    let object = published
+        .as_object_mut()
+        .ok_or_else(|| AppError::validation("website draft is invalid"))?;
+    object.insert("revision".into(), revision.into());
+    object.insert("publishedAt".into(), Utc::now().to_rfc3339().into());
+    let value = json!({"draft": draft, "published": published});
+    organization_repository::save_config(
+        db,
+        tenant_id,
+        None,
+        "website",
+        &value,
+        payload.expected_version,
+        false,
+        payload.reason.trim(),
+        actor,
+        None,
+    )
+    .await
+    .map_err(map_write_error)?
+    .ok_or_else(|| AppError::conflict("website changed; reload and try again"))?;
+    snapshot(db, tenant_id, current_branch_id).await
+}
+
+pub async fn public_website(db: &PgPool, tenant_id: &str) -> Result<Value, AppError> {
+    let published = organization_repository::active_config(db, tenant_id, None, "website")
+        .await
+        .map_err(|_| AppError::internal("failed to load published website"))?
+        .map(|(value, _)| value["published"].clone())
+        .filter(Value::is_object)
+        .unwrap_or(Value::Null);
+    Ok(published)
+}
+
 pub async fn update_lifecycle(
     db: &PgPool,
     tenant_id: &str,
@@ -666,8 +764,183 @@ fn validate_config(
     }
     if key == "enterprise_verticals" {
         validate_enterprise_verticals(value)?;
+    } else if key == "website" {
+        let draft = value.get("draft").unwrap_or(&Value::Null);
+        validate_website_document(draft)?;
     }
     Ok(())
+}
+
+fn validate_website_document(value: &Value) -> Result<(), AppError> {
+    let object = website_object(value, "website draft")?;
+    allowed_fields(object, &["template", "siteName", "pages"], "website draft")?;
+    let template = required_text(object, "template", 3, 24)?;
+    if !matches!(template, "classic" | "minimal" | "editorial") {
+        return Err(AppError::validation("website template is invalid"));
+    }
+    required_text(object, "siteName", 1, 120)?;
+    let pages = object
+        .get("pages")
+        .and_then(Value::as_array)
+        .filter(|pages| (1..=20).contains(&pages.len()))
+        .ok_or_else(|| AppError::validation("website pages must contain 1 to 20 pages"))?;
+    let mut slugs = BTreeSet::new();
+    let mut page_ids = BTreeSet::new();
+    for page in pages {
+        let page = website_object(page, "website page")?;
+        allowed_fields(
+            page,
+            &[
+                "id",
+                "slug",
+                "title",
+                "navigationLabel",
+                "seoTitle",
+                "seoDescription",
+                "visible",
+                "showInNavigation",
+                "sections",
+            ],
+            "website page",
+        )?;
+        let id = required_key(page, "id", 64)?;
+        let slug = required_key(page, "slug", 60)?;
+        if !page_ids.insert(id) || !slugs.insert(slug) {
+            return Err(AppError::validation(
+                "website page ids and slugs must be unique",
+            ));
+        }
+        required_text(page, "title", 1, 120)?;
+        optional_text(page, "navigationLabel", 40)?;
+        required_text(page, "seoTitle", 1, 70)?;
+        optional_text(page, "seoDescription", 160)?;
+        required_bool(page, "visible")?;
+        required_bool(page, "showInNavigation")?;
+        let sections = page
+            .get("sections")
+            .and_then(Value::as_array)
+            .filter(|sections| (1..=30).contains(&sections.len()))
+            .ok_or_else(|| {
+                AppError::validation("website page sections must contain 1 to 30 sections")
+            })?;
+        let mut section_ids = BTreeSet::new();
+        for section in sections {
+            let section = website_object(section, "website section")?;
+            allowed_fields(
+                section,
+                &[
+                    "id",
+                    "type",
+                    "heading",
+                    "body",
+                    "imageUrl",
+                    "buttonLabel",
+                    "buttonUrl",
+                    "visible",
+                ],
+                "website section",
+            )?;
+            let section_id = required_key(section, "id", 64)?;
+            if !section_ids.insert(section_id) {
+                return Err(AppError::validation(
+                    "website section ids must be unique within a page",
+                ));
+            }
+            let kind = required_text(section, "type", 3, 20)?;
+            if !matches!(kind, "hero" | "text" | "services" | "booking" | "contact") {
+                return Err(AppError::validation("website section type is invalid"));
+            }
+            optional_text(section, "heading", 120)?;
+            optional_text(section, "body", 4_000)?;
+            safe_url(section, "imageUrl", false)?;
+            optional_text(section, "buttonLabel", 40)?;
+            safe_url(section, "buttonUrl", true)?;
+            required_bool(section, "visible")?;
+        }
+    }
+    if !slugs.contains("home") {
+        return Err(AppError::validation("website requires a home page"));
+    }
+    Ok(())
+}
+
+fn website_object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>, AppError> {
+    value
+        .as_object()
+        .ok_or_else(|| AppError::validation(format!("{field} is invalid")))
+}
+
+fn allowed_fields(
+    object: &Map<String, Value>,
+    fields: &[&str],
+    label: &str,
+) -> Result<(), AppError> {
+    if object.keys().any(|key| !fields.contains(&key.as_str())) {
+        return Err(AppError::validation(format!("{label} has unknown fields")));
+    }
+    Ok(())
+}
+
+fn required_text<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    min: usize,
+    max: usize,
+) -> Result<&'a str, AppError> {
+    let value = object.get(key).and_then(Value::as_str).unwrap_or("").trim();
+    if !(min..=max).contains(&value.chars().count()) {
+        return Err(AppError::validation(format!("{key} is invalid")));
+    }
+    Ok(value)
+}
+
+fn optional_text(object: &Map<String, Value>, key: &str, max: usize) -> Result<(), AppError> {
+    if object
+        .get(key)
+        .is_some_and(|value| value.as_str().is_none_or(|text| text.chars().count() > max))
+    {
+        return Err(AppError::validation(format!("{key} is invalid")));
+    }
+    Ok(())
+}
+
+fn required_key<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<&'a str, AppError> {
+    let value = required_text(object, key, 1, max)?;
+    if !value
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        || value.starts_with('-')
+        || value.ends_with('-')
+    {
+        return Err(AppError::validation(format!("{key} is invalid")));
+    }
+    Ok(value)
+}
+
+fn required_bool(object: &Map<String, Value>, key: &str) -> Result<(), AppError> {
+    if object.get(key).and_then(Value::as_bool).is_none() {
+        return Err(AppError::validation(format!("{key} is invalid")));
+    }
+    Ok(())
+}
+
+fn safe_url(object: &Map<String, Value>, key: &str, allow_relative: bool) -> Result<(), AppError> {
+    let value = object.get(key).and_then(Value::as_str).unwrap_or("").trim();
+    if value.is_empty()
+        || value.starts_with("https://")
+        || (allow_relative
+            && ((value.starts_with('/') && !value.starts_with("//"))
+                || (value.starts_with('#') && value.len() > 1)))
+    {
+        return Ok(());
+    }
+    Err(AppError::validation(format!(
+        "{key} must be empty, HTTPS or an internal path"
+    )))
 }
 
 fn validate_enterprise_verticals(value: &Value) -> Result<(), AppError> {
@@ -818,7 +1091,9 @@ fn map_write_error(error: sqlx::Error) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{hours_pair, operating_hours, validate_config, OperatingHourInput};
+    use super::{
+        hours_pair, operating_hours, validate_config, validate_website_document, OperatingHourInput,
+    };
     use serde_json::json;
 
     #[test]
@@ -860,5 +1135,27 @@ mod tests {
         assert!(
             validate_config(None, "enterprise_verticals", &academy, 0, "Unproven pack").is_err()
         );
+    }
+
+    #[test]
+    fn website_requires_safe_unique_pages_and_sections() {
+        let valid = json!({
+            "template": "classic", "siteName": "Aura Salon", "pages": [{
+                "id": "home", "slug": "home", "title": "Home", "navigationLabel": "Home",
+                "seoTitle": "Aura Salon", "seoDescription": "Book salon services online.",
+                "visible": true, "showInNavigation": true,
+                "sections": [{"id": "hero", "type": "hero", "heading": "Welcome", "body": "", "imageUrl": "https://cdn.example.com/hero.jpg", "buttonLabel": "Book", "buttonUrl": "/book", "visible": true}]
+            }]
+        });
+        assert!(validate_website_document(&valid).is_ok());
+        let mut duplicate = valid.clone();
+        duplicate["pages"]
+            .as_array_mut()
+            .unwrap()
+            .push(valid["pages"][0].clone());
+        assert!(validate_website_document(&duplicate).is_err());
+        let mut unsafe_url = valid;
+        unsafe_url["pages"][0]["sections"][0]["imageUrl"] = "javascript:alert(1)".into();
+        assert!(validate_website_document(&unsafe_url).is_err());
     }
 }

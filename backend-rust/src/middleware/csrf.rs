@@ -42,11 +42,7 @@ pub struct IssuedCsrfToken {
 /// Mints `{expiry}.{nonce}.{signature}`.
 pub fn issue(secret: &str) -> IssuedCsrfToken {
     let expires_at = Utc::now() + Duration::minutes(TOKEN_TTL_MINUTES);
-    let payload = format!(
-        "{}.{}",
-        expires_at.timestamp(),
-        Uuid::new_v4().simple()
-    );
+    let payload = format!("{}.{}", expires_at.timestamp(), Uuid::new_v4().simple());
     let signature = sign(&payload, secret);
     IssuedCsrfToken {
         token: format!("{payload}.{signature}"),
@@ -72,7 +68,11 @@ pub async fn require_csrf(
     req: Request<Body>,
     next: Next,
 ) -> Response {
-    if let Err(error) = check(req.method(), req.headers(), &state.settings.jwt_refresh_secret) {
+    if let Err(error) = check(
+        req.method(),
+        req.headers(),
+        &state.settings.jwt_refresh_secret,
+    ) {
         return error.into_response();
     }
     next.run(req).await
@@ -134,8 +134,8 @@ fn verify(token: &str, secret: &str) -> Result<(), AppError> {
 }
 
 fn sign(payload: &str, secret: &str) -> String {
-    let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .expect("hmac accepts keys of any length");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("hmac accepts keys of any length");
     mac.update(SIGNATURE_LABEL.as_bytes());
     mac.update(b":");
     mac.update(payload.as_bytes());
@@ -205,7 +205,12 @@ mod tests {
     fn issued_token_passes_double_submit() {
         let issued = issue(SECRET);
         let cookie = format!("{CSRF_COOKIE}={}", issued.token);
-        assert!(check(&Method::POST, &headers(Some(&cookie), Some(&issued.token)), SECRET).is_ok());
+        assert!(check(
+            &Method::POST,
+            &headers(Some(&cookie), Some(&issued.token)),
+            SECRET
+        )
+        .is_ok());
     }
 
     #[test]
@@ -244,9 +249,12 @@ mod tests {
     fn tokens_from_another_deployment_are_rejected() {
         let issued = issue("a-different-signing-secret-entirely");
         let cookie = format!("{CSRF_COOKIE}={}", issued.token);
-        assert!(
-            check(&Method::POST, &headers(Some(&cookie), Some(&issued.token)), SECRET).is_err()
-        );
+        assert!(check(
+            &Method::POST,
+            &headers(Some(&cookie), Some(&issued.token)),
+            SECRET
+        )
+        .is_err());
     }
 
     #[test]
@@ -261,11 +269,20 @@ mod tests {
     #[test]
     fn refresh_tokens_cannot_be_replayed_as_csrf_tokens() {
         // The label keeps the shared secret from making the two interchangeable.
-        let payload = format!("{}.{}", (Utc::now() + Duration::hours(1)).timestamp(), "nonce");
+        let payload = format!(
+            "{}.{}",
+            (Utc::now() + Duration::hours(1)).timestamp(),
+            "nonce"
+        );
         let mut mac = Hmac::<Sha256>::new_from_slice(SECRET.as_bytes()).unwrap();
         mac.update(payload.as_bytes());
         let unlabelled = format!("{payload}.{}", hex(&mac.finalize().into_bytes()));
         let cookie = format!("{CSRF_COOKIE}={unlabelled}");
-        assert!(check(&Method::POST, &headers(Some(&cookie), Some(&unlabelled)), SECRET).is_err());
+        assert!(check(
+            &Method::POST,
+            &headers(Some(&cookie), Some(&unlabelled)),
+            SECRET
+        )
+        .is_err());
     }
 }

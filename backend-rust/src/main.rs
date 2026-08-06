@@ -392,6 +392,12 @@ async fn main() -> Result<()> {
                 {
                     worker::note_failure("integration_delivery", "connector_sync");
                 }
+                if services::social_publishing_service::process_due(&state)
+                    .await
+                    .is_err()
+                {
+                    worker::note_failure("integration_delivery", "social_publications");
+                }
             },
         );
     }

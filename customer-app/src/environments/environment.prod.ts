@@ -3,6 +3,7 @@ const runtime = globalThis as typeof globalThis & { AURA_CUSTOMER_API_BASE_URL?:
 export const environment = {
   production: true,
   apiBaseUrl: runtime.AURA_CUSTOMER_API_BASE_URL?.trim() || "/api/v1",
+  businessAppUrl: "/login",
   staffAppUrl: "/staff/login",
   firebase: {
     apiKey: "",

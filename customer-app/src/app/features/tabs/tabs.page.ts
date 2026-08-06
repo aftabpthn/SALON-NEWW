@@ -1,475 +1,274 @@
 import { Component, HostListener, signal } from "@angular/core";
-import { Router, RouterLink, RouterLinkActive } from "@angular/router";
-import { IonButton, IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
+import { Router, RouterLink } from "@angular/router";
+import { IonIcon, IonLabel, IonTabBar, IonTabButton, IonTabs } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, chevronForwardOutline, closeOutline, fingerPrintOutline, giftOutline, homeOutline, locationOutline, lockClosedOutline, logInOutline, logOutOutline, menuOutline, notificationsOutline, personCircleOutline, personOutline, pricetagOutline, ribbonOutline, searchOutline, settingsOutline, sparklesOutline } from "ionicons/icons";
+import {
+  briefcaseOutline,
+  calendarOutline,
+  closeOutline,
+  downloadOutline,
+  ellipsisHorizontal,
+  fingerPrintOutline,
+  globeOutline,
+  helpCircleOutline,
+  homeOutline,
+  lockClosedOutline,
+  logInOutline,
+  logOutOutline,
+  personOutline,
+  phonePortraitOutline,
+  searchOutline
+} from "ionicons/icons";
+import { environment } from "../../../environments/environment";
 import { AuthService } from "../../core/auth.service";
+
+interface InstallPromptEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 @Component({
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, IonButton, IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel],
+  imports: [RouterLink, IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel],
   template: `
     @if (auth.biometricLocked()) {
       <section class="biometric-gate" aria-label="Biometric verification required">
         <div class="biometric-panel">
           <span class="gate-icon"><ion-icon name="finger-print-outline"></ion-icon></span>
           <h1>Verify to open Aura Shine</h1>
-          @if (auth.error()) {
-            <p class="gate-error">{{ auth.error() }}</p>
-          }
-          <ion-button expand="block" class="primary-gradient" (click)="unlock()" [disabled]="auth.loading()">
-            <ion-icon name="lock-closed-outline" slot="start"></ion-icon>
+          @if (auth.error()) { <p class="gate-error">{{ auth.error() }}</p> }
+          <button type="button" class="primary-action" (click)="unlock()" [disabled]="auth.loading()">
+            <ion-icon name="lock-closed-outline"></ion-icon>
             Verify with biometric
-          </ion-button>
-          <ion-button expand="block" fill="clear" (click)="logout()" [disabled]="auth.loading()">Use another account</ion-button>
-        </div>
-      </section>
-    }
-    <header class="mobile-topbar" aria-label="Customer app quick header">
-      <a class="mobile-brand" routerLink="/tabs/home" (click)="closeMenu()">
-        <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
-        <span>
-          <strong>Aura Shine</strong>
-          <small>{{ locationLabel() }}</small>
-        </span>
-      </a>
-      <div class="mobile-topbar-actions">
-        <a class="mobile-icon-link" routerLink="/notifications" aria-label="Open notifications">
-          <ion-icon name="notifications-outline"></ion-icon>
-        </a>
-        <button type="button" class="mobile-icon-link" aria-label="Open menu" (click)="toggleMenu()">
-          <ion-icon [name]="menuOpen() ? 'close-outline' : 'menu-outline'"></ion-icon>
-        </button>
-      </div>
-    </header>
-    @if (menuOpen()) {
-      <button type="button" class="mobile-menu-backdrop" aria-label="Close menu" (click)="closeMenu()"></button>
-      <section class="mobile-menu-sheet" aria-label="Customer app menu">
-        <div class="menu-sheet-head">
-          <div>
-            <p class="menu-kicker">Aura customer app</p>
-            <h2>{{ auth.isAuthenticated() ? t("account") : t("welcome") }}</h2>
-          </div>
-          @if (auth.isAuthenticated()) {
-            <button type="button" class="menu-auth-button" (click)="logoutAndClose()">
-              <ion-icon name="log-out-outline"></ion-icon>
-              {{ t("logout") }}
-            </button>
-          } @else {
-            <a class="menu-auth-button" routerLink="/login" (click)="closeMenu()">
-              <ion-icon name="log-in-outline"></ion-icon>
-              {{ t("login") }}
-            </a>
-          }
-        </div>
-        @if (auth.isAuthenticated()) {
-          <article class="menu-profile-card">
-            <span class="menu-avatar">{{ customerInitial() }}</span>
-            <div>
-              <strong>{{ customerName() }}</strong>
-              <small>{{ customerTierLabel() }} · {{ customerPointsLabel() }}</small>
-            </div>
-            <a routerLink="/tabs/profile" (click)="closeMenu()">{{ t("open") }}</a>
-          </article>
-        }
-        <div class="menu-highlight-grid">
-          <a routerLink="/tabs/search" [queryParams]="{ nearMe: true }" (click)="closeMenu()"><ion-icon name="location-outline"></ion-icon><span>{{ t("nearMe") }}</span></a>
-          <a routerLink="/tabs/offers" (click)="closeMenu()"><ion-icon name="pricetag-outline"></ion-icon><span>{{ t("offers") }}</span></a>
-          <a routerLink="/tabs/rewards" (click)="closeMenu()"><ion-icon name="gift-outline"></ion-icon><span>{{ t("rewards") }}</span></a>
-          <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="settings-outline"></ion-icon><span>{{ t("profile") }}</span></a>
-        </div>
-        <div class="menu-insight-strip">
-          <article><span>{{ t("mode") }}</span><strong>{{ auth.isAuthenticated() ? t("member") : t("guest") }}</strong></article>
-          <article><span>{{ t("explore") }}</span><strong>{{ t("salons") }}</strong></article>
-          <article><span>{{ t("fastPath") }}</span><strong>{{ t("bookings") }}</strong></article>
-        </div>
-        <nav class="mobile-menu-list">
-          <a routerLink="/tabs/home" (click)="closeMenu()"><span>{{ t("home") }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/search" (click)="closeMenu()"><span>{{ t("discoverSalons") }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/consultation" (click)="closeMenu()"><span>{{ t("consultation") }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/bookings" (click)="closeMenu()"><span>{{ t("myBookings") }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a routerLink="/tabs/profile" (click)="closeMenu()"><span>{{ t("accountSettings") }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-        </nav>
-      </section>
-    }
-    <nav class="web-nav" aria-label="Customer app navigation">
-      <a class="brand" routerLink="/tabs/home">
-        <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
-        <span class="brand-copy">
-          <strong>Aura Shine</strong>
-        </span>
-      </a>
-      <div class="nav-links">
-        <a routerLink="/tabs/home" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">{{ t("home") }}</a>
-        <a routerLink="/tabs/search" routerLinkActive="active">{{ t("discover") }}</a>
-        <a routerLink="/tabs/consultation" routerLinkActive="active">{{ t("consult") }}</a>
-        <a routerLink="/tabs/offers" routerLinkActive="active">{{ t("offers") }}</a>
-        <a routerLink="/tabs/bookings" routerLinkActive="active">{{ t("bookings") }}</a>
-        <a routerLink="/tabs/rewards" routerLinkActive="active">{{ t("hub") }}</a>
-        <a routerLink="/tabs/profile" routerLinkActive="active">{{ t("profile") }}</a>
-      </div>
-      <div class="nav-actions" aria-label="Customer quick actions">
-        <a class="location-chip" routerLink="/tabs/search" [queryParams]="{ nearMe: true, map: true, filter: 'nearest', sort: 'distance' }">
-          <ion-icon name="location-outline"></ion-icon>
-          {{ locationLabel() }}
-        </a>
-        @if (auth.isAuthenticated()) {
-          <button type="button" class="location-chip" (click)="logout()">
-            <ion-icon name="log-out-outline"></ion-icon>
-            {{ t("logout") }}
           </button>
-        } @else {
-          <a class="location-chip" routerLink="/login">
-            <ion-icon name="log-in-outline"></ion-icon>
-            {{ t("login") }}
-          </a>
-        }
-        <button type="button" class="location-chip" (click)="toggleLanguage()">{{ language() === "hi-IN" ? "हिंदी" : "EN" }}</button>
-        <a class="icon-link" routerLink="/notifications" aria-label="Open notifications">
-          <ion-icon name="notifications-outline"></ion-icon>
-          <span class="nav-badge" aria-hidden="true"></span>
-        </a>
-        <a class="icon-link" routerLink="/tabs/profile" aria-label="Open profile">
-          <ion-icon name="person-circle-outline"></ion-icon>
-        </a>
+          <button type="button" class="text-action" (click)="logout()" [disabled]="auth.loading()">Use another account</button>
+        </div>
+      </section>
+    }
+
+    <header class="customer-header">
+      <div class="header-inner">
+        <a class="brand" routerLink="/tabs/home" (click)="closeMenu()" aria-label="Aura Shine home">Aura Shine</a>
+        <div class="header-actions">
+          @if (auth.isAuthenticated()) {
+            <a class="account-link" routerLink="/tabs/profile" (click)="closeMenu()" aria-label="Open customer account">
+              <span>{{ customerInitial() }}</span>
+              <strong>{{ customerName() }}</strong>
+            </a>
+          } @else {
+            <a class="login-link" routerLink="/login" (click)="closeMenu()">Log in</a>
+          }
+          <a class="business-link" [href]="businessAppUrl">List your business</a>
+          <button
+            type="button"
+            class="menu-trigger"
+            [attr.aria-expanded]="menuOpen()"
+            aria-controls="customer-public-menu"
+            aria-label="Open menu"
+            (click)="toggleMenu()">
+            <ion-icon [name]="menuOpen() ? 'close-outline' : 'ellipsis-horizontal'"></ion-icon>
+          </button>
+        </div>
       </div>
-    </nav>
+
+      @if (menuOpen()) {
+        <button type="button" class="menu-backdrop" aria-label="Close menu" (click)="closeMenu()"></button>
+        <nav id="customer-public-menu" class="public-menu" aria-label="Customer menu">
+          <button type="button" (click)="installApp()">
+            <ion-icon name="download-outline"></ion-icon><span>Download app</span>
+          </button>
+          @if (auth.isAuthenticated()) {
+            <a routerLink="/tabs/profile" (click)="closeMenu()"><ion-icon name="person-outline"></ion-icon><span>My account</span></a>
+            <button type="button" (click)="logoutAndClose()"><ion-icon name="log-out-outline"></ion-icon><span>Log out</span></button>
+          } @else {
+            <a routerLink="/login" (click)="closeMenu()"><ion-icon name="log-in-outline"></ion-icon><span>Log in / Sign up</span></a>
+          }
+          <a routerLink="/help" (click)="closeMenu()"><ion-icon name="help-circle-outline"></ion-icon><span>Help</span></a>
+          <a routerLink="/tabs/home" (click)="closeMenu()"><ion-icon name="phone-portrait-outline"></ion-icon><span>Customer app</span></a>
+          <button type="button" (click)="toggleLanguage()"><ion-icon name="globe-outline"></ion-icon><span>{{ languageLabel() }}</span></button>
+          <a [href]="businessAppUrl"><ion-icon name="briefcase-outline"></ion-icon><span>For business</span></a>
+          @if (installMessage()) { <p role="status">{{ installMessage() }}</p> }
+        </nav>
+      }
+    </header>
+
     <ion-tabs>
-      <ion-tab-bar slot="bottom">
-        <ion-tab-button tab="home" href="/tabs/home">
-          <ion-icon name="home-outline"></ion-icon>
-          <ion-label>{{ t("home") }}</ion-label>
-        </ion-tab-button>
-        <ion-tab-button tab="search" href="/tabs/search">
-          <ion-icon name="search-outline"></ion-icon>
-          <ion-label>{{ t("book") }}</ion-label>
-        </ion-tab-button>
-        <ion-tab-button tab="bookings" href="/tabs/bookings">
-          <ion-icon name="calendar-outline"></ion-icon>
-          <ion-label>{{ t("bookings") }}</ion-label>
-        </ion-tab-button>
-        <ion-tab-button tab="profile" href="/tabs/profile">
-          <ion-icon name="person-outline"></ion-icon>
-          <ion-label>{{ t("profile") }}</ion-label>
-        </ion-tab-button>
+      <ion-tab-bar slot="bottom" aria-label="Customer navigation">
+        <ion-tab-button tab="home" href="/tabs/home"><ion-icon name="home-outline"></ion-icon><ion-label>Home</ion-label></ion-tab-button>
+        <ion-tab-button tab="search" href="/tabs/search"><ion-icon name="search-outline"></ion-icon><ion-label>Book</ion-label></ion-tab-button>
+        <ion-tab-button tab="bookings" href="/tabs/bookings"><ion-icon name="calendar-outline"></ion-icon><ion-label>Bookings</ion-label></ion-tab-button>
+        <ion-tab-button tab="profile" href="/tabs/profile"><ion-icon name="person-outline"></ion-icon><ion-label>Profile</ion-label></ion-tab-button>
       </ion-tab-bar>
     </ion-tabs>
   `,
   styles: [`
-    .mobile-topbar,
-    .mobile-brand,
-    .mobile-topbar-actions,
-    .mobile-menu-backdrop,
-    .mobile-menu-sheet,
-    .menu-sheet-head,
-    .menu-profile-card,
-    .menu-highlight-grid,
-    .menu-insight-strip,
-    .menu-highlight-grid a,
-    .mobile-menu-list a,
-    .menu-auth-button {
+    :host {
+      --shell-ink: #071832;
+      --shell-muted: #5d6b82;
+      --shell-line: #d8e0ea;
+      display: block;
+      color: var(--shell-ink);
+    }
+
+    .customer-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      border-bottom: 1px solid var(--shell-line);
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    .header-inner {
+      width: min(calc(100% - 32px), 1504px);
+      min-height: 64px;
       display: flex;
       align-items: center;
-    }
-
-    .mobile-topbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      z-index: 40;
       justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px 8px;
-      background: linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(255, 249, 236, 0.88));
-      border-bottom: 1px solid rgba(214, 169, 74, 0.14);
-      backdrop-filter: blur(18px);
+      gap: 16px;
+      margin: 0 auto;
     }
 
-    ion-tabs {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-      padding-top: 60px;
-      box-sizing: border-box;
-    }
-
-    ion-tabs ion-router-outlet {
-      flex: 1 1 auto;
-    }
-
-    @media (max-width: 599px) {
-      ion-tabs {
-        touch-action: pan-y;
-      }
-    }
-
-    ion-tab-bar {
-      --background: rgba(255, 253, 248, 0.96);
-      --border: 1px solid rgba(214, 169, 74, 0.18);
-      min-height: calc(62px + env(safe-area-inset-bottom));
-      padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
-      box-shadow: 0 -12px 32px rgba(92, 65, 28, 0.12);
-      backdrop-filter: blur(18px);
-    }
-
-    ion-tab-button {
-      --color: #7e6e55;
-      --color-selected: #201307;
-      --ripple-color: rgba(214, 169, 74, 0.18);
-      min-width: 0;
-      border-radius: 16px;
-      font-size: 0.68rem;
-      font-weight: 900;
-    }
-
-    ion-tab-button.tab-selected {
-      background: linear-gradient(135deg, rgba(246, 200, 189, 0.88), rgba(241, 213, 159, 0.92));
-    }
-
-    ion-tab-button ion-icon {
-      font-size: 1.18rem;
-    }
-
-    @media (max-width: 1023px) {
-      .mobile-topbar {
-        display: none !important;
-      }
-
-      ion-tabs {
-        padding-top: 0;
-      }
-    }
-
-    @media (min-width: 1024px) {
-      .mobile-topbar,
-      .mobile-menu-backdrop,
-      .mobile-menu-sheet {
-        display: none !important;
-      }
-
-      ion-tabs {
-        padding-top: 0;
-      }
-    }
-
-    .mobile-brand {
-      gap: 10px;
-      min-width: 0;
-      color: var(--text);
+    .brand,
+    .login-link,
+    .business-link,
+    .account-link,
+    .public-menu a {
+      color: inherit;
       text-decoration: none;
     }
 
-    .mobile-brand span {
-      min-width: 0;
-      display: grid;
-      gap: 1px;
-    }
-
-    .mobile-brand strong {
-      color: #1d1307;
-      font-size: 0.92rem;
-      line-height: 1.1;
-    }
-
-    .mobile-brand small {
-      color: var(--muted);
-      font-size: 0.72rem;
-      font-weight: 800;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .mobile-topbar-actions {
-      gap: 8px;
-    }
-
-    .mobile-icon-link {
-      width: 40px;
-      height: 40px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid rgba(17, 24, 39, 0.1);
-      border-radius: 999px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.82);
-      box-shadow: 0 8px 18px rgba(92, 65, 28, 0.08);
-    }
-
-    .mobile-menu-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 38;
-      border: 0;
-      background: rgba(20, 12, 5, 0.34);
-      backdrop-filter: blur(4px);
-    }
-
-    .mobile-menu-sheet {
-      position: fixed;
-      top: 56px;
-      left: 12px;
-      right: 12px;
-      bottom: calc(82px + env(safe-area-inset-bottom));
-      z-index: 39;
-      display: grid;
-      align-content: start;
-      gap: 14px;
-      padding: 16px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      border-radius: 28px;
-      overflow: auto;
-      background:
-        radial-gradient(circle at top right, rgba(255,255,255,0.52), transparent 22%),
-        linear-gradient(180deg, rgba(255,255,255,0.99), rgba(255,249,236,0.96));
-      box-shadow: 0 24px 54px rgba(92, 65, 28, 0.18);
-    }
-
-    .menu-sheet-head {
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 10px;
-    }
-
-    .menu-kicker {
-      margin: 0 0 4px;
-      color: #a36d16;
-      font-size: 0.68rem;
-      font-weight: 950;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    .menu-sheet-head h2 {
-      margin: 0;
-      color: #1d1307;
-      font-size: 1.15rem;
+    .brand {
+      font-size: 22px;
+      font-weight: 700;
       letter-spacing: -0.03em;
     }
 
-    .menu-auth-button {
-      gap: 6px;
+    .header-actions,
+    .account-link,
+    .public-menu a,
+    .public-menu button,
+    .primary-action {
+      display: flex;
+      align-items: center;
+    }
+
+    .header-actions { gap: 10px; }
+
+    .login-link,
+    .business-link,
+    .menu-trigger,
+    .account-link {
       min-height: 38px;
-      padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
-      border-radius: 999px;
-      color: #6e4810;
-      background: rgba(255,255,255,0.86);
-      font-weight: 900;
-      text-decoration: none;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      font-weight: 600;
     }
 
-    .menu-highlight-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+    .login-link { padding: 0 10px; }
+
+    .business-link {
+      display: inline-flex;
+      align-items: center;
+      padding: 0 14px;
+      border-color: #c9d5e5;
+      background: #fff;
     }
 
-    .menu-insight-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .menu-insight-strip article {
-      display: grid;
-      gap: 3px;
-      padding: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.16);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.76);
-    }
-
-    .menu-insight-strip span {
-      color: #a36d16;
-      font-size: 0.66rem;
-      font-weight: 950;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-    }
-
-    .menu-insight-strip strong {
-      color: #1d1307;
-      font-size: 0.9rem;
-      line-height: 1.1;
-    }
-
-    .menu-profile-card {
-      gap: 12px;
-      justify-content: space-between;
-      padding: 12px;
-      border: 1px solid rgba(214, 169, 74, 0.2);
-      border-radius: 18px;
-      background: radial-gradient(circle at 0 0, rgba(255,255,255,0.7), transparent 38%), rgba(255,255,255,0.86);
-      box-shadow: 0 10px 24px rgba(92, 65, 28, 0.08);
-    }
-
-    .menu-avatar {
-      width: 40px;
-      height: 40px;
+    .account-link { gap: 8px; padding: 0 8px; }
+    .account-link span {
+      width: 30px;
+      height: 30px;
       display: grid;
       place-items: center;
-      border-radius: 14px;
-      color: #6e4810;
-      background: linear-gradient(145deg, #f7d77f, #d6a94a);
-      font-weight: 1000;
-      flex: 0 0 auto;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--shell-ink);
+      font-size: 12px;
+      font-weight: 700;
     }
+    .account-link strong { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .menu-profile-card div {
-      min-width: 0;
+    .menu-trigger {
+      width: 38px;
+      min-width: 38px;
       display: grid;
-      gap: 2px;
-      flex: 1 1 auto;
+      place-items: center;
+      padding: 0;
+      border-color: #c9d5e5;
+      color: var(--shell-ink);
+      background: #fff;
+      font-size: 20px;
+      cursor: pointer;
     }
 
-    .menu-profile-card strong,
-    .menu-profile-card small,
-    .menu-profile-card a {
-      color: #1d1307;
+    .login-link:hover,
+    .business-link:hover,
+    .account-link:hover,
+    .menu-trigger:hover,
+    .menu-trigger:focus-visible {
+      border-color: #2563eb;
+      background: #f3f8ff;
     }
 
-    .menu-profile-card small {
-      color: var(--muted);
-      font-weight: 800;
+    .menu-backdrop {
+      position: fixed;
+      inset: 64px 0 0;
+      z-index: 998;
+      border: 0;
+      background: rgba(7, 24, 50, 0.18);
     }
 
-    .menu-profile-card a {
-      text-decoration: none;
-      font-weight: 900;
-    }
-
-    .menu-highlight-grid a {
-      gap: 8px;
-      min-height: 52px;
-      padding: 0 12px;
-      border: 1px solid rgba(214, 169, 74, 0.18);
-      border-radius: 18px;
-      color: #1d1307;
-      background: rgba(255,255,255,0.8);
-      text-decoration: none;
-      font-weight: 900;
-    }
-
-    .mobile-menu-list {
+    .public-menu {
+      position: absolute;
+      top: 56px;
+      right: max(16px, calc((100% - 1504px) / 2));
+      z-index: 999;
+      width: min(280px, calc(100vw - 24px));
       display: grid;
-      border-top: 1px solid rgba(214, 169, 74, 0.16);
+      overflow: hidden;
+      border: 1px solid var(--shell-line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 22px 52px rgba(15, 23, 42, 0.18);
     }
 
-    .mobile-menu-list a {
-      justify-content: space-between;
-      gap: 10px;
-      min-height: 48px;
-      border-bottom: 1px solid rgba(214, 169, 74, 0.12);
-      color: #3a2713;
-      text-decoration: none;
-      font-weight: 850;
+    .public-menu a,
+    .public-menu button {
+      gap: 12px;
+      min-height: 46px;
+      padding: 0 14px;
+      border: 0;
+      border-bottom: 1px solid #e8edf4;
+      color: var(--shell-ink);
+      background: #fff;
+      font: inherit;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
     }
 
-    .web-nav {
-      display: none;
+    .public-menu a:hover,
+    .public-menu button:hover,
+    .public-menu a:focus-visible,
+    .public-menu button:focus-visible {
+      outline: 0;
+      background: #eaf2ff;
+      color: #174ea6;
+    }
+
+    .public-menu ion-icon { flex: 0 0 auto; font-size: 19px; }
+    .public-menu p { margin: 0; padding: 10px 14px; color: var(--shell-muted); font-size: 12px; }
+
+    ion-tabs {
+      --page-top: 24px;
+      display: flex;
+      min-height: calc(100vh - 65px);
+    }
+
+    ion-tab-bar {
+      --background: rgba(255, 255, 255, 0.98);
+      --border: 1px solid var(--shell-line);
     }
 
     .biometric-gate {
@@ -479,8 +278,7 @@ import { AuthService } from "../../core/auth.service";
       display: grid;
       place-items: center;
       padding: 24px;
-      background: linear-gradient(180deg, rgba(245, 243, 255, 0.94), rgba(255, 255, 255, 0.98));
-      animation: aura-gate-fade 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      background: #f3f6fa;
     }
 
     .biometric-panel {
@@ -488,241 +286,58 @@ import { AuthService } from "../../core/auth.service";
       display: grid;
       gap: 14px;
       padding: 24px;
-      border: 1px solid rgba(17, 24, 39, 0.16);
-      border-radius: 24px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: var(--shadow-card);
-      backdrop-filter: blur(18px);
-      animation: aura-gate-panel 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      border: 1px solid var(--shell-line);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.14);
     }
 
     .gate-icon {
-      width: 58px;
-      height: 58px;
+      width: 48px;
+      height: 48px;
       display: grid;
       place-items: center;
-      border-radius: 20px;
-      color: var(--primary-2);
-      background: var(--aura-gold-soft);
-      font-size: 1.7rem;
+      border-radius: 10px;
+      color: #174ea6;
+      background: #eaf2ff;
+      font-size: 22px;
+    }
+    .biometric-panel h1, .biometric-panel p { margin: 0; }
+    .gate-error { color: #b42318; }
+    .primary-action, .text-action {
+      min-height: 40px;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid #071832;
+      border-radius: 8px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .primary-action { color: #fff; background: #071832; }
+    .text-action { color: #071832; background: #fff; }
+
+    @media (min-width: 768px) {
+      ion-tab-bar { display: none; }
     }
 
-    .biometric-panel h1 {
-      margin: 0;
-      font-size: 1.85rem;
-      letter-spacing: 0;
-    }
-
-    .biometric-panel p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.5;
-      font-weight: 800;
-    }
-
-    .gate-error {
-      padding: 12px 14px;
-      border: 1px solid rgba(225, 29, 72, 0.16);
-      border-radius: 16px;
-      color: #EF4444 !important;
-      background: #fff1f2;
-    }
-
-    @media (min-width: 1024px) {
-      .mobile-topbar,
-      .mobile-menu-sheet {
-        display: none;
-      }
-
-      ion-tabs {
-        padding-top: 0;
-      }
-
-      .web-nav {
-        position: fixed;
-        top: 18px;
-        left: 50%;
-        z-index: 1000;
-        width: min(100% - 64px, 1360px);
-        min-height: 72px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 20px;
-        padding: 10px 12px 10px 18px;
-        border: 1px solid rgba(17, 24, 39, 0.14);
-        border-radius: 999px;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 249, 236, 0.82));
-        box-shadow: 0 18px 42px rgba(92, 65, 28, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.72);
-        backdrop-filter: blur(24px);
-        transform: translateX(-50%);
-        animation: aura-web-nav-in 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      .brand,
-      .brand-copy,
-      .nav-links,
-      .nav-links a,
-      .nav-actions,
-      .location-chip,
-      .icon-link {
-        display: flex;
-        align-items: center;
-      }
-
-      .brand {
-        gap: 10px;
-        color: var(--text);
-        text-decoration: none;
-      }
-
-      .brand-mark {
-        width: 44px;
-        height: 44px;
-        border-radius: 15px;
-        box-shadow: 0 10px 24px rgba(139, 92, 246, 0.13);
-        transition: transform var(--motion-medium), box-shadow var(--motion-medium);
-      }
-
-      .brand-copy {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 1px;
-      }
-
-      .brand-copy strong {
-        font-size: 1.02rem;
-        letter-spacing: 0;
-      }
-
-      .brand-copy small {
-        color: var(--muted);
-        font-size: 0.74rem;
-        font-weight: 800;
-      }
-
-      .nav-links {
-        gap: 4px;
-        padding: 6px;
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        background: rgba(255, 249, 236, 0.72);
-      }
-
-      .nav-links a {
-        min-height: 44px;
-        padding: 0 18px;
-        border-radius: 999px;
-        color: var(--muted);
-        font-weight: 900;
-        text-decoration: none;
-        transition: color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast);
-      }
-
-      .nav-links a:hover {
-        color: var(--text);
-        background: #ffffff;
-        transform: translateY(-1px);
-      }
-
-      .nav-links a.active {
-        color: #120D05;
-        background: linear-gradient(135deg, rgba(244, 213, 141, 0.96), rgba(214, 169, 74, 0.82));
-        box-shadow: 0 12px 26px rgba(214, 169, 74, 0.18);
-      }
-
-      .nav-actions {
-        gap: 8px;
-      }
-
-      .location-chip,
-      .icon-link {
-        min-height: 44px;
-        border: 1px solid var(--border);
-        color: var(--text);
-        background: rgba(255, 255, 255, 0.72);
-        text-decoration: none;
-        transition: color var(--motion-fast), border-color var(--motion-fast), background var(--motion-fast), transform var(--motion-fast), box-shadow var(--motion-fast);
-      }
-
-      .location-chip {
-        gap: 7px;
-        padding: 0 14px;
-        border-radius: 999px;
-        font-size: 0.88rem;
-        font-weight: 900;
-      }
-
-      .icon-link {
-        position: relative;
-        width: 44px;
-        justify-content: center;
-        border-radius: 999px;
-        font-size: 1.18rem;
-      }
-
-      .nav-badge {
-        position: absolute;
-        top: 9px;
-        right: 9px;
-        width: 8px;
-        height: 8px;
-        border: 1px solid rgba(255, 249, 236, 0.92);
-        border-radius: 999px;
-        background: #D6A94A;
-      }
-
-      .location-chip:hover,
-      .icon-link:hover {
-        border-color: rgba(214, 169, 74, 0.32);
-        color: #7A5019;
-        background: #ffffff;
-        transform: translateY(-2px);
-        box-shadow: 0 12px 24px rgba(92, 65, 28, 0.1);
-      }
-
-      .brand:hover .brand-mark {
-        transform: rotate(-3deg) scale(1.04);
-        box-shadow: 0 14px 30px rgba(92, 65, 28, 0.18);
-      }
-    }
-
-    @keyframes aura-web-nav-in {
-      from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(-14px) scale(0.985);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0) scale(1);
-      }
-    }
-
-    @keyframes aura-gate-fade {
-      from {
-        opacity: 0;
-      }
-      to {
-        opacity: 1;
-      }
-    }
-
-    @keyframes aura-gate-panel {
-      from {
-        opacity: 0;
-        transform: translateY(16px) scale(0.98);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-      }
+    @media (max-width: 767px) {
+      .header-inner { width: calc(100% - 24px); min-height: 58px; }
+      .brand { font-size: 19px; }
+      .business-link { display: none; }
+      .account-link strong { display: none; }
+      .menu-backdrop { inset-block-start: 58px; }
+      .public-menu { top: 50px; right: 12px; }
+      ion-tabs { --page-top: 16px; min-height: calc(100vh - 59px); }
     }
   `]
 })
 export class TabsPage {
-  readonly locationLabel = signal(this.readLocationLabel());
+  readonly businessAppUrl = environment.businessAppUrl;
   readonly language = signal(this.readLanguage());
   readonly menuOpen = signal(false);
+  readonly installMessage = signal("");
+  private installPrompt: InstallPromptEvent | null = null;
   private readonly mobileSwipeRoutes = ["/tabs/home", "/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
@@ -730,37 +345,26 @@ export class TabsPage {
   private swipeTracking = false;
 
   constructor(readonly auth: AuthService, private readonly router: Router) {
-    addIcons({ homeOutline, searchOutline, sparklesOutline, calendarOutline, ribbonOutline, personOutline, locationOutline, notificationsOutline, personCircleOutline, fingerPrintOutline, lockClosedOutline, pricetagOutline, menuOutline, closeOutline, logOutOutline, logInOutline, settingsOutline, giftOutline, chevronForwardOutline });
+    addIcons({ briefcaseOutline, calendarOutline, closeOutline, downloadOutline, ellipsisHorizontal, fingerPrintOutline, globeOutline, helpCircleOutline, homeOutline, lockClosedOutline, logInOutline, logOutOutline, personOutline, phonePortraitOutline, searchOutline });
+    addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      this.installPrompt = event as InstallPromptEvent;
+    });
   }
 
   @HostListener("window:storage")
   @HostListener("window:focus")
-  @HostListener("window:aura:customer-location-updated")
-  refreshLocationLabel() {
-    this.locationLabel.set(this.readLocationLabel());
-    this.language.set(this.readLanguage());
-  }
+  refreshLanguage() { this.language.set(this.readLanguage()); }
 
   @HostListener("window:touchstart", ["$event"])
   startSwipe(event: TouchEvent) {
-    if (!window.matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
+    if (!matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
     this.swipeStartX = event.touches[0].clientX;
     this.swipeStartY = event.touches[0].clientY;
-    this.swipeStartRoute = this.normalizeSwipeRoute(this.router.url);
+    this.swipeStartRoute = this.normalizeRoute(this.router.url);
     this.swipeTracking = true;
-  }
-
-  @HostListener("window:touchmove", ["$event"])
-  moveSwipe(event: TouchEvent) {
-    if (!this.swipeTracking || event.touches.length !== 1) return;
-    const deltaX = event.touches[0].clientX - this.swipeStartX;
-    const deltaY = event.touches[0].clientY - this.swipeStartY;
-    if (Math.abs(deltaX) <= Math.abs(deltaY) || Math.abs(deltaX) < 8) return;
-    const index = this.mobileSwipeRoutes.indexOf(this.swipeStartRoute);
-    if (index < 0 || !this.mobileSwipeRoutes[index + (deltaX < 0 ? 1 : -1)]) return;
-    event.preventDefault();
   }
 
   @HostListener("window:touchend", ["$event"])
@@ -769,132 +373,45 @@ export class TabsPage {
     if (!this.swipeTracking) return;
     const deltaX = event.changedTouches[0]?.clientX - this.swipeStartX;
     const deltaY = event.changedTouches[0]?.clientY - this.swipeStartY;
-    const startRoute = this.swipeStartRoute;
+    const index = this.mobileSwipeRoutes.indexOf(this.swipeStartRoute);
     this.swipeTracking = false;
-    this.swipeStartX = 0;
-    this.swipeStartY = 0;
-    this.swipeStartRoute = "";
     if (!deltaX || Math.abs(deltaX) < 64 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-    const index = this.mobileSwipeRoutes.indexOf(startRoute);
-    const nextRoute = this.mobileSwipeRoutes[index + (deltaX < 0 ? 1 : -1)];
-    if (nextRoute) void this.router.navigateByUrl(nextRoute);
+    const next = this.mobileSwipeRoutes[index + (deltaX < 0 ? 1 : -1)];
+    if (next) void this.router.navigateByUrl(next);
   }
 
-  private normalizeSwipeRoute(url: string): string {
-    return url.split(/[?#]/)[0].replace(/\/+$/, "");
+  toggleMenu() { this.menuOpen.update((open) => !open); }
+  closeMenu() { this.menuOpen.set(false); this.installMessage.set(""); }
+
+  async installApp() {
+    if (!this.installPrompt) {
+      this.installMessage.set("Use your browser menu and choose Add to Home screen.");
+      return;
+    }
+    await this.installPrompt.prompt();
+    await this.installPrompt.userChoice;
+    this.installPrompt = null;
+    this.closeMenu();
   }
 
   toggleLanguage() {
     const next = this.language() === "hi-IN" ? "en-IN" : "hi-IN";
     localStorage.setItem("aura_customer_language", next);
     this.language.set(next);
+    dispatchEvent(new CustomEvent("aura:customer-language-updated"));
   }
 
-  t(key: string): string {
-    const hi: Record<string, string> = {
-      account: "आपका अकाउंट",
-      accountSettings: "अकाउंट और सेटिंग्स",
-      book: "बुक",
-      bookings: "बुकिंग्स",
-      consult: "कंसल्ट",
-      consultation: "लाइव कंसल्टेशन",
-      discover: "डिस्कवर",
-      discoverSalons: "सलून खोजें",
-      explore: "एक्सप्लोर",
-      fastPath: "फास्ट पाथ",
-      guest: "गेस्ट",
-      home: "होम",
-      hub: "हब",
-      login: "लॉगिन",
-      logout: "लॉगआउट",
-      member: "मेंबर",
-      mode: "मोड",
-      myBookings: "मेरी बुकिंग्स",
-      nearMe: "मेरे पास",
-      offers: "ऑफर्स",
-      open: "ओपन",
-      profile: "प्रोफाइल",
-      rewards: "रिवॉर्ड्स",
-      salons: "सलून",
-      welcome: "वेलकम बैक"
-    };
-    const en: Record<string, string> = {
-      account: "Your account",
-      accountSettings: "Account and settings",
-      book: "Book",
-      bookings: "Bookings",
-      consult: "Consult",
-      consultation: "Live consultation",
-      discover: "Discover",
-      discoverSalons: "Discover salons",
-      explore: "Explore",
-      fastPath: "Fast path",
-      guest: "Guest",
-      home: "Home",
-      hub: "Hub",
-      login: "Login",
-      logout: "Logout",
-      member: "Member",
-      mode: "Mode",
-      myBookings: "My bookings",
-      nearMe: "Near me",
-      offers: "Offers",
-      open: "Open",
-      profile: "Profile",
-      rewards: "Rewards",
-      salons: "Salons",
-      welcome: "Welcome back"
-    };
-    return (this.language() === "hi-IN" ? hi : en)[key] || key;
-  }
+  languageLabel() { return this.language() === "hi-IN" ? "हिन्दी" : "English (IN)"; }
+  unlock() { void this.auth.verifyBiometricUnlock().catch(() => undefined); }
+  logout() { void this.auth.logout().catch(() => undefined); }
+  logoutAndClose() { this.closeMenu(); this.logout(); }
 
-  unlock() {
-    void this.auth.verifyBiometricUnlock().catch(() => undefined);
-  }
-
-  logout() {
-    void this.auth.logout().catch(() => undefined);
-  }
-
-  toggleMenu() {
-    this.menuOpen.update((open) => !open);
-  }
-
-  closeMenu() {
-    this.menuOpen.set(false);
-  }
-
-  logoutAndClose() {
-    this.closeMenu();
-    this.logout();
-  }
-
-  customerName(): string {
+  customerName() {
     const customer = this.auth.customer();
-    return customer?.firstName || customer?.name || customer?.email || "Aura member";
+    return customer?.firstName || customer?.name || customer?.email || "Customer";
   }
 
-  customerInitial(): string {
-    return this.customerName().trim().charAt(0).toUpperCase() || "A";
-  }
-
-  customerTierLabel(): string {
-    const customer = this.auth.customer();
-    return String(customer?.membershipLabel || "Member");
-  }
-
-  customerPointsLabel(): string {
-    return `${Number(this.auth.customer()?.loyaltyPoints || 0)} pts`;
-  }
-
-  private readLocationLabel(): string {
-    try {
-      const label = (localStorage.getItem("aura_customer_area_label") || "").trim();
-      return label && label.toLowerCase() !== "near me" ? label : "Current location";
-    } catch {
-      return "Current location";
-    }
-  }
+  customerInitial() { return this.customerName().trim().charAt(0).toUpperCase() || "A"; }
 
   private readLanguage(): "en-IN" | "hi-IN" {
     try {
@@ -903,4 +420,6 @@ export class TabsPage {
       return "en-IN";
     }
   }
+
+  private normalizeRoute(url: string) { return url.split(/[?#]/)[0].replace(/\/+$/, ""); }
 }

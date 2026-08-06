@@ -315,6 +315,19 @@ struct ProfileUpdate {
 struct MarketplaceQuery {
     q: Option<String>,
     category: Option<String>,
+    area: Option<String>,
+    city: Option<String>,
+    lat: Option<f64>,
+    lng: Option<f64>,
+    radius_km: Option<f64>,
+    open_now: Option<bool>,
+    top_rated: Option<bool>,
+    offers: Option<bool>,
+    available_today: Option<bool>,
+    min_price_paise: Option<i64>,
+    max_price_paise: Option<i64>,
+    staff_gender: Option<String>,
+    sort: Option<String>,
     limit: Option<i64>,
 }
 
@@ -2006,10 +2019,58 @@ async fn businesses(
     State(state): State<AppState>,
     Query(query): Query<MarketplaceQuery>,
 ) -> ApiResult<Vec<Value>> {
+    let q = query.q.as_deref().unwrap_or("").trim();
+    let category = query.category.as_deref().unwrap_or("").trim();
+    let area = query.area.as_deref().unwrap_or("").trim();
+    let city = query.city.as_deref().unwrap_or("").trim();
+    let staff_gender = query.staff_gender.as_deref().unwrap_or("").trim();
+    let sort = query.sort.as_deref().unwrap_or("recommended").trim();
+    if q.len() > 200
+        || category.len() > 120
+        || area.len() > 120
+        || city.len() > 120
+        || !matches!(
+            staff_gender,
+            "" | "female" | "male" | "non_binary" | "prefer_not_to_say"
+        )
+        || !matches!(sort, "recommended" | "rating" | "distance" | "price")
+    {
+        return Err(AppError::validation("marketplace filters are invalid"));
+    }
+    if query.lat.is_some() != query.lng.is_some()
+        || query
+            .lat
+            .is_some_and(|value| !(-90.0..=90.0).contains(&value))
+        || query
+            .lng
+            .is_some_and(|value| !(-180.0..=180.0).contains(&value))
+        || query
+            .radius_km
+            .is_some_and(|value| !(0.1..=200.0).contains(&value))
+        || query.radius_km.is_some() && query.lat.is_none()
+        || query.min_price_paise.is_some_and(|value| value < 0)
+        || query.max_price_paise.is_some_and(|value| value < 0)
+        || matches!((query.min_price_paise, query.max_price_paise), (Some(min), Some(max)) if min > max)
+    {
+        return Err(AppError::validation("marketplace filter range is invalid"));
+    }
     let mut rows = repo::businesses(
         &state.db,
-        query.q.as_deref().unwrap_or("").trim(),
-        query.category.as_deref().unwrap_or("").trim(),
+        q,
+        category,
+        area,
+        city,
+        query.lat,
+        query.lng,
+        query.radius_km,
+        query.open_now.unwrap_or(false),
+        query.top_rated.unwrap_or(false),
+        query.offers.unwrap_or(false),
+        query.available_today.unwrap_or(false),
+        query.min_price_paise,
+        query.max_price_paise,
+        staff_gender,
+        sort,
         query.limit.unwrap_or(48).clamp(1, 100),
     )
     .await
@@ -2315,7 +2376,7 @@ async fn create_customer_booking(
         .get("tenantId")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let booking_tenant_id = business
+    let tenant_slug = business
         .get("tenantSlug")
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
@@ -2324,18 +2385,13 @@ async fn create_customer_booking(
         .get("branchId")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let booking_branch_id = business
-        .get("branchCode")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| business.get("branchName").and_then(Value::as_str))
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(public_branch_id);
-    if public_tenant_id != body.tenant_id.trim() && booking_tenant_id != body.tenant_id.trim() {
+    if public_tenant_id != body.tenant_id.trim() && tenant_slug != body.tenant_id.trim() {
         return Err(appointments::ApiError::bad_request(
             "branch does not belong to the selected tenant",
         ));
     }
+    let booking_tenant_id = public_tenant_id;
+    let booking_branch_id = public_branch_id;
     if payment_mode == "online" {
         let deposit_percent = business
             .get("bookingDepositPercent")
@@ -3694,6 +3750,16 @@ fn authorize_booking_action(
     id: &str,
     owned: &repo::OwnedBooking,
 ) -> Result<(), appointments::ApiError> {
+    headers.insert(
+        "x-tenant-id",
+        HeaderValue::from_str(&owned.tenant_id)
+            .map_err(|_| appointments::ApiError::internal("invalid booking tenant scope"))?,
+    );
+    headers.insert(
+        "x-branch-id",
+        HeaderValue::from_str(&owned.branch_id)
+            .map_err(|_| appointments::ApiError::internal("invalid booking branch scope"))?,
+    );
     let token = appointments::issue_public_booking_token(
         state,
         &owned.tenant_id,

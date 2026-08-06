@@ -54,6 +54,7 @@ pub mod saas_repository;
 pub mod security_repository;
 pub mod services_repository;
 pub mod sms_center_repository;
+pub mod social_publishing_repository;
 pub mod sso_repository;
 pub mod staff_advance_repository;
 pub mod staff_advanced_repository;

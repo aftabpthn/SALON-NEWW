@@ -27,7 +27,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
           <section class="timeline premium-card">
             <div><ion-icon name="checkmark-circle-outline"></ion-icon><span>Booking created</span><strong>{{ booking.reference }}</strong></div>
-            <div><ion-icon name="time-outline"></ion-icon><span>Appointment time</span><strong>{{ booking.displayStartAt || booking.startsAt || booking.startAt }}</strong></div>
+            <div><ion-icon name="time-outline"></ion-icon><span>Appointment time</span><strong>{{ dateTimeLabel(booking.displayStartAt || booking.startsAt || booking.startAt) }}</strong></div>
             <div><ion-icon name="location-outline"></ion-icon><span>Venue</span><strong>{{ booking.address }}</strong></div>
             <div><ion-icon name="card-outline"></ion-icon><span>Payment</span><strong>{{ booking.paymentStatus || "Pay at venue" }}</strong></div>
           </section>
@@ -393,6 +393,13 @@ export class BookingDetailPage implements OnInit {
     } catch {
       this.actionMessage.set(this.marketplace.error() || "Digital receipt is unavailable.");
     }
+  }
+
+  dateTimeLabel(value: string | undefined): string {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return `${date.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })} · ${date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}`;
   }
 
   async cancel() {

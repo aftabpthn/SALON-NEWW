@@ -86661,7 +86661,7 @@
     },
     "staffApp": {
       "path": "docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md",
-      "sha256": "52ab7b79f322feae5d31d4c0227f6f341e65674d9a0540a0b9793a976148eda1",
+      "sha256": "396f5791fa9067508bf90f97081416e4a097392f8aeb41655a9b84ab046e7f12",
       "rowCount": 149
     }
   },
@@ -86672,5 +86672,5 @@
     "productOwnerSignoff": "APPROVED_BY_USER_INSTRUCTION_2026-08-02",
     "phase1Authorization": "APPROVED"
   },
-  "registerHash": "a9da9638d57b5b3df01dbbc942478279463ed252c34a54e552f750c4b733c5d7"
+  "registerHash": "1455ad5a00dca9241590a2ab9320a47d4d5a8f6cbff7a85cab4e97545c56262f"
 }

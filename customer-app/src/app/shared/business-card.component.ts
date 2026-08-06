@@ -29,7 +29,7 @@ import { MarketplaceService } from "../core/marketplace.service";
             <small>{{ business.category || 'Salon' }}</small>
           </div>
         }
-        <span class="rating-pill">Star {{ ratingText() }}</span>
+        <span class="rating-pill">★ {{ ratingText() }}</span>
         <button class="favorite" [class.saved]="isSaved()" type="button" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
           <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
         </button>
@@ -465,6 +465,63 @@ import { MarketplaceService } from "../core/marketplace.service";
         align-content: center;
         padding: 24px;
       }
+    }
+
+    /* Phase 1 public marketplace uses the shared Appointment surface language. */
+    .business-card,
+    .business-card.highlighted {
+      border-color: #d8e0ea;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .07);
+    }
+
+    .business-card.highlighted { border-color: #2563eb; }
+    .cover::after { background: linear-gradient(180deg, transparent 52%, rgba(7, 24, 50, .34)); }
+
+    .rating-pill,
+    .offer-pill,
+    .status-pill,
+    .countdown-pill {
+      border: 1px solid #d8e0ea;
+      color: #071832;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, .10);
+    }
+
+    .favorite,
+    .favorite.saved {
+      border-color: #d8e0ea;
+      color: #071832;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, .10);
+    }
+
+    .favorite:hover,
+    .favorite:focus-visible {
+      border-color: #2563eb;
+      color: #174ea6;
+      background: #eaf2ff;
+    }
+
+    .content { padding: 14px; }
+    h3 { color: #071832; font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+
+    .service-row {
+      padding: 10px;
+      border: 1px solid #e8edf4;
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .footer-row ion-button {
+      --background: #071832;
+      --background-hover: #102a50;
+      --background-activated: #020b18;
+      --color: #fff;
+      --box-shadow: none;
+      font-weight: 600;
+      text-transform: none;
     }
   `]
 })

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-06T04:25:06.728Z",
+  "generatedAt": "2026-08-06T14:22:00.452Z",
   "scanRule": "Exact static Axum route literal in a mounted router; all other README contracts are explicitly future, external, or retired.",
   "mountedModuleCount": 60,
   "mountedRouteLiteralCount": 4637,

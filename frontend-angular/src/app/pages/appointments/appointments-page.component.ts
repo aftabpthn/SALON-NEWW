@@ -2899,7 +2899,9 @@ export class AppointmentsPageComponent implements OnInit, OnDestroy {
       const grid = this.host.nativeElement.querySelector('.calendar-grid') as HTMLElement | null;
       const headerHeight = (grid?.querySelector('.time-head') as HTMLElement | null)?.offsetHeight || 0;
       if (grid && this.currentTimeTop !== null) {
-        grid.scrollTop = Math.max(0, headerHeight + this.currentTimeTop - (grid.clientHeight - headerHeight) / 2);
+        grid.scrollTop = this.appointmentSettings.previousTimeSlot
+          ? 0
+          : Math.max(0, headerHeight + this.currentTimeTop - (grid.clientHeight - headerHeight) / 2);
       }
     });
   }
