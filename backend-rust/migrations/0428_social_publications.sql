@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS social_publications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
   tenant_id TEXT NOT NULL,
   branch_id TEXT NOT NULL,
   provider TEXT NOT NULL,

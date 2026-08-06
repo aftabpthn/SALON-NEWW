@@ -49,12 +49,13 @@ async fn cancel(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
-    Path(id): Path<uuid::Uuid>,
+    Path(id): Path<String>,
 ) -> ApiResult<SocialPublication> {
     require_permission(&claims, true)?;
+    validate_id(&id)?;
     let (tenant, branch) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        social_publishing_service::cancel(&state, &tenant, &branch, &claims.sub, id).await?,
+        social_publishing_service::cancel(&state, &tenant, &branch, &claims.sub, &id).await?,
     )))
 }
 
@@ -62,12 +63,13 @@ async fn retry(
     State(state): State<AppState>,
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
-    Path(id): Path<uuid::Uuid>,
+    Path(id): Path<String>,
 ) -> ApiResult<SocialPublication> {
     require_permission(&claims, true)?;
+    validate_id(&id)?;
     let (tenant, branch) = tenant_branch(&headers)?;
     Ok(Json(ApiResponse::ok(
-        social_publishing_service::retry(&state, &tenant, &branch, &claims.sub, id).await?,
+        social_publishing_service::retry(&state, &tenant, &branch, &claims.sub, &id).await?,
     )))
 }
 
@@ -88,4 +90,10 @@ fn require_permission(claims: &AuthClaims, write: bool) -> Result<(), AppError> 
     } else {
         Err(AppError::forbidden("marketing permission is required"))
     }
+}
+
+fn validate_id(id: &str) -> Result<(), AppError> {
+    uuid::Uuid::parse_str(id)
+        .map(|_| ())
+        .map_err(|_| AppError::validation("social publication ID is invalid"))
 }

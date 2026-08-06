@@ -5,7 +5,7 @@ use sqlx::{FromRow, PgPool};
 #[derive(Debug, Clone, FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SocialPublication {
-    pub id: uuid::Uuid,
+    pub id: String,
     pub provider: String,
     pub caption: String,
     pub media_url: String,
@@ -27,7 +27,7 @@ pub struct SocialPublication {
 
 #[derive(Debug, Clone, FromRow)]
 pub struct ClaimedSocialPublication {
-    pub id: uuid::Uuid,
+    pub id: String,
     pub tenant_id: String,
     pub branch_id: String,
     pub provider: String,
@@ -87,7 +87,7 @@ pub async fn cancel(
     db: &PgPool,
     tenant: &str,
     branch: &str,
-    id: uuid::Uuid,
+    id: &str,
 ) -> Result<Option<SocialPublication>, sqlx::Error> {
     sqlx::query_as(&format!(
         "UPDATE social_publications SET status='cancelled',updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status IN ('queued','retry') RETURNING {COLUMNS}"
@@ -103,7 +103,7 @@ pub async fn retry(
     db: &PgPool,
     tenant: &str,
     branch: &str,
-    id: uuid::Uuid,
+    id: &str,
 ) -> Result<Option<SocialPublication>, sqlx::Error> {
     sqlx::query_as(&format!(
         "UPDATE social_publications SET status='queued',attempts=0,next_attempt_at=NOW(),last_error='',provider_container_id=CASE WHEN status='failed' THEN '' ELSE provider_container_id END,updated_at=NOW() WHERE id=$1 AND tenant_id=$2 AND branch_id=$3 AND status IN ('failed','uncertain') RETURNING {COLUMNS}"
@@ -129,7 +129,7 @@ pub async fn claim_due(
 
 pub async fn save_container(
     db: &PgPool,
-    id: uuid::Uuid,
+    id: &str,
     container_id: &str,
     delay_seconds: i64,
 ) -> Result<(), sqlx::Error> {
@@ -138,21 +138,13 @@ pub async fn save_container(
     Ok(())
 }
 
-pub async fn reschedule(
-    db: &PgPool,
-    id: uuid::Uuid,
-    delay_seconds: i64,
-) -> Result<(), sqlx::Error> {
+pub async fn reschedule(db: &PgPool, id: &str, delay_seconds: i64) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE social_publications SET status=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'retry' END,next_attempt_at=NOW()+($2::BIGINT*INTERVAL '1 second'),last_error=CASE WHEN attempts>=max_attempts THEN 'Meta media processing timed out' ELSE last_error END,updated_at=NOW() WHERE id=$1 AND status='processing'")
         .bind(id).bind(delay_seconds.max(1)).execute(db).await?;
     Ok(())
 }
 
-pub async fn complete(
-    db: &PgPool,
-    id: uuid::Uuid,
-    provider_post_id: &str,
-) -> Result<(), sqlx::Error> {
+pub async fn complete(db: &PgPool, id: &str, provider_post_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query("UPDATE social_publications SET status='published',provider_post_id=$2,last_error='',published_at=NOW(),updated_at=NOW() WHERE id=$1 AND status='processing'")
         .bind(id).bind(provider_post_id).execute(db).await?;
     Ok(())

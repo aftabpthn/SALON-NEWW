@@ -89,7 +89,7 @@ pub async fn cancel(
     tenant: &str,
     branch: &str,
     actor: &str,
-    id: uuid::Uuid,
+    id: &str,
 ) -> Result<SocialPublication, AppError> {
     let row = social_publishing_repository::cancel(&state.db, tenant, branch, id)
         .await
@@ -112,7 +112,7 @@ pub async fn retry(
     tenant: &str,
     branch: &str,
     actor: &str,
-    id: uuid::Uuid,
+    id: &str,
 ) -> Result<SocialPublication, AppError> {
     let row = social_publishing_repository::retry(&state.db, tenant, branch, id)
         .await
@@ -138,18 +138,18 @@ pub async fn process_due(state: &AppState) -> Result<usize, AppError> {
     for row in rows {
         match publish(state, &row).await {
             Ok(PublishOutcome::Published(id)) => {
-                social_publishing_repository::complete(&state.db, row.id, &id)
+                social_publishing_repository::complete(&state.db, &row.id, &id)
                     .await
                     .map_err(|_| AppError::internal("failed to complete social publication"))?;
                 completed += 1;
             }
             Ok(PublishOutcome::Container(id)) => {
-                social_publishing_repository::save_container(&state.db, row.id, &id, 10)
+                social_publishing_repository::save_container(&state.db, &row.id, &id, 10)
                     .await
                     .map_err(|_| AppError::internal("failed to save social media container"))?;
             }
             Ok(PublishOutcome::Wait) => {
-                social_publishing_repository::reschedule(&state.db, row.id, 10)
+                social_publishing_repository::reschedule(&state.db, &row.id, 10)
                     .await
                     .map_err(|_| AppError::internal("failed to reschedule social publication"))?;
             }
