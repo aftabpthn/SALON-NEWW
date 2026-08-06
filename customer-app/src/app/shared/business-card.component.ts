@@ -196,7 +196,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     .cover-fallback small {
       padding: 0 14px;
       color: rgba(67, 56, 202, 0.82);
-      font-size: 0.74rem;
+      font-size: 0.8rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -299,7 +299,7 @@ import { MarketplaceService } from "../core/marketplace.service";
     .booking-status {
       min-width: 0;
       color: var(--brand-800);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
       line-height: 1.25;
     }
@@ -322,7 +322,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border-radius: 999px;
       color: var(--primary-2);
       background: var(--primary-soft);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 900;
       white-space: nowrap;
     }
@@ -367,14 +367,14 @@ import { MarketplaceService } from "../core/marketplace.service";
       align-items: center;
       gap: 3px;
       color: var(--primary-2);
-      font-size: 0.8rem;
+      font-size: 0.86rem;
       font-weight: 900;
       white-space: nowrap;
     }
 
     .business-rating.is-new {
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.8rem;
       font-weight: 850;
       letter-spacing: 0.02em;
     }
@@ -432,7 +432,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       min-height: 44px;
       --padding-start: 14px;
       --padding-end: 14px;
-      font-size: 0.78rem;
+      font-size: 0.85rem;
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -609,7 +609,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .cover-fallback small {
-        font-size: 0.62rem;
+        font-size: 0.72rem;
       }
 
       .cover img,
@@ -653,7 +653,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .offer-pill {
         min-height: 24px;
         padding-inline: 8px;
-        font-size: 0.68rem;
+        font-size: 0.75rem;
       }
 
       h3 {
@@ -667,7 +667,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-meta {
-        font-size: 0.72rem;
+        font-size: 0.8rem;
         line-height: 1.2;
       }
 
@@ -678,7 +678,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .service-row strong {
-        font-size: 0.78rem;
+        font-size: 0.84rem;
       }
 
       .service-row span {
@@ -703,7 +703,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .footer-row > span {
         min-width: 0;
-        font-size: 0.72rem;
+        font-size: 0.8rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -788,7 +788,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         display: flex;
         margin: 0;
         overflow: hidden;
-        font-size: 0.68rem;
+        font-size: 0.76rem;
         line-height: 1.2;
         white-space: nowrap;
       }
@@ -818,7 +818,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding: 0;
         border: 0;
         background: transparent;
-        font-size: 0.68rem;
+        font-size: 0.76rem;
       }
 
       .business-card.variant-rail .service-row strong,
@@ -834,7 +834,7 @@ import { MarketplaceService } from "../core/marketplace.service";
         margin: 0;
         --padding-start: 9px;
         --padding-end: 9px;
-        font-size: 0.72rem;
+        font-size: 0.78rem;
       }
 
     }
@@ -858,7 +858,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-card.variant-discovery .booking-status {
-        font-size: 0.72rem;
+        font-size: 0.8rem;
       }
 
       .business-card.variant-discovery h3 {
@@ -869,7 +869,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-card.variant-discovery .business-meta {
-        font-size: 0.76rem;
+        font-size: 0.82rem;
       }
 
       .business-card.variant-discovery .service-row {
@@ -947,7 +947,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-mini-rail h3 {
         display: -webkit-box;
         overflow: hidden;
-        font-size: 0.78rem;
+        font-size: 0.85rem;
         line-height: 1.12;
         white-space: normal;
         -webkit-box-orient: vertical;
@@ -957,7 +957,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-mini-rail .business-meta {
         display: block;
         overflow: hidden;
-        font-size: 0.61rem;
+        font-size: 0.72rem;
         line-height: 1.15;
         text-overflow: ellipsis;
         white-space: nowrap;

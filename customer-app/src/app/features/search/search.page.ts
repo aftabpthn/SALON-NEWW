@@ -5,6 +5,7 @@ import { RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { arrowBackOutline, businessOutline, chevronForwardOutline, compassOutline, heart, heartOutline, locateOutline, locationOutline, mapOutline, micOutline, optionsOutline, peopleOutline, pricetagOutline, ribbonOutline, searchOutline, sparklesOutline, swapVerticalOutline } from "ionicons/icons";
+import { Capacitor } from "@capacitor/core";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
@@ -215,7 +216,7 @@ interface QuickFilterChip {
               </div>
 
               <footer class="sheet-footer">
-                <button type="button" class="apply-button" (click)="applyFilters()">Apply filters</button>
+                <button type="button" class="apply-button" (click)="applyFilters()">Show {{ draftResultCount() }} results</button>
               </footer>
             </section>
           }
@@ -347,9 +348,14 @@ interface QuickFilterChip {
                     <div class="map-state warning">
                       <strong>{{ mapErrorTitle() }}</strong>
                       <span>{{ mapError() }}</span>
-                      @if (locationRetryAvailable()) {
-                        <ion-button size="small" class="primary-gradient" (click)="useLocation(true)">Retry location</ion-button>
-                      }
+                      <div class="map-state-actions">
+                        @if (mapErrorTitle() === "Location permission blocked") {
+                          <ion-button size="small" fill="outline" (click)="openDeviceSettings()">Open settings</ion-button>
+                        }
+                        @if (locationRetryAvailable()) {
+                          <ion-button size="small" class="primary-gradient" (click)="useLocation(true)">Retry location</ion-button>
+                        }
+                      </div>
                     </div>
                   } @else if (!mapPins().length) {
                     <div class="map-state"><strong>No salons in this area</strong><span>Try changing filters or search terms.</span></div>
@@ -418,6 +424,12 @@ interface QuickFilterChip {
                   <section class="empty premium-card">
                     <h2>No matches yet</h2>
                     <p>{{ emptyStateNote() }}</p>
+                    @if (hasAnyTimeFilter()) {
+                      <ion-button fill="outline" (click)="clearTimeFilters()">Clear time filters</ion-button>
+                    }
+                    @if (location() && radiusKm() < 50) {
+                      <ion-button fill="outline" (click)="expandRadius()">Expand radius to 50 km</ion-button>
+                    }
                     @if (activeFilterCount() > 0 || location()) {
                       <ion-button fill="outline" (click)="clearFilters()">Clear filters</ion-button>
                     }
@@ -426,6 +438,22 @@ interface QuickFilterChip {
                     }
                     <ion-button class="primary-gradient" (click)="reset()">See all salons</ion-button>
                   </section>
+                  @if (suggestedSalons().length) {
+                    <div class="empty-suggestions">
+                      <h3>You may also like</h3>
+                      <div class="suggestions-grid">
+                        @for (business of suggestedSalons(); track business.id) {
+                          <aura-business-card
+                            [business]="business"
+                            [selectable]="true"
+                            [displayDistanceKm]="businessDistanceForCard(business)"
+                            [userLocation]="location()"
+                            (cardSelect)="selectBusiness($event)">
+                          </aura-business-card>
+                        }
+                      </div>
+                    </div>
+                  }
                 }
               }
             </div>
@@ -518,8 +546,8 @@ interface QuickFilterChip {
 
     .search-command-action {
       position: relative;
-      width: 18px;
-      height: 40px;
+      width: 44px;
+      height: 44px;
       border-radius: 6px;
       color: var(--muted);
     }
@@ -797,7 +825,7 @@ interface QuickFilterChip {
     .suggestion-panel small {
       margin-top: 3px;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -1150,6 +1178,13 @@ interface QuickFilterChip {
       max-width: 320px;
     }
 
+    .map-state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
     .map-preview-card {
       display: grid;
       grid-template-columns: 76px minmax(0, 1fr) auto;
@@ -1218,6 +1253,39 @@ interface QuickFilterChip {
       line-height: 1.5;
     }
 
+    .empty-suggestions {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: 10px;
+      padding: 6px 2px 4px;
+    }
+
+    .empty-suggestions h3 {
+      margin: 0;
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 950;
+      letter-spacing: -0.02em;
+    }
+
+    .suggestions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    @media (min-width: 640px) {
+      .suggestions-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .suggestions-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
     .active-filter-chips {
       display: flex;
       flex-wrap: wrap;
@@ -1236,7 +1304,7 @@ interface QuickFilterChip {
       color: var(--primary);
       background: var(--primary-soft);
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       cursor: pointer;
     }
@@ -1322,7 +1390,7 @@ interface QuickFilterChip {
         border-radius: 999px;
         color: var(--text);
         background: var(--surface);
-        font-size: 0.76rem;
+        font-size: 0.84rem;
         font-weight: 850;
       }
 
@@ -1357,14 +1425,14 @@ interface QuickFilterChip {
 
       .premium-result-row strong {
         color: var(--text);
-        font-size: 0.82rem;
+        font-size: 0.9rem;
         font-weight: 900;
         line-height: 1.2;
       }
 
       .premium-result-row span {
         color: var(--muted);
-        font-size: 0.71rem;
+        font-size: 0.82rem;
         font-weight: 750;
         line-height: 1.3;
       }
@@ -1381,13 +1449,13 @@ interface QuickFilterChip {
 
       .premium-map-switch {
         flex: 0 0 auto;
-        min-height: 32px;
-        padding: 0 10px;
+        min-height: 44px;
+        padding: 0 12px;
         border: 1px solid rgba(99, 102, 241, 0.18);
         border-radius: 999px;
         background: var(--primary-soft);
         color: var(--primary);
-        font-size: 0.72rem;
+        font-size: 0.82rem;
         font-weight: 900;
         display: inline-flex;
         align-items: center;
@@ -1836,24 +1904,24 @@ interface QuickFilterChip {
 
     .sheet-header span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
     }
 
     .sheet-header button {
-      min-height: 36px;
-      padding: 0 12px;
+      min-height: 44px;
+      padding: 0 14px;
       border: 1px solid rgba(99, 102, 241, 0.28);
       border-radius: 999px;
       color: var(--primary);
       background: var(--glass);
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 950;
     }
 
     .sheet-header .sheet-close {
-      width: 38px;
+      width: 44px;
       padding: 0;
       color: var(--text);
       font-size: 1.35rem;
@@ -2768,6 +2836,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly sortButtonLabel = computed(() => this.sortOptions.find((option) => option.key === this.sort())?.label ?? "Best match");
   readonly hasPriceFilter = computed(() => this.activeFilters().some((key) => key === "budget" || key === "mid" || key === "premium") || !!this.minPrice() || !!this.maxPrice());
   readonly hasTimeFilter = computed(() => this.activeFilters().some((key) => key === "morning" || key === "afternoon" || key === "evening"));
+  readonly hasAnyTimeFilter = computed(() => this.hasTimeFilter() || this.hasDateFilter());
   readonly hasAvailabilityFilter = computed(() => this.activeFilters().some((key) => key === "open"));
   readonly hasDateFilter = computed(() => this.activeFilters().some((key) => key === "today"));
   readonly hasRatingFilter = computed(() => this.activeFilters().some((key) => key === "rating4" || key === "rating4.5"));
@@ -2907,6 +2976,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.draftMaxPrice.set("");
     this.draftRadiusKm.set(25);
     this.filterPanelOpen.set(false);
+    void this.executeSearch();
+  }
+
+  clearTimeFilters() {
+    this.activeFilters.update((filters) => filters.filter((key) => key !== "today" && key !== "morning" && key !== "afternoon" && key !== "evening"));
+    this.draftFilters.set([...this.activeFilters()]);
+    void this.executeSearch();
+  }
+
+  expandRadius() {
+    this.radiusKm.set(50);
+    this.draftRadiusKm.set(50);
     void this.executeSearch();
   }
 
@@ -3152,52 +3233,76 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       return (!country || meta.country === country) && (!state || meta.state === state);
     });
   });
+  private matchesCriteria(business: import("../../core/api.types").Business, ctx: {
+    query: string;
+    mode: SearchMode;
+    filters: FilterKey[];
+    selectedCountry: string;
+    selectedState: string;
+    selectedCity: string;
+    minPrice: string;
+    maxPrice: string;
+    radiusKm: number;
+  }): boolean {
+    const query = ctx.query.trim().toLowerCase();
+    const mode = ctx.mode;
+    const filters = ctx.filters;
+    const serviceText = business.services.map((service) => [service.name, service.description, service.category].join(" ")).join(" ");
+    const staffText = business.staff.map((staff) => [staff.name, staff.title, staff.specialty].join(" ")).join(" ");
+    const locationText = [business.area, business.city, business.address].join(" ");
+    const salonText = [business.businessName, business.category, business.popularService, ...business.categories].join(" ");
+    const meta = this.locationMeta(business);
+    const modeText = (mode === "services"
+      ? serviceText || salonText
+      : mode === "staff"
+        ? staffText || salonText
+        : mode === "locations"
+          ? locationText
+          : [salonText, serviceText, staffText, locationText].join(" ")).toLowerCase();
+    const searchText = query
+      ? [salonText, serviceText, staffText, locationText].join(" ").toLowerCase()
+      : modeText;
+    if (query && !searchText.includes(query)) return false;
+    if (ctx.selectedCountry && meta.country !== ctx.selectedCountry) return false;
+    if (ctx.selectedState && meta.state !== ctx.selectedState) return false;
+    if (ctx.selectedCity && business.city !== ctx.selectedCity) return false;
+    if (filters.includes("open") && !business.isOpen) return false;
+    if (filters.includes("top") && business.ratingAverage < 4.5) return false;
+    if (filters.includes("reviewed") && Number(business.ratingCount || 0) < 10) return false;
+    if ((filters.includes("deals") || filters.includes("offpeak") || filters.includes("lastminute")) && !business.hasOffer) return false;
+    if (filters.includes("rating4") && Number(business.ratingAverage || 0) < 4) return false;
+    if (filters.includes("rating4.5") && Number(business.ratingAverage || 0) < 4.5) return false;
+    if (filters.includes("instant-booking") && !business.paymentModes?.includes("online")) return false;
+    if (filters.includes("nearest") && !this.isUsableDistance(business)) return false;
+    if (this.location()) {
+      const distanceKm = this.businessDistance(business);
+      if (distanceKm !== null && distanceKm > ctx.radiusKm) return false;
+    }
+    if (filters.includes("budget") && business.startingPricePaise > 100000) return false;
+    if (filters.includes("mid") && (business.startingPricePaise < 100000 || business.startingPricePaise > 250000)) return false;
+    if (filters.includes("premium") && business.startingPricePaise < 250000) return false;
+    const minPrice = Number(ctx.minPrice);
+    const maxPrice = Number(ctx.maxPrice);
+    if (Number.isFinite(minPrice) && minPrice > 0 && business.startingPricePaise < minPrice * 100) return false;
+    if (Number.isFinite(maxPrice) && maxPrice > 0 && business.startingPricePaise > maxPrice * 100) return false;
+    if (filters.some((key) => key === "morning" || key === "afternoon" || key === "evening") && !this.matchesTimeFilter(business, filters)) return false;
+    return true;
+  }
+
   readonly filtered = computed(() => {
-    const query = this.query().trim().toLowerCase();
-    const mode = this.mode();
     const filters = this.activeFilters();
     const sort = this.sort();
-    const rows = this.marketplace.businesses().filter((business) => {
-      const serviceText = business.services.map((service) => [service.name, service.description, service.category].join(" ")).join(" ");
-      const staffText = business.staff.map((staff) => [staff.name, staff.title, staff.specialty].join(" ")).join(" ");
-      const locationText = [business.area, business.city, business.address].join(" ");
-      const salonText = [business.businessName, business.category, business.popularService, ...business.categories].join(" ");
-      const meta = this.locationMeta(business);
-      const modeText = (mode === "services"
-        ? serviceText || salonText
-        : mode === "staff"
-          ? staffText || salonText
-          : mode === "locations"
-            ? locationText
-            : [salonText, serviceText, staffText, locationText].join(" ")).toLowerCase();
-      const searchText = query
-        ? [salonText, serviceText, staffText, locationText].join(" ").toLowerCase()
-        : modeText;
-      if (query && !searchText.includes(query)) return false;
-      if (this.selectedCountry() && meta.country !== this.selectedCountry()) return false;
-      if (this.selectedState() && meta.state !== this.selectedState()) return false;
-      if (this.selectedCity() && business.city !== this.selectedCity()) return false;
-      if (filters.includes("open") && !business.isOpen) return false;
-      if (filters.includes("top") && business.ratingAverage < 4.5) return false;
-      if (filters.includes("reviewed") && Number(business.ratingCount || 0) < 10) return false;
-      if ((filters.includes("deals") || filters.includes("offpeak") || filters.includes("lastminute")) && !business.hasOffer) return false;
-      if (filters.includes("rating4") && Number(business.ratingAverage || 0) < 4) return false;
-      if (filters.includes("rating4.5") && Number(business.ratingAverage || 0) < 4.5) return false;
-      if (filters.includes("nearest") && !this.isUsableDistance(business)) return false;
-      if (this.location()) {
-        const distanceKm = this.businessDistance(business);
-        if (distanceKm !== null && distanceKm > this.radiusKm()) return false;
-      }
-      if (filters.includes("budget") && business.startingPricePaise > 100000) return false;
-      if (filters.includes("mid") && (business.startingPricePaise < 100000 || business.startingPricePaise > 250000)) return false;
-      if (filters.includes("premium") && business.startingPricePaise < 250000) return false;
-      const minPrice = Number(this.minPrice());
-      const maxPrice = Number(this.maxPrice());
-      if (Number.isFinite(minPrice) && minPrice > 0 && business.startingPricePaise < minPrice * 100) return false;
-      if (Number.isFinite(maxPrice) && maxPrice > 0 && business.startingPricePaise > maxPrice * 100) return false;
-      if (filters.some((key) => key === "morning" || key === "afternoon" || key === "evening") && !this.matchesTimeFilter(business, filters)) return false;
-      return true;
-    });
+    const rows = this.marketplace.businesses().filter((business) => this.matchesCriteria(business, {
+      query: this.query(),
+      mode: this.mode(),
+      filters: this.activeFilters(),
+      selectedCountry: this.selectedCountry(),
+      selectedState: this.selectedState(),
+      selectedCity: this.selectedCity(),
+      minPrice: this.minPrice(),
+      maxPrice: this.maxPrice(),
+      radiusKm: this.radiusKm()
+    }));
 
     const sorted = [...rows];
     if (sort === "rating" || filters.includes("top")) {
@@ -3215,6 +3320,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }
     return sorted;
   });
+
+  readonly draftResultCount = computed(() => this.marketplace.businesses().filter((business) => this.matchesCriteria(business, {
+    query: this.query(),
+    mode: this.draftMode(),
+    filters: this.draftFilters(),
+    selectedCountry: this.selectedCountry(),
+    selectedState: this.selectedState(),
+    selectedCity: this.selectedCity(),
+    minPrice: this.draftMinPrice(),
+    maxPrice: this.draftMaxPrice(),
+    radiusKm: this.draftRadiusKm()
+  })).length);
 
   readonly professionalResults = computed<ProfessionalResult[]>(() => {
     const query = this.query().trim().toLowerCase();
@@ -3254,6 +3371,13 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       return `No salons match ${reasons.join(" and ")}. Try removing filters, widening the radius or checking another area.`;
     }
     return "No salons are available right now. Try another area or check back later.";
+  });
+  readonly suggestedSalons = computed(() => {
+    if (this.filtered().length || !this.marketplace.businesses().length) return [];
+    return this.marketplace.businesses()
+      .filter((business) => Number(business.ratingCount || 0) > 0)
+      .sort((a, b) => Number(b.ratingAverage || 0) - Number(a.ratingAverage || 0))
+      .slice(0, 3);
   });
   readonly showMap = computed(() => this.mapPanelOpen() || this.mapPickMode() || this.mapFullscreen());
 
@@ -3628,7 +3752,16 @@ useLocation(isManualRetry = false) {
 
   openLocationSettings() {
     this.mapErrorTitle.set("Location permission blocked");
-    this.mapError.set("Location permission is blocked. You can still search by picking an area on the map or entering a city manually. To use your current location, enable permission in your device settings.");
+    this.mapError.set("Location permission is blocked. You can still search by picking an area on the map or entering a city manually. To use your current location, open device settings and allow location access.");
+    this.locationRetryAvailable.set(true);
+  }
+
+  async openDeviceSettings() {
+    if (Capacitor.isNativePlatform()) {
+      this.mapError.set("Open Settings > App permissions for this app and allow Location, then come back and tap Retry location.");
+    } else {
+      this.mapError.set("Open your browser's site settings for this app and allow location access, then retry. You can also pick an area on the map or enter a city manually.");
+    }
     this.locationRetryAvailable.set(true);
   }
 

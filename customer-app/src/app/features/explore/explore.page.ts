@@ -256,7 +256,7 @@ import { Business } from "../../core/api.types";
       border-radius: 13px;
       color: var(--text);
       background: var(--surface);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-decoration: none;
     }
@@ -282,7 +282,7 @@ import { Business } from "../../core/api.types";
       border-radius: 999px;
       color: var(--text);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-decoration: none;
       transition: border-color 160ms ease, background 160ms ease;
@@ -302,7 +302,7 @@ import { Business } from "../../core/api.types";
     .explore-section-head > div > span {
       display: block;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.8rem;
       font-weight: 750;
       letter-spacing: 0;
       line-height: 1.3;
@@ -325,7 +325,7 @@ import { Business } from "../../core/api.types";
       min-height: 44px;
       padding-inline: 4px;
       color: var(--primary);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-decoration: none;
       white-space: nowrap;
@@ -358,7 +358,7 @@ import { Business } from "../../core/api.types";
 
     .open-banner-copy { display: grid; gap: 2px; min-width: 0; }
     .open-banner-copy strong { font-size: 0.86rem; line-height: 1.2; }
-    .open-banner-copy small { color: var(--muted); font-size: 0.7rem; line-height: 1.3; }
+    .open-banner-copy small { color: var(--muted); font-size: 0.78rem; line-height: 1.3; }
     .open-banner-arrow { color: var(--primary); }
 
     .explore-categories {
@@ -382,7 +382,7 @@ import { Business } from "../../core/api.types";
       color: var(--text);
       background: var(--surface);
       box-shadow: none;
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-family: inherit;
       font-weight: 900;
       text-decoration: none;
@@ -408,7 +408,7 @@ import { Business } from "../../core/api.types";
       min-height: 2.4em;
       overflow: hidden;
       color: var(--text);
-      font-size: 0.68rem;
+      font-size: 0.76rem;
       line-height: 1.2;
       text-align: center;
       overflow-wrap: anywhere;
@@ -443,8 +443,8 @@ import { Business } from "../../core/api.types";
 
     .concierge-card > div { display: grid; gap: 2px; min-width: 0; }
     .concierge-card h2 { margin: 0; font-size: 0.9rem; line-height: 1.2; }
-    .concierge-card p { margin: 0; color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
-    .concierge-card b { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 0.78rem; font-weight: 900; white-space: nowrap; }
+    .concierge-card p { margin: 0; color: var(--muted); font-size: 0.8rem; line-height: 1.35; }
+    .concierge-card b { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 0.84rem; font-weight: 900; white-space: nowrap; }
 
     .salon-group { gap: 14px; }
     .salon-previews {
@@ -481,10 +481,10 @@ import { Business } from "../../core/api.types";
     }
 
     .service-grid > a:nth-child(n + 5) { display: none; }
-    .service-grid span { color: var(--primary); font-size: 0.65rem; font-weight: 850; line-height: 1.2; }
+    .service-grid span { color: var(--primary); font-size: 0.74rem; font-weight: 850; line-height: 1.2; }
     .service-grid h3 { display: -webkit-box; margin: 6px 0 3px; overflow: hidden; font-size: 0.9rem; line-height: 1.18; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .service-grid p { min-width: 0; margin: 0; overflow: hidden; color: var(--muted); font-size: 0.7rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-    .service-grid strong { align-self: end; margin-top: 12px; color: var(--primary); font-size: 0.74rem; }
+    .service-grid p { min-width: 0; margin: 0; overflow: hidden; color: var(--muted); font-size: 0.78rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+    .service-grid strong { align-self: end; margin-top: 12px; color: var(--primary); font-size: 0.82rem; }
 
     .professional-list {
       display: grid;
@@ -512,7 +512,7 @@ import { Business } from "../../core/api.types";
     .professional-list > a > div { min-width: 0; }
     .professional-list .professional-avatar { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; color: #fff; background: linear-gradient(145deg, var(--brand-600), var(--brand-800)); font-size: 0.78rem; font-weight: 950; }
     .professional-list h3 { margin: 0 0 3px; overflow: hidden; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
-    .professional-list p { margin: 0; overflow: hidden; color: var(--muted); font-size: 0.7rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+    .professional-list p { margin: 0; overflow: hidden; color: var(--muted); font-size: 0.78rem; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
     .professional-list > a > ion-icon { color: var(--primary); }
 
     .explore-loading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
