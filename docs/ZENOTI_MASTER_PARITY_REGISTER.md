@@ -51,4 +51,4 @@ Phase 1 authorization: **APPROVED**.
 Product owner: ____________________
 Decision: **APPROVED_BY_USER_INSTRUCTION_2026-08-02**
 Date: ____________________
-Baseline hash: `8cd825364a7f3522bf4b4795f64a45610ee7b484f07ce11aacac426d710bcb26`
+Baseline hash: `a9da9638d57b5b3df01dbbc942478279463ed252c34a54e552f750c4b733c5d7`
