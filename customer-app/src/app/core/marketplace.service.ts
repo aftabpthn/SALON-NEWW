@@ -495,14 +495,47 @@ export class MarketplaceService {
   private normalizeBusiness(business: Business): Business {
     return {
       ...business,
+      businessName: this.titleCaseDisplay(business.businessName),
+      category: this.titleCaseDisplay(business.category),
+      area: this.titleCaseDisplay(business.area),
+      city: this.titleCaseDisplay(business.city),
+      state: this.titleCaseDisplay(business.state),
+      popularService: this.titleCaseDisplay(business.popularService),
+      offerText: this.titleCaseDisplay(business.offerText),
+      categories: (business.categories ?? []).map((item) => this.titleCaseDisplay(item)),
+      policies: (business.policies ?? []).map((item) => this.titleCaseDisplay(item)),
       galleryImages: business.galleryImages ?? [],
-      categories: business.categories ?? [],
-      services: business.services ?? [],
-      staff: business.staff ?? [],
+      services: (business.services ?? []).map((service) => ({
+        ...service,
+        name: this.titleCaseDisplay(service.name),
+        description: this.titleCaseDisplay(service.description),
+        category: this.titleCaseDisplay(service.category)
+      })),
+      staff: (business.staff ?? []).map((member) => ({
+        ...member,
+        name: this.titleCaseDisplay(member.name),
+        title: this.titleCaseDisplay(member.title),
+        specialty: this.titleCaseDisplay(member.specialty),
+        gender: this.titleCaseDisplay(member.gender)
+      })),
       reviews: business.reviews ?? [],
-      policies: business.policies ?? [],
       businessHours: business.businessHours ?? []
     };
+  }
+
+  /**
+   * Converts ALL-CAPS user-facing text to title case so service and staff
+   * data reads naturally. Strings that are not entirely uppercase are left
+   * untouched to protect proper nouns, acronyms and mixed-case brand names.
+   */
+  private titleCaseDisplay(value: string | undefined | null): string {
+    if (!value) return value ?? "";
+    const trimmed = value.trim();
+    if (!trimmed) return value;
+    if (trimmed !== trimmed.toUpperCase() || trimmed === trimmed.toLowerCase()) return value;
+    return trimmed
+      .toLowerCase()
+      .replace(/(?:^|[\s\-/()])([a-z])/g, (match) => match.toUpperCase());
   }
 
   private accountModuleRequest(slug: string): Promise<CustomerAccountModule> {
