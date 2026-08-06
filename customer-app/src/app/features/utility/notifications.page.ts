@@ -140,7 +140,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 
     .wallet-heading { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 0 0; }
     .wallet-heading p, .wallet-heading h1 { margin: 0; }
-    .wallet-eyebrow, .wallet-section-kicker { color: var(--primary); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
+    .wallet-eyebrow, .wallet-section-kicker { color: var(--primary); font-size: 0.80rem; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; }
     .wallet-heading h1 { margin-top: 5px; color: var(--brand-950); font-size: clamp(1.7rem, 7vw, 2.45rem); font-weight: 900; letter-spacing: -0.045em; line-height: 0.98; }
     .wallet-heading .wallet-intro { max-width: 290px; margin-top: 8px; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
     .wallet-heading .wallet-eyebrow { margin-left: 30px; line-height: 1; }
@@ -162,7 +162,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 
     .notif-header-actions { position: absolute; top: 0; right: -8px; display: flex; align-items: center; gap: 8px; }
     .unread-badge { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 999px; color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary)); font-size: 0.96rem; font-weight: 900; box-shadow: 0 12px 24px rgba(99, 102, 241, 0.2); }
-    .section-unread-badge { width: 34px; height: 34px; flex-basis: 34px; transform: translate(22px, -24px); font-size: 0.78rem; box-shadow: 0 8px 18px rgba(99, 102, 241, 0.18); }
+    .section-unread-badge { width: 34px; height: 34px; flex-basis: 34px; transform: translate(22px, -24px); font-size: 0.84rem; box-shadow: 0 8px 18px rgba(99, 102, 241, 0.18); }
     .notif-menu { position: relative; }
     .notif-menu summary { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 0; color: #06172b; background: transparent; cursor: pointer; list-style: none; box-shadow: none; }
     .notif-menu summary::-webkit-details-marker { display: none; }
@@ -174,10 +174,10 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
 
     .inbox-actions { display: grid; gap: 10px; }
     .pill-row { display: flex; flex-wrap: wrap; gap: 7px; }
-    .pill { min-height: 34px; padding: 0 15px; border: 1px solid rgba(99, 102, 241, 0.18); border-radius: 999px; color: var(--muted); background: var(--surface); font-size: 0.74rem; font-weight: 850; cursor: pointer; }
+    .pill { min-height: 34px; padding: 0 15px; border: 1px solid rgba(99, 102, 241, 0.18); border-radius: 999px; color: var(--muted); background: var(--surface); font-size: 0.82rem; font-weight: 850; cursor: pointer; }
     .pill.active { color: #FFFFFF; background: linear-gradient(135deg, var(--brand-600), var(--primary)); border-color: transparent; }
     .button-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .button-row ion-button { min-height: 40px; margin: 0; font-size: 0.76rem; --border-radius: 999px; }
+    .button-row ion-button { min-height: 40px; margin: 0; font-size: 0.84rem; --border-radius: 999px; }
 
     .wallet-content-grid { display: grid; gap: 16px; align-items: start; min-width: 0; }
     .wallet-activity, .wallet-guide, .wallet-state { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: 0 14px 36px rgba(28, 28, 28, 0.08); }
@@ -192,7 +192,7 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .transaction-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; color: #087443; background: #E8F8F0; font-size: 1.12rem; }
     .transaction-copy { min-width: 0; display: grid; gap: 3px; }
     .transaction-copy strong { color: var(--text); font-size: 0.9rem; font-weight: 850; line-height: 1.25; overflow-wrap: anywhere; }
-    .transaction-copy span, .transaction-copy small { color: var(--muted); font-size: 0.73rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+    .transaction-copy span, .transaction-copy small { color: var(--muted); font-size: 0.82rem; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
 
     .read-button { min-height: 36px; padding: 0 12px; border: 1px solid rgba(99, 102, 241, 0.28); border-radius: 999px; color: var(--primary); background: var(--glass); font-weight: 900; flex: 0 0 auto; }
 
@@ -224,12 +224,12 @@ type NotificationFilter = "all" | "unread" | "bookings" | "payments" | "offers";
     .wallet-guide > h2 { margin-top: 4px; color: var(--brand-950); font-size: clamp(1.25rem, 3vw, 1.65rem); font-weight: 900; letter-spacing: -0.035em; line-height: 1.1; }
     .wallet-guide-list { display: grid; margin-top: 22px; }
     .wallet-guide-list > div { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 15px 0; border-top: 1px solid var(--border); }
-    .guide-number { color: var(--primary); font-size: 0.72rem; font-weight: 900; letter-spacing: 0.06em; }
+    .guide-number { color: var(--primary); font-size: 0.80rem; font-weight: 900; letter-spacing: 0.06em; }
     .wallet-guide-list p, .wallet-guide-list strong, .wallet-guide-list small { margin: 0; }
     .wallet-guide-list p { display: grid; gap: 4px; }
     .wallet-guide-list strong { color: var(--text); font-size: 0.9rem; font-weight: 850; }
-    .wallet-guide-list small { color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
-    .wallet-guide-note { margin: 16px 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; font-weight: 700; }
+    .wallet-guide-list small { color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+    .wallet-guide-note { margin: 16px 0 0; color: var(--muted); font-size: 0.84rem; line-height: 1.5; font-weight: 700; }
     .wallet-help-link { min-height: 44px; display: inline-flex; align-items: center; justify-content: space-between; gap: 7px; width: 100%; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--primary); font-size: 0.88rem; font-weight: 850; text-decoration: none; }
 
     @media (min-width: 800px) {

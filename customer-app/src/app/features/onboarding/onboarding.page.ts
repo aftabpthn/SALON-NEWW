@@ -134,7 +134,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
     .eyebrow {
       margin: 18px 0 8px;
       color: var(--primary);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -182,7 +182,7 @@ import { IonButton, IonContent } from "@ionic/angular/standalone";
 
     .feature-grid small {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 

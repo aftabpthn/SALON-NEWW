@@ -192,7 +192,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       border-radius: 999px;
       color: var(--muted);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
       text-decoration: none;
       white-space: nowrap;
@@ -276,7 +276,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       gap: 8px;
       margin: 2px 4px 0;
       color: var(--muted);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.09em;
       text-transform: uppercase;
@@ -285,7 +285,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     .date-group-label span {
       color: var(--muted);
       opacity: 0.75;
-      font-size: 0.62rem;
+      font-size: 0.74rem;
       font-weight: 800;
       letter-spacing: 0.04em;
       text-transform: none;
@@ -323,7 +323,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     }
 
     .date-block span {
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 900;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -359,7 +359,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       border-radius: 999px;
       color: var(--primary);
       background: var(--primary-soft, rgba(99, 102, 241, 0.1));
-      font-size: 0.62rem;
+      font-size: 0.74rem;
       font-weight: 900;
       letter-spacing: 0.02em;
       white-space: nowrap;
@@ -425,7 +425,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       padding: 3px 10px;
       border: 1px solid;
       border-radius: 999px;
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 850;
       letter-spacing: 0.01em;
       text-transform: capitalize;
@@ -472,7 +472,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       border: 1px solid;
       border-radius: 999px;
       font-family: inherit;
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 850;
       white-space: nowrap;
       cursor: pointer;
@@ -578,7 +578,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       .support-link {
         min-height: 36px;
         padding: 0 10px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       ion-segment {
@@ -587,7 +587,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
       ion-segment-button {
         min-height: 36px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       .booking-card {
@@ -603,7 +603,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       }
 
       .date-block span {
-        font-size: 0.66rem;
+        font-size: 0.76rem;
       }
 
       .date-block strong {
@@ -622,7 +622,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       .booking-meta {
         gap: 4px;
         margin-top: 6px;
-        font-size: 0.76rem;
+        font-size: 0.84rem;
       }
 
       .booking-footer {
@@ -638,13 +638,13 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       .card-action {
         min-height: 32px;
         padding: 0 10px;
-        font-size: 0.68rem;
+        font-size: 0.78rem;
       }
 
       .status-pill {
         min-height: 22px;
         padding: 2px 8px;
-        font-size: 0.68rem;
+        font-size: 0.78rem;
       }
     }
 

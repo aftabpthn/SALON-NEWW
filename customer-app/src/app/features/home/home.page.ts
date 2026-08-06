@@ -358,7 +358,7 @@ interface ConsultationChatMessage {
     .location-copy span {
       display: block;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -460,7 +460,7 @@ interface ConsultationChatMessage {
       align-items: center;
       gap: 6px;
       border-radius: 999px;
-      font-size: 0.75rem;
+      font-size: 0.82rem;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.04em;
@@ -557,7 +557,7 @@ interface ConsultationChatMessage {
     }
 
     .consultation-message strong {
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
     }
@@ -648,7 +648,7 @@ interface ConsultationChatMessage {
       padding: 3px;
       color: #fff;
       background: rgba(28, 28, 28, 0.78);
-      font-size: 0.62rem;
+      font-size: 0.74rem;
       font-weight: 900;
       text-align: center;
     }
@@ -754,7 +754,7 @@ interface ConsultationChatMessage {
     .consultation-safety {
       margin: 0;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       line-height: 1.38;
     }
@@ -956,7 +956,7 @@ interface ConsultationChatMessage {
 
     .customer-quick-actions small {
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 800;
       line-height: 1.2;
     }
@@ -1453,9 +1453,9 @@ interface ConsultationChatMessage {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .home-page .visited-card span { font-size: 0.72rem; line-height: 1.25; }
+      .home-page .visited-card span { font-size: 0.80rem; line-height: 1.25; }
       .home-page .visited-card strong { font-size: 0.96rem; line-height: 1.15; }
-      .home-page .visited-card small { font-size: 0.74rem; line-height: 1.25; }
+      .home-page .visited-card small { font-size: 0.82rem; line-height: 1.25; }
       .home-page .visited-card ion-icon { width: 40px; height: 40px; padding: 11px; }
     }
 
@@ -1468,7 +1468,7 @@ interface ConsultationChatMessage {
       .location-copy { justify-self: end; text-align: right; }
       .location-row { justify-content: flex-end; }
       .home-page .home-toolbar { min-height: 44px; padding-block: 2px; }
-      .home-page .location-row strong { font-size: 0.78rem; }
+      .home-page .location-row strong { font-size: 0.84rem; }
       .home-page .hero { margin-top: 0; }
       .home-page .search-panel {
         position: relative;
@@ -1595,7 +1595,7 @@ interface ConsultationChatMessage {
     .section-kicker {
       display: block;
       color: var(--primary);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 950;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -1612,7 +1612,7 @@ interface ConsultationChatMessage {
 
     .recent-searches > span {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 900;
     }
 
@@ -1655,7 +1655,7 @@ interface ConsultationChatMessage {
 
     .appointment-date span {
       align-self: end;
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -1683,7 +1683,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       color: var(--brand-800);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 950;
       text-decoration: none;
     }
@@ -1832,7 +1832,7 @@ interface ConsultationChatMessage {
       .appointment-date strong { color: var(--primary); font-size: 1.55rem; }
       .appointment-copy .eyebrow { color: var(--primary); }
       .appointment-copy h2 { margin-block: 2px; color: var(--text); font-size: 1rem; }
-      .appointment-copy p { color: var(--muted); font-size: 0.74rem; line-height: 1.25; }
+      .appointment-copy p { color: var(--muted); font-size: 0.82rem; line-height: 1.25; }
       .next-appointment > a { color: #FFFFFF; background: var(--primary); }
       .account-shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow: visible; padding: 0; }
       .account-shortcuts a {
@@ -1846,8 +1846,8 @@ interface ConsultationChatMessage {
         text-align: center;
       }
       .account-shortcuts ion-icon { grid-row: auto; font-size: 1.25rem; }
-      .account-shortcuts span { width: 100%; font-size: 0.72rem; line-height: 1.15; text-overflow: clip; white-space: nowrap; }
-      .account-shortcuts strong { font-size: 0.66rem; line-height: 1.1; white-space: nowrap; }
+      .account-shortcuts span { width: 100%; font-size: 0.80rem; line-height: 1.15; text-overflow: clip; white-space: nowrap; }
+      .account-shortcuts strong { font-size: 0.76rem; line-height: 1.1; white-space: nowrap; }
       .customer-quick-actions { display: grid; }
     }
 
@@ -1881,12 +1881,12 @@ interface ConsultationChatMessage {
       .home-page .visited-rail .visited-card ion-icon { display: none; }
       .home-page .visited-rail .visited-card strong {
         grid-column: 2;
-        font-size: 0.78rem;
+        font-size: 0.84rem;
         line-height: 1.1;
       }
       .home-page .visited-rail .visited-card small {
         grid-column: 2;
-        font-size: 0.62rem;
+        font-size: 0.74rem;
         line-height: 1.15;
       }
 
@@ -1913,15 +1913,15 @@ interface ConsultationChatMessage {
         height: 68px;
         border-radius: 11px;
       }
-      .home-page .favourites-rail .favourite-mini-card strong { font-size: 0.76rem; }
-      .home-page .favourites-rail .favourite-mini-card small { font-size: 0.61rem; }
+      .home-page .favourites-rail .favourite-mini-card strong { font-size: 0.84rem; }
+      .home-page .favourites-rail .favourite-mini-card small { font-size: 0.74rem; }
       .home-page .favourites-rail .favourite-mini-card:nth-child(n + 5) { display: none; }
 
       .home-page .lower-actions {
         gap: 8px;
         margin-top: 8px;
       }
-      .home-page .lower-actions .section-kicker { font-size: 0.62rem; }
+      .home-page .lower-actions .section-kicker { font-size: 0.74rem; }
       .home-page .lower-actions .section-title { font-size: 1rem; }
       .home-page .lower-actions .customer-quick-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -243,7 +243,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 5px;
       color: var(--primary);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       cursor: pointer;
     }
@@ -260,7 +260,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border-radius: 999px;
       color: #fff;
       background: #dc2626;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 950;
       cursor: pointer;
     }
@@ -313,7 +313,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 6px 12px;
       color: #FFFFFF;
       background: #B91C1C;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-align: center;
     }
@@ -367,7 +367,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       min-width: 0;
       min-height: 44px;
       border-radius: 12px;
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       font-weight: 850;
     }
 
@@ -427,7 +427,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .mobile-brand small {
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 800;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -487,7 +487,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .menu-kicker {
       margin: 0 0 4px;
       color: var(--primary);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -535,7 +535,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
     .menu-insight-strip span {
       color: #a36d16;
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       font-weight: 950;
       letter-spacing: 0.1em;
       text-transform: uppercase;
@@ -748,7 +748,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
       .brand-copy small {
         color: var(--muted);
-        font-size: 0.74rem;
+        font-size: 0.82rem;
         font-weight: 800;
       }
 

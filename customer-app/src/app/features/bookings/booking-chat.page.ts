@@ -210,7 +210,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     .header-copy { min-width: 0; display: grid; gap: 3px; }
     .header-copy h1, .header-copy p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .header-copy h1 { color: #FFFFFF; font-size: clamp(1rem, 4.8vw, 1.18rem); font-weight: 850; letter-spacing: -0.02em; }
-    .header-copy p { color: #C8D9E8; font-size: 0.72rem; font-weight: 650; }
+    .header-copy p { color: #C8D9E8; font-size: 0.80rem; font-weight: 650; }
     .connection {
       display: inline-flex;
       align-items: center;
@@ -220,7 +220,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 999px;
       color: #EAF5FF;
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 800;
     }
     .connection span { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: #59D98E; }
@@ -267,19 +267,19 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     .context-appointment { margin: 0; color: var(--text); font-size: 0.8rem; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
     .context-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .context-reference { min-width: 0; color: var(--muted); font-size: 0.7rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .booking-context a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; color: var(--primary); font-size: 0.76rem; font-weight: 800; }
+    .booking-context a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; color: var(--primary); font-size: 0.84rem; font-weight: 800; }
     .message-row { max-width: min(82%, 620px); align-self: flex-start; display: grid; gap: 5px; animation: message-in 320ms ease-out both; }
     .message-row.customer { align-self: flex-end; justify-items: end; }
     .message-row.system { max-width: min(92%, 680px); align-self: center; }
     .message-bubble { min-width: 74px; padding: 12px 14px 9px; border: 1px solid var(--border); border-radius: 16px 16px 16px 4px; background: var(--surface); box-shadow: 0 3px 12px rgba(28, 28, 28, 0.05); }
     .customer .message-bubble { color: #FFFFFF; border-color: var(--primary); border-radius: 16px 16px 4px 16px; background: var(--primary); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.2); }
     .system .message-bubble { padding: 8px 14px; border: 0; border-radius: 999px; color: var(--muted); background: var(--surface-elevated); box-shadow: none; text-align: center; }
-    .sender { display: block; margin-bottom: 3px; color: var(--muted); font-size: 0.65rem; font-weight: 850; letter-spacing: 0.025em; }
+    .sender { display: block; margin-bottom: 3px; color: var(--muted); font-size: 0.76rem; font-weight: 850; letter-spacing: 0.025em; }
     .customer .sender { color: rgba(255, 255, 255, 0.82); }
-    .system .sender { margin-bottom: 1px; color: var(--muted); font-size: 0.58rem; }
+    .system .sender { margin-bottom: 1px; color: var(--muted); font-size: 0.72rem; }
     .message-bubble p { margin: 0; color: inherit; font-size: 0.95rem; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
-    .system .message-bubble p { font-size: 0.75rem; font-weight: 700; }
-    .message-bubble footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 5px; color: var(--muted); font-size: 0.63rem; font-weight: 650; }
+    .system .message-bubble p { font-size: 0.82rem; font-weight: 700; }
+    .message-bubble footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 5px; color: var(--muted); font-size: 0.74rem; font-weight: 650; }
     .customer .message-bubble footer { color: rgba(255, 255, 255, 0.72); }
     .system .message-bubble footer { justify-content: center; margin-top: 2px; }
     .delivery { display: inline-flex; align-items: center; gap: 1px; }
@@ -289,11 +289,11 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     .delivery.failed, .delivery.sending { font-weight: 800; }
     .delivery.failed { color: #FFD0D0; }
     .delivery.sending { color: rgba(255, 255, 255, 0.72); }
-    .message-retry { min-height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--primary); background: var(--surface); font: inherit; font-size: 0.72rem; font-weight: 800; }
+    .message-retry { min-height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--primary); background: var(--surface); font: inherit; font-size: 0.80rem; font-weight: 800; }
     .message-retry:disabled { opacity: 0.55; }
-    .sync-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid #E4C477; border-radius: 10px; color: var(--text); background: var(--gold-soft); font-size: 0.74rem; font-weight: 700; }
+    .sync-notice { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid #E4C477; border-radius: 10px; color: var(--text); background: var(--gold-soft); font-size: 0.82rem; font-weight: 700; }
     .sync-notice button { min-height: 36px; border: 0; color: var(--primary); background: transparent; font: inherit; font-weight: 850; }
-    .day-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; color: var(--muted); font-size: 0.64rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+    .day-divider { display: flex; align-items: center; gap: 10px; margin: 2px 0; color: var(--muted); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
     .day-divider::before, .day-divider::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--border); }
     .quick-prompts { display: flex; flex-wrap: wrap; gap: 8px; }
     .quick-chip {
@@ -304,7 +304,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
       color: var(--primary);
       background: var(--surface);
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       transition: border-color 180ms ease-out, background 180ms ease-out, transform 180ms ease-out;
     }
@@ -314,11 +314,11 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     .empty-mark, .state-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #FFFFFF; background: var(--primary); font-size: 1.35rem; }
     .empty-chat h2, .state-card h2 { margin: 4px 0 0; color: var(--text); font-size: 1.05rem; }
     .empty-chat p, .state-card p { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.5; }
-    .response-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: 0.72rem; font-weight: 650; line-height: 1.4; }
+    .response-note { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--muted); font-size: 0.80rem; font-weight: 650; line-height: 1.4; }
     .response-note ion-icon { flex: 0 0 auto; font-size: 0.85rem; }
     .closed-notice { align-self: center; display: grid; gap: 3px; max-width: 420px; margin-top: 8px; padding: 10px 14px; border-radius: 10px; color: var(--muted); background: var(--surface-elevated); text-align: center; }
     .closed-notice strong { font-size: 0.8rem; }
-    .closed-notice span { font-size: 0.72rem; line-height: 1.4; }
+    .closed-notice span { font-size: 0.80rem; line-height: 1.4; }
     .composer {
       z-index: 3;
       display: grid;
@@ -335,7 +335,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
     textarea::placeholder { color: var(--muted); opacity: 1; }
     textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15); }
     textarea:disabled { color: var(--muted); background: var(--surface-soft); }
-    .character-count { position: absolute; right: 11px; bottom: 7px; color: var(--muted); font-size: 0.62rem; font-weight: 750; }
+    .character-count { position: absolute; right: 11px; bottom: 7px; color: var(--muted); font-size: 0.74rem; font-weight: 750; }
     .character-count.at-limit { color: #B42318; }
     .send-button {
       width: 48px;
@@ -388,7 +388,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
         line-height: 1.05;
         letter-spacing: -0.015em;
       }
-      .header-copy p { font-size: 0.64rem; line-height: 1.05; }
+      .header-copy p { font-size: 0.76rem; line-height: 1.05; }
       .connection {
         grid-column: 2;
         justify-self: start;
@@ -396,7 +396,7 @@ type ChatMessage = CustomerBookingChatMessage & { deliveryState?: DeliveryState 
         gap: 5px;
         padding: 0;
         border: 0;
-        font-size: 0.62rem;
+        font-size: 0.74rem;
       }
       .connection span { width: 6px; height: 6px; flex-basis: 6px; }
     }

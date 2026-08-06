@@ -2060,7 +2060,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .hub-hero p {
       color: rgba(255, 255, 255, 0.76);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -2167,7 +2167,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .metric-card span,
     .record-card span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -2198,7 +2198,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .record-card small,
     .state-card p {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       line-height: 1.4;
     }
@@ -2210,7 +2210,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: 999px;
       color: #8A5B08;
       background: rgba(246, 217, 148, 0.34);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       white-space: nowrap;
@@ -2291,7 +2291,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .wallet-eyebrow,
     .wallet-section-kicker {
       color: var(--primary);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 900;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -2419,7 +2419,7 @@ const hubConfigs: Record<string, HubConfig> = {
       align-items: center;
       gap: 7px;
       color: rgba(255, 255, 255, 0.78);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -2460,7 +2460,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .wallet-balance-copy > small {
       display: block;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       line-height: 1.45;
     }
 
@@ -2649,7 +2649,7 @@ const hubConfigs: Record<string, HubConfig> = {
       display: block;
       margin-top: 2px;
       color: var(--muted);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 700;
     }
 
@@ -2676,7 +2676,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: 999px;
       color: var(--success-text, var(--brand-700));
       background: var(--primary-soft);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 850;
     }
 
@@ -2684,7 +2684,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .plan-terms {
       margin: 0;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       line-height: 1.45;
     }
 
@@ -2742,7 +2742,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .wallet-vs small {
       margin-top: 3px;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       line-height: 1.45;
     }
 
@@ -2798,7 +2798,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .wallet-section-heading > span {
       flex: 0 0 auto;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -2855,7 +2855,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .transaction-copy small,
     .transaction-value small {
       color: var(--muted);
-      font-size: 0.73rem;
+      font-size: 0.82rem;
       font-weight: 700;
       line-height: 1.35;
       overflow-wrap: anywhere;
@@ -2884,7 +2884,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: 999px;
       color: var(--brand-700);
       background: var(--primary-soft);
-      font-size: 0.64rem;
+      font-size: 0.76rem;
       font-weight: 850;
       letter-spacing: 0.04em;
       text-transform: uppercase;
@@ -2943,7 +2943,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .guide-number {
       color: var(--primary);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 900;
       letter-spacing: 0.06em;
     }
@@ -2967,7 +2967,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
     .wallet-guide-list small {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       line-height: 1.45;
     }
 
@@ -3177,7 +3177,7 @@ const hubConfigs: Record<string, HubConfig> = {
       border-radius: 999px;
       color: var(--primary);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
       cursor: pointer;
     }
@@ -3227,7 +3227,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-heading h1, .support-heading p, .support-heading span { margin: 0; color: #FFFFFF; }
     .support-heading h1 { font-size: clamp(1.45rem, 6vw, 2rem); letter-spacing: -0.04em; line-height: 1.08; }
     .support-heading span { display: block; margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 0.86rem; line-height: 1.4; }
-    .support-heading .support-eyebrow { margin-bottom: 4px; color: rgba(255, 255, 255, 0.82); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
+    .support-heading .support-eyebrow { margin-bottom: 4px; color: rgba(255, 255, 255, 0.82); font-size: 0.80rem; font-weight: 850; letter-spacing: 0.06em; text-transform: uppercase; }
     .support-status { display: grid; gap: 12px; }
     .support-panel, .support-form {
       padding: 18px;
@@ -3260,7 +3260,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-booking-card p { margin: 0; color: rgba(255, 255, 255, 0.78); overflow-wrap: anywhere; }
     .support-booking-card dl { display: grid; margin: 0; background: rgba(99, 102, 241, 0.36); }
     .support-booking-card dl div { min-width: 0; padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-    .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 800; }
+    .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.80rem; font-weight: 800; }
     .support-booking-card dd { margin: 3px 0 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 750; overflow-wrap: anywhere; }
     .support-booking-card .status-pill { text-transform: capitalize; }
     .support-booking-card .status-pill.status-pending { color: #92600A; background: rgba(251, 191, 36, 0.14); }
@@ -3286,7 +3286,7 @@ const hubConfigs: Record<string, HubConfig> = {
     .field-group { min-width: 0; display: grid; gap: 7px; }
     .field-group label { color: var(--text); font-size: 0.84rem; font-weight: 850; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .field-label-row span { color: var(--muted); font-size: 0.75rem; font-weight: 750; }
+    .field-label-row span { color: var(--muted); font-size: 0.82rem; font-weight: 750; }
     .field-group select, .field-group textarea {
       width: 100%;
       min-width: 0;
@@ -3323,7 +3323,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
       .wallet-eyebrow,
       .wallet-section-kicker {
-        font-size: 0.62rem;
+        font-size: 0.74rem;
       }
 
       .wallet-heading h1 {
@@ -3334,7 +3334,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
       .wallet-heading .wallet-intro {
         margin-top: 5px;
-        font-size: 0.72rem;
+        font-size: 0.80rem;
         line-height: 1.35;
       }
 
@@ -3380,7 +3380,7 @@ const hubConfigs: Record<string, HubConfig> = {
 
       .wallet-status,
       .wallet-secure {
-        font-size: 0.67rem;
+        font-size: 0.78rem;
       }
 
       .wallet-balance-card {
@@ -3412,7 +3412,7 @@ const hubConfigs: Record<string, HubConfig> = {
       .wallet-action {
         min-height: 38px;
         padding-inline: 7px;
-        font-size: 0.68rem;
+        font-size: 0.78rem;
         white-space: nowrap;
       }
 
@@ -3445,7 +3445,7 @@ const hubConfigs: Record<string, HubConfig> = {
       .transaction-copy span,
       .transaction-copy small,
       .transaction-value small {
-        font-size: 0.65rem;
+        font-size: 0.76rem;
       }
 
       .wallet-guide {
@@ -3463,11 +3463,11 @@ const hubConfigs: Record<string, HubConfig> = {
       }
 
       .wallet-guide-list strong {
-        font-size: 0.78rem;
+        font-size: 0.84rem;
       }
 
       .wallet-guide-list small {
-        font-size: 0.66rem;
+        font-size: 0.76rem;
         line-height: 1.35;
       }
 
@@ -3493,20 +3493,20 @@ const hubConfigs: Record<string, HubConfig> = {
       .wallet-empty p,
       .wallet-state p {
         margin-top: 5px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
         line-height: 1.4;
       }
 
       .wallet-empty a {
         min-height: 38px;
         margin-top: 6px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       .wallet-help-link {
         min-height: 38px;
         padding-top: 6px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       .hub-hero {

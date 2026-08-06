@@ -31,7 +31,6 @@ type FilterKey =
   | "offpeak" 
   | "lastminute" 
   | "instant-booking" 
-  | "home-service" 
   | "female" 
   | "male"
   | "rating4"
@@ -2826,7 +2825,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   ];
   readonly flatFilterOptions = computed(() => this.filterSections().flatMap((section) => section.options));
   readonly activeFilterCount = computed(() => {
-    let count = this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0) + (this.draftRadiusKm() !== 25 ? 1 : 0) + (this.hasRatingFilter() ? 1 : 0) + (this.hasInstantBookingFilter() ? 1 : 0) + (this.hasHomeServiceFilter() ? 1 : 0) + (this.hasGenderFilter() ? 1 : 0);
+    let count = this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0) + (this.draftRadiusKm() !== 25 ? 1 : 0) + (this.hasRatingFilter() ? 1 : 0) + (this.hasInstantBookingFilter() ? 1 : 0) + (this.hasGenderFilter() ? 1 : 0);
     if (this.hasDateFilter() || this.hasTimeFilter() || this.hasAvailabilityFilter()) count += 1;
     if (this.hasPriceRangeFilter()) count += 2;
     if (this.hasLocationSelectorFilter()) count += 1;
@@ -2842,7 +2841,6 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly hasRatingFilter = computed(() => this.activeFilters().some((key) => key === "rating4" || key === "rating4.5"));
   readonly hasDistanceFilter = computed(() => this.activeFilters().some((key) => key === "within2km" || key === "within5km" || key === "within10km" || key === "customRadius"));
   readonly hasInstantBookingFilter = computed(() => this.activeFilters().some((key) => key === "instant-booking"));
-  readonly hasHomeServiceFilter = computed(() => this.activeFilters().some((key) => key === "home-service"));
   readonly hasGenderFilter = computed(() => this.activeFilters().some((key) => key === "female" || key === "male"));
   readonly hasPriceRangeFilter = computed(() => this.minPrice() || this.maxPrice());
   readonly hasLocationSelectorFilter = computed(() => this.selectedCountry() || this.selectedState() || this.selectedCity());
@@ -2895,9 +2893,6 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
           break;
         case "instant-booking":
           chips.push({ key, label: "Instant booking" });
-          break;
-        case "home-service":
-          chips.push({ key, label: "Home service" });
           break;
         case "female":
           chips.push({ key, label: "Female" });
@@ -4285,7 +4280,7 @@ useLocation(isManualRetry = false) {
   private toFilterKey(value: string | null): FilterKey | null {
     const key = value === "offers" ? "deals" : value === "price" ? "mid" : value;
     if (!key) return null;
-    const validKeys: FilterKey[] = ["anytime", "open", "today", "morning", "afternoon", "evening", "nearest", "within2km", "within5km", "within10km", "customRadius", "budget", "mid", "premium", "top", "reviewed", "deals", "offpeak", "lastminute", "instant-booking", "home-service", "female", "male", "rating4", "rating4.5", "customMinPrice", "customMaxPrice"];
+    const validKeys: FilterKey[] = ["anytime", "open", "today", "morning", "afternoon", "evening", "nearest", "within2km", "within5km", "within10km", "customRadius", "budget", "mid", "premium", "top", "reviewed", "deals", "offpeak", "lastminute", "instant-booking", "female", "male", "rating4", "rating4.5", "customMinPrice", "customMaxPrice"];
     return validKeys.includes(key as FilterKey) ? (key as FilterKey) : null;
   }
 

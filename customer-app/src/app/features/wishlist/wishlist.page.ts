@@ -225,7 +225,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .header-copy p {
       margin-top: 2px;
       color: var(--muted);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 700;
     }
 
@@ -240,7 +240,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       border-radius: 10px;
       color: var(--primary);
       background: var(--surface);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 850;
       text-decoration: none;
       transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
@@ -314,7 +314,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .image-fallback ion-icon {
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       opacity: 0.72;
     }
 
@@ -376,7 +376,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       min-width: 0;
       overflow: hidden;
       color: var(--muted);
-      font-size: 0.65rem;
+      font-size: 0.76rem;
       font-weight: 750;
       white-space: nowrap;
     }
@@ -396,7 +396,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .metadata ion-icon {
       flex: 0 0 auto;
       color: var(--primary);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
     }
 
     .category {
@@ -416,7 +416,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       gap: 4px;
       min-width: 0;
       color: var(--muted);
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       line-height: 1.2;
     }
 
@@ -430,7 +430,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .service-line strong {
       flex: 0 0 auto;
       color: var(--primary-2);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       white-space: nowrap;
     }
 
@@ -453,7 +453,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       padding: 0 14px;
       border: 1px solid transparent;
       border-radius: 999px;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
       line-height: 1;
       text-decoration: none;

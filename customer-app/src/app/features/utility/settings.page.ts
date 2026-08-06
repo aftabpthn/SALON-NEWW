@@ -274,7 +274,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
       margin: 0;
       padding: 10px 18px 18px;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 750;
       line-height: 1.45;
     }
@@ -296,7 +296,7 @@ import { CustomerDeviceSession, CustomerNotificationPreferences } from "../../co
     strong, span { display: block; }
     strong { margin-bottom: 5px; color: var(--brand-950); font-weight: 900; }
     span { color: var(--muted); font-size: 0.86rem; font-weight: 750; line-height: 1.4; }
-    small { display: block; margin-top: 7px; color: var(--primary); font-size: 0.76rem; font-weight: 850; }
+    small { display: block; margin-top: 7px; color: var(--primary); font-size: 0.84rem; font-weight: 850; }
     @media (max-width: 599px) {
       .settings-page { gap: 12px; }
       .setting-row, .device-heading { align-items: flex-start; }

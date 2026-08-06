@@ -80,7 +80,7 @@ import { MySalonHeaderComponent } from "./my-salon-header.component";
       gap: 2px;
       border-radius: 12px;
       color: var(--muted);
-      font-size: 0.64rem;
+      font-size: 0.76rem;
       font-weight: 850;
       text-decoration: none;
       touch-action: manipulation;

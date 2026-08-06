@@ -317,7 +317,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       padding: 4px 9px;
       border: 1px solid transparent;
       border-radius: 999px;
-      font-size: 0.62rem;
+      font-size: 0.74rem;
       font-weight: 900;
       line-height: 1;
       text-transform: capitalize;
@@ -346,12 +346,12 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       background: rgba(255, 255, 255, 0.045);
     }
     .appointment-time ion-icon { color: #FFFFFF; font-size: 1.05rem; }
-    .appointment-time span { display: block; color: rgba(255, 255, 255, 0.72); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .appointment-time span { display: block; color: rgba(255, 255, 255, 0.72); font-size: 0.76rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
     .appointment-time strong { display: block; color: #FFFFFF; font-size: 0.95rem; line-height: 1.3; overflow-wrap: anywhere; }
     .booking-facts { display: grid; margin: 0; }
     .booking-facts div { min-width: 0; padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
     .booking-facts div:last-child { border-bottom: 0; }
-    .booking-facts dt { display: flex; align-items: center; gap: 7px; margin: 0 0 2px; color: rgba(255, 255, 255, 0.72); font-size: 0.66rem; font-weight: 750; }
+    .booking-facts dt { display: flex; align-items: center; gap: 7px; margin: 0 0 2px; color: rgba(255, 255, 255, 0.72); font-size: 0.76rem; font-weight: 750; }
     .booking-facts dt ion-icon { flex: 0 0 auto; font-size: 0.88rem; }
     .booking-facts dd { margin: 0; color: #FFFFFF; font-size: 0.86rem; font-weight: 750; line-height: 1.3; overflow-wrap: anywhere; word-break: break-word; }
     .reference-fact dd { font-size: 0.8rem; }
@@ -466,7 +466,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       color: var(--primary);
       background: var(--surface);
       font-family: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
       line-height: 1.15;
       cursor: pointer;
@@ -500,7 +500,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .help-salon h2 {
       margin: 0 8px 4px;
       color: var(--muted);
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -563,7 +563,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     }
     .policy-strip[open] summary::before { transform: rotate(90deg); }
     .policy-strip summary span { grid-column: 2; display: block; color: var(--text); font-size: 0.88rem; font-weight: 850; }
-    .policy-strip summary small { grid-column: 2; display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; font-weight: 650; }
+    .policy-strip summary small { grid-column: 2; display: block; margin-top: 2px; color: var(--muted); font-size: 0.82rem; font-weight: 650; }
     .policy-strip p { margin: 0; padding: 0 4px 13px; color: var(--text); font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
     .policy-strip summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
 
@@ -624,7 +624,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .impact-primary { margin: 0; color: var(--text); font-size: 0.92rem; font-weight: 900; line-height: 1.4; }
     .impact-row { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--muted); font-size: 0.84rem; font-weight: 650; line-height: 1.45; }
     .impact-row ion-icon { flex: 0 0 auto; margin-top: 2px; color: var(--primary); font-size: 0.95rem; }
-    .policy-note { margin: 0; color: var(--muted); font-size: 0.76rem; line-height: 1.4; }
+    .policy-note { margin: 0; color: var(--muted); font-size: 0.84rem; line-height: 1.4; }
     .reschedule-offer {
       width: 100%;
       min-height: 44px;

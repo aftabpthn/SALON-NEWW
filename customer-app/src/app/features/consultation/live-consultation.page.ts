@@ -443,7 +443,7 @@ interface ConsultationChatMessage {
       border: 0;
       overflow: hidden;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       line-height: 1.2;
       text-align: left;
     }
@@ -483,7 +483,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       color: var(--brand-700);
       background: var(--primary-soft);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 850;
       line-height: 1.15;
       text-align: center;
@@ -611,7 +611,7 @@ interface ConsultationChatMessage {
 
     .chat-message > strong {
       color: inherit;
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 850;
       text-transform: uppercase;
       letter-spacing: 0.07em;
@@ -657,7 +657,7 @@ interface ConsultationChatMessage {
       display: grid;
       gap: 6px;
       color: var(--text);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 850;
     }
 
@@ -762,7 +762,7 @@ interface ConsultationChatMessage {
       border-radius: 999px;
       color: var(--muted);
       background: var(--surface-soft);
-      font-size: 0.66rem;
+      font-size: 0.76rem;
       font-weight: 750;
     }
 
@@ -802,7 +802,7 @@ interface ConsultationChatMessage {
 
     .nearby-context summary small {
       color: var(--muted);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 650;
     }
 
@@ -929,7 +929,7 @@ interface ConsultationChatMessage {
 
     .consult-summary-grid span {
       color: var(--muted);
-      font-size: 0.65rem;
+      font-size: 0.76rem;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -1015,7 +1015,7 @@ interface ConsultationChatMessage {
     .compact-cards small,
     .context-list small {
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 650;
       line-height: 1.35;
     }
@@ -1047,7 +1047,7 @@ interface ConsultationChatMessage {
     .context-list strong {
       display: block;
       color: var(--text);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
     }
 
     @media (max-width: 599px) {

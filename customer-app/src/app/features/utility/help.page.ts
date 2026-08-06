@@ -271,7 +271,7 @@ interface HelpItem {
     .search-status {
       margin: 0;
       color: var(--muted);
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       line-height: 1.25;
       font-weight: 700;
     }
@@ -313,7 +313,7 @@ interface HelpItem {
       display: block;
       margin-bottom: 2px;
       color: var(--primary);
-      font-size: 0.65rem;
+      font-size: 0.76rem;
       font-weight: 900;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -330,7 +330,7 @@ interface HelpItem {
     .booking-copy p {
       overflow: hidden;
       margin: 2px 0 0;
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       line-height: 1.3;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -347,7 +347,7 @@ interface HelpItem {
       border-radius: 10px;
       color: var(--brand-700);
       background: var(--primary-soft);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 850;
       text-decoration: none;
       transition: color var(--motion-fast), background-color var(--motion-fast);
@@ -373,7 +373,7 @@ interface HelpItem {
     .search-intro .eyebrow,
     .support-escalation .eyebrow {
       margin: 0;
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       line-height: 1.3;
     }
 
@@ -440,7 +440,7 @@ interface HelpItem {
       display: -webkit-box;
       overflow: hidden;
       color: var(--muted);
-      font-size: 0.67rem;
+      font-size: 0.78rem;
       font-weight: 650;
       line-height: 1.25;
       -webkit-box-orient: vertical;
@@ -546,7 +546,7 @@ interface HelpItem {
 
     .faq-escalation-copy span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       line-height: 1.4;
     }
 
@@ -581,7 +581,7 @@ interface HelpItem {
       align-items: center;
       min-height: 36px;
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 750;
       text-decoration: underline;
       text-decoration-color: var(--border-strong);
@@ -675,7 +675,7 @@ interface HelpItem {
       }
 
       .booking-copy span {
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .booking-copy h2 {
@@ -741,7 +741,7 @@ interface HelpItem {
       .category-button small {
         display: block;
         overflow: visible;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
         line-height: 1.35;
       }
 

@@ -405,7 +405,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
 
     .summary-card span {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
     }
 
@@ -540,7 +540,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       margin: 0;
       padding: 16px 18px 6px;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -585,7 +585,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
 
     .menu-item small {
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-align: right;
     }
@@ -631,7 +631,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 0.75rem;
+        font-size: 0.82rem;
       }
 
       .edit-profile-button {
@@ -641,7 +641,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       }
 
       .edit-profile-button span {
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .pass-card {
@@ -651,7 +651,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       }
 
       .pass-card span {
-        font-size: 0.66rem;
+        font-size: 0.76rem;
         letter-spacing: 0.08em;
       }
 
@@ -663,7 +663,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
 
       .pass-card p {
         margin-top: 2px;
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .account-grid {

@@ -327,7 +327,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     .auth-kicker {
       margin: -6px 0 -10px;
       color: var(--primary);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
       font-weight: 950;
       letter-spacing: 0.14em;
       text-align: center;
@@ -351,7 +351,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       border-radius: 999px;
       color: var(--primary);
       background: var(--primary-soft);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 950;
     }
 
@@ -570,7 +570,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       gap: 14px;
       margin: 10px 0 2px;
       color: var(--muted);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
     }
 
@@ -670,7 +670,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
     .modal-eyebrow {
       margin: 0 0 4px;
       color: var(--primary-2);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-transform: uppercase;
     }
@@ -841,7 +841,7 @@ type AuthStep = "choices" | "email" | "emailCode" | "completeProfile" | "mobile"
       }
 
       .field-label {
-        font-size: 0.78rem;
+        font-size: 0.84rem;
       }
 
       .dark-continue-button,

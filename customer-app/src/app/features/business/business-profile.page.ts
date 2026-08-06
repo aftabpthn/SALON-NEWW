@@ -787,7 +787,7 @@ import { Subscription } from "rxjs";
       color: var(--muted);
       background: var(--surface-soft);
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       text-align: left;
     }
@@ -848,7 +848,7 @@ import { Subscription } from "rxjs";
 
     .primary-salon-strip span {
       color: var(--muted);
-      font-size: 0.75rem;
+      font-size: 0.82rem;
       font-weight: 800;
       line-height: 1.2;
     }
@@ -904,7 +904,7 @@ import { Subscription } from "rxjs";
       color: var(--muted);
       background: transparent;
       font: inherit;
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 850;
       cursor: pointer;
     }
@@ -942,7 +942,7 @@ import { Subscription } from "rxjs";
       color: var(--muted);
       background: transparent;
       font: inherit;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       cursor: pointer;
       transition: color 160ms ease, background 160ms ease;
@@ -1047,7 +1047,7 @@ import { Subscription } from "rxjs";
       background: transparent;
       border: 0;
       color: var(--primary);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 800;
       cursor: pointer;
       padding: 4px 8px;
@@ -1071,7 +1071,7 @@ import { Subscription } from "rxjs";
       border-radius: 999px;
       background: var(--surface);
       color: var(--muted);
-      font-size: 0.75rem;
+      font-size: 0.82rem;
       font-weight: 750;
       cursor: pointer;
       transition: all 180ms ease;
@@ -1113,7 +1113,7 @@ import { Subscription } from "rxjs";
       color: var(--primary);
       background: transparent;
       font-weight: 800;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       cursor: pointer;
     }
 
@@ -1172,7 +1172,7 @@ import { Subscription } from "rxjs";
       border-radius: 999px;
       color: var(--brand-800);
       background: var(--surface);
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 850;
     }
 
@@ -1258,7 +1258,7 @@ import { Subscription } from "rxjs";
 
     .service-popup-head small {
       color: var(--muted);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -1366,7 +1366,7 @@ import { Subscription } from "rxjs";
       border: 0;
       color: var(--primary);
       background: transparent;
-      font-size: 0.78rem;
+      font-size: 0.84rem;
       font-weight: 900;
       cursor: pointer;
     }
@@ -1693,7 +1693,7 @@ import { Subscription } from "rxjs";
     .offer-validity {
       margin-top: 2px;
       color: var(--muted);
-      font-size: 0.72rem;
+      font-size: 0.80rem;
     }
 
     .loyalty-grid {
@@ -1829,7 +1829,7 @@ import { Subscription } from "rxjs";
       }
 
       .cover-copy p {
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .cover-monogram {
@@ -1853,7 +1853,7 @@ import { Subscription } from "rxjs";
 
       .intro .eyebrow {
         margin-bottom: 0;
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .quick-actions {
@@ -1863,7 +1863,7 @@ import { Subscription } from "rxjs";
       .quick-action {
         min-height: 38px;
         padding: 0 14px;
-        font-size: 0.76rem;
+        font-size: 0.84rem;
       }
 
       .hero-meta {
@@ -1874,7 +1874,7 @@ import { Subscription } from "rxjs";
       .hero-meta-item {
         min-height: 42px;
         padding: 6px 10px;
-        font-size: 0.72rem;
+        font-size: 0.80rem;
       }
 
       .primary-salon-strip {
@@ -1886,7 +1886,7 @@ import { Subscription } from "rxjs";
       .primary-salon-action {
         min-height: 38px;
         padding: 0 14px;
-        font-size: 0.78rem;
+        font-size: 0.84rem;
       }
 
       .page-section-nav {
@@ -1897,7 +1897,7 @@ import { Subscription } from "rxjs";
       .page-section-nav button {
         min-height: 32px;
         padding: 0 12px;
-        font-size: 0.74rem;
+        font-size: 0.82rem;
       }
 
       .section-heading {
@@ -2030,7 +2030,7 @@ import { Subscription } from "rxjs";
 
     .branch-option-copy small {
       color: var(--muted);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 800;
     }
 

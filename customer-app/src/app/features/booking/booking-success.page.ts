@@ -227,7 +227,7 @@ interface SuccessState {
 
     .appointment-primary span {
       color: var(--primary);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -313,7 +313,7 @@ interface SuccessState {
 
     .multi-service-title span {
       color: var(--primary);
-      font-size: 0.68rem;
+      font-size: 0.78rem;
       font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -344,7 +344,7 @@ interface SuccessState {
       border-radius: 999px;
       color: #ffffff;
       background: var(--primary);
-      font-size: 0.76rem;
+      font-size: 0.84rem;
       font-weight: 950;
     }
 
@@ -362,7 +362,7 @@ interface SuccessState {
       white-space: nowrap;
     }
 
-    .service-copy small { color: var(--muted); font-weight: 800; font-size: 0.78rem; }
+    .service-copy small { color: var(--muted); font-weight: 800; font-size: 0.84rem; }
 
     .service-time {
       flex: 0 0 auto;
@@ -392,7 +392,7 @@ interface SuccessState {
       color: var(--primary);
       background: var(--glass);
       font: inherit;
-      font-size: 0.74rem;
+      font-size: 0.82rem;
       font-weight: 950;
       cursor: pointer;
     }
@@ -416,7 +416,7 @@ interface SuccessState {
 
     .info-cell span {
       color: var(--muted);
-      font-size: 0.64rem;
+      font-size: 0.76rem;
       font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -424,7 +424,7 @@ interface SuccessState {
 
     .info-cell strong { font-size: 0.92rem; line-height: 1.2; }
 
-    .info-cell small { color: var(--muted); font-size: 0.74rem; font-weight: 800; }
+    .info-cell small { color: var(--muted); font-size: 0.82rem; font-weight: 800; }
 
     .home-button {
       --color: var(--primary);
