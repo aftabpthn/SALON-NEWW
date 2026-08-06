@@ -67,6 +67,10 @@ export class MarketplaceService {
   private savedSalonsLoaded = false;
   private businessesRequestCounter = 0;
   private publicBusinessesLoadedAt = 0;
+  private readonly businessCacheStore = new Map<string, { at: number; business: Business }>();
+  private readonly bookingsCacheStore = new Map<string, { at: number; rows: Booking[] }>();
+  private readonly BUSINESS_CACHE_TTL_MS = 60_000;
+  private readonly BOOKINGS_CACHE_TTL_MS = 30_000;
 
   constructor(private readonly api: CustomerApiService, private readonly auth: AuthService) {
     try {
@@ -158,7 +162,12 @@ export class MarketplaceService {
     });
   }
 
-  async loadBusiness(slug: string): Promise<Business> {
+  async loadBusiness(slug: string, force = false): Promise<Business> {
+    const cached = this.businessCacheStore.get(slug);
+    if (!force && cached && cached.at > Date.now() - this.BUSINESS_CACHE_TTL_MS) {
+      this.selectedBusiness.set(cached.business);
+      return cached.business;
+    }
     return this.run("Unable to load business profile", async () => {
       const [business, services, staff, reviews] = await Promise.all([
         firstValueFrom(this.api.getPublicBusiness(slug)),
@@ -167,6 +176,7 @@ export class MarketplaceService {
         firstValueFrom(this.api.listBusinessReviews(slug)).catch(() => [])
       ]);
       const profile: Business = this.normalizeBusiness({ ...business, services, staff, reviews });
+      this.businessCacheStore.set(slug, { at: Date.now(), business: profile });
       this.selectedBusiness.set(profile);
       this.businesses.update((rows) => {
         const index = rows.findIndex((row) => row.slug === slug || row.id === profile.id);
@@ -192,9 +202,15 @@ export class MarketplaceService {
     });
   }
 
-  async loadBookings(status?: "upcoming" | "past" | "cancelled"): Promise<Booking[]> {
+  async loadBookings(status?: "upcoming" | "past" | "cancelled", force = false): Promise<Booking[]> {
+    const key = status ?? "all";
+    const cached = this.bookingsCacheStore.get(key);
+    if (!force && cached && cached.at > Date.now() - this.BOOKINGS_CACHE_TTL_MS) {
+      return cached.rows;
+    }
     return this.run("Unable to load bookings", async () => {
       const rows = await firstValueFrom(this.api.listBookings(status));
+      this.bookingsCacheStore.set(key, { at: Date.now(), rows });
       this.bookings.set(rows);
       return rows;
     });
@@ -223,6 +239,7 @@ export class MarketplaceService {
       const booking = await firstValueFrom(this.api.createBooking(payload));
       this.latestBooking.set(booking);
       this.bookings.update((rows) => [booking, ...rows.filter((row) => row.id !== booking.id)]);
+      this.bookingsCacheStore.clear();
       return booking;
     });
   }
@@ -231,6 +248,7 @@ export class MarketplaceService {
     return this.run("Unable to cancel booking", async () => {
       const booking = await firstValueFrom(this.api.cancelBooking(id));
       this.replaceBooking(booking);
+      this.bookingsCacheStore.clear();
       return booking;
     });
   }
@@ -239,6 +257,7 @@ export class MarketplaceService {
     return this.run("Unable to reschedule booking", async () => {
       const booking = await firstValueFrom(this.api.rescheduleBooking(id, payload));
       this.replaceBooking(booking);
+      this.bookingsCacheStore.clear();
       return booking;
     });
   }

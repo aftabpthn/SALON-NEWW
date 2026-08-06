@@ -766,19 +766,19 @@ export class BookingsPage implements OnDestroy, OnInit {
       void this.router.navigateByUrl("/login");
       return;
     }
-    this.ensureTab(this.tab());
+    this.ensureTab(this.tab(), true);
   }
 
-  private ensureTab(tab: BookingTab) {
+  private ensureTab(tab: BookingTab, force = false) {
     if (this.tabBusy()[tab]) return;
-    void this.loadTab(tab);
+    void this.loadTab(tab, force);
   }
 
-  private async loadTab(tab: BookingTab) {
+  private async loadTab(tab: BookingTab, force = false) {
     if (this.tabBusy()[tab]) return;
     this.tabBusy.update((state) => ({ ...state, [tab]: true }));
     try {
-      const rows = await this.marketplace.loadBookings(tab);
+      const rows = await this.marketplace.loadBookings(tab, force);
       this.tabResults.update((state) => ({ ...state, [tab]: rows }));
       this.tabLoaded.update((state) => ({ ...state, [tab]: true }));
     } catch {
@@ -791,7 +791,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   async onPullRefresh(event: Event) {
     const refresher = event.target as unknown as { complete(): Promise<void> };
     try {
-      const rows = await this.marketplace.loadBookings(this.tab());
+      const rows = await this.marketplace.loadBookings(this.tab(), true);
       this.tabResults.update((state) => ({ ...state, [this.tab()]: rows }));
       this.tabLoaded.update((state) => ({ ...state, [this.tab()]: true }));
     } catch {
