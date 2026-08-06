@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
-import { Router, RouterLink } from "@angular/router";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { AlertController, IonButton, IonContent, IonIcon, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { FormsModule } from "@angular/forms";
 import { addIcons } from "ionicons";
@@ -424,12 +424,10 @@ type WaitlistDialog = {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       overflow: hidden;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid var(--control-border);
       border-radius: 28px;
-      background:
-        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(255, 249, 236, 0.98) 48%, rgba(246, 228, 193, 0.92)),
-        #FFF9EC;
-      box-shadow: 0 28px 70px rgba(92, 65, 28, 0.24);
+      background: var(--surface);
+      box-shadow: 0 28px 70px rgba(11, 79, 138, 0.2);
     }
 
     .sheet-head {
@@ -470,7 +468,7 @@ type WaitlistDialog = {
       gap: 12px;
       align-items: center;
       padding: 14px;
-      border: 1px solid rgba(214, 169, 74, 0.22);
+      border: 1px solid var(--control-border);
       border-radius: 20px;
       background: rgba(255, 255, 255, 0.72);
     }
@@ -482,7 +480,7 @@ type WaitlistDialog = {
       border-radius: 16px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
-      box-shadow: 0 12px 24px rgba(122, 80, 25, 0.14);
+      box-shadow: 0 12px 24px rgba(11, 79, 138, 0.14);
     }
 
     .waitlist-summary strong,
@@ -515,7 +513,7 @@ type WaitlistDialog = {
     .waitlist-field input,
     .waitlist-field textarea {
       width: 100%;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid var(--control-border);
       border-radius: 18px;
       color: var(--text);
       background: rgba(255, 255, 255, 0.88);
@@ -538,8 +536,8 @@ type WaitlistDialog = {
 
     .waitlist-field input:focus,
     .waitlist-field textarea:focus {
-      border-color: rgba(214, 169, 74, 0.56);
-      box-shadow: 0 0 0 4px rgba(214, 169, 74, 0.14);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(11, 79, 138, 0.12);
     }
 
     .waitlist-options {
@@ -554,9 +552,9 @@ type WaitlistDialog = {
 
     .waitlist-options button {
       min-height: 44px;
-      border: 1px solid rgba(214, 169, 74, 0.24);
+      border: 1px solid var(--control-border);
       border-radius: 999px;
-      color: #7A5019;
+      color: var(--primary-2);
       background: rgba(255, 255, 255, 0.78);
       font-weight: 900;
     }
@@ -565,7 +563,7 @@ type WaitlistDialog = {
       border-color: transparent;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
-      box-shadow: 0 12px 24px rgba(122, 80, 25, 0.15);
+      box-shadow: 0 12px 24px rgba(11, 79, 138, 0.15);
     }
 
     .waitlist-error {
@@ -841,7 +839,7 @@ type WaitlistDialog = {
       }
 
       .booking-card:focus-visible {
-        outline: 3px solid rgba(214, 169, 74, 0.6);
+        outline: 3px solid rgba(11, 79, 138, 0.55);
         outline-offset: 2px;
       }
 
@@ -888,7 +886,9 @@ export class BookingsPage implements OnDestroy, OnInit {
   private dateSwipeStartX = 0;
   private dateSwipeStartY = 0;
 
-  constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly router: Router, private readonly toasts: ToastController) {
+  private pendingRescheduleId = this.route.snapshot.queryParamMap.get("reschedule") || "";
+
+  constructor(readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly route: ActivatedRoute, private readonly router: Router, private readonly toasts: ToastController) {
     addIcons({ calendarOutline, chatbubblesOutline, checkmarkCircleOutline, heartCircleOutline, hourglassOutline, locationOutline, navigateOutline, repeatOutline, receiptOutline, timeOutline });
   }
 
@@ -925,12 +925,19 @@ export class BookingsPage implements OnDestroy, OnInit {
     this.openBooking(booking);
   }
 
-  reload() {
+  async reload() {
     if (!this.marketplace.isAuthenticated()) {
       void this.router.navigateByUrl("/login");
       return;
     }
-    void this.marketplace.loadBookings(this.tab()).catch(() => undefined);
+    await this.marketplace.loadBookings(this.tab()).catch(() => undefined);
+    const id = this.pendingRescheduleId;
+    this.pendingRescheduleId = "";
+    const booking = id ? this.marketplace.bookings().find((item) => item.id === id) : null;
+    if (booking) {
+      await this.openRescheduleSlots(booking);
+      void this.router.navigate([], { queryParams: { reschedule: null }, queryParamsHandling: "merge", replaceUrl: true });
+    }
   }
 
   runBookingCommand(action: string) {
@@ -981,9 +988,16 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   private async confirmCancel(id: string) {
-    await this.marketplace.cancelBooking(id).catch(() => undefined);
-    // Re-fetch so a cancelled booking drops out of the Upcoming list immediately.
-    this.reload();
+    this.actionLoading.set(`cancel:${id}`);
+    try {
+      await this.marketplace.cancelBooking(id);
+      await this.presentToast("Booking cancelled.", "success");
+      await this.reload();
+    } catch {
+      await this.presentToast(this.marketplace.error() || "Unable to cancel booking.", "danger");
+    } finally {
+      this.actionLoading.set("");
+    }
   }
 
   rebook(event: Event, booking: Booking) {

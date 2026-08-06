@@ -3,7 +3,7 @@ import { RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkDoneOutline, shareSocialOutline, ticketOutline } from "ionicons/icons";
-import { Booking, ServiceItem } from "../../core/api.types";
+import { Booking } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 
 @Component({
@@ -38,11 +38,19 @@ import { MarketplaceService } from "../../core/marketplace.service";
             </dl>
           </section>
 
-          <section class="premium-card price-card">
-            <div><span>Service price</span><strong>{{ money(servicePricePaise()) }}</strong></div>
-            <div><span>Estimated taxes</span><strong>{{ taxLabel() }}</strong></div>
-            <div class="total-row"><span>Estimated total</span><strong>{{ money(totalPaise()) }}</strong></div>
-          </section>
+          @if (booking.depositAmountPaise || booking.invoiceTotalPaise) {
+            <section class="premium-card price-card">
+              @if (booking.depositAmountPaise) {
+                <div><span>Deposit requested</span><strong>{{ money(booking.depositAmountPaise) }}</strong></div>
+              }
+              @if (booking.invoiceTotalPaise) {
+                <div class="total-row"><span>Invoice total</span><strong>{{ money(booking.invoiceTotalPaise) }}</strong></div>
+              }
+              @if (booking.invoiceBalancePaise) {
+                <div><span>Balance due</span><strong>{{ money(booking.invoiceBalancePaise) }}</strong></div>
+              }
+            </section>
+          }
 
           <section class="premium-card policy-card">
             <ion-icon name="ticket-outline"></ion-icon>
@@ -99,10 +107,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
       place-items: center;
       margin-bottom: 12px;
       border-radius: 24px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A, #9B6B22);
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
       font-size: 1.8rem;
-      box-shadow: 0 18px 38px rgba(214, 169, 74, 0.26);
+      box-shadow: 0 18px 38px rgba(11, 79, 138, 0.22);
     }
 
     .summary-hero h1,
@@ -188,8 +196,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
       height: 48px;
       padding: 12px;
       border-radius: 18px;
-      color: #120D05;
-      background: linear-gradient(135deg, #F4D58D, #D6A94A);
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
     }
 
     .summary-actions {
@@ -213,10 +221,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
 })
 export class BookingSummaryPage {
   readonly booking = computed(() => this.marketplace.latestBooking());
-  readonly service = computed(() => this.findService(this.booking()));
-  readonly servicePricePaise = computed(() => this.service()?.pricePaise ?? 0);
-  readonly taxPaise = computed(() => this.servicePricePaise() > 0 ? Math.round(this.servicePricePaise() * 0.18) : 0);
-  readonly totalPaise = computed(() => this.servicePricePaise() + this.taxPaise());
 
   constructor(private readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, checkmarkDoneOutline, shareSocialOutline, ticketOutline });
@@ -233,12 +237,8 @@ export class BookingSummaryPage {
     return "Pay at venue";
   }
 
-  taxLabel(): string {
-    return this.taxPaise() > 0 ? this.money(this.taxPaise()) : "Calculated at checkout";
-  }
-
   money(pricePaise: number): string {
-    return pricePaise > 0 ? this.marketplace.formatMoney(pricePaise) : "Shown at checkout";
+    return this.marketplace.formatMoney(pricePaise);
   }
 
   addToCalendar(booking: Booking) {
@@ -261,11 +261,6 @@ export class BookingSummaryPage {
       return;
     }
     await navigator.clipboard?.writeText(text).catch(() => undefined);
-  }
-
-  private findService(booking: Booking | null): ServiceItem | null {
-    if (!booking?.serviceId) return null;
-    return this.marketplace.selectedBusiness()?.services.find((service) => service.id === booking.serviceId) ?? null;
   }
 
   private dateForCalendar(value?: string, addMinutes = 0): string {

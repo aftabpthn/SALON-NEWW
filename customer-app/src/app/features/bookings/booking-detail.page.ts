@@ -139,7 +139,9 @@ import { MarketplaceService } from "../../core/marketplace.service";
     </ion-content>
   `,
   styles: [`
+    ion-content { --background: var(--app-bg); }
     .detail-page { display: grid; gap: 14px; }
+    .detail-page .premium-card { border-color: var(--border) !important; background: var(--surface) !important; box-shadow: var(--shadow-soft) !important; }
     .hero-card { padding: 22px; }
     .hero-card h2 { margin: 14px 0 6px; font-size: 1.7rem; letter-spacing: -0.045em; }
     .timeline, .policy { padding: 18px; }
@@ -160,7 +162,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
     .booking-chat { display: grid; gap: 10px; padding: 18px; }
     .booking-chat h2 { margin: 0; letter-spacing: -0.04em; }
     .booking-chat article { width: fit-content; max-width: 86%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
-    .booking-chat article.customer { justify-self: end; background: rgba(214, 169, 74, 0.14); }
+    .booking-chat article.customer { justify-self: end; background: var(--accent-2); }
     .booking-chat span { color: var(--muted); font-size: 0.72rem; font-weight: 900; text-transform: uppercase; }
     .booking-chat p { margin: 4px 0 0; color: var(--ink); font-weight: 700; }
     .detail-actions {
@@ -389,89 +391,8 @@ export class BookingDetailPage implements OnInit {
       this.actionMessage.set("API receipt downloaded.");
       return;
     } catch {
-      this.actionMessage.set("API receipt unavailable; local receipt generated.");
+      this.actionMessage.set(this.marketplace.error() || "Digital receipt is unavailable.");
     }
-
-    const record = booking as unknown as Record<string, unknown>;
-    const payment = String(record["paymentStatus"] || record["paymentState"] || "not_required");
-    const reference = String(booking.reference || booking.id);
-    const appointment = String(booking.displayStartAt || booking.startsAt || booking.startAt || "Not available");
-    const venue = String(booking.address || "Not available");
-    const status = String(booking.status || "confirmed");
-    const service = String(booking.serviceName || "Appointment");
-    const salon = String(booking.businessName || "Salon");
-
-    const escapePdf = (value: string) => value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-    const commands: string[] = [];
-    const rect = (x: number, y: number, width: number, height: number, color: string) =>
-      commands.push("q " + color + " rg " + x + " " + y + " " + width + " " + height + " re f Q");
-    const text = (x: number, y: number, size: number, value: string, color = "0.12 0.10 0.08", font = "F1") =>
-      commands.push("BT " + color + " rg /" + font + " " + size + " Tf " + x + " " + y + " Td (" + escapePdf(value) + ") Tj ET");
-
-    rect(0, 0, 612, 792, "0.98 0.97 0.94");
-    rect(0, 650, 612, 142, "0.74 0.46 0.08");
-    rect(0, 786, 612, 6, "1 0.86 0.40");
-    rect(0, 650, 612, 4, "0.96 0.68 0.16");
-    rect(402, 650, 5, 142, "0.88 0.58 0.10");
-    text(48, 744, 26, "AURA SHINE", "1 1 1", "F2");
-    text(48, 708, 13, "BOOKING INVOICE", "1 1 1");
-    text(430, 744, 10, "INVOICE", "1 1 1", "F2");
-    text(430, 726, 10, reference, "1 1 1");
-    rect(430, 674, 122, 26, "0.956 0.835 0.553");
-    text(445, 683, 9, status.toUpperCase(), "0.72 0.48 0.08", "F2");
-
-    text(48, 612, 12, "Thank you for choosing Aura Shine", "0.42 0.28 0.08", "F2");
-    text(48, 590, 10, "Your appointment details are below.", "0.40 0.36 0.30");
-
-    rect(40, 430, 532, 124, "1 1 1");
-    text(58, 526, 10, "APPOINTMENT SUMMARY", "0.72 0.48 0.08", "F2");
-    text(58, 494, 11, service, "0.12 0.10 0.08", "F2");
-    text(58, 472, 10, salon, "0.35 0.30 0.24");
-    text(340, 494, 9, "REFERENCE", "0.48 0.43 0.35", "F2");
-    text(340, 474, 10, reference, "0.12 0.10 0.08");
-
-    rect(40, 244, 532, 148, "1 1 1");
-    text(58, 364, 10, "APPOINTMENT DETAILS", "0.72 0.48 0.08", "F2");
-    text(58, 334, 9, "DATE & TIME", "0.48 0.43 0.35", "F2");
-    text(188, 334, 10, appointment, "0.12 0.10 0.08");
-    text(58, 304, 9, "VENUE", "0.48 0.43 0.35", "F2");
-    text(188, 304, 10, venue, "0.12 0.10 0.08");
-    text(58, 274, 9, "STATUS", "0.48 0.43 0.35", "F2");
-    text(188, 274, 10, status.toUpperCase(), "0.18 0.48 0.30", "F2");
-
-    rect(40, 164, 532, 52, "0.956 0.835 0.553");
-    text(58, 188, 10, "PAYMENT STATUS", "0.72 0.48 0.08", "F2");
-    text(420, 188, 10, payment.replace(/_/g, " ").toUpperCase(), "0.12 0.10 0.08", "F2");
-    text(48, 90, 10, "Aura Shine", "0.72 0.48 0.08", "F2");
-    text(48, 70, 9, "Please keep this invoice for your appointment records.", "0.40 0.36 0.30");
-    text(430, 70, 9, "Thank you", "0.40 0.36 0.30");
-
-    const content = commands.join("\n");
-    const objects = [
-      "<< /Type /Catalog /Pages 2 0 R >>",
-      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
-      "<< /Length " + content.length + " >>\nstream\n" + content + "\nendstream"
-    ];
-    let pdf = "%PDF-1.4\n";
-    const offsets = [0];
-    objects.forEach((object, index) => {
-      offsets.push(pdf.length);
-      pdf += (index + 1) + " 0 obj\n" + object + "\nendobj\n";
-    });
-    const xref = pdf.length;
-    pdf += "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
-    for (let i = 1; i <= objects.length; i++) pdf += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
-    pdf += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
-
-    const url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "aura-shine-" + reference + ".pdf";
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   async cancel() {
@@ -482,7 +403,7 @@ export class BookingDetailPage implements OnInit {
       message: "This will call the customer booking cancellation API.",
       buttons: [
         { text: "Keep booking", role: "cancel" },
-        { text: "Cancel booking", role: "destructive", handler: () => void this.marketplace.cancelBooking(booking.id) }
+        { text: "Cancel booking", role: "destructive", handler: () => void this.confirmCancel(booking.id) }
       ]
     });
     await alert.present();
@@ -517,29 +438,17 @@ export class BookingDetailPage implements OnInit {
   async reschedule() {
     const booking = this.booking();
     if (!booking) return;
-    const alert = await this.alerts.create({
-      header: "Reschedule booking",
-      message: "Enter the new backend-approved start time.",
-      inputs: [
-        {
-          name: "startAt",
-          type: "datetime-local",
-          placeholder: "New start time"
-        }
-      ],
-      buttons: [
-        { text: "Not now", role: "cancel" },
-        {
-          text: "Reschedule",
-          handler: (value: { startAt?: string }) => {
-            if (!value.startAt) return false;
-            void this.marketplace.rescheduleBooking(booking.id, { startAt: new Date(value.startAt).toISOString() });
-            return true;
-          }
-        }
-      ]
-    });
-    await alert.present();
+    void this.router.navigate(["/tabs/bookings"], { queryParams: { reschedule: booking.id } });
+  }
+
+  private async confirmCancel(id: string) {
+    try {
+      await this.marketplace.cancelBooking(id);
+      this.actionMessage.set("Booking cancelled.");
+      await this.marketplace.loadBooking(id);
+    } catch {
+      this.actionMessage.set(this.marketplace.error() || "Unable to cancel booking.");
+    }
   }
 
 }
