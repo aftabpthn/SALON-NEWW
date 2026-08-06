@@ -94,6 +94,13 @@ jobs:
           npm ci
           npm run build:prod
 
+      - name: Build Customer App
+        working-directory: customer-app
+        shell: bash
+        run: |
+          npm ci
+          npm run build -- --base-href /customer/
+
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -185,17 +192,22 @@ jobs:
             --min-capacity "$MIN_CAPACITY" \
             --max-capacity "$MAX_CAPACITY" >/dev/null
 
-      - name: Publish versioned frontend
+      - name: Publish versioned frontends
         working-directory: infra/aws/terraform
         shell: bash
         run: |
           FRONTEND_DIR="$GITHUB_WORKSPACE/frontend-angular/dist/aura-shine-frontend"
           if [ -d "$FRONTEND_DIR/browser" ]; then FRONTEND_DIR="$FRONTEND_DIR/browser"; fi
+          CUSTOMER_DIR="$GITHUB_WORKSPACE/customer-app/www"
+          if [ -d "$CUSTOMER_DIR/browser" ]; then CUSTOMER_DIR="$CUSTOMER_DIR/browser"; fi
           test -f "$FRONTEND_DIR/index.html" || { echo "Frontend build output not found"; exit 1; }
+          test -f "$CUSTOMER_DIR/index.html" || { echo "Customer App build output not found"; exit 1; }
           BUCKET=$(terraform output -raw frontend_bucket)
           DISTRIBUTION=$(terraform output -raw cloudfront_distribution_id)
           aws s3 sync "$FRONTEND_DIR" "s3://$BUCKET/releases/$GITHUB_SHA/" --only-show-errors
-          aws s3 sync "$FRONTEND_DIR" "s3://$BUCKET/" --delete --exclude "releases/*" --only-show-errors
+          aws s3 sync "$CUSTOMER_DIR" "s3://$BUCKET/releases/$GITHUB_SHA/customer/" --only-show-errors
+          aws s3 sync "$FRONTEND_DIR" "s3://$BUCKET/" --delete --exclude "releases/*" --exclude "customer/*" --only-show-errors
+          aws s3 sync "$CUSTOMER_DIR" "s3://$BUCKET/customer/" --delete --only-show-errors
           aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' >/dev/null
 
       - name: Verify public health
@@ -204,10 +216,12 @@ jobs:
         run: |
           URL=$(terraform output -raw application_url)
           curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 "$URL/health"
+          curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 10 "$URL/customer/" >/dev/null
           {
             echo "### AWS deployment completed"
             echo "- Environment: ${{ inputs.environment }}"
             echo "- URL: $URL"
+            echo "- Customer App: $URL/customer/"
             echo "- Image tag: $IMAGE_TAG"
             echo "- Previous task definition: ${{ steps.ecs.outputs.previous_task_definition }}"
           } >> "$GITHUB_STEP_SUMMARY"

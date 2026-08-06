@@ -270,6 +270,10 @@ function handler(event) {
   if (uri === "/api" || uri.indexOf("/api/") === 0 || uri === "/health" || uri.indexOf(".") !== -1) {
     return request;
   }
+  if (uri === "/customer" || uri.indexOf("/customer/") === 0) {
+    request.uri = "/customer/index.html";
+    return request;
+  }
   request.uri = "/index.html";
   return request;
 }

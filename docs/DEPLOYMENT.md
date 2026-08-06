@@ -96,6 +96,8 @@ Routing:
 
 - `/api/*` -> Rust API target group.
 - `/health` -> Rust API target group.
+- `/customer/*` -> standalone Customer App SPA in the private frontend bucket.
+- All other frontend routes -> CRM SPA in the same private bucket.
 - AI service stays private unless explicitly required.
 
 ## 7. CloudWatch
@@ -143,6 +145,7 @@ Never commit:
 9. Verify:
    - `GET https://<domain>/health`
    - `GET https://<domain>/api/v1/health`
+   - `GET https://<domain>/customer/`
    - `GET https://<domain>/metrics` with the `METRICS_AUTH_TOKEN` bearer
    - login smoke test after owner/user exists
 10. Watch CloudWatch for 30 minutes.
