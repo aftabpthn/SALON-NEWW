@@ -2,7 +2,7 @@ import { Component, computed, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, checkmarkDoneOutline, checkmarkOutline, copyOutline, homeOutline, navigateOutline } from "ionicons/icons";
+import { addOutline, calendarOutline, checkmarkDoneOutline, checkmarkOutline, copyOutline, homeOutline, navigateOutline } from "ionicons/icons";
 import { Booking } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 
@@ -136,6 +136,11 @@ interface SuccessState {
                 <ion-icon [name]="copied() ? 'checkmark-outline' : 'copy-outline'" aria-hidden="true"></ion-icon>
                 {{ copied() ? "Copied" : "Copy reference" }}
               </button>
+              @if (bookAgainLink(); as bookAgain) {
+                <a class="secondary-action" [routerLink]="bookAgain">
+                  <ion-icon name="add-outline" aria-hidden="true"></ion-icon> Book another service
+                </a>
+              }
               <a class="secondary-action" [routerLink]="homeLink()">
                 <ion-icon name="home-outline" aria-hidden="true"></ion-icon>
                 {{ marketplace.salonMode() ? 'My Salon' : 'Home' }}
@@ -457,7 +462,7 @@ export class BookingSuccessPage {
   private persistedState: SuccessState | null | undefined;
 
   constructor(readonly marketplace: MarketplaceService) {
-    addIcons({ calendarOutline, checkmarkDoneOutline, checkmarkOutline, copyOutline, homeOutline, navigateOutline });
+    addIcons({ addOutline, calendarOutline, checkmarkDoneOutline, checkmarkOutline, copyOutline, homeOutline, navigateOutline });
   }
 
   /** Router state is lost on refresh; fall back to the session-persisted confirmation context. */
@@ -551,6 +556,24 @@ export class BookingSuccessPage {
 
   homeLink(): string {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/home";
+  }
+
+  /** Resolve a fresh booking URL for this salon so the customer can add another appointment. */
+  readonly bookAgainLink = computed<string>(() => {
+    const booking = this.booking();
+    const byId = booking?.businessId ? this.marketplace.findBusiness(booking.businessId) : null;
+    const byName = this.marketplace.businesses().find((row) => this.sameName(row.businessName, booking?.businessName));
+    const slug = byId?.slug || byName?.slug;
+    if (slug) {
+      return this.marketplace.salonMode()
+        ? this.marketplace.salonModeUrl("business", slug, "book")
+        : `/business/${encodeURIComponent(slug)}/book`;
+    }
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/search";
+  });
+
+  private sameName(first: string, second: string | undefined): boolean {
+    return String(first || "").trim().toLocaleLowerCase() === String(second || "").trim().toLocaleLowerCase();
   }
 
   async copyReference() {
