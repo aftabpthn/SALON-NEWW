@@ -1038,7 +1038,9 @@ export class BusinessCardComponent implements OnInit {
   }
 
   supportsOnlineBooking(): boolean {
-    return Array.isArray(this.business.paymentModes) && this.business.paymentModes.includes("online");
+    const hasOnlineMode = Array.isArray(this.business.paymentModes) && this.business.paymentModes.includes("online");
+    const hasServices = Array.isArray(this.business.services) && this.business.services.length > 0;
+    return hasOnlineMode && (hasServices || !!this.business.popularService || !!this.business.nextAvailableSlot);
   }
 
   private get now(): number {

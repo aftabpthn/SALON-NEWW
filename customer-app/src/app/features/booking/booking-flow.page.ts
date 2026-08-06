@@ -1330,7 +1330,11 @@ type BookingFlowItem = {
       .service-assign-body { padding: 2px 12px 12px; }
       .best-available-card { gap: 10px; padding: 12px; }
       .best-available-state { padding: 0 10px; font-size: 0.72rem; }
-      .date-row.seven-days-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; overflow-x: auto; }
+      .date-row.seven-days-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; overflow: visible; }
+      .date-row.seven-days-grid .date-card { min-height: 68px; padding: 6px 2px; gap: 2px; border-radius: 12px; }
+      .date-row.seven-days-grid .date-card strong { font-size: 0.74rem; }
+      .date-row.seven-days-grid .date-card span { font-size: 0.68rem; }
+      .date-row.seven-days-grid .date-card .status-text { display: none; }
       .timeline-step { grid-template-columns: 1fr; gap: 4px; }
     }
     @media (max-width: 430px) {
@@ -1592,7 +1596,7 @@ export class BookingFlowPage implements OnInit, OnDestroy {
   }
 
   formatServiceName(name: string): string {
-    const trimmed = String(name || "").trim();
+    const trimmed = String(name || "").trim().replace(/[_]+/g, " ");
     if (!trimmed) return "";
     return trimmed.split(/\s+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
   }
