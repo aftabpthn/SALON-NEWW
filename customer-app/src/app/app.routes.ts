@@ -1,6 +1,7 @@
 import { Routes } from "@angular/router";
 import { customerAuthGuard } from "./core/auth.guard";
 import { mySalonContextGuard } from "./core/my-salon-context.guard";
+import { unsavedSupportDraftGuard } from "./core/unsaved-support-draft.guard";
 
 export const routes: Routes = [
   { path: "", redirectTo: "onboarding", pathMatch: "full" },
@@ -16,6 +17,13 @@ export const routes: Routes = [
     path: "signup",
     data: { authMode: "signup" },
     loadComponent: () => import("./features/auth/login.page").then((m) => m.LoginPage)
+  },
+  {
+    path: "support",
+    canActivate: [customerAuthGuard],
+    canDeactivate: [unsavedSupportDraftGuard],
+    data: { hub: "support" },
+    loadComponent: () => import("./features/customer-hub/customer-hub.page").then((m) => m.CustomerHubPage)
   },
   {
     path: "verify-otp",
@@ -84,6 +92,7 @@ export const routes: Routes = [
       {
         path: "support",
         canActivate: [customerAuthGuard],
+        canDeactivate: [unsavedSupportDraftGuard],
         data: { hub: "support" },
         loadComponent: () => import("./features/customer-hub/customer-hub.page").then((m) => m.CustomerHubPage)
       },

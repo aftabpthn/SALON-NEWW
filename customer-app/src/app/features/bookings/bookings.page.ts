@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton, ToastController } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
@@ -9,12 +9,14 @@ import { Booking } from "../../core/api.types";
 type BookingTab = "upcoming" | "past" | "cancelled";
 type BookingGroup = { key: string; label: string; countLabel: string; items: Booking[] };
 type PaymentTone = "paid" | "pending" | "refunded" | "default";
+type EffectiveBookingStatus = Booking["status"] | "no_show";
+type CheckInState = { kind: "available" | "checked_in" | "unavailable" | "hidden"; reason?: string };
 
 @Component({
   standalone: true,
   imports: [RouterLink, IonButton, IonContent, IonIcon, IonRefresher, IonRefresherContent, IonSegment, IonSegmentButton],
   template: `
-    <ion-content>
+    <ion-content #bookingsContent>
       <ion-refresher slot="fixed" (ionRefresh)="onPullRefresh($event)">
         <ion-refresher-content pullingIcon="crescent" pullingText="Refreshing bookings..." refreshingSpinner="crescent"></ion-refresher-content>
       </ion-refresher>
@@ -31,11 +33,13 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
           </div>
         </section>
 
-        <ion-segment [value]="tab()" (ionChange)="setTab($any($event.detail.value) || 'upcoming')">
-          <ion-segment-button value="upcoming">Upcoming</ion-segment-button>
-          <ion-segment-button value="past">Past</ion-segment-button>
-          <ion-segment-button value="cancelled">Cancelled</ion-segment-button>
-        </ion-segment>
+        <div class="booking-tabs-shell">
+          <ion-segment [value]="tab()" (ionChange)="setTab($any($event.detail.value) || 'upcoming')">
+            <ion-segment-button value="upcoming">Upcoming</ion-segment-button>
+            <ion-segment-button value="past">Past</ion-segment-button>
+            <ion-segment-button value="cancelled">Cancelled</ion-segment-button>
+          </ion-segment>
+        </div>
 
         @if (showTopProgress()) {
           <div class="refresh-strip" role="status" aria-label="Updating bookings"><span></span></div>
@@ -66,21 +70,25 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
                       </div>
                       <div class="booking-content">
                         <div class="booking-main">
-                          <h2 class="booking-service">
-                            {{ booking.serviceName }}
-                            @if (serviceCount(booking) > 1) {
-                              <span class="service-count">{{ serviceCount(booking) }} services</span>
-                            }
-                          </h2>
+                          <h2 class="booking-service">{{ bookingTitle(booking) }}</h2>
+                          @if (serviceCount(booking) > 1) {
+                            <p class="service-subtitle">Includes {{ booking.serviceName }}</p>
+                          }
                           <p class="salon-name">{{ booking.businessName }}</p>
                           <div class="booking-meta">
                             <span class="meta-line">
                               <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
                               <span class="meta-text">{{ bookingDateTimeLabel(booking) }}</span>
                             </span>
+                            @if (compactProfessionalLine(booking); as professional) {
+                              <span class="meta-line compact-line">
+                                <span class="meta-dot" aria-hidden="true"></span>
+                                <span class="meta-text">{{ professional }}</span>
+                              </span>
+                            }
                             <span class="meta-line">
                               <ion-icon name="location-outline" aria-hidden="true"></ion-icon>
-                              <span class="meta-text">{{ booking.address || "Venue to be confirmed" }}</span>
+                              <span class="meta-text" [title]="booking.address || 'Venue to be confirmed'">{{ booking.address || "Venue to be confirmed" }}</span>
                             </span>
                             @if (paymentMetaLabel(booking); as payment) {
                               <span class="meta-line tone-{{ payment.tone }}">
@@ -91,7 +99,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
                           </div>
                         </div>
                         <div class="booking-footer">
-                          <span class="status-pill status-{{ booking.status }}" role="status">{{ statusLabel(booking.status) }}</span>
+                          <span class="status-pill status-{{ effectiveStatus(booking) }}" role="status">{{ statusLabel(effectiveStatus(booking)) }}</span>
                           <div class="footer-actions">
                             @if (showCheckIn(booking)) {
                               <button type="button" class="card-action checkin" (click)="checkIn($event, booking)">
@@ -106,7 +114,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
                               </button>
                             }
                           </div>
-                          <ion-icon class="card-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                          <span class="card-chevron-hit" aria-hidden="true"><ion-icon class="card-chevron" name="chevron-forward-outline"></ion-icon></span>
                         </div>
                       </div>
                     </article>
@@ -151,7 +159,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     .bookings-page {
       max-width: 1180px;
       padding-top: 0;
-      scroll-padding-top: calc(112px + env(safe-area-inset-top));
+      scroll-padding-top: calc(174px + env(safe-area-inset-top));
     }
 
     .bookings-hero {
@@ -219,9 +227,19 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       border-radius: 999px;
     }
 
+    .booking-tabs-shell {
+      position: sticky;
+      top: calc(96px + env(safe-area-inset-top));
+      z-index: 19;
+      margin: 0 calc(var(--page-x, 0px) * -1) 18px;
+      padding: 0 var(--page-x, 0px) 10px;
+      background: linear-gradient(180deg, rgba(255, 250, 246, 0.94), rgba(255, 250, 246, 0.88));
+      backdrop-filter: blur(18px);
+    }
+
     ion-segment {
       --background: var(--glass);
-      margin-bottom: 18px;
+      margin-bottom: 0;
       border: 1px solid var(--border);
       border-radius: 999px;
       overflow: hidden;
@@ -302,10 +320,11 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
     .booking-card {
       display: grid;
-      grid-template-columns: 62px minmax(0, 1fr);
-      gap: 14px;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 12px;
       align-items: stretch;
-      padding: 14px 14px 14px 10px;
+      min-height: 128px;
+      padding: 12px 12px 12px 10px;
       color: inherit;
       text-decoration: none;
       cursor: pointer;
@@ -317,17 +336,17 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     }
 
     .date-block {
-      min-height: 84px;
+      min-height: 70px;
       display: grid;
       place-items: center;
       align-content: center;
-      border-radius: 18px;
+      border-radius: 16px;
       color: #ffffff;
       background: var(--primary);
     }
 
     .date-block span {
-      font-size: 0.80rem;
+      font-size: 0.72rem;
       font-weight: 900;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -335,7 +354,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     }
 
     .date-block strong {
-      font-size: 1.7rem;
+      font-size: 1.45rem;
       line-height: 1;
     }
 
@@ -348,11 +367,19 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     .booking-service {
       margin: 0;
       color: var(--text);
-      font-size: 1.04rem;
-      font-weight: 850;
+      font-size: 1.02rem;
+      font-weight: 950;
       letter-spacing: -0.03em;
       line-height: 1.25;
       overflow-wrap: anywhere;
+    }
+
+    .service-subtitle {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1.25;
     }
 
     .service-count {
@@ -373,8 +400,8 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     .salon-name {
       margin: 3px 0 0;
       color: var(--muted);
-      font-size: 0.86rem;
-      font-weight: 750;
+      font-size: 0.84rem;
+      font-weight: 800;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -382,8 +409,8 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
     .booking-meta {
       display: grid;
-      gap: 5px;
-      margin-top: 8px;
+      gap: 4px;
+      margin-top: 7px;
       color: var(--muted);
       font-size: 0.82rem;
       font-weight: 750;
@@ -402,6 +429,20 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       color: var(--primary);
     }
 
+    .meta-dot {
+      width: 4px;
+      height: 4px;
+      flex: 0 0 auto;
+      margin-left: 5px;
+      border-radius: 999px;
+      background: var(--primary);
+      opacity: 0.72;
+    }
+
+    .compact-line {
+      font-size: 0.80rem;
+    }
+
     .meta-line .meta-text {
       min-width: 0;
       overflow: hidden;
@@ -418,7 +459,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       align-items: center;
       gap: 10px;
       margin-top: auto;
-      padding-top: 10px;
+      padding-top: 8px;
     }
 
     .status-pill {
@@ -455,9 +496,15 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
     }
 
     .status-pill.status-cancelled {
-      color: #B91C1C;
-      border-color: rgba(239, 68, 68, 0.38);
-      background: rgba(239, 68, 68, 0.11);
+      color: #991B1B;
+      border-color: rgba(153, 27, 27, 0.28);
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .status-pill.status-no_show {
+      color: #7C2D12;
+      border-color: rgba(234, 88, 12, 0.36);
+      background: rgba(251, 146, 60, 0.14);
     }
 
     .footer-actions {
@@ -471,7 +518,7 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      min-height: 34px;
+      min-height: 44px;
       padding: 0 12px;
       border: 1px solid;
       border-radius: 999px;
@@ -505,8 +552,18 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       outline-offset: 2px;
     }
 
-    .card-chevron {
+    .card-chevron-hit {
       flex: 0 0 auto;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      margin-right: -10px;
+      border-radius: 999px;
+    }
+
+    .card-chevron {
       color: var(--muted);
       font-size: 1rem;
     }
@@ -588,23 +645,24 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       }
 
       ion-segment {
-        margin-bottom: 8px;
+        margin-bottom: 0;
       }
 
       ion-segment-button {
-        min-height: 36px;
+        min-height: 44px;
         font-size: 0.82rem;
       }
 
       .booking-card {
-        grid-template-columns: 46px minmax(0, 1fr);
-        gap: 10px;
-        padding: 10px 12px 10px 8px;
+        grid-template-columns: 44px minmax(0, 1fr);
+        gap: 9px;
+        min-height: 118px;
+        padding: 9px 10px 9px 8px;
         border-radius: 16px;
       }
 
       .date-block {
-        min-height: 72px;
+        min-height: 62px;
         border-radius: 14px;
       }
 
@@ -613,12 +671,14 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
       }
 
       .date-block strong {
-        font-size: 1.38rem;
+        font-size: 1.24rem;
       }
 
       .booking-service {
         font-size: 0.96rem;
       }
+
+      .service-subtitle { font-size: 0.78rem; }
 
       .salon-name {
         margin-top: 2px;
@@ -627,14 +687,14 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
 
       .booking-meta {
         gap: 4px;
-        margin-top: 6px;
+        margin-top: 5px;
         font-size: 0.84rem;
       }
 
       .booking-footer {
         flex-wrap: wrap;
         gap: 8px;
-        padding-top: 8px;
+        padding-top: 6px;
       }
 
       .footer-actions {
@@ -676,8 +736,12 @@ type PaymentTone = "paid" | "pending" | "refunded" | "default";
   `]
 })
 export class BookingsPage implements OnDestroy, OnInit {
+  private static readonly TAB_STORAGE_KEY = "aura_bookings_tab";
+  private static readonly SCROLL_STORAGE_KEY = "aura_bookings_scroll_top";
+  @ViewChild("bookingsContent") private bookingsContent?: IonContent;
   readonly tab = signal<BookingTab>("upcoming");
   readonly cancelDialog = signal<Booking | null>(null);
+  private readonly allBookings = signal<Booking[]>([]);
   private readonly tabResults = signal<Record<BookingTab, Booking[]>>({ upcoming: [], past: [], cancelled: [] });
   readonly tabLoaded = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
   readonly tabBusy = signal<Record<BookingTab, boolean>>({ upcoming: false, past: false, cancelled: false });
@@ -685,9 +749,6 @@ export class BookingsPage implements OnDestroy, OnInit {
   readonly showTopProgress = computed(() => this.tabBusy()[this.tab()] && this.tabLoaded()[this.tab()]);
   readonly groups = computed<BookingGroup[]>(() => {
     const rows = this.filtered();
-    if (this.tab() !== "upcoming") {
-      return rows.length ? [{ key: "all", label: "", countLabel: "", items: rows }] : [];
-    }
     const grouped = new Map<string, Booking[]>();
     for (const booking of rows) {
       const key = this.bookingDateKey(booking);
@@ -695,11 +756,12 @@ export class BookingsPage implements OnDestroy, OnInit {
       list.push(booking);
       grouped.set(key, list);
     }
+    const direction = this.tab() === "upcoming" ? 1 : -1;
     return [...grouped.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
+      .sort((a, b) => direction * a[0].localeCompare(b[0]))
       .map(([key, items]) => {
-        const sorted = [...items].sort((a, b) => this.bookingTimeValue(a) - this.bookingTimeValue(b));
-        return { key, label: this.groupLabel(key), countLabel: sorted.length > 1 ? `${sorted.length} appointments` : "", items: sorted };
+        const sorted = [...items].sort((a, b) => direction * (this.bookingTimeValue(a) - this.bookingTimeValue(b)));
+        return { key, label: this.groupLabel(key), countLabel: this.appointmentCountLabel(sorted.length), items: sorted };
       });
   });
   readonly emptyTitle = computed(() => {
@@ -717,6 +779,7 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   ngOnInit() {
+    this.tab.set(this.readSavedTab());
     this.ensureTab("upcoming");
     this.ensureTab("past");
     this.ensureTab("cancelled");
@@ -724,7 +787,9 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   ionViewWillEnter() {
+    this.tab.set(this.readSavedTab());
     this.ensureTab(this.tab());
+    window.setTimeout(() => this.restoreScrollPosition(), 80);
   }
 
   ngOnDestroy() {
@@ -734,10 +799,12 @@ export class BookingsPage implements OnDestroy, OnInit {
   setTab(tab: BookingTab) {
     if (this.tab() === tab) return;
     this.tab.set(tab);
+    this.saveTab(tab);
     this.ensureTab(tab);
   }
 
-  openBooking(booking: Booking) {
+  async openBooking(booking: Booking) {
+    await this.saveScrollPosition();
     void this.router.navigateByUrl(this.bookingDetailUrl(booking.id));
   }
 
@@ -785,7 +852,8 @@ export class BookingsPage implements OnDestroy, OnInit {
     this.tabBusy.update((state) => ({ ...state, [tab]: true }));
     try {
       const rows = await this.marketplace.loadBookings(tab, force);
-      this.tabResults.update((state) => ({ ...state, [tab]: rows }));
+      this.mergeBookings(rows);
+      this.reclassifyBookings();
       this.tabLoaded.update((state) => ({ ...state, [tab]: true }));
     } catch {
       // The failure is surfaced through marketplace.error(); cached content, if any, stays visible.
@@ -794,11 +862,48 @@ export class BookingsPage implements OnDestroy, OnInit {
     }
   }
 
+  private readSavedTab(): BookingTab {
+    try {
+      const value = sessionStorage.getItem(BookingsPage.TAB_STORAGE_KEY);
+      return value === "past" || value === "cancelled" || value === "upcoming" ? value : "upcoming";
+    } catch {
+      return "upcoming";
+    }
+  }
+
+  private saveTab(tab: BookingTab) {
+    try {
+      sessionStorage.setItem(BookingsPage.TAB_STORAGE_KEY, tab);
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
+  private async saveScrollPosition() {
+    try {
+      const element = await this.bookingsContent?.getScrollElement();
+      sessionStorage.setItem(BookingsPage.SCROLL_STORAGE_KEY, String(element?.scrollTop || 0));
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
+  private restoreScrollPosition() {
+    try {
+      const value = Number(sessionStorage.getItem(BookingsPage.SCROLL_STORAGE_KEY) || 0);
+      if (!Number.isFinite(value) || value <= 0) return;
+      void this.bookingsContent?.scrollToPoint(0, value, 0);
+    } catch {
+      // Optional navigation state only.
+    }
+  }
+
   async onPullRefresh(event: Event) {
     const refresher = event.target as unknown as { complete(): Promise<void> };
     try {
       const rows = await this.marketplace.loadBookings(this.tab(), true);
-      this.tabResults.update((state) => ({ ...state, [this.tab()]: rows }));
+      this.mergeBookings(rows);
+      this.reclassifyBookings();
       this.tabLoaded.update((state) => ({ ...state, [this.tab()]: true }));
     } catch {
       // handled through marketplace.error()
@@ -816,7 +921,7 @@ export class BookingsPage implements OnDestroy, OnInit {
 
   bookingTimeLabel(booking: Booking): string {
     const raw = booking.startsAt || booking.startAt || "";
-    const date = raw ? new Date(raw) : null;
+    const date = this.parseBookingTime(raw);
     if (date && Number.isFinite(date.getTime())) {
       return new Intl.DateTimeFormat("en-IN", {
         hour: "numeric",
@@ -830,7 +935,7 @@ export class BookingsPage implements OnDestroy, OnInit {
 
   bookingDateTimeLabel(booking: Booking): string {
     const raw = booking.startsAt || booking.startAt || "";
-    const date = raw ? new Date(raw) : null;
+    const date = this.parseBookingTime(raw);
     if (date && Number.isFinite(date.getTime())) {
       try {
         const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(date);
@@ -853,18 +958,35 @@ export class BookingsPage implements OnDestroy, OnInit {
     return count > 1 ? count : 1;
   }
 
-  statusLabel(status: Booking["status"]): string {
+  bookingTitle(booking: Booking): string {
+    const count = this.serviceCount(booking);
+    return count > 1 ? `${count} services` : booking.serviceName;
+  }
+
+  compactProfessionalLine(booking: Booking): string {
+    const parts = [booking.staffName, this.durationLabel(booking)].filter(Boolean);
+    return parts.join(" · ");
+  }
+
+  private durationLabel(booking: Booking): string {
+    const minutes = Number(booking.durationMinutes || booking.serviceDurationMinutes || 0);
+    if (!Number.isFinite(minutes) || minutes <= 0) return "";
+    return `${minutes} min`;
+  }
+
+  statusLabel(status: EffectiveBookingStatus): string {
     switch (status) {
       case "pending": return "Pending";
       case "confirmed": return "Confirmed";
       case "completed": return "Completed";
       case "cancelled": return "Cancelled";
+      case "no_show": return "No-show";
       default: return String(status || "").charAt(0).toUpperCase() + String(status || "").slice(1);
     }
   }
 
   cardLabel(booking: Booking): string {
-    return `View details — ${booking.serviceName} at ${booking.businessName}, ${this.bookingDateTimeLabel(booking)}, status ${this.statusLabel(booking.status)}`;
+    return `View details — ${booking.serviceName} at ${booking.businessName}, ${this.bookingDateTimeLabel(booking)}, status ${this.statusLabel(this.effectiveStatus(booking))}`;
   }
 
   paymentMetaLabel(booking: Booking): { label: string; tone: PaymentTone } | null {
@@ -879,11 +1001,26 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   showCheckIn(booking: Booking): boolean {
-    return this.tab() === "upcoming" && booking.status !== "cancelled" && booking.status !== "completed" && this.isTodayBooking(booking);
+    return this.checkInState(booking).kind === "available";
+  }
+
+  checkInState(booking: Booking): CheckInState {
+    const status = this.effectiveStatus(booking);
+    if (status === "cancelled" || status === "completed" || status === "no_show") return { kind: "hidden" };
+    if (this.isCheckedIn(booking)) return { kind: "checked_in" };
+    const start = this.appointmentStartDate(booking)?.getTime() ?? null;
+    if (!start) return { kind: "unavailable", reason: "Time unavailable" };
+    const now = Date.now();
+    const opensAt = start - 30 * 60 * 1000;
+    const closesAt = start + 15 * 60 * 1000;
+    if (now < opensAt) return { kind: "unavailable", reason: "Opens 30 min before" };
+    if (now > closesAt || this.hasAppointmentEnded(booking)) return { kind: "hidden" };
+    if (this.hasConflictingCheckedInBooking(booking)) return { kind: "unavailable", reason: "Another check-in active" };
+    return { kind: "available" };
   }
 
   showRebook(booking: Booking): boolean {
-    return booking.status === "completed";
+    return this.effectiveStatus(booking) === "completed" || this.effectiveStatus(booking) === "no_show";
   }
 
   checkIn(event: Event, booking: Booking) {
@@ -936,21 +1073,23 @@ export class BookingsPage implements OnDestroy, OnInit {
   }
 
   private bookingDateKey(booking: Booking): string {
-    const raw = booking.startsAt || booking.startAt || "";
-    const date = raw ? new Date(raw) : null;
+    const date = this.appointmentStartDate(booking);
     if (date && Number.isFinite(date.getTime())) return this.istDateKey(date);
     return String(booking.displayStartAt || "").toLowerCase().includes("today") ? this.istTodayKey() : "9999-12-31";
   }
 
   private bookingTimeValue(booking: Booking): number {
-    const raw = booking.startsAt || booking.startAt || "";
-    const date = raw ? new Date(raw) : null;
+    const date = this.appointmentStartDate(booking);
     return date && Number.isFinite(date.getTime()) ? date.getTime() : Number.MAX_SAFE_INTEGER;
   }
 
   private groupLabel(key: string): string {
-    if (key === this.istTodayKey()) return "Today";
+    if (key === this.istTodayKey()) return `Today · ${this.formatDateGroupKey(key)}`;
     if (key === this.tomorrowKey()) return "Tomorrow";
+    return this.formatDateGroupKey(key);
+  }
+
+  private formatDateGroupKey(key: string): string {
     const [year, month, day] = key.split("-").map(Number);
     const date = new Date(Date.UTC(year, month - 1, day));
     try {
@@ -960,11 +1099,115 @@ export class BookingsPage implements OnDestroy, OnInit {
     }
   }
 
+  private appointmentCountLabel(count: number): string {
+    return `${count} ${count === 1 ? "appointment" : "appointments"}`;
+  }
+
   private isTodayBooking(booking: Booking): boolean {
-    const raw = booking.startsAt || booking.startAt || "";
-    const date = raw ? new Date(raw) : null;
+    const date = this.appointmentStartDate(booking);
     if (date && Number.isFinite(date.getTime())) return this.istDateKey(date) === this.istTodayKey();
     return String(booking.displayStartAt || "").toLowerCase().includes("today");
+  }
+
+  effectiveStatus(booking: Booking): EffectiveBookingStatus {
+    const rawStatus = String(booking.status || "") as EffectiveBookingStatus;
+    if (rawStatus === "cancelled" || rawStatus === "completed" || rawStatus === "no_show") return rawStatus;
+    if (!this.hasAppointmentEnded(booking)) return booking.status;
+    return rawStatus === "pending" ? "no_show" : "completed";
+  }
+
+  private mergeBookings(rows: Booking[]) {
+    const byId = new Map<string, Booking>();
+    for (const booking of this.allBookings()) byId.set(booking.id, booking);
+    for (const booking of rows) byId.set(booking.id, booking);
+    this.allBookings.set([...byId.values()]);
+  }
+
+  private reclassifyBookings() {
+    const next: Record<BookingTab, Booking[]> = { upcoming: [], past: [], cancelled: [] };
+    for (const booking of this.allBookings()) {
+      const bucket = this.bookingBucket(booking);
+      next[bucket].push(booking);
+    }
+    next.upcoming.sort((a, b) => this.bookingTimeValue(a) - this.bookingTimeValue(b));
+    next.past.sort((a, b) => this.bookingTimeValue(b) - this.bookingTimeValue(a));
+    next.cancelled.sort((a, b) => this.bookingTimeValue(b) - this.bookingTimeValue(a));
+    this.tabResults.set(next);
+  }
+
+  private bookingBucket(booking: Booking): BookingTab {
+    if (String(booking.status) === "cancelled") return "cancelled";
+    return this.hasAppointmentEnded(booking) ? "past" : "upcoming";
+  }
+
+  private hasAppointmentEnded(booking: Booking): boolean {
+    const end = this.appointmentEndTime(booking);
+    return end !== null && end <= Date.now();
+  }
+
+  private isCheckedIn(booking: Booking): boolean {
+    const row = booking as Booking & { checkedInAt?: string; checkInAt?: string; attendanceStatus?: string; checkInStatus?: string };
+    const status = String(row.attendanceStatus || row.checkInStatus || "").toLowerCase().replace(/[\s-]+/g, "_");
+    return Boolean(row.checkedInAt || row.checkInAt || status === "checked_in" || status === "arrived");
+  }
+
+  private hasConflictingCheckedInBooking(booking: Booking): boolean {
+    const start = this.appointmentStartDate(booking)?.getTime() ?? null;
+    const end = this.appointmentEndTime(booking);
+    if (start === null || end === null) return false;
+    return this.allBookings().some((candidate) => {
+      if (candidate.id === booking.id || !this.isCheckedIn(candidate)) return false;
+      if (this.effectiveStatus(candidate) === "cancelled") return false;
+      const candidateStart = this.appointmentStartDate(candidate)?.getTime() ?? null;
+      const candidateEnd = this.appointmentEndTime(candidate);
+      return candidateStart !== null && candidateEnd !== null && candidateStart < end && candidateEnd > start;
+    });
+  }
+
+  private appointmentEndTime(booking: Booking): number | null {
+    const explicitEnd = this.parseBookingTime(booking.endsAt || booking.endAt || "");
+    if (explicitEnd) return explicitEnd.getTime();
+    const start = this.appointmentStartDate(booking);
+    if (!start) return null;
+    const duration = Number(booking.durationMinutes || booking.serviceDurationMinutes || 60);
+    return start.getTime() + Math.max(1, Number.isFinite(duration) ? duration : 60) * 60 * 1000;
+  }
+
+  private parseBookingTime(value: string): Date | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const normalized = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)
+      ? `${raw.replace(" ", "T")}+05:30`
+      : raw;
+    const date = new Date(normalized);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+
+  private appointmentStartDate(booking: Booking): Date | null {
+    return this.parseBookingTime(booking.startsAt || booking.startAt || "") || this.parseDisplayStartAt(booking.displayStartAt || "");
+  }
+
+  private parseDisplayStartAt(value: string): Date | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const lower = raw.toLowerCase();
+    const time = raw.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+    const hour12 = Number(time?.[1] || 9);
+    const minute = Number(time?.[2] || 0);
+    const period = String(time?.[3] || "AM").toUpperCase();
+    const hour = period === "PM" && hour12 < 12 ? hour12 + 12 : period === "AM" && hour12 === 12 ? 0 : hour12;
+    const today = new Date();
+    const todayParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(today);
+    const part = (type: Intl.DateTimeFormatPartTypes) => Number(todayParts.find((item) => item.type === type)?.value || 0);
+    if (lower.includes("today")) return new Date(`${part("year")}-${String(part("month")).padStart(2, "0")}-${String(part("day")).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`);
+    const monthMap: Record<string, number> = { jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
+    const match = raw.match(/(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+    if (!match) return null;
+    const day = Number(match[1]);
+    const month = monthMap[match[2].toLowerCase()];
+    const year = Number(match[3] || part("year"));
+    if (!month || !day) return null;
+    return new Date(`${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`);
   }
 
   private scheduleMidnightRefresh() {

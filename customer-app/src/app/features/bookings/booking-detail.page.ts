@@ -1,9 +1,10 @@
-import { Component, OnDestroy, OnInit, computed, signal } from "@angular/core";
+import { Component, OnDestroy, OnInit, ViewChild, computed, signal } from "@angular/core";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import { Subscription } from "rxjs";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { addOutline, alertCircleOutline, calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, giftOutline, helpCircleOutline, locationOutline, navigateOutline, personOutline, repeatOutline, settingsOutline, shareSocialOutline, storefrontOutline, swapHorizontalOutline, timeOutline } from "ionicons/icons";
-import { Business } from "../../core/api.types";
+import { Booking, Business } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-header.component";
 
@@ -12,7 +13,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
   imports: [IonButton, IonContent, IonIcon, RouterLink, CustomerMobileHeaderComponent],
   template: `
     <aura-customer-mobile-header title="Booking details" [subtitle]="booking()?.businessName || ''" [backHref]="backHref()" />
-    <ion-content>
+    <ion-content #detailContent>
       @if (booking(); as booking) {
         <main class="page-narrow detail-page">
           @if (statusNote(); as note) {
@@ -23,21 +24,29 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
             <div class="summary-top">
               <span class="booking-status-pill status-{{ booking.status }}" role="status">{{ statusLabel() }}</span>
               <h1 id="booking-service">{{ booking.serviceName }}</h1>
-              <p>{{ booking.businessName }}</p>
+              <p>{{ branchName() }}</p>
             </div>
 
             <div class="appointment-time">
               <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
               <div>
                 <span>Appointment time</span>
-                <strong>{{ appointmentDisplay() }}</strong>
+                <strong>{{ appointmentWindowDisplay() }}</strong>
               </div>
             </div>
 
             <dl class="booking-facts">
               <div>
+                <dt><ion-icon name="time-outline" aria-hidden="true"></ion-icon>Duration</dt>
+                <dd>{{ durationDisplay() }}</dd>
+              </div>
+              <div>
+                <dt><ion-icon name="person-outline" aria-hidden="true"></ion-icon>Professional</dt>
+                <dd>{{ professionalDisplay() }}</dd>
+              </div>
+              <div>
                 <dt><ion-icon name="location-outline" aria-hidden="true"></ion-icon>Venue</dt>
-                <dd>{{ booking.address || "Venue to be confirmed" }}</dd>
+                <dd>{{ venueDisplay() }}</dd>
               </div>
               <div>
                 <dt><ion-icon name="card-outline" aria-hidden="true"></ion-icon>Payment</dt>
@@ -46,7 +55,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
               <div class="reference-fact">
                 <dt><ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>Booking reference</dt>
                 <dd class="reference-value">
-                  <span>{{ bookingReference() }}</span>
+                  <span>{{ readableBookingReference() }}</span>
                   <button
                     type="button"
                     class="copy-reference"
@@ -59,6 +68,21 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
                 </dd>
               </div>
             </dl>
+
+            @if (serviceTimeline().length > 1) {
+              <section class="service-timeline" aria-label="Service timeline">
+                <h2>Service timeline</h2>
+                @for (item of serviceTimeline(); track item.index) {
+                  <div class="timeline-row">
+                    <span>{{ item.index }}</span>
+                    <div>
+                      <strong>{{ item.name }}</strong>
+                      <small>{{ item.meta }}</small>
+                    </div>
+                  </div>
+                }
+              </section>
+            }
           </section>
 
           <span class="visually-hidden" aria-live="polite">{{ actionFeedback() }}</span>
@@ -96,23 +120,26 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
                       <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                     </a>
                     @if (salonPhone(); as phone) {
-                      <a class="option-row" [href]="phone.href">
+                      <a class="option-row" [href]="phone.href" [attr.aria-label]="'Call salon at ' + phone.label">
                         <ion-icon name="call-outline" aria-hidden="true"></ion-icon>
                         <span>Call salon · {{ phone.label }}</span>
                         <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
                       </a>
+                    }
+                    @if (salonMayReplyTomorrow()) {
+                      <p class="contact-note"><ion-icon name="time-outline" aria-hidden="true"></ion-icon><span>Salon may reply tomorrow</span></p>
                     }
                   </div>
                 }
               </div>
 
               @if (directionsUrl(); as mapUrl) {
-                <a class="primary-action outline" [href]="mapUrl" target="_blank" rel="noopener noreferrer" aria-label="Open venue directions in a new tab">
+                <a class="primary-action outline secondary-action" [href]="mapUrl" target="_blank" rel="noopener noreferrer" aria-label="Open venue directions in a new tab">
                   <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
                   <span>Directions</span>
                 </a>
               } @else {
-                <button type="button" class="primary-action outline" disabled>
+                <button type="button" class="primary-action outline secondary-action" disabled>
                   <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon>
                   <span>Directions</span>
                 </button>
@@ -138,7 +165,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
             @if (invoiceAvailable()) {
               <button type="button" class="utility-action" (click)="downloadInvoice($event)">
                 <ion-icon name="download-outline" aria-hidden="true"></ion-icon>
-                <span>Download invoice</span>
+                <span>View receipt/invoice</span>
               </button>
             }
           </section>
@@ -152,7 +179,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
                   <p>{{ booking.status === "cancelled" ? "Ready for another visit? Start a fresh booking with this salon." : "Loved your visit? Book the same service or something new." }}</p>
                 </div>
               </div>
-              <ion-button expand="block" class="primary-gradient" (click)="rebook()">Book another appointment</ion-button>
+              <ion-button expand="block" class="primary-gradient" (click)="rebook()">{{ booking.status === "cancelled" ? "Rebook" : "Book again" }}</ion-button>
             </section>
           }
 
@@ -166,61 +193,75 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
               </a>
             }
             <button type="button" class="option-row" (click)="requestSupport()">
-              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
+              <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
               <span>Request support for this booking</span>
               <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
             </button>
-            <a class="option-row" [routerLink]="helpRoute()" [queryParams]="supportQuery()">
-              <ion-icon name="help-circle-outline" aria-hidden="true"></ion-icon>
-              <span>Help centre</span>
+            <a class="option-row" [routerLink]="helpRoute()">
+              <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+              <span>General Help Centre</span>
               <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
             </a>
           </section>
 
-          <details class="policy-strip">
-            <summary>
-              <span>Cancellation &amp; rescheduling policy</span>
-              <small>Open the full policy for this booking</small>
-            </summary>
-            <p>{{ booking.cancellationPolicy || "The business policy will appear here when returned by the API." }}</p>
-          </details>
-
-          @if (isActive()) {
-            <button type="button" class="cancel-link" (click)="cancel()">
-              <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
-              <span>Cancel booking</span>
-            </button>
-          }
+          <section class="policy-strip" aria-labelledby="policy-title">
+            <header>
+              <span id="policy-title">Cancellation policy</span>
+              <small>{{ isActive() ? "Review impact before cancelling" : "Cancellation is not available for this booking" }}</small>
+            </header>
+            <div class="policy-impact-list">
+              <p><strong>Cutoff</strong><span>{{ cancellationCutoffLine() }}</span></p>
+              <p><strong>Cancellation fee</strong><span>{{ cancelFeeLine() }}</span></p>
+              <p><strong>Refund before cancellation</strong><span>{{ cancelRefundLine() }}</span></p>
+              <p><strong>Package/membership credits</strong><span>{{ cancelCreditsLine() }}</span></p>
+            </div>
+            @if (booking.cancellationPolicy) {
+              <p class="policy-note">Policy: {{ booking.cancellationPolicy }}</p>
+            }
+            @if (isActive()) {
+              <button type="button" class="cancel-link" [disabled]="!canCancelBooking()" (click)="cancel()">
+                <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+                <span>{{ canCancelBooking() ? "Cancel booking" : cancelDisabledReason() }}</span>
+              </button>
+            }
+          </section>
         </main>
 
         @if (manageSheetOpen()) {
           <div class="sheet-backdrop" role="presentation" (click)="closeManageSheet()">
             <section class="action-sheet" role="dialog" aria-modal="true" aria-labelledby="manage-sheet-title" (click)="$event.stopPropagation()">
-              <h2 id="manage-sheet-title">Manage booking</h2>
+              <div class="sheet-handle" aria-hidden="true"></div>
+              <div class="sheet-title-row">
+                <h2 id="manage-sheet-title">Manage booking</h2>
+                <button type="button" class="sheet-close" aria-label="Close manage booking" (click)="closeManageSheet()">
+                  <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
+                </button>
+              </div>
               <p class="sheet-subtitle">Choose what you would like to change for this appointment.</p>
-              <button type="button" class="option-row" (click)="changeServices()">
+              <button type="button" class="option-row sheet-option" [disabled]="!canChangeServices()" (click)="changeServices()">
                 <ion-icon name="swap-horizontal-outline" aria-hidden="true"></ion-icon>
-                <span>Change services</span>
+                <span><strong>Change services</strong><small>{{ canChangeServices() ? "Replace or remove existing services. Staff, time and price will be recalculated before confirmation." : manageActionReason() }}</small></span>
                 <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
               </button>
-              <button type="button" class="option-row" (click)="changeProfessional()">
+              <button type="button" class="option-row sheet-option" [disabled]="!canChangeProfessional()" (click)="changeProfessional()">
                 <ion-icon name="person-outline" aria-hidden="true"></ion-icon>
-                <span>Change professional</span>
+                <span><strong>Change professional</strong><small>{{ canChangeProfessional() ? "Pick another professional. The slot will be revalidated before confirmation." : manageActionReason() }}</small></span>
                 <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
               </button>
-              <button type="button" class="option-row" (click)="rescheduleFromSheet()">
+              <button type="button" class="option-row sheet-option" [disabled]="!canReschedule()" (click)="rescheduleFromSheet()">
                 <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
-                <span>Reschedule</span>
+                <span><strong>Reschedule</strong><small>{{ canReschedule() ? "Keep the current services and professional, then choose a new valid time." : manageActionReason() }}</small></span>
                 <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
               </button>
-              <button type="button" class="option-row" (click)="addService()">
+              <button type="button" class="option-row sheet-option" [disabled]="!canAddServiceToBooking()" (click)="addService()">
                 <ion-icon name="add-outline" aria-hidden="true"></ion-icon>
-                <span>Add a service</span>
+                <span><strong>Add a service</strong><small>{{ canAddServiceToBooking() ? "Append another service to this booking. Price difference shows before confirmation." : manageActionReason() }}</small></span>
                 <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
               </button>
-              <button type="button" class="option-row cancel-sheet-row" (click)="cancelFromSheet()">
+              <button type="button" class="option-row sheet-option cancel-sheet-row" [disabled]="!canCancelBooking()" (click)="cancelFromSheet()">
                 <ion-icon name="close-circle-outline" aria-hidden="true"></ion-icon>
-                <span>Cancel booking</span>
+                <span><strong>Cancel booking</strong><small>{{ canCancelBooking() ? "Review cutoff, fee and refund before cancelling." : cancelDisabledReason() }}</small></span>
+                <ion-icon class="row-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
               </button>
             </section>
           </div>
@@ -262,7 +303,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
 
                 <div class="cancel-sheet-actions">
                   <button type="button" class="neutral-action" (click)="closeCancelSheet()">Keep appointment</button>
-                  <button type="button" class="destructive-confirm" [disabled]="cancelSubmitting()" (click)="confirmCancelBooking(booking.id)">{{ cancelSubmitting() ? "Cancelling…" : "Yes, cancel appointment" }}</button>
+                  <button type="button" class="destructive-confirm" [disabled]="cancelSubmitting() || !canCancelBooking()" (click)="confirmCancelBooking(booking.id)">{{ cancelSubmitting() ? "Cancelling…" : "Yes, cancel appointment" }}</button>
                 </div>
 
                 @if (canReschedule()) {
@@ -286,7 +327,8 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
   styles: [`
     .detail-header ion-toolbar { --min-height: 52px; }
     .detail-header ion-title { font-size: 1rem; font-weight: 850; letter-spacing: -0.015em; }
-    .detail-page { display: grid; gap: 12px; max-width: 680px; }
+    ion-content::part(scroll) { scroll-padding-top: calc(76px + env(safe-area-inset-top)); }
+    .detail-page { display: grid; gap: 12px; max-width: 680px; padding-top: calc(10px + env(safe-area-inset-top)); }
 
     .status-note {
       padding: 10px 14px;
@@ -358,14 +400,27 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .reference-fact dt { color: rgba(255, 255, 255, 0.58); }
     .reference-value { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .reference-value > span { min-width: 0; color: rgba(255, 255, 255, 0.82); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+    .service-timeline {
+      display: grid;
+      gap: 8px;
+      padding: 10px 16px 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.035);
+    }
+    .service-timeline h2 { margin: 0; color: rgba(255, 255, 255, 0.72); font-size: 0.76rem; font-weight: 850; text-transform: uppercase; letter-spacing: 0.05em; }
+    .timeline-row { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; align-items: start; }
+    .timeline-row > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; color: var(--brand-900); background: rgba(255, 255, 255, 0.9); font-size: 0.74rem; font-weight: 950; }
+    .timeline-row strong { display: block; color: #fff; font-size: 0.86rem; line-height: 1.25; }
+    .timeline-row small { display: block; margin-top: 2px; color: rgba(255, 255, 255, 0.72); font-size: 0.78rem; line-height: 1.25; }
     .copy-reference {
       display: inline-flex;
       flex: 0 0 auto;
       align-items: center;
       justify-content: center;
       gap: 4px;
-      min-height: 32px;
-      padding: 6px 8px;
+      min-width: 44px;
+      min-height: 48px;
+      padding: 8px 11px;
       border: 0;
       border-radius: 8px;
       color: rgba(255, 255, 255, 0.9);
@@ -377,12 +432,8 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .copy-reference:hover { background: rgba(255, 255, 255, 0.1); }
     .copy-reference:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
-    .primary-actions {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .primary-actions .contact-wrap { grid-column: 1 / -1; display: grid; gap: 8px; }
+    .primary-actions { display: grid; gap: 8px; }
+    .primary-actions .contact-wrap { display: grid; gap: 8px; }
     .primary-action {
       display: inline-flex;
       min-width: 0;
@@ -417,6 +468,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .primary-action:hover { transform: translateY(-1px); }
     .primary-action:disabled { color: var(--muted); border-color: var(--border); background: var(--surface-soft); cursor: not-allowed; opacity: 0.72; transform: none; box-shadow: none; }
     .primary-action:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .secondary-action { min-height: 46px; }
     .contact-chevron { margin-left: auto; font-size: 0.9rem; transition: transform var(--motion-fast); }
     .contact-wrap.expanded .contact-chevron { transform: rotate(90deg); }
     .contact-wrap.expanded .primary-action.contact { border-color: var(--primary); background: var(--primary-soft); }
@@ -428,6 +480,20 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       border-radius: 14px;
       background: var(--glass);
     }
+    .contact-note {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin: 4px 2px 0;
+      padding: 8px 10px;
+      border-radius: 10px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.8rem;
+      font-weight: 750;
+      line-height: 1.3;
+    }
+    .contact-note ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 0.95rem; }
 
     .manage-row {
       width: 100%;
@@ -456,7 +522,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .utility-action {
       display: inline-flex;
       min-width: 0;
-      min-height: 38px;
+      min-height: 40px;
       align-items: center;
       justify-content: center;
       gap: 6px;
@@ -530,42 +596,48 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     .option-row:active { background: rgba(99, 102, 241, 0.12); transform: scale(0.99); }
     .option-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     .option-row > ion-icon:first-child { color: var(--primary); font-size: 1.05rem; }
+    .help-salon .option-row { grid-template-columns: 28px minmax(0, 1fr) auto; }
+    .help-salon .option-row > ion-icon:first-child {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-size: 1rem;
+    }
     .option-row > span { min-width: 0; color: inherit; overflow-wrap: anywhere; }
     .row-chevron { color: var(--muted); font-size: 0.95rem; }
 
     .policy-strip {
+      display: grid;
+      gap: 10px;
+      padding: 12px 4px;
       border-block: 1px solid var(--border);
       color: var(--text);
       background: var(--glass);
     }
-    .policy-strip summary {
+    .policy-strip header { display: grid; gap: 2px; padding: 0 4px; }
+    .policy-strip header span { display: block; color: var(--text); font-size: 0.88rem; font-weight: 850; }
+    .policy-strip header small { display: block; color: var(--muted); font-size: 0.82rem; font-weight: 650; }
+    .policy-impact-list { display: grid; gap: 8px; }
+    .policy-impact-list p {
       display: grid;
-      grid-template-columns: 14px minmax(0, 1fr);
-      align-items: center;
-      column-gap: 7px;
-      min-height: 44px;
-      padding: 12px 4px;
+      grid-template-columns: minmax(118px, 0.42fr) minmax(0, 1fr);
+      gap: 10px;
+      margin: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
       color: var(--text);
-      list-style: none;
-      cursor: pointer;
+      font-size: 0.84rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
     }
-    .policy-strip summary::-webkit-details-marker { display: none; }
-    .policy-strip summary::before {
-      grid-column: 1;
-      grid-row: 1 / span 2;
-      content: "›";
-      color: var(--primary);
-      font-size: 1.05rem;
-      font-weight: 900;
-      line-height: 1;
-      transform: rotate(0deg);
-      transition: transform var(--motion-fast);
-    }
-    .policy-strip[open] summary::before { transform: rotate(90deg); }
-    .policy-strip summary span { grid-column: 2; display: block; color: var(--text); font-size: 0.88rem; font-weight: 850; }
-    .policy-strip summary small { grid-column: 2; display: block; margin-top: 2px; color: var(--muted); font-size: 0.82rem; font-weight: 650; }
-    .policy-strip p { margin: 0; padding: 0 4px 13px; color: var(--text); font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
-    .policy-strip summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+    .policy-impact-list strong { color: var(--muted); font-size: 0.76rem; font-weight: 850; text-transform: uppercase; letter-spacing: 0.04em; }
+    .policy-impact-list span { font-weight: 780; }
 
     .cancel-link {
       display: inline-flex;
@@ -586,6 +658,8 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
     }
     .cancel-link ion-icon { font-size: 1rem; }
     .cancel-link:hover { background: rgba(180, 35, 24, 0.07); }
+    .cancel-link:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.76; }
+    .cancel-link:disabled:hover { background: transparent; }
     .cancel-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -607,15 +681,27 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       display: grid;
       gap: 2px;
       margin: 0 auto;
-      padding: 18px 20px;
+      padding: 10px 20px calc(18px + env(safe-area-inset-bottom));
       border: 1px solid var(--border);
       border-radius: 24px;
       background: var(--surface);
       box-shadow: 0 24px 60px rgba(28, 28, 28, 0.22);
     }
+    .sheet-handle { justify-self: center; width: 42px; height: 4px; margin: 0 0 10px; border-radius: 999px; background: var(--border-strong); opacity: 0.7; }
+    .sheet-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .action-sheet h2 { margin: 0; color: var(--text); font-size: 1.18rem; letter-spacing: -0.03em; }
+    .sheet-close { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 999px; color: var(--muted); background: transparent; cursor: pointer; }
+    .sheet-close ion-icon { font-size: 1.35rem; }
+    .sheet-close:hover { background: var(--surface-soft); }
+    .sheet-close:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     .action-sheet .sheet-subtitle { margin: 0 0 10px; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
     .action-sheet .option-row { border-radius: 10px; }
+    .sheet-option { grid-template-columns: 24px minmax(0, 1fr) auto; min-height: 58px; align-items: center; }
+    .sheet-option > span { display: grid; gap: 2px; }
+    .sheet-option strong { color: inherit; font-size: 0.86rem; line-height: 1.2; }
+    .sheet-option small { color: var(--muted); font-size: 0.76rem; font-weight: 700; line-height: 1.32; }
+    .sheet-option:disabled { color: var(--muted); background: var(--surface-soft); cursor: not-allowed; opacity: 0.78; }
+    .sheet-option:disabled > ion-icon:first-child, .sheet-option:disabled .row-chevron { color: var(--muted); }
     .cancel-sheet-row { color: #B42318 !important; margin-top: 6px; border-top: 1px solid var(--border); }
     .cancel-sheet-row > ion-icon:first-child { color: #B42318; }
     .cancel-sheet { gap: 12px; }
@@ -665,8 +751,11 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
   `]
 })
 export class BookingDetailPage implements OnInit, OnDestroy {
+  @ViewChild("detailContent") private detailContent?: IonContent;
   private readonly id = signal(this.route.snapshot.paramMap.get("id"));
   private copyResetTimer: ReturnType<typeof setTimeout> | undefined;
+  private routeSubscription?: Subscription;
+  private lastOpenedId = this.id() || "";
   readonly booking = computed(() => this.marketplace.findBooking(this.id()));
   readonly resolvedBusiness = computed<Business | null>(() => {
     const booking = this.booking();
@@ -679,9 +768,17 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     return this.marketplace.businesses().find((business) => this.sameName(business.businessName, booking.businessName)) ?? null;
   });
   readonly bookingReference = computed(() => String(this.booking()?.reference || this.booking()?.id || ""));
+  readonly readableBookingReference = computed(() => this.formatBookingReference(this.bookingReference()));
   readonly appointmentDisplay = computed(() => this.formatAppointment(this.appointmentStart()));
+  readonly appointmentWindowDisplay = computed(() => this.formatAppointmentWindow());
+  readonly durationDisplay = computed(() => this.formatDuration(this.bookingDurationMinutes()));
+  readonly professionalDisplay = computed(() => String(this.booking()?.staffName || "Professional to be assigned"));
+  readonly branchName = computed(() => this.resolvedBusiness()?.businessName || this.booking()?.businessName || "Salon branch");
+  readonly venueDisplay = computed(() => this.resolvedBusiness()?.address?.trim() || this.booking()?.address?.trim() || "Venue to be confirmed");
   readonly paymentDisplay = computed(() => this.paymentLabel(this.booking()?.paymentStatus));
+  readonly serviceTimeline = computed(() => this.extractServiceTimeline());
   readonly salonPhone = computed(() => this.resolveSalonPhone(this.resolvedBusiness()));
+  readonly salonMayReplyTomorrow = computed(() => this.resolvedBusiness()?.isOpen === false);
   readonly salonRoute = computed(() => {
     const slug = this.resolvedBusiness()?.slug;
     return slug ? this.businessProfileUrl(slug) : null;
@@ -692,7 +789,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   readonly actionFeedback = signal("");
   readonly isActive = computed(() => {
     const booking = this.booking();
-    return !!booking && (booking.status === "pending" || booking.status === "confirmed");
+    return !!booking && (booking.status === "pending" || booking.status === "confirmed") && !this.isPastBooking(booking);
   });
   readonly canReschedule = computed(() => {
     const booking = this.booking();
@@ -714,38 +811,75 @@ export class BookingDetailPage implements OnInit, OnDestroy {
 
   readonly cancelSheetOpen = signal(false);
   readonly manageSheetOpen = signal(false);
+  readonly manageSheetDirty = signal(false);
   readonly contactExpanded = signal(false);
   readonly cancelDone = signal(false);
   readonly cancelSubmitting = signal(false);
 
+  readonly cancellationCutoffLine = computed<string>(() => {
+    const explicit = this.cancellationCutoffDate();
+    if (explicit) return `Free cancellation until ${this.formatShortDateTime(explicit)}`;
+    if (this.booking()?.cancellationPolicy) return "Check the salon policy text below for the cutoff.";
+    return "Salon has not shared a cancellation cutoff yet.";
+  });
+
   readonly cancelRefundLine = computed<string | null>(() => {
     const booking = this.booking();
     if (!booking) return null;
+    const paid = this.bookingPaidPaise() || (String(booking.paymentStatus || "").toLowerCase() === "paid" ? this.bookingAmountPaise() : 0);
+    const refund = Math.max(0, paid - this.cancellationFeePaise());
     const payment = String(booking.paymentStatus || "").toLowerCase();
-    if (["paid", "captured", "payment_received"].includes(payment)) return "Your payment will be refunded to your original payment method.";
-    if (["refunded"].includes(payment)) return "Your payment has already been refunded to your original payment method.";
-    return "No payment was taken for this appointment, so there is nothing to refund.";
+    if (["refunded"].includes(payment)) return "Already refunded to your original payment method.";
+    if (paid > 0) return `${this.money(refund)} estimated refund before cancellation.`;
+    return "No online payment found, so refund amount is Rs 0.";
   });
 
   readonly cancelFeeLine = computed<string | null>(() => {
-    const policy = String(this.booking()?.cancellationPolicy || "");
-    return /fee|charge|forfeit|deposit|penalty|%|percent/i.test(policy) ? policy : null;
+    const fee = this.cancellationFeePaise();
+    if (fee > 0) return `${this.money(fee)} may be deducted.`;
+    const policy = String(this.booking()?.cancellationPolicy || "").trim();
+    if (/fee|charge|forfeit|deposit|penalty|%|percent/i.test(policy)) return policy;
+    return "No cancellation fee shown for this booking.";
   });
 
-  // Bookings do not carry membership/package usage data today, so the credit
-  // consequence row is intentionally omitted until the API exposes that data.
-  readonly cancelCreditsLine = computed<string | null>(() => null);
+  readonly cancelCreditsLine = computed<string | null>(() => {
+    const booking = this.booking() as Record<string, unknown> | null;
+    if (!booking) return null;
+    const direct = String(booking["packageCreditImpact"] || booking["membershipCreditImpact"] || booking["creditImpact"] || "").trim();
+    if (direct) return direct;
+    const packageCredits = Number(booking["packageCreditsUsed"] || booking["packageCredits"] || 0);
+    const membershipCredits = Number(booking["membershipCreditsUsed"] || booking["membershipCredits"] || 0);
+    const totalCredits = Number(booking["creditsUsed"] || 0) + (Number.isFinite(packageCredits) ? packageCredits : 0) + (Number.isFinite(membershipCredits) ? membershipCredits : 0);
+    if (totalCredits > 0) return `${totalCredits} package/membership credit${totalCredits === 1 ? "" : "s"} will be returned if policy allows.`;
+    return "No package or membership credits are linked to this booking.";
+  });
+
+  readonly canCancelBooking = computed(() => this.isActive() && !this.cancellationCutoffExpired());
 
   constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService) {
     addIcons({ addOutline, alertCircleOutline, calendarOutline, callOutline, cardOutline, chatbubbleEllipsesOutline, checkmarkCircleOutline, checkmarkOutline, chevronForwardOutline, closeCircleOutline, copyOutline, downloadOutline, giftOutline, helpCircleOutline, locationOutline, navigateOutline, personOutline, repeatOutline, settingsOutline, shareSocialOutline, storefrontOutline, swapHorizontalOutline, timeOutline });
   }
 
   ngOnInit() {
+    this.routeSubscription = this.route.paramMap.subscribe((params) => {
+      const id = params.get("id") || "";
+      if (!id || id === this.lastOpenedId) return;
+      this.lastOpenedId = id;
+      this.id.set(id);
+      this.resetDetailScroll();
+      void this.reload();
+    });
+    this.resetDetailScroll();
     this.reload();
+  }
+
+  ionViewWillEnter() {
+    this.resetDetailScroll();
   }
 
   ngOnDestroy() {
     if (this.copyResetTimer) clearTimeout(this.copyResetTimer);
+    this.routeSubscription?.unsubscribe();
   }
 
   backHref(): string {
@@ -763,6 +897,10 @@ export class BookingDetailPage implements OnInit, OnDestroy {
 
   helpRoute(): string {
     return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+  }
+
+  bookingSupportRoute(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/support";
   }
 
   supportQuery(): { mode: string; bookingId: string } {
@@ -787,6 +925,11 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     } catch {
       return;
     }
+  }
+
+  private resetDetailScroll() {
+    window.setTimeout(() => void this.detailContent?.scrollToTop(0), 0);
+    window.setTimeout(() => void this.detailContent?.scrollToTop(0), 80);
   }
 
   async copyReference() {
@@ -844,7 +987,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   requestSupport() {
     const booking = this.booking();
     if (!booking) return;
-    void this.router.navigate([this.helpRoute()], { queryParams: this.supportQuery() });
+    void this.router.navigate([this.bookingSupportRoute()], { queryParams: this.supportQuery() });
   }
 
   addToCalendar() {
@@ -894,10 +1037,13 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   openManageSheet() {
+    if (!this.isActive()) return;
     this.manageSheetOpen.set(true);
   }
 
   closeManageSheet(): void {
+    if (this.manageSheetDirty() && !window.confirm("Discard changes in this manage booking sheet?")) return;
+    this.manageSheetDirty.set(false);
     this.manageSheetOpen.set(false);
   }
 
@@ -907,6 +1053,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   cancelFromSheet() {
+    if (!this.canCancelBooking()) return;
     this.closeManageSheet();
     this.cancelDone.set(false);
     this.cancelSubmitting.set(false);
@@ -914,6 +1061,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   changeServices() {
+    if (!this.canChangeServices()) return;
     const booking = this.booking();
     const identity = this.resolvedBusiness()?.slug || booking?.businessId;
     if (!booking || !identity) {
@@ -927,6 +1075,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   changeProfessional() {
+    if (!this.canChangeProfessional()) return;
     const booking = this.booking();
     const identity = this.resolvedBusiness()?.slug || booking?.businessId;
     if (!booking || !identity) {
@@ -946,6 +1095,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   addService() {
+    if (!this.canAddServiceToBooking()) return;
     const booking = this.booking();
     const identity = this.resolvedBusiness()?.slug || booking?.businessId;
     if (!booking || !identity) {
@@ -958,6 +1108,35 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     });
   }
 
+  canChangeServices(): boolean {
+    const booking = this.booking();
+    return this.isActive() && !!booking?.serviceId && !!(this.resolvedBusiness()?.slug || booking.businessId);
+  }
+
+  canChangeProfessional(): boolean {
+    const booking = this.booking();
+    return this.isActive() && !!booking?.serviceId && !!(this.resolvedBusiness()?.slug || booking.businessId);
+  }
+
+  canAddServiceToBooking(): boolean {
+    const booking = this.booking();
+    return this.isActive() && !!(this.resolvedBusiness()?.slug || booking?.businessId);
+  }
+
+  manageActionReason(): string {
+    if (!this.isActive()) return "Past or completed bookings cannot be changed.";
+    const booking = this.booking();
+    if (!booking || !(this.resolvedBusiness()?.slug || booking.businessId)) return "Salon details are missing for this booking.";
+    if (!booking.serviceId) return "Original service details are missing for this booking.";
+    return "This action is unavailable for this booking.";
+  }
+
+  cancelDisabledReason(): string {
+    if (!this.isActive()) return "Past bookings cannot be cancelled.";
+    if (this.cancellationCutoffExpired()) return "Cancellation cutoff has expired.";
+    return "Cancellation is unavailable for this booking.";
+  }
+
   private resolveSalonPhone(business: Business | null): { label: string; href: string } | null {
     if (!business) return null;
     const value = [business.appointmentNumber, business.mobileNumber, business.phone, business.telephoneNumber]
@@ -966,7 +1145,17 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     const digits = value.replace(/\D/g, "");
     if (digits.length < 7 || digits.length > 15) return null;
     const dialValue = `${value.startsWith("+") ? "+" : ""}${digits}`;
-    return { label: value, href: `tel:${dialValue}` };
+    return { label: this.formatPhoneLabel(value, digits), href: `tel:${dialValue}` };
+  }
+
+  private formatPhoneLabel(raw: string, digits: string): string {
+    if (raw.trim().startsWith("+")) {
+      const country = digits.length > 10 ? digits.slice(0, digits.length - 10) : "";
+      const local = digits.length > 10 ? digits.slice(-10) : digits;
+      return country ? `+${country} ${local.slice(0, 5)} ${local.slice(5)}` : raw.trim();
+    }
+    if (digits.length === 10) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+    return raw.trim();
   }
 
   private resolveDirectionsUrl(): string {
@@ -1044,18 +1233,144 @@ export class BookingDetailPage implements OnInit, OnDestroy {
     }
   }
 
+  private formatAppointmentWindow(): string {
+    const start = this.calendarStart();
+    if (!start) return this.appointmentStart() || "Time to be confirmed";
+    const end = this.appointmentEnd(start);
+    const day = new Intl.DateTimeFormat("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).format(start);
+    const timeFormatter = new Intl.DateTimeFormat("en-IN", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
+    return `${day} · ${timeFormatter.format(start).toUpperCase()}–${timeFormatter.format(end).toUpperCase()}`;
+  }
+
+  private appointmentEnd(start: Date): Date {
+    const booking = this.booking();
+    const explicit = this.parseDate(booking?.endsAt || booking?.endAt);
+    if (explicit) return explicit;
+    return new Date(start.getTime() + this.bookingDurationMinutes() * 60_000);
+  }
+
+  private isPastBooking(booking: Booking): boolean {
+    const start = this.parseDate(booking.startsAt || booking.startAt || booking.displayStartAt);
+    if (!start) return false;
+    const explicitEnd = this.parseDate(booking.endsAt || booking.endAt);
+    const duration = Number(booking.durationMinutes || booking.serviceDurationMinutes || 60);
+    const end = explicitEnd && explicitEnd.getTime() > start.getTime()
+      ? explicitEnd
+      : new Date(start.getTime() + (Number.isFinite(duration) && duration > 0 ? duration : 60) * 60_000);
+    return end.getTime() <= Date.now();
+  }
+
+  private bookingDurationMinutes(): number {
+    const booking = this.booking();
+    const minutes = Number(booking?.durationMinutes || booking?.serviceDurationMinutes || 60);
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : 60;
+  }
+
+  private formatDuration(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (hours && rest) return `${hours}h ${rest}m`;
+    if (hours) return `${hours}h`;
+    return `${minutes} min`;
+  }
+
   private paymentLabel(value: unknown): string {
+    const amount = this.bookingAmountPaise();
+    const paid = this.bookingPaidPaise();
+    const balance = Math.max(0, amount - paid);
     const raw = String(value || "").trim();
-    if (!raw) return "Pay at salon";
+    if (!raw) return amount > 0 ? `${this.money(amount)} payable at salon` : "Payment due at salon";
     const normalized = raw.toLowerCase().replace(/[\s-]+/g, "_").replace(/[^a-z0-9_]/g, "");
-    if (["paid", "payment_received", "success", "captured"].includes(normalized)) return "Paid online";
+    if (["paid", "payment_received", "success", "captured"].includes(normalized)) return amount > 0 ? `Paid ${this.money(amount)}` : "Paid";
+    if (["partial", "part_paid", "partially_paid", "advance_paid"].includes(normalized)) return paid > 0 && balance > 0 ? `Paid ${this.money(paid)} · ${this.money(balance)} balance` : "Part payment received";
     if (["refunded", "refund_completed", "refund_issued"].includes(normalized)) return "Refunded";
     if (["not_required", "no_payment_required"].includes(normalized)) {
-      return this.booking()?.status === "completed" ? "No charge" : "Pay at salon";
+      return amount > 0 ? `${this.money(amount)} payable at salon` : (this.booking()?.status === "completed" ? "No charge" : "Payment due at salon");
     }
-    if (["pay_at_venue", "pay_on_arrival", "pay_at_salon", "payment_at_venue", "cash_at_venue", "pending", "unpaid", "due"].includes(normalized)) return "Pay at salon";
+    if (["pay_at_venue", "pay_on_arrival", "pay_at_salon", "payment_at_venue", "cash_at_venue", "pending", "unpaid", "due"].includes(normalized)) return amount > 0 ? `${this.money(amount)} payable at salon` : "Payment due at salon";
     const readable = raw.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
     return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : raw;
+  }
+
+  private bookingAmountPaise(): number {
+    const record = this.booking() as Record<string, unknown> | null;
+    return this.firstMoneyPaise(record, ["totalAmountPaise", "amountPaise", "totalPaise", "payablePaise", "pricePaise", "totalAmount", "amount", "payableAmount"]);
+  }
+
+  private bookingPaidPaise(): number {
+    const record = this.booking() as Record<string, unknown> | null;
+    return this.firstMoneyPaise(record, ["paidAmountPaise", "amountPaidPaise", "advancePaidPaise", "paidPaise", "paidAmount", "amountPaid", "advancePaid"]);
+  }
+
+  private cancellationFeePaise(): number {
+    const record = this.booking() as Record<string, unknown> | null;
+    const explicit = this.firstMoneyPaise(record, ["cancellationFeePaise", "cancelFeePaise", "cancellationChargePaise", "cancellationPenaltyPaise", "cancellationFee", "cancelFee", "cancellationCharge", "cancellationPenalty"]);
+    if (explicit > 0) return explicit;
+    const policy = String(record?.["cancellationPolicy"] || "");
+    const percent = policy.match(/(\d+(?:\.\d+)?)\s*(?:%|percent)/i);
+    if (percent) return Math.round(this.bookingAmountPaise() * Number(percent[1]) / 100);
+    return 0;
+  }
+
+  private cancellationCutoffDate(): Date | null {
+    const record = this.booking() as Record<string, unknown> | null;
+    const explicit = ["cancellationCutoffAt", "cancellationDeadlineAt", "cancellableUntil", "cancelUntil", "freeCancellationUntil"]
+      .map((key) => this.parseDate(String(record?.[key] || "")))
+      .find((date): date is Date => !!date);
+    if (explicit) return explicit;
+
+    const start = this.calendarStart();
+    const policy = String(record?.["cancellationPolicy"] || "");
+    const hours = policy.match(/(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/i);
+    if (start && hours) return new Date(start.getTime() - Number(hours[1]) * 60 * 60_000);
+    return null;
+  }
+
+  private cancellationCutoffExpired(): boolean {
+    const cutoff = this.cancellationCutoffDate();
+    return !!cutoff && cutoff.getTime() <= Date.now();
+  }
+
+  private firstMoneyPaise(record: Record<string, unknown> | null, keys: string[]): number {
+    if (!record) return 0;
+    for (const key of keys) {
+      const value = Number(record[key] || 0);
+      if (Number.isFinite(value) && value > 0) return key.toLowerCase().endsWith("paise") ? Math.round(value) : Math.round(value * 100);
+    }
+    return 0;
+  }
+
+  private money(paise: number): string {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Math.max(0, paise) / 100);
+  }
+
+  private formatShortDateTime(date: Date): string {
+    return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Kolkata" }).format(date);
+  }
+
+  private formatBookingReference(value: string): string {
+    const raw = String(value || "").trim();
+    if (!raw) return "Booking reference pending";
+    const cleaned = raw.replace(/^booking[-_#\s]*/i, "").replace(/_/g, "-").toUpperCase();
+    return `Booking #${cleaned}`;
+  }
+
+  private extractServiceTimeline(): Array<{ index: number; name: string; meta: string }> {
+    const booking = this.booking() as (Record<string, unknown> & { serviceName?: string; staffName?: string }) | null;
+    if (!booking) return [];
+    const rows = ["services", "serviceItems", "items", "lineItems"]
+      .map((key) => booking[key])
+      .find((value): value is unknown[] => Array.isArray(value)) || [];
+    if (rows.length <= 1) return [];
+    return rows.map((row, index) => {
+      const item = row as Record<string, unknown>;
+      const name = String(item["name"] || item["serviceName"] || item["title"] || `Service ${index + 1}`);
+      const staff = String(item["staffName"] || item["professionalName"] || booking.staffName || "").trim();
+      const minutes = Number(item["durationMinutes"] || item["serviceDurationMinutes"] || 0);
+      const price = this.firstMoneyPaise(item, ["pricePaise", "amountPaise", "totalPaise", "price", "amount"]);
+      const meta = [staff, Number.isFinite(minutes) && minutes > 0 ? this.formatDuration(minutes) : "", price > 0 ? this.money(price) : ""].filter(Boolean).join(" · ") || "Included in booking";
+      return { index: index + 1, name, meta };
+    });
   }
 
   private parseDate(value?: string): Date | null {
@@ -1186,7 +1501,7 @@ export class BookingDetailPage implements OnInit, OnDestroy {
   }
 
   async cancel() {
-    if (!this.booking()) return;
+    if (!this.booking() || !this.canCancelBooking()) return;
     this.cancelDone.set(false);
     this.cancelSubmitting.set(false);
     this.cancelSheetOpen.set(true);

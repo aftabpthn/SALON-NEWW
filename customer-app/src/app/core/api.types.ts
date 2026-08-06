@@ -388,7 +388,7 @@ export interface Booking {
   address?: string;
   latitude?: number | null;
   longitude?: number | null;
-  status: "pending" | "confirmed" | "completed" | "cancelled";
+  status: "pending" | "confirmed" | "completed" | "cancelled" | "no_show";
   paymentStatus?: "not_required" | "pending" | "paid" | "refunded";
   cancellationPolicy?: string;
 }

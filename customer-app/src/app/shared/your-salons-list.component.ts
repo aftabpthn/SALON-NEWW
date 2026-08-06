@@ -14,18 +14,26 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       <div class="salons-header">
         <h3>Your salons</h3>
         @if (salons.length > 0) {
-          <span class="count">{{ salons.length }} visited</span>
+          <span class="count">{{ salons.length }} visited or chosen</span>
         }
       </div>
 
       @if (salons.length === 0) {
         <div class="empty-state">
           @if (hasBookings) {
-            <p>Your salon visits will appear here as you book and visit.</p>
-            <a class="empty-link" routerLink="/tabs/bookings">View my bookings</a>
+            <p>Your salons shows visited salons or the salon you choose as primary. Booked salons appear here after a visit or when you choose one.</p>
+            <div class="empty-state-facts" aria-label="Salon account summary">
+              <span>{{ bookingCount }} booked</span>
+              <span>{{ favouriteCount }} favourite{{ favouriteCount === 1 ? '' : 's' }}</span>
+              <span>0 visited</span>
+            </div>
+            <div class="empty-actions">
+              <a class="empty-link" routerLink="/tabs/my-salon">Choose My Salon</a>
+              <a class="empty-link secondary" routerLink="/tabs/search">Explore salons</a>
+            </div>
           } @else {
-            <p>You haven't visited any salons yet. Start exploring!</p>
-            <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+            <p>You haven't visited or chosen a salon yet. Favourites and booked salons are tracked separately.</p>
+            <ion-button class="primary-gradient" routerLink="/tabs/search">Explore salons</ion-button>
           }
         </div>
       } @else {
@@ -120,6 +128,23 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       text-align: center;
     }
 
+    .empty-state-facts,
+    .empty-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .empty-state-facts span {
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.76rem;
+      font-weight: 850;
+    }
+
     .empty-state ion-button {
       min-height: 44px;
       margin: 0;
@@ -139,6 +164,10 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
       font-size: 0.85rem;
       font-weight: 900;
       text-decoration: none;
+    }
+
+    .empty-link.secondary {
+      color: var(--text);
     }
 
     .empty-state p {
@@ -296,6 +325,8 @@ export class YourSalonsListComponent {
   @Input() salons: CustomerSalonRelationship[] = [];
   @Input() primarySalon: CustomerPrimarySalon | null = null;
   @Input() hasBookings = false;
+  @Input() bookingCount = 0;
+  @Input() favouriteCount = 0;
   @Output() setAsPrimary = new EventEmitter<CustomerSalonRelationship>();
   @Output() removePrimary = new EventEmitter<void>();
 

@@ -61,6 +61,11 @@ const BOOKING_PROGRESS_STEPS: BookingProgressStep[] = [
     .progress-marker { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 999px; background: rgba(102, 112, 133, 0.12); font-size: 0.8rem; font-weight: 950; line-height: 1; }
     .progress-marker ion-icon { font-size: 1.05rem; }
     .progress-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+    :host-context(.editing) .booking-progress { gap: 6px; padding: 7px 0 5px; }
+    :host-context(.editing) .booking-progress-step { min-height: 44px; gap: 4px; padding: 6px 4px; border-radius: 13px; }
+    :host-context(.editing) .progress-marker { width: 21px; height: 21px; font-size: 0.72rem; }
+    :host-context(.editing) .progress-marker ion-icon { font-size: 0.9rem; }
+    :host-context(.editing) .progress-label { font-size: 0.76rem; }
     @media (max-width: 430px) {
       .booking-progress { gap: 6px; padding: 8px 0 6px; }
       .booking-progress-step { min-height: 54px; padding: 7px 3px; border-radius: 14px; }

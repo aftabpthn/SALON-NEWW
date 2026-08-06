@@ -174,7 +174,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private isRestorableRoute(route: string): boolean {
-    return /^(?:\/my-salon\/|\/tabs\/|\/business\/|\/booking\/|\/bookings\/|\/notifications(?:[/?]|$)|\/settings(?:[/?]|$)|\/help(?:[/?]|$)|\/search(?:[/?]|$))/.test(route);
+    return /^(?:\/my-salon\/|\/tabs\/|\/business\/|\/booking\/|\/bookings\/|\/support(?:[/?]|$)|\/notifications(?:[/?]|$)|\/settings(?:[/?]|$)|\/help(?:[/?]|$)|\/search(?:[/?]|$))/.test(route);
   }
 
   private finishLaunchShell() {

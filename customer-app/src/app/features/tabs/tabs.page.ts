@@ -50,7 +50,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         <span>You're offline — some features may be unavailable.</span>
       </aside>
     }
-    <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app quick header">
+    <header class="mobile-topbar" [class.salon-mode-hidden]="salonModeActive() || supportSubflowActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app quick header">
       <a class="mobile-brand" routerLink="/tabs/home" (click)="closeMenu()">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span>
@@ -67,7 +67,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </button>
       </div>
     </header>
-    @if (menuOpen() && !salonModeActive()) {
+    @if (menuOpen() && !salonModeActive() && !supportSubflowActive()) {
       <button type="button" class="mobile-menu-backdrop" aria-label="Close menu" (click)="closeMenu()"></button>
       <section class="mobile-menu-sheet" aria-label="Customer app menu">
         <div class="menu-sheet-head">
@@ -117,7 +117,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         </nav>
       </section>
     }
-    <nav class="web-nav" [class.salon-mode-hidden]="salonModeActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app navigation">
+    <nav class="web-nav" [class.salon-mode-hidden]="salonModeActive() || supportSubflowActive()" [class.offline-active]="marketplace.offline()" aria-label="Customer app navigation">
       <a class="brand" routerLink="/tabs/home">
         <img class="brand-mark" src="assets/icons/icon.svg" alt="" aria-hidden="true" />
         <span class="brand-copy">
@@ -158,7 +158,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
       </div>
     </nav>
     <ion-tabs [class.salon-mode-active]="salonModeActive()" [class.offline-active]="marketplace.offline()">
-      @if (!salonModeActive()) {
+      @if (!salonModeActive() && !supportSubflowActive()) {
       <ion-tab-bar slot="bottom">
         <ion-tab-button tab="search" href="/tabs/search">
           <ion-icon name="compass-outline"></ion-icon>
@@ -874,6 +874,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 export class TabsPage implements OnInit {
   readonly locationLabel = signal(this.readLocationLabel());
   readonly menuOpen = signal(false);
+  readonly currentUrl = signal(this.router.url);
   private readonly mobileSwipeRoutes = ["/tabs/search", "/tabs/bookings", "/tabs/profile"];
   private swipeStartX = 0;
   private swipeStartY = 0;
@@ -886,6 +887,8 @@ export class TabsPage implements OnInit {
 
   ngOnInit(): void {
     this.router.events.pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd)).subscribe(() => {
+      this.currentUrl.set(this.router.url);
+      if (this.supportSubflowActive()) this.closeMenu();
       if (!this.marketplace.salonMode() || this.normalizeSwipeRoute(this.router.url) !== "/tabs/home") return;
       void this.router.navigateByUrl(this.mySalonHref(), { replaceUrl: true });
     });
@@ -900,7 +903,7 @@ export class TabsPage implements OnInit {
 
   @HostListener("window:touchstart", ["$event"])
   startSwipe(event: TouchEvent) {
-    if (this.salonModeActive()) return;
+    if (this.salonModeActive() || this.supportSubflowActive()) return;
     if (!window.matchMedia("(max-width: 599px)").matches || event.touches.length !== 1) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest("ion-tab-bar, button, a, input, textarea, select")) return;
@@ -944,6 +947,11 @@ export class TabsPage implements OnInit {
 
   salonModeActive(): boolean {
     return this.marketplace.salonMode();
+  }
+
+  supportSubflowActive(): boolean {
+    const url = this.currentUrl();
+    return this.normalizeSwipeRoute(url) === "/tabs/support" && /(?:[?&])mode=booking(?:&|$)/.test(url) && /(?:[?&])bookingId=/.test(url);
   }
 
   onSalonDashboard(): boolean {

@@ -1,6 +1,6 @@
-import { Component, OnInit, computed, signal } from "@angular/core";
+import { Component, HostListener, OnInit, computed, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
-import { ActivatedRoute, RouterLink } from "@angular/router";
+import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { firstValueFrom } from "rxjs";
@@ -67,6 +67,16 @@ interface HubRecord {
   description?: string;
   route?: string;
   demo?: boolean;
+}
+
+type SupportIssueValue = "" | "reschedule_problem" | "payment_issue" | "salon_no_response" | "service_issue" | "refund_issue" | "other";
+
+interface SupportDraft {
+  issue: SupportIssueValue;
+  message: string;
+  preferredContact: CustomerBookingSupportPreferredContact;
+  priority: CustomerBookingSupportPriority;
+  attachmentName: string;
 }
 
 const hubConfigs: Record<string, HubConfig> = {
@@ -165,21 +175,22 @@ const hubConfigs: Record<string, HubConfig> = {
         @if (bookingSupportMode()) {
           <section class="booking-support" aria-labelledby="booking-support-title">
             <header class="support-heading">
-              <div class="hero-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
-              <div>
-                <p class="support-eyebrow">Booking support</p>
-                <div class="wallet-title-row">
-                  <ion-back-button class="content-back-button" [defaultHref]="hubBackHref()" text=""></ion-back-button>
-                  <h1 id="booking-support-title">How can we help?</h1>
-                </div>
-                <span>Send a request linked securely to your booking.</span>
+              <p class="support-eyebrow">Booking support</p>
+              <div class="wallet-title-row support-title-line">
+                <button type="button" class="content-back-button support-back-button" aria-label="Back" (click)="goBackFromSupport()">
+                  <ion-icon name="arrow-undo-outline" aria-hidden="true"></ion-icon>
+                </button>
+                <div class="hero-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
+                <h1 id="booking-support-title">How can we help?</h1>
               </div>
+              <span>Send a request linked securely to your booking.</span>
             </header>
 
             <div class="support-status">
               @if (supportLoading()) {
-                <section class="support-panel" role="status"><h2>Loading booking</h2><p>Confirming your booking details securely.</p></section>
-              } @else if (supportLoadError()) {
+                <p class="support-inline-loader" role="status">Loading booking details...</p>
+              }
+              @if (supportLoadError()) {
                 <section class="support-panel support-error" role="alert">
                   <h2>Booking support is unavailable</h2>
                   <p>{{ supportLoadError() }}</p>
@@ -197,6 +208,7 @@ const hubConfigs: Record<string, HubConfig> = {
                     <div><dt>Status</dt><dd>{{ ticket.status }}</dd></div>
                   </dl>
                   <ion-button class="primary-gradient" [routerLink]="hubRoute('/bookings/' + ticket.bookingId)">Back to booking</ion-button>
+                  <ion-button fill="outline" class="secondary-button" [routerLink]="hubRoute('/tabs/support')">View support status</ion-button>
                 </section>
               } @else if (supportBooking(); as booking) {
                 <section class="support-booking-card" aria-label="Verified booking details">
@@ -207,7 +219,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   </div>
                   <dl>
                     <div><dt>Appointment</dt><dd>{{ supportAppointmentDisplay() }}</dd></div>
-                    <div><dt>Reference</dt><dd>{{ booking.reference || booking.id }}</dd></div>
+                    <div class="support-reference"><dt>Reference</dt><dd>{{ booking.reference || booking.id }}</dd></div>
                   </dl>
                 </section>
 
@@ -219,55 +231,71 @@ const hubConfigs: Record<string, HubConfig> = {
 
                   <div class="field-group">
                     <label for="support-category">What do you need help with?</label>
-                    <select id="support-category" name="supportCategory" [(ngModel)]="supportCategory" required>
-                      @for (category of supportCategories; track category.value) {
-                        <option [value]="category.value">{{ category.label }}</option>
+                    <select id="support-category" name="supportIssue" [(ngModel)]="supportIssue" (ngModelChange)="persistSupportDraft()" required>
+                      <option value="" disabled>Select an issue</option>
+                      @for (issue of supportIssues; track issue.value) {
+                        <option [value]="issue.value">{{ issue.label }}</option>
                       }
                     </select>
                   </div>
 
                   <div class="field-group">
                     <div class="field-label-row">
-                      <label for="support-message">Message</label>
+                      <label for="support-message">Message <span class="required-label">required</span></label>
                       <span>{{ supportMessage.length }}/1200</span>
                     </div>
                     <textarea
                       id="support-message"
                       name="supportMessage"
                       [(ngModel)]="supportMessage"
+                      (ngModelChange)="persistSupportDraft()"
                       maxlength="1200"
                       rows="6"
                       required
                       placeholder="Tell us what happened and how we can help."
                     ></textarea>
+                    <small class="field-hint">Minimum 10 characters so support has enough context.</small>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="support-attachment">Screenshot or photo</label>
+                    <label class="attachment-control" for="support-attachment">
+                      <ion-icon name="images-outline" aria-hidden="true"></ion-icon>
+                      <span>{{ supportAttachmentName || "Add screenshot/photo (optional)" }}</span>
+                    </label>
+                    <input id="support-attachment" class="attachment-input" type="file" accept="image/*" (change)="captureSupportAttachment($event)" />
                   </div>
 
                   <div class="support-field-grid">
                     <div class="field-group">
                       <label for="preferred-contact">Preferred contact</label>
-                      <select id="preferred-contact" name="preferredContact" [(ngModel)]="preferredContact">
+                      <select id="preferred-contact" name="preferredContact" [(ngModel)]="preferredContact" (ngModelChange)="persistSupportDraft()">
                         <option value="in_app">In-app</option>
                         <option value="phone">Phone</option>
                         <option value="email">Email</option>
                       </select>
                     </div>
                     <div class="field-group">
-                      <label for="support-priority">Priority</label>
-                      <select id="support-priority" name="supportPriority" [(ngModel)]="supportPriority">
+                      <label for="support-priority">Priority <span class="optional-label">optional</span></label>
+                      <select id="support-priority" name="supportPriority" [(ngModel)]="supportPriority" (ngModelChange)="persistSupportDraft()">
+                        <option value="medium">Normal</option>
                         <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
+                        <option value="high">Urgent - safety, payment loss, or salon no-show only</option>
                       </select>
                     </div>
                   </div>
+
+                  <p class="response-time">Usually replies within 2 hours.</p>
 
                   @if (supportSubmitError()) {
                     <p class="form-error" role="alert">{{ supportSubmitError() }}</p>
                   }
                   <span class="support-live" aria-live="polite">{{ supportSubmitting() ? "Sending support request" : "" }}</span>
-                  <ion-button type="submit" expand="block" class="primary-gradient" [disabled]="!supportFormValid() || supportSubmitting()">
-                    {{ supportSubmitting() ? "Sending request" : "Send support request" }}
-                  </ion-button>
+                  <div class="support-submit-bar">
+                    <ion-button type="submit" expand="block" class="primary-gradient" [disabled]="!supportFormValid() || supportSubmitting()">
+                      {{ supportSubmitting() ? "Sending request" : "Send support request" }}
+                    </ion-button>
+                  </div>
                 </form>
               }
             </div>
@@ -3209,21 +3237,38 @@ const hubConfigs: Record<string, HubConfig> = {
       display: grid;
       gap: 14px;
       margin-inline: auto;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      padding-bottom: calc(92px + env(safe-area-inset-bottom));
     }
 
     .support-heading {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 14px;
-      padding: 18px;
+      gap: 7px;
+      padding: 16px;
       border-radius: var(--radius-lg);
       color: #FFFFFF;
       background: linear-gradient(145deg, var(--brand-900), var(--brand-800));
       box-shadow: 0 14px 34px rgba(28, 28, 28, 0.15);
     }
 
-    .support-heading .hero-icon { width: 52px; height: 52px; border-radius: 18px; font-size: 1.4rem; }
+    .support-heading .hero-icon { width: 42px; height: 42px; border-radius: 14px; font-size: 1.18rem; }
+    .support-title-line { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 9px; margin-left: 0; }
+    .support-heading .content-back-button {
+      position: static;
+      left: auto;
+      top: auto;
+      --color: #FFFFFF;
+      filter: none;
+    }
+    .support-back-button {
+      display: grid;
+      place-items: center;
+      border: 0;
+      color: #FFFFFF;
+      background: transparent;
+      cursor: pointer;
+    }
+    .support-back-button ion-icon { font-size: 1.35rem; }
     .support-heading h1, .support-heading p, .support-heading span { margin: 0; color: #FFFFFF; }
     .support-heading h1 { font-size: clamp(1.45rem, 6vw, 2rem); letter-spacing: -0.04em; line-height: 1.08; }
     .support-heading span { display: block; margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 0.86rem; line-height: 1.4; }
@@ -3239,6 +3284,18 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-panel h2, .support-panel p { margin: 0; }
     .support-panel h2 { font-size: 1.2rem; letter-spacing: -0.025em; }
     .support-panel p { margin-top: 7px; color: var(--muted); line-height: 1.5; }
+    .support-inline-loader {
+      margin: 0;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1.2;
+      justify-self: start;
+    }
     .support-error { border-color: rgba(180, 35, 24, 0.28); }
     .support-inline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
     .support-inline-actions ion-button { min-height: 44px; margin: 0; text-transform: none; }
@@ -3255,13 +3312,14 @@ const hubConfigs: Record<string, HubConfig> = {
       background: var(--brand-900);
       box-shadow: 0 14px 34px rgba(28, 28, 28, 0.14);
     }
-    .support-booking-card > div { padding: 15px 16px 12px; }
-    .support-booking-card h2 { margin: 9px 0 3px; color: #FFFFFF; font-size: 1.25rem; letter-spacing: -0.035em; overflow-wrap: anywhere; }
-    .support-booking-card p { margin: 0; color: rgba(255, 255, 255, 0.78); overflow-wrap: anywhere; }
+    .support-booking-card > div { padding: 12px 14px 9px; }
+    .support-booking-card h2 { margin: 7px 0 2px; color: #FFFFFF; font-size: 1.08rem; letter-spacing: -0.03em; overflow-wrap: anywhere; }
+    .support-booking-card p { margin: 0; color: rgba(255, 255, 255, 0.78); font-size: 0.84rem; overflow-wrap: anywhere; }
     .support-booking-card dl { display: grid; margin: 0; background: rgba(99, 102, 241, 0.36); }
-    .support-booking-card dl div { min-width: 0; padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-    .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.80rem; font-weight: 800; }
-    .support-booking-card dd { margin: 3px 0 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 750; overflow-wrap: anywhere; }
+    .support-booking-card dl div { min-width: 0; padding: 9px 14px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+    .support-booking-card dt { color: rgba(255, 255, 255, 0.74); font-size: 0.76rem; font-weight: 800; }
+    .support-booking-card dd { margin: 2px 0 0; color: #FFFFFF; font-size: 0.84rem; font-weight: 750; overflow-wrap: anywhere; }
+    .support-booking-card .support-reference dt, .support-booking-card .support-reference dd { color: rgba(255, 255, 255, 0.68); }
     .support-booking-card .status-pill { text-transform: capitalize; }
     .support-booking-card .status-pill.status-pending { color: #92600A; background: rgba(251, 191, 36, 0.14); }
     .support-booking-card .status-pill.status-confirmed { color: #047857; background: rgba(16, 185, 129, 0.13); }
@@ -3285,9 +3343,10 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-context-note ion-icon { flex: none; margin-top: 2px; font-size: 1rem; }
     .field-group { min-width: 0; display: grid; gap: 7px; }
     .field-group label { color: var(--text); font-size: 0.84rem; font-weight: 850; }
+    .required-label, .optional-label { color: var(--muted); font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
     .field-label-row span { color: var(--muted); font-size: 0.82rem; font-weight: 750; }
-    .field-group select, .field-group textarea {
+    .field-group select, .field-group textarea, .attachment-control {
       width: 100%;
       min-width: 0;
       min-height: 44px;
@@ -3300,9 +3359,25 @@ const hubConfigs: Record<string, HubConfig> = {
       line-height: 1.4;
     }
     .field-group textarea { min-height: 132px; resize: vertical; }
-    .field-group select:focus-visible, .field-group textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
+    .field-group select:focus-visible, .field-group textarea:focus-visible, .attachment-control:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--focus); }
+    .field-hint { color: var(--muted); font-size: 0.78rem; font-weight: 700; line-height: 1.35; }
+    .attachment-control { display: flex; align-items: center; gap: 9px; cursor: pointer; }
+    .attachment-control ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 1.05rem; }
+    .attachment-control span { min-width: 0; overflow-wrap: anywhere; }
+    .attachment-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     .support-field-grid { display: grid; gap: 12px; }
     .support-form ion-button { min-height: 46px; margin: 0; text-transform: none; }
+    .response-time { margin: -3px 0 0; color: var(--muted); font-size: 0.82rem; font-weight: 750; line-height: 1.4; }
+    .support-submit-bar {
+      position: sticky;
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      z-index: 4;
+      margin: 2px -6px -6px;
+      padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), var(--surface) 34%);
+      backdrop-filter: blur(10px);
+    }
     .form-error { margin: -3px 0 0; color: #B42318; font-size: 0.84rem; font-weight: 750; line-height: 1.4; }
     .support-live { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
@@ -3330,6 +3405,11 @@ const hubConfigs: Record<string, HubConfig> = {
         margin-top: 3px;
         font-size: 1.55rem;
         line-height: 1;
+      }
+
+      .booking-support {
+        padding-top: calc(16px + env(safe-area-inset-top));
+        padding-bottom: calc(96px + env(safe-area-inset-bottom));
       }
 
       .wallet-heading .wallet-intro {
@@ -3706,10 +3786,19 @@ export class CustomerHubPage implements OnInit {
   readonly supportSubmitting = signal(false);
   readonly supportLoadError = signal("");
   readonly supportSubmitError = signal("");
-  supportCategory: CustomerBookingSupportCategory = "other";
+  supportIssue: SupportIssueValue = "";
   supportMessage = "";
+  supportAttachmentName = "";
   preferredContact: CustomerBookingSupportPreferredContact = "in_app";
   supportPriority: CustomerBookingSupportPriority = "medium";
+  readonly supportIssues: { value: Exclude<SupportIssueValue, "">; label: string; category: CustomerBookingSupportCategory }[] = [
+    { value: "reschedule_problem", label: "Reschedule problem", category: "reschedule" },
+    { value: "payment_issue", label: "Payment issue", category: "payment" },
+    { value: "salon_no_response", label: "Salon did not respond", category: "salon_unavailable" },
+    { value: "service_issue", label: "Service issue", category: "other" },
+    { value: "refund_issue", label: "Refund issue", category: "payment" },
+    { value: "other", label: "Other", category: "other" }
+  ];
   readonly supportCategories: { value: CustomerBookingSupportCategory; label: string }[] = [
     { value: "reschedule", label: "Edit appointment" },
     { value: "cancellation", label: "Cancellation" },
@@ -3733,7 +3822,7 @@ export class CustomerHubPage implements OnInit {
     { slug: "notifications", label: "Notifications", copy: "Booking and account updates.", icon: "chatbubbles-outline", route: "/notifications" }
   ];
 
-  constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly api: CustomerApiService) {
+  constructor(private readonly route: ActivatedRoute, private readonly router: Router, readonly marketplace: MarketplaceService, private readonly alerts: AlertController, private readonly api: CustomerApiService) {
     addIcons({
       arrowUndoOutline,
       briefcaseOutline,
@@ -3777,6 +3866,11 @@ export class CustomerHubPage implements OnInit {
     this.reload();
   }
 
+  @HostListener("document:visibilitychange")
+  persistDraftOnBackground(): void {
+    if (document.visibilityState === "hidden") this.persistSupportDraft();
+  }
+
   reload() {
     if (this.bookingSupportMode()) {
       void this.loadBookingSupportContext();
@@ -3807,17 +3901,28 @@ export class CustomerHubPage implements OnInit {
 
   async loadBookingSupportContext() {
     const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
-    this.supportBooking.set(null);
     this.supportTicket.set(null);
     this.supportLoadError.set("");
     this.supportSubmitError.set("");
     if (!bookingId) {
+      this.supportBooking.set(null);
       this.supportLoadError.set("We couldn't verify a booking for this support request. Please use general help instead.");
       return;
     }
+
+    const cachedBooking = this.marketplace.findBooking(bookingId);
+    if (cachedBooking) {
+      this.supportBooking.set(cachedBooking);
+      this.restoreSupportDraft();
+      this.supportLoading.set(false);
+      return;
+    }
+
+    this.supportBooking.set(null);
     this.supportLoading.set(true);
     try {
       this.supportBooking.set(await this.marketplace.loadBooking(bookingId));
+      this.restoreSupportDraft();
     } catch {
       this.supportLoadError.set("We couldn't verify this booking. Please retry or use general help.");
     } finally {
@@ -3827,29 +3932,143 @@ export class CustomerHubPage implements OnInit {
 
   supportFormValid(): boolean {
     const length = this.supportMessage.trim().length;
-    return !!this.supportBooking() && length > 0 && length <= 1200;
+    return !!this.supportBooking() && !!this.supportIssue && length >= 10 && length <= 1200;
+  }
+
+  captureSupportAttachment(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.supportAttachmentName = input.files?.[0]?.name || "";
+    this.persistSupportDraft();
+  }
+
+  persistSupportDraft(): void {
+    if (!this.bookingSupportMode() || this.supportTicket()) return;
+    const key = this.supportDraftKey();
+    if (!key) return;
+    const draft: SupportDraft = {
+      issue: this.supportIssue,
+      message: this.supportMessage,
+      preferredContact: this.preferredContact,
+      priority: this.supportPriority,
+      attachmentName: this.supportAttachmentName
+    };
+    try {
+      localStorage.setItem(key, JSON.stringify(draft));
+    } catch {
+      return;
+    }
   }
 
   async submitBookingSupport(event: Event) {
     event.preventDefault();
     const booking = this.supportBooking();
-    if (!booking || !this.supportFormValid() || this.supportSubmitting()) return;
+    if (!booking || this.supportSubmitting()) return;
+    if (!this.supportFormValid()) {
+      this.supportSubmitError.set("Select an issue and add at least 10 characters in the message.");
+      return;
+    }
     this.supportSubmitting.set(true);
     this.supportSubmitError.set("");
     try {
       const ticket = await firstValueFrom(this.api.createBookingSupportTicket(booking.id, {
-        category: this.supportCategory,
+        category: this.supportCategoryForIssue(),
         message: this.supportMessage.trim(),
         preferredContact: this.preferredContact,
         priority: this.supportPriority
       }));
       this.supportTicket.set(ticket);
+      this.clearSupportDraft();
       this.supportTickets.update((items) => [ticket, ...items.filter((item) => item.id !== ticket.id)]);
     } catch {
       this.supportSubmitError.set("Your support request could not be sent. Review the details and try again.");
     } finally {
       this.supportSubmitting.set(false);
     }
+  }
+
+  private supportCategoryForIssue(): CustomerBookingSupportCategory {
+    return this.supportIssues.find((issue) => issue.value === this.supportIssue)?.category || "other";
+  }
+
+  async goBackFromSupport(): Promise<void> {
+    if (!(await this.canLeaveSupportSubflow())) return;
+    await this.router.navigateByUrl(this.supportBackHref());
+  }
+
+  private supportBackHref(): string {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    if (!bookingId) return this.hubBackHref();
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("bookings", bookingId) : `/bookings/${encodeURIComponent(bookingId)}`;
+  }
+
+  async canLeaveSupportSubflow(): Promise<boolean> {
+    if (!this.bookingSupportMode() || !this.hasSupportDraft() || this.supportTicket()) return true;
+    const alert = await this.alerts.create({
+      header: "Discard support draft?",
+      message: "Your draft is saved on this device. Leave this form only if you want to discard it.",
+      buttons: [
+        { text: "Keep editing", role: "cancel" },
+        { text: "Discard", role: "destructive" }
+      ]
+    });
+    await alert.present();
+    const result = await alert.onDidDismiss();
+    const discard = result.role === "destructive";
+    if (discard) this.clearSupportDraft();
+    return discard;
+  }
+
+  private restoreSupportDraft(): void {
+    const key = this.supportDraftKey();
+    if (!key || this.supportTicket()) return;
+    try {
+      const draft = JSON.parse(localStorage.getItem(key) || "null") as Partial<SupportDraft> | null;
+      if (!draft) return;
+      this.supportIssue = this.isSupportIssue(draft.issue) ? draft.issue : "";
+      this.supportMessage = typeof draft.message === "string" ? draft.message : "";
+      this.preferredContact = this.isPreferredContact(draft.preferredContact) ? draft.preferredContact : "in_app";
+      this.supportPriority = this.isSupportPriority(draft.priority) ? draft.priority : "medium";
+      this.supportAttachmentName = typeof draft.attachmentName === "string" ? draft.attachmentName : "";
+    } catch {
+      return;
+    }
+  }
+
+  private hasSupportDraft(): boolean {
+    return !!this.supportIssue || this.supportMessage.trim().length > 0 || !!this.supportAttachmentName || this.preferredContact !== "in_app" || this.supportPriority !== "medium";
+  }
+
+  private clearSupportDraft(): void {
+    const key = this.supportDraftKey();
+    if (key) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        return;
+      }
+    }
+    this.supportIssue = "";
+    this.supportMessage = "";
+    this.supportAttachmentName = "";
+    this.preferredContact = "in_app";
+    this.supportPriority = "medium";
+  }
+
+  private supportDraftKey(): string {
+    const bookingId = this.route.snapshot.queryParamMap.get("bookingId");
+    return bookingId ? `auraCustomerSupportDraft:${bookingId}` : "";
+  }
+
+  private isSupportIssue(value: unknown): value is SupportIssueValue {
+    return value === "" || this.supportIssues.some((issue) => issue.value === value);
+  }
+
+  private isPreferredContact(value: unknown): value is CustomerBookingSupportPreferredContact {
+    return value === "in_app" || value === "phone" || value === "email";
+  }
+
+  private isSupportPriority(value: unknown): value is CustomerBookingSupportPriority {
+    return value === "low" || value === "medium" || value === "high";
   }
 
   supportCategoryLabel(category: CustomerBookingSupportCategory): string {

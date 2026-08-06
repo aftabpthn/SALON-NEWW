@@ -1,12 +1,12 @@
 import { Component, OnInit, computed } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
-import { IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
+import { AlertController, IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { briefcaseOutline, calendarOutline, chatbubblesOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, searchOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { YourSalonsListComponent } from "../../shared/your-salons-list.component";
-import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelationship } from "../../core/api.types";
+import { Booking, CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelationship } from "../../core/api.types";
 
 @Component({
   standalone: true,
@@ -16,10 +16,25 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       <main class="page-narrow profile-page">
         @if (marketplace.isAuthenticated()) {
           <section class="profile-card premium-card">
-            <div class="avatar">{{ profileName().charAt(0) }}</div>
+            <div class="avatar">
+              @if (profilePhotoUrl(); as photoUrl) {
+                <img [src]="photoUrl" alt="" />
+              } @else {
+                <span>{{ profileName().charAt(0) }}</span>
+              }
+            </div>
             <div class="profile-identity">
               <h1>{{ profileName() || "Loading profile" }}</h1>
-              <p class="muted">{{ marketplace.customer()?.email || "No email saved" }} · {{ marketplace.customer()?.phone || "No phone saved" }}</p>
+              <div class="profile-contact-list" aria-label="Profile contact details">
+                <button type="button" (click)="showContactDetail('Email', marketplace.customer()?.email || 'No email saved')">
+                  <ion-icon name="mail-outline" aria-hidden="true"></ion-icon>
+                  <span>{{ marketplace.customer()?.email || "No email saved" }}</span>
+                </button>
+                <button type="button" (click)="showContactDetail('Phone', marketplace.customer()?.phone || 'No phone saved')">
+                  <ion-icon name="phone-portrait-outline" aria-hidden="true"></ion-icon>
+                  <span>{{ marketplace.customer()?.phone || "No phone saved" }}</span>
+                </button>
+              </div>
             </div>
             <button type="button" class="edit-profile-button" [routerLink]="profileRoute('profile/edit')" aria-label="Edit profile">
               <ion-icon name="create-outline" aria-hidden="true"></ion-icon>
@@ -36,7 +51,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
           </section>
         }
 
-        @if (marketplace.loading()) {
+        @if (marketplace.loading() && marketplace.isAuthenticated() && !marketplace.customer()) {
           <section class="status-card premium-card"><strong>Loading profile</strong></section>
         }
         @if (marketplace.error()) {
@@ -61,22 +76,15 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
                 <span>Salons you saved</span>
               </a>
             }
-            @if (upcomingCount() > 0) {
-              <a class="summary-card premium-card" [routerLink]="profileRoute('bookings')">
-                <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
-                <strong>{{ upcomingCount() }} upcoming</strong>
-                <span>Confirmed and pending visits</span>
-              </a>
-            }
             <a class="summary-card premium-card" [routerLink]="profileRoute('bookings')">
               <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon>
-              <strong>{{ bookingsCompleted() }} completed</strong>
-              <span>Visits you have had</span>
+              <strong>{{ pastBookingCount() }} past</strong>
+              <span>Completed and past visits</span>
             </a>
             <a class="summary-card premium-card" [routerLink]="profileRoute('rewards')">
               <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
               <strong>{{ customer.membershipLabel || "Starter" }}</strong>
-              <span>Loyalty and rewards status</span>
+              <span>{{ loyaltyProgressLine(customer) }}</span>
             </a>
           </section>
 
@@ -97,6 +105,8 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
             [salons]="marketplace.mySalons()"
             [primarySalon]="marketplace.primarySalon()"
             [hasBookings]="hasBookings()"
+            [bookingCount]="marketplace.bookings().length"
+            [favouriteCount]="favouriteCount()"
             (setAsPrimary)="onSetPrimarySalon($event)"
             (removePrimary)="onRemovePrimarySalon()">
           </aura-your-salons-list>
@@ -237,11 +247,13 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
             <div class="menu-group">
               <h2 class="menu-group-title">{{ group.label }}</h2>
               @for (item of group.items; track item.route) {
-                <a [routerLink]="profileRoute(item.route)">
-                  <ion-icon [name]="item.icon" aria-hidden="true"></ion-icon>
-                  <span>{{ item.label }}</span>
-                  <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
-                </a>
+                @if (showMenuItem(item.route)) {
+                  <a [routerLink]="profileRoute(item.route)">
+                    <ion-icon [name]="item.icon" aria-hidden="true"></ion-icon>
+                    <span>{{ item.label }}</span>
+                    <ion-icon class="menu-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                  </a>
+                }
               }
             </div>
           }
@@ -260,6 +272,8 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
     .profile-page {
       display: grid;
       gap: 16px;
+      padding-top: calc(14px + env(safe-area-inset-top));
+      padding-bottom: calc(96px + env(safe-area-inset-bottom));
     }
 
     .profile-card {
@@ -267,8 +281,8 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 16px;
-      align-items: center;
-      padding: 22px;
+      align-items: start;
+      padding: 18px;
     }
 
     .edit-profile-button {
@@ -276,19 +290,17 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       gap: 7px;
       align-items: center;
       justify-content: center;
-      min-width: 86px;
-      min-height: 42px;
-      padding: 0 16px;
+      min-width: 0;
+      min-height: 36px;
+      padding: 0 12px;
       border: 1px solid rgba(99, 102, 241, 0.24);
       border-radius: 999px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
       box-shadow: 0 12px 24px rgba(99, 102, 241, 0.18);
       font: inherit;
-      font-size: 0.8rem;
-      font-weight: 900;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      font-size: 0.82rem;
+      font-weight: 850;
       cursor: pointer;
     }
 
@@ -309,6 +321,7 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       height: 88px;
       display: grid;
       place-items: center;
+      overflow: hidden;
       border-radius: 30px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent));
@@ -316,6 +329,34 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
       font-size: 2rem;
       font-weight: 900;
     }
+
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar span { display: block; line-height: 1; }
+
+    .profile-identity { min-width: 0; display: grid; gap: 8px; padding-top: 2px; }
+
+    .profile-contact-list { display: grid; gap: 6px; min-width: 0; }
+    .profile-contact-list button {
+      width: 100%;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 7px;
+      padding: 0;
+      border: 0;
+      color: var(--muted);
+      background: transparent;
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 700;
+      line-height: 1.35;
+      text-align: left;
+      cursor: pointer;
+    }
+    .profile-contact-list ion-icon { color: var(--primary); font-size: 0.95rem; }
+    .profile-contact-list span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .profile-contact-list button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
 
     h1 {
       margin: 0;
@@ -382,31 +423,34 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
 
     .account-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 10px;
     }
 
     .summary-card {
       display: grid;
-      gap: 7px;
-      padding: 16px;
+      gap: 5px;
+      padding: 12px;
       color: inherit;
       text-decoration: none;
     }
 
     .summary-card ion-icon {
-      width: 42px;
-      height: 42px;
-      padding: 10px;
-      border-radius: 16px;
+      width: 36px;
+      height: 36px;
+      padding: 8px;
+      border-radius: 14px;
       color: #ffffff;
       background: linear-gradient(135deg, var(--primary), var(--primary-2));
     }
 
+    .summary-card strong { font-size: 0.95rem; line-height: 1.2; }
+
     .summary-card span {
       color: var(--muted);
-      font-size: 0.84rem;
+      font-size: 0.8rem;
       font-weight: 800;
+      line-height: 1.3;
     }
 
     .discover-card {
@@ -549,10 +593,10 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
     .menu a,
     .menu-item {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: 24px minmax(0, 1fr) 20px;
       gap: 12px;
       align-items: center;
-      min-height: 52px;
+      min-height: 48px;
       padding: 0 18px;
       color: var(--text);
       font-weight: 900;
@@ -565,10 +609,15 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
 
     .menu ion-icon {
       color: var(--muted);
-      font-size: 1.2rem;
+      width: 24px;
+      height: 24px;
+      font-size: 1.08rem;
     }
 
-    .menu a ion-icon:last-child {
+    .menu a .menu-chevron {
+      width: 20px;
+      height: 20px;
+      justify-self: end;
       color: var(--muted);
       font-size: 0.95rem;
       opacity: 0.55;
@@ -605,10 +654,12 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
     @media (max-width: 767px) {
       .profile-page {
         gap: 10px;
+        padding-top: calc(18px + env(safe-area-inset-top));
+        padding-bottom: calc(116px + env(safe-area-inset-bottom));
       }
 
       .profile-card {
-        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-columns: auto minmax(0, 1fr);
         gap: 10px;
         padding: 14px;
         border-radius: 20px;
@@ -626,18 +677,11 @@ import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelation
         line-height: 1.05;
       }
 
-      .profile-card .muted {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: 0.82rem;
-      }
-
       .edit-profile-button {
-        min-width: 44px;
-        min-height: 44px;
-        padding: 0 12px;
+        grid-column: 2;
+        justify-self: start;
+        min-height: 34px;
+        padding: 0 11px;
       }
 
       .edit-profile-button span {
@@ -764,11 +808,16 @@ export class ProfilePage implements OnInit {
       items: [
         { label: "Family profiles", icon: "people-outline", route: "family" },
         { label: "Corporate benefits", icon: "briefcase-outline", route: "corporate" },
-        { label: "Beauty goals", icon: "color-palette-outline", route: "goals" },
         { label: "Notifications", icon: "notifications-outline", route: "notifications" },
         { label: "Gift cards", icon: "gift-outline", route: "gift-cards" },
         { label: "Referrals", icon: "share-social-outline", route: "referrals" },
         { label: "Privacy and settings", icon: "shield-checkmark-outline", route: "settings" }
+      ]
+    },
+    {
+      label: "Personalization",
+      items: [
+        { label: "Beauty goals", icon: "color-palette-outline", route: "goals" }
       ]
     },
     {
@@ -795,7 +844,7 @@ export class ProfilePage implements OnInit {
   profileNotice = "";
   passwordNotice = "";
 
-  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly route: ActivatedRoute) {
+  constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly route: ActivatedRoute, private readonly alerts: AlertController) {
     addIcons({ briefcaseOutline, calendarOutline, chatbubblesOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, searchOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline });
   }
 
@@ -814,6 +863,26 @@ export class ProfilePage implements OnInit {
     const fullName = [customer?.firstName, customer?.lastName].map((part) => String(part || "").trim()).filter(Boolean).join(" ");
     const fallback = String(customer?.name || customer?.displayName || "").trim();
     return fullName || (/^\+?\d[\d\s-]{7,}$/.test(fallback) ? "" : fallback);
+  }
+
+  profilePhotoUrl(): string {
+    const value = String(this.marketplace.customer()?.avatarUrl || "").trim();
+    if (!value) return "";
+    try {
+      const url = new URL(value, window.location.origin);
+      return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+    } catch {
+      return "";
+    }
+  }
+
+  async showContactDetail(label: string, value: string): Promise<void> {
+    const alert = await this.alerts.create({
+      header: label,
+      message: value,
+      buttons: ["OK"]
+    });
+    await alert.present();
   }
 
   upcomingCount(): number {
@@ -881,14 +950,31 @@ export class ProfilePage implements OnInit {
     return this.marketplace.salonModeUrl(...path.split("/"));
   }
 
+  showMenuItem(route: string): boolean {
+    return route !== "corporate" || this.hasCorporateEligibility();
+  }
+
+  private hasCorporateEligibility(): boolean {
+    const customer = this.marketplace.customer() as (CustomerProfile & Record<string, unknown>) | null;
+    if (!customer) return false;
+    return Boolean(
+      customer["corporateEligible"] ||
+      customer["corporateBenefitsEnabled"] ||
+      customer["corporatePartnerId"] ||
+      customer["corporateAccountId"] ||
+      customer["employerName"] ||
+      customer["companyName"]
+    );
+  }
+
   summaryHeading(customer: CustomerProfile): string {
-    const completed = Number(customer.bookingCount) || this.bookingsCompleted();
+    const completed = Number(customer.bookingCount) || this.pastBookingCount();
     return completed > 0 ? `${completed} ${completed === 1 ? "booking" : "bookings"} completed` : "Welcome to Aura";
   }
 
   summaryLine(customer: CustomerProfile): string {
     const parts: string[] = [];
-    const completed = Number(customer.bookingCount) || this.bookingsCompleted();
+    const completed = Number(customer.bookingCount) || this.pastBookingCount();
     if (completed > 0) parts.push(`${completed} ${completed === 1 ? "visit" : "visits"}`);
     const upcoming = this.upcomingCount();
     if (upcoming > 0) parts.push(`${upcoming} upcoming`);
@@ -898,8 +984,37 @@ export class ProfilePage implements OnInit {
       : "Explore salons to plan your first visit";
   }
 
-  bookingsCompleted(): number {
-    return this.marketplace.bookings().filter((booking) => booking.status === "completed").length;
+  pastBookingCount(): number {
+    return this.marketplace.bookings().filter((booking) => this.isPastBooking(booking)).length;
+  }
+
+  loyaltyProgressLine(customer: CustomerProfile): string {
+    const points = Number(customer.loyaltyPoints || 0);
+    return points > 0 ? `${points} points earned` : "Loyalty and rewards status";
+  }
+
+  private isPastBooking(booking: Booking): boolean {
+    const status = String(booking.status || "");
+    if (status === "cancelled") return false;
+    if (status === "completed" || status === "no_show") return true;
+    const end = this.appointmentEndTime(booking);
+    return end !== null && end <= Date.now();
+  }
+
+  private appointmentEndTime(booking: Booking): number | null {
+    const explicitEnd = this.parseBookingTime(booking.endsAt || booking.endAt || "");
+    if (explicitEnd) return explicitEnd.getTime();
+    const start = this.parseBookingTime(booking.startsAt || booking.startAt || booking.displayStartAt || "");
+    if (!start) return null;
+    const duration = Number(booking.durationMinutes || booking.serviceDurationMinutes || 60);
+    return start.getTime() + Math.max(1, Number.isFinite(duration) ? duration : 60) * 60 * 1000;
+  }
+
+  private parseBookingTime(value: string): Date | null {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    const date = new Date(raw);
+    return Number.isFinite(date.getTime()) ? date : null;
   }
 
   hasBookings(): boolean {
