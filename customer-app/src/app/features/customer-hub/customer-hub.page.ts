@@ -212,6 +212,11 @@ const hubConfigs: Record<string, HubConfig> = {
                 </section>
 
                 <form class="support-form" (submit)="submitBookingSupport($event)" novalidate>
+                  <p class="support-context-note">
+                    <ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>
+                    We&rsquo;ve attached your booking &mdash; no need to repeat your salon, service or reference.
+                  </p>
+
                   <div class="field-group">
                     <label for="support-category">What do you need help with?</label>
                     <select id="support-category" name="supportCategory" [(ngModel)]="supportCategory" required>
@@ -285,6 +290,12 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved wallet details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
             @if (!marketplace.isAuthenticated()) {
               <section class="wallet-state" aria-labelledby="wallet-login-title">
                 <div class="wallet-state-icon"><ion-icon name="wallet-outline" aria-hidden="true"></ion-icon></div>
@@ -292,7 +303,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your wallet balance and transaction history are private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wallet' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading()) {
+            } @else if (marketplace.loading() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading your wallet</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -310,7 +321,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </section>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="wallet-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="wallet-error-title">We couldn’t load your wallet</h2>
@@ -318,27 +329,41 @@ const hubConfigs: Record<string, HubConfig> = {
                 <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
               </section>
             } @else if (wallet(); as walletData) {
-              <section class="wallet-balance-card" aria-labelledby="available-balance-label">
-                <div class="wallet-balance-copy">
-                  <div class="wallet-status-row">
-                    <span class="wallet-status"><span aria-hidden="true"></span>{{ walletData.balancePaise > 0 ? "Available" : "No credits available" }}</span>
-                    <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+              @if (walletData.balancePaise > 0 || walletData.transactions.length) {
+                <section class="wallet-balance-card" aria-labelledby="available-balance-label">
+                  <div class="wallet-balance-copy">
+                    <div class="wallet-status-row">
+                      <span class="wallet-status"><span aria-hidden="true"></span>{{ walletData.balancePaise > 0 ? "Available" : "No credits available" }}</span>
+                      <span class="wallet-secure"><ion-icon name="shield-checkmark-outline" aria-hidden="true"></ion-icon>Account protected</span>
+                    </div>
+                    <p id="available-balance-label">Available balance</p>
+                    <strong>{{ money(walletData.balancePaise) }}</strong>
+                    <small>Applied only where wallet payment is eligible.</small>
                   </div>
-                  <p id="available-balance-label">Available balance</p>
-                  <strong>{{ money(walletData.balancePaise) }}</strong>
-                  <small>Applied only where wallet payment is eligible.</small>
-                </div>
-                <div class="wallet-actions" aria-label="Wallet actions">
+                  <div class="wallet-actions" aria-label="Wallet actions">
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/payments')">
+                      <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
+                      Transaction history
+                    </a>
+                    <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/invoices')">
+                      <ion-icon name="card-outline" aria-hidden="true"></ion-icon>
+                      Check invoices
+                    </a>
+                  </div>
+                </section>
+              } @else {
+                <div class="wallet-zero">
+                  <span class="wallet-zero-icon"><ion-icon name="wallet-outline" aria-hidden="true"></ion-icon></span>
+                  <div class="wallet-zero-copy">
+                    <h2 id="available-balance-label">No credits yet</h2>
+                    <p>Credits, eligible refunds and wallet payments will appear here automatically.</p>
+                  </div>
                   <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
                     <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
                     Explore services
                   </a>
-                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/invoices')">
-                    <ion-icon name="receipt-outline" aria-hidden="true"></ion-icon>
-                    Check invoices
-                  </a>
                 </div>
-              </section>
+              }
 
               <div class="wallet-content-grid">
                 <section class="wallet-activity" aria-labelledby="wallet-activity-title">
@@ -431,6 +456,12 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved invoice details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
             @if (!marketplace.isAuthenticated()) {
               <section class="wallet-state" aria-labelledby="invoices-login-title">
                 <div class="wallet-state-icon"><ion-icon name="receipt-outline" aria-hidden="true"></ion-icon></div>
@@ -438,7 +469,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your invoices and payment records are private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/invoices' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading()) {
+            } @else if (marketplace.loading() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading invoices</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -456,7 +487,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </section>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="invoices-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="invoices-error-title">We couldn’t load your invoices</h2>
@@ -589,6 +620,12 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved payment details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
             @if (!marketplace.isAuthenticated()) {
               <section class="wallet-state" aria-labelledby="payments-login-title">
                 <div class="wallet-state-icon"><ion-icon name="card-outline" aria-hidden="true"></ion-icon></div>
@@ -596,7 +633,7 @@ const hubConfigs: Record<string, HubConfig> = {
                 <p>Your payment history is private to your Aura account.</p>
                 <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/payments' }">Log in</ion-button>
               </section>
-            } @else if (marketplace.loading()) {
+            } @else if (marketplace.loading() && !cachedModule()) {
               <section class="wallet-loading" role="status" aria-live="polite">
                 <span class="sr-only">Loading your payments</span>
                 <div class="wallet-balance-skeleton skeleton-block"></div>
@@ -614,7 +651,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </section>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="payments-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="payments-error-title">We couldn’t load your payments</h2>
@@ -734,6 +771,12 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved reward details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
             @if (rewardsData(); as rewards) {
               <section class="wallet-balance-card" aria-labelledby="rewards-balance-label">
                 <div class="wallet-balance-copy">
@@ -741,15 +784,18 @@ const hubConfigs: Record<string, HubConfig> = {
                   <strong>{{ rewards.loyaltyPoints }}</strong>
                   <small><span class="wallet-status"><span aria-hidden="true"></span>{{ rewards.tier }} tier</span></small>
                 </div>
-                <div class="wallet-actions" aria-label="Reward actions">
-                  <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/home')">
-                    <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
-                    View tier benefits
-                  </a>
-                  <a class="wallet-action wallet-action-secondary" [routerLink]="hubRoute('/tabs/search')">
-                    <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
-                    Book & earn
-                  </a>
+                <div class="wallet-actions" aria-label="Reward action">
+                  @if (rewardEarned()) {
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/home')">
+                      <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
+                      View tier benefits
+                    </a>
+                  } @else {
+                    <a class="wallet-action wallet-action-primary" [routerLink]="hubRoute('/tabs/search')">
+                      <ion-icon name="search-outline" aria-hidden="true"></ion-icon>
+                      Book & earn
+                    </a>
+                  }
                 </div>
               </section>
 
@@ -787,8 +833,8 @@ const hubConfigs: Record<string, HubConfig> = {
                   } @else {
                     <div class="wallet-empty">
                       <div class="wallet-state-icon"><ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon></div>
-                      <h3>No reward activity yet</h3>
-                      <p>Points are earned from completed bookings and referrals. They will appear here automatically.</p>
+                      <h3>You haven’t earned rewards yet</h3>
+                      <p>Points are earned from completed bookings and referrals. Book a service to start earning.</p>
                       <a [routerLink]="hubRoute('/tabs/search')">{{ marketplace.salonMode() ? 'Back to My Salon' : 'Book a service' }} <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
@@ -821,7 +867,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   </a>
                 </aside>
               </div>
-            } @else if (marketplace.loading()) {
+            } @else if (marketplace.loading() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -838,19 +884,19 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </div>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="rewards-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
-                <h2 id="rewards-error-title">We couldn&rsquo;t load your rewards</h2>
+                <h2 id="rewards-error-title">Rewards are temporarily unavailable</h2>
                 <p>{{ marketplace.error() }}</p>
-                <ion-button class="primary-gradient" (click)="reload()">Try again</ion-button>
+                <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
               </section>
             } @else {
               <section class="wallet-state" aria-labelledby="rewards-unavailable-title">
                 <div class="wallet-state-icon"><ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon></div>
-                <h2 id="rewards-unavailable-title">Rewards are unavailable</h2>
-                <p>We didn&rsquo;t receive reward data for this account. Try refreshing the page.</p>
-                <ion-button class="primary-gradient" (click)="reload()">Refresh rewards</ion-button>
+                <h2 id="rewards-unavailable-title">Rewards are temporarily unavailable</h2>
+                <p>We didn’t receive reward details for this account. Try refreshing the page.</p>
+                <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
               </section>
             }
           </section>
@@ -871,7 +917,13 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
-            @if (marketplace.loading()) {
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved membership details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loading() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -888,7 +940,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </div>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="memberships-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="memberships-error-title">We couldn&rsquo;t load your memberships</h2>
@@ -970,25 +1022,61 @@ const hubConfigs: Record<string, HubConfig> = {
                       </div>
                     }
 
-                    <ion-button class="primary-gradient" expand="block" (click)="loadPlans()" style="margin-bottom:12px">
-                      <ion-icon name="heart-circle-outline" slot="start"></ion-icon>
-                      Load live plans
-                    </ion-button>
+                    <div class="plan-listing">
+                      <button type="button" class="plan-load-button" (click)="loadPlans()" [disabled]="plansLoading()">
+                        <ion-icon name="heart-circle-outline" aria-hidden="true"></ion-icon>
+                        {{ plansLoading() ? 'Loading plans…' : 'Explore membership plans' }}
+                      </button>
 
-                    @if (marketplace.membershipPlans().length) {
-                      <div class="wallet-guide-list">
-                        @for (plan of marketplace.membershipPlans(); track plan.id) {
-                          <div>
-                            <span class="guide-number">{{ $index + 1 }}</span>
-                            <p>
-                              <strong>{{ plan.name }}</strong>
-                              <small>{{ plan.validityDays }} days &middot; {{ money(plan.pricePaise) }} &middot; {{ plan.description }}</small>
-                              <ion-button fill="outline" size="small" class="secondary-button" (click)="buyPlan(plan)" style="margin-top:6px">Buy membership</ion-button>
-                            </p>
-                          </div>
-                        }
-                      </div>
-                    }
+                      @if (plansLoading()) {
+                        <div class="plan-loading" role="status" aria-live="polite">
+                          <span class="skeleton-line skeleton-title"></span>
+                          <span class="skeleton-line"></span>
+                          <span class="skeleton-line"></span>
+                        </div>
+                      } @else if (marketplace.membershipPlans().length) {
+                        <div class="plan-list">
+                          @for (plan of marketplace.membershipPlans(); track plan.id) {
+                            <article class="plan-card">
+                              <div class="plan-card-head">
+                                <div class="plan-card-name">
+                                  <strong>{{ plan.name }}</strong>
+                                  @if (plan.validityDays) {
+                                    <span>Valid {{ plan.validityDays }} days</span>
+                                  }
+                                </div>
+                                <div class="plan-price">
+                                  <strong>{{ money(plan.pricePaise) }}</strong>
+                                  <small>one-time</small>
+                                </div>
+                              </div>
+                              @if (plan.description) {
+                                <p class="plan-desc">{{ plan.description }}</p>
+                              }
+                              @if (plan.discountPercent || plan.productDiscountPercent) {
+                                <div class="plan-perks">
+                                  @if (plan.discountPercent) {
+                                    <span class="plan-perk">-{{ plan.discountPercent }}% on services</span>
+                                  }
+                                  @if (plan.productDiscountPercent) {
+                                    <span class="plan-perk">-{{ plan.productDiscountPercent }}% on products</span>
+                                  }
+                                </div>
+                              }
+                              @if (planServiceCount(plan)) {
+                                <p class="plan-services">{{ planServiceCount(plan) }} included {{ planServiceCount(plan) === 1 ? 'service' : 'services' }} in this plan</p>
+                              }
+                              @if (planTermsSummary(plan)) {
+                                <p class="plan-terms">Terms: {{ planTermsSummary(plan) }}</p>
+                              }
+                              <button type="button" class="plan-join" (click)="buyPlan(plan)">Join this plan</button>
+                            </article>
+                          }
+                        </div>
+                      } @else if (plansLoaded()) {
+                        <p class="plan-none">No membership plans are available right now. Check back soon.</p>
+                      }
+                    </div>
 
                     <div class="wallet-guide-list" style="margin-top:16px">
                       <div>
@@ -1004,6 +1092,18 @@ const hubConfigs: Record<string, HubConfig> = {
                         <p><strong>Auto-renew</strong><small>Memberships can be set to auto-renew so you never lose your benefits.</small></p>
                       </div>
                     </div>
+
+                    <div class="wallet-vs" aria-label="Membership versus package">
+                      <div>
+                        <strong>Membership</strong>
+                        <small>Ongoing benefits for a fixed period &mdash; discounts, credits and perks.</small>
+                      </div>
+                      <div>
+                        <strong>Package</strong>
+                        <small>Prepaid service sessions you redeem as you book.</small>
+                      </div>
+                    </div>
+
                     <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'memberships' }">
                       <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                       Help with memberships
@@ -1232,7 +1332,13 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
-            @if (marketplace.loading()) {
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved gift card details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loading() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -1249,7 +1355,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </div>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="giftcards-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="giftcards-error-title">We couldn&rsquo;t load your gift cards</h2>
@@ -1366,59 +1472,26 @@ const hubConfigs: Record<string, HubConfig> = {
               <section class="wallet-activity" aria-labelledby="corporate-list-title">
                 <div class="wallet-section-heading">
                   <div>
-                    <p class="wallet-section-kicker">Benefits</p>
-                    <h2 id="corporate-list-title">Corporate records</h2>
+                    <p class="wallet-section-kicker">Eligibility</p>
+                    <h2 id="corporate-list-title">Corporate benefits</h2>
                   </div>
-                  <span>3 items</span>
                 </div>
 
-                <div class="wallet-transactions">
-                  <article class="wallet-transaction">
-                    <div class="transaction-icon">
-                      <ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon>
-                    </div>
-                    <div class="transaction-copy">
-                      <strong>Aura Corporate Wellness</strong>
-                      <span>Employee verified</span>
-                      <small>Company benefit active for grooming and wellness bookings</small>
-                    </div>
-                  </article>
-                  <article class="wallet-transaction">
-                    <div class="transaction-icon">
-                      <ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon>
-                    </div>
-                    <div class="transaction-copy">
-                      <strong>Monthly team grooming pass</strong>
-                      <span>1 pass left</span>
-                      <small>One subsidized appointment available this month</small>
-                    </div>
-                    <div class="transaction-value">
-                      <strong>{{ money(120000) }}</strong>
-                    </div>
-                  </article>
-                  <article class="wallet-transaction">
-                    <div class="transaction-icon">
-                      <ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon>
-                    </div>
-                    <div class="transaction-copy">
-                      <strong>HR reimbursement pending</strong>
-                      <span>Pending approval</span>
-                      <small>Corporate invoice can be shared with the company admin</small>
-                    </div>
-                    <div class="transaction-value">
-                      <strong>{{ money(280000) }}</strong>
-                    </div>
-                  </article>
+                <div class="wallet-empty">
+                  <div class="wallet-state-icon"><ion-icon name="briefcase-outline" aria-hidden="true"></ion-icon></div>
+                  <h3>No corporate benefits linked</h3>
+                  <p>Corporate benefits appear here only when your account is linked to a partner organisation through your employer&rsquo;s wellness program. If your company offers Aura benefits, ask your HR or contact support to link your account.</p>
+                  <a class="wallet-empty-primary" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'corporate' }">How to check eligibility</a>
                 </div>
               </section>
 
               <aside class="wallet-guide" aria-labelledby="corporate-guide-title">
                 <p class="wallet-section-kicker">How it works</p>
-                <h2 id="corporate-guide-title">Corporate benefits</h2>
+                <h2 id="corporate-guide-title">Benefits & reimbursements</h2>
                 <div class="wallet-guide-list">
                   <div>
                     <span class="guide-number">01</span>
-                    <p><strong>Verify eligibility</strong><small>Confirm your corporate benefit through your employer&rsquo;s wellness program.</small></p>
+                    <p><strong>Verify eligibility</strong><small>Confirm your corporate benefit through your employer&rsquo;s wellness program before it appears here.</small></p>
                   </div>
                   <div>
                     <span class="guide-number">02</span>
@@ -1426,7 +1499,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   </div>
                   <div>
                     <span class="guide-number">03</span>
-                    <p><strong>Reimbursements</strong><small>Submit invoices for HR reimbursement directly from the app.</small></p>
+                    <p><strong>Reimbursement status</strong><small>Submitted invoices move through Pending, then Approved and Paid &mdash; or Rejected if the company declines them.</small></p>
                   </div>
                 </div>
                 <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'corporate' }">
@@ -1541,7 +1614,13 @@ const hubConfigs: Record<string, HubConfig> = {
               </a>
             </header>
 
-            @if (marketplace.loading()) {
+            @if (marketplace.error() && cachedModule()) {
+              <p class="wallet-cached-note" role="status">
+                Showing your last saved package details. <a (click)="reload()">Refresh</a>
+              </p>
+            }
+
+            @if (marketplace.loading() && !cachedModule()) {
               <div class="wallet-loading" role="status">
                 <div class="wallet-skeleton">
                   <div class="skeleton-block skeleton-balance"></div>
@@ -1558,7 +1637,7 @@ const hubConfigs: Record<string, HubConfig> = {
                   <div class="wallet-guide-skeleton skeleton-block"></div>
                 </div>
               </div>
-            } @else if (marketplace.error()) {
+            } @else if (marketplace.error() && !cachedModule()) {
               <section class="wallet-state wallet-error" role="alert" aria-labelledby="packages-error-title">
                 <div class="wallet-state-icon"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon></div>
                 <h2 id="packages-error-title">We couldn&rsquo;t load your packages</h2>
@@ -1649,6 +1728,18 @@ const hubConfigs: Record<string, HubConfig> = {
                         <p><strong>Track balance</strong><small>Your remaining credits and package status are always visible in this section.</small></p>
                       </div>
                     </div>
+
+                    <div class="wallet-vs" aria-label="Package versus membership">
+                      <div>
+                        <strong>Package</strong>
+                        <small>Prepaid service sessions you redeem as you book.</small>
+                      </div>
+                      <div>
+                        <strong>Membership</strong>
+                        <small>Ongoing benefits for a fixed period &mdash; discounts, credits and perks.</small>
+                      </div>
+                    </div>
+
                     <a class="wallet-help-link" [routerLink]="hubRoute('/help')" [queryParams]="{ topic: 'packages' }">
                       <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
                       Help with packages
@@ -1740,17 +1831,21 @@ const hubConfigs: Record<string, HubConfig> = {
                   } @else if (supportTickets().length) {
                     <div class="wallet-transactions">
                       @for (ticket of supportTickets(); track ticket.id) {
-                        <article class="wallet-transaction" [routerLink]="ticket.bookingId ? hubRoute('/bookings/' + ticket.bookingId) : undefined">
+                        <article
+                          class="wallet-transaction"
+                          [routerLink]="ticket.bookingId ? hubRoute('/bookings/' + ticket.bookingId) : undefined"
+                          [attr.aria-label]="'Support ticket for ' + supportCategoryLabel(ticket.category) + ', ' + supportStatusLabel(ticket.status)"
+                        >
                           <div class="transaction-icon">
                             <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
                           </div>
                           <div class="transaction-copy">
                             <strong>{{ supportCategoryLabel(ticket.category) }}</strong>
-                            <span>{{ ticket.status }}</span>
-                            <small>{{ supportTicketDate(ticket.updatedAt || ticket.createdAt) }}</small>
+                            <span class="ticket-status" [class]="supportStatusClass(ticket.status)">{{ supportStatusLabel(ticket.status) }}</span>
+                            <small>Updated {{ supportTicketDate(ticket.updatedAt || ticket.createdAt) }}</small>
                           </div>
                           <div class="transaction-value">
-                            <small>{{ ticket.id }}</small>
+                            <small class="ticket-response">{{ supportExpectedResponse(ticket.status) }}</small>
                           </div>
                         </article>
                       }
@@ -1758,9 +1853,10 @@ const hubConfigs: Record<string, HubConfig> = {
                   } @else {
                     <div class="wallet-empty">
                       <div class="wallet-state-icon"><ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon></div>
-                      <h3>No support tickets</h3>
-                      <p>You haven&rsquo;t submitted any support requests yet. Visit a booking to get help.</p>
-                      <a [routerLink]="hubRoute('/tabs/bookings')">View my bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
+                      <h3>No support tickets yet</h3>
+                      <p>When you raise a request from a booking, your ticket appears here with its status and expected reply time.</p>
+                      <a class="wallet-empty-primary" [routerLink]="hubRoute('/help')">Start a support request</a>
+                      <a class="wallet-empty-secondary" [routerLink]="hubRoute('/tabs/bookings')">View my bookings <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon></a>
                     </div>
                   }
 
@@ -1857,7 +1953,7 @@ const hubConfigs: Record<string, HubConfig> = {
             </article>
             <article class="metric-card count-metric premium-card">
               <span>Loyalty</span>
-              <strong>{{ marketplace.customer()?.loyaltyPoints ?? 0 }} pts</strong>
+              <strong>{{ loyaltyMetricLabel() }}</strong>
             </article>
           </section>
 
@@ -2405,6 +2501,251 @@ const hubConfigs: Record<string, HubConfig> = {
       background: rgba(255, 255, 255, 0.06);
     }
 
+    .wallet-cached-note {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 0.82rem;
+      font-weight: 650;
+    }
+
+    .wallet-cached-note a {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-weight: 850;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .wallet-zero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      padding: clamp(18px, 3vw, 26px);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+    }
+
+    .wallet-zero-icon {
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: var(--primary);
+      background: var(--primary-soft);
+      font-size: 1.2rem;
+    }
+
+    .wallet-zero-copy {
+      min-width: 0;
+      flex: 1 1 220px;
+    }
+
+    .wallet-zero-copy h2,
+    .wallet-zero-copy p {
+      margin: 0;
+    }
+
+    .wallet-zero-copy h2 {
+      color: var(--brand-950);
+      font-size: 1.05rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .wallet-zero-copy p {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .plan-listing {
+      display: grid;
+      gap: 12px;
+    }
+
+    .plan-load-button {
+      min-height: 48px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 18px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      color: #FFFFFF;
+      background: var(--brand-700);
+      font-size: 0.88rem;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background var(--motion-fast), transform var(--motion-fast), opacity var(--motion-fast);
+    }
+
+    .plan-load-button:hover {
+      background: var(--brand-800);
+    }
+
+    .plan-load-button:disabled {
+      opacity: 0.65;
+      cursor: default;
+    }
+
+    .plan-loading {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    .plan-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .plan-card {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+    }
+
+    .plan-card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .plan-card-name {
+      min-width: 0;
+    }
+
+    .plan-card-name strong,
+    .plan-price strong {
+      display: block;
+      margin: 0;
+      color: var(--brand-950);
+      font-size: 0.98rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .plan-card-name span,
+    .plan-price small {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+
+    .plan-price {
+      flex: 0 0 auto;
+      text-align: right;
+    }
+
+    .plan-desc {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    .plan-perks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .plan-perk {
+      padding: 4px 9px;
+      border-radius: 999px;
+      color: var(--success-text, var(--brand-700));
+      background: var(--primary-soft);
+      font-size: 0.74rem;
+      font-weight: 850;
+    }
+
+    .plan-services,
+    .plan-terms {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .plan-join {
+      min-height: 42px;
+      border: 1px solid var(--brand-700);
+      border-radius: 12px;
+      color: var(--brand-700);
+      background: transparent;
+      font-size: 0.84rem;
+      font-weight: 850;
+      cursor: pointer;
+      transition: background var(--motion-fast), color var(--motion-fast);
+    }
+
+    .plan-join:hover {
+      color: #FFFFFF;
+      background: var(--brand-700);
+    }
+
+    .plan-none {
+      margin: 0;
+      padding: 14px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-align: center;
+    }
+
+    .wallet-vs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .wallet-vs > div {
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: var(--primary-soft);
+    }
+
+    .wallet-vs strong,
+    .wallet-vs small {
+      display: block;
+    }
+
+    .wallet-vs strong {
+      color: var(--brand-900);
+      font-size: 0.82rem;
+      font-weight: 900;
+    }
+
+    .wallet-vs small {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
     .wallet-content-grid {
       display: grid;
       gap: 16px;
@@ -2534,6 +2875,55 @@ const hubConfigs: Record<string, HubConfig> = {
       color: var(--text);
     }
 
+    .transaction-copy .ticket-status {
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: var(--brand-700);
+      background: var(--primary-soft);
+      font-size: 0.64rem;
+      font-weight: 850;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      line-height: 1;
+    }
+
+    .transaction-copy .ticket-status.is-open {
+      color: var(--warning);
+      background: var(--warning-soft);
+    }
+
+    .transaction-copy .ticket-status.is-pending {
+      color: var(--muted);
+      background: var(--surface-soft);
+    }
+
+    .transaction-copy .ticket-status.is-progress {
+      color: var(--brand-700);
+      background: var(--primary-soft);
+    }
+
+    .transaction-copy .ticket-status.is-escalated {
+      color: var(--error);
+      background: var(--error-soft);
+    }
+
+    .transaction-copy .ticket-status.is-resolved,
+    .transaction-copy .ticket-status.is-closed {
+      color: var(--success);
+      background: var(--success-soft);
+    }
+
+    .transaction-value small.ticket-response {
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
     .wallet-guide {
       padding: clamp(20px, 3vw, 26px);
     }
@@ -2651,6 +3041,19 @@ const hubConfigs: Record<string, HubConfig> = {
       font-size: 0.86rem;
       font-weight: 850;
       text-decoration: none;
+    }
+
+    .wallet-empty a.wallet-empty-primary {
+      justify-content: center;
+      margin-top: 16px;
+      padding: 0 18px;
+      border-radius: 13px;
+      color: #FFFFFF;
+      background: var(--brand-700);
+    }
+
+    .wallet-empty a.wallet-empty-secondary {
+      margin-top: 2px;
     }
 
     .wallet-state ion-button {
@@ -2862,6 +3265,21 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-booking-card .status-pill { color: var(--text); background: var(--surface); text-transform: capitalize; }
     .support-booking-card .status-pill.closed { color: var(--muted); background: var(--surface-soft); }
     .support-form { display: grid; gap: 15px; }
+    .support-context-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: -2px 0 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(99, 102, 241, 0.28);
+      border-radius: 12px;
+      color: var(--brand-800);
+      background: var(--primary-soft);
+      font-size: 0.8rem;
+      font-weight: 750;
+      line-height: 1.45;
+    }
+    .support-context-note ion-icon { flex: none; margin-top: 2px; font-size: 1rem; }
     .field-group { min-width: 0; display: grid; gap: 7px; }
     .field-group label { color: var(--text); font-size: 0.84rem; font-weight: 850; }
     .field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -2947,6 +3365,14 @@ const hubConfigs: Record<string, HubConfig> = {
       .wallet-status-row {
         margin-bottom: 12px;
         gap: 8px;
+      }
+
+      .wallet-vs {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-zero {
+        align-items: start;
       }
 
       .wallet-status,
@@ -3184,13 +3610,19 @@ export class CustomerHubPage implements OnInit {
   readonly bookingSupportMode = computed(() => this.slug() === "support" && this.route.snapshot.queryParamMap.get("mode") === "booking" && !!this.route.snapshot.queryParamMap.get("bookingId"));
   readonly config = computed(() => hubConfigs[this.slug()] ?? hubConfigs["rewards"]);
   readonly customerName = computed(() => this.marketplace.customer()?.name || "Customer");
+  readonly cachedModule = computed(() => this.marketplace.cachedModule(this.slug()));
+  readonly rewardEarned = computed(() => (this.rewardsData()?.loyaltyPoints ?? 0) > 0);
   readonly wallet = computed<CustomerWallet | null>(() => {
     const data = this.marketplace.accountModule();
-    return data && this.isWallet(data) ? data : null;
+    if (data && this.isWallet(data)) return data;
+    const cached = this.cachedModule();
+    return cached && this.isWallet(cached) ? cached : null;
   });
   readonly invoices = computed<CustomerInvoice[]>(() => {
     const data = this.marketplace.accountModule();
     if (Array.isArray(data) && data.length && typeof data[0] === "object" && "invoiceNumber" in data[0]) return data as CustomerInvoice[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "invoiceNumber" in cached[0]) return cached as CustomerInvoice[];
     return [];
   });
   readonly invoiceTotalOutstanding = computed(() => this.invoices().reduce((sum, inv) => sum + (inv.balancePaise || 0), 0));
@@ -3198,6 +3630,8 @@ export class CustomerHubPage implements OnInit {
   readonly paymentsList = computed<CustomerPayment[]>(() => {
     const data = this.marketplace.accountModule();
     if (Array.isArray(data) && data.length && typeof data[0] === "object" && "invoiceId" in data[0] && "amountPaise" in data[0]) return data as CustomerPayment[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "invoiceId" in cached[0] && "amountPaise" in cached[0]) return cached as CustomerPayment[];
     return [];
   });
   readonly paymentTotalPaid = computed(() => this.paymentsList().reduce((sum, payment) => sum + (Number(payment.amountPaise) || 0), 0));
@@ -3209,24 +3643,36 @@ export class CustomerHubPage implements OnInit {
   );
   readonly rewardsData = computed<CustomerRewardSummary | null>(() => {
     const data = this.marketplace.accountModule();
-    return data && this.isRewards(data) ? data : null;
+    if (data && this.isRewards(data)) return data;
+    const cached = this.cachedModule();
+    return cached && this.isRewards(cached) ? cached : null;
   });
   readonly membershipsList = computed<CustomerMembership[]>(() => {
     const data = this.marketplace.accountModule();
     if (Array.isArray(data) && data.length && typeof data[0] === "object" && "planName" in data[0]) return data as CustomerMembership[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "planName" in cached[0]) return cached as CustomerMembership[];
     return [];
   });
   readonly packagesList = computed<CustomerPackage[]>(() => {
     const data = this.marketplace.accountModule();
     if (Array.isArray(data) && data.length && typeof data[0] === "object" && "name" in data[0] && "pricePaise" in data[0] && !("planName" in data[0])) return data as CustomerPackage[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "name" in cached[0] && "pricePaise" in cached[0] && !("planName" in cached[0])) return cached as CustomerPackage[];
     return [];
   });
   readonly giftCardsList = computed<CustomerGiftCard[]>(() => {
     const data = this.marketplace.accountModule();
     if (Array.isArray(data) && data.length && typeof data[0] === "object" && "initialValuePaise" in data[0]) return data as CustomerGiftCard[];
+    const cached = this.cachedModule();
+    if (Array.isArray(cached) && cached.length && typeof cached[0] === "object" && "initialValuePaise" in cached[0]) return cached as CustomerGiftCard[];
     return [];
   });
-  readonly liveRecords = computed(() => this.recordsFor(this.marketplace.accountModule()));
+  readonly liveRecords = computed(() => {
+    const live = this.recordsFor(this.marketplace.accountModule());
+    if (live.length) return live;
+    return this.recordsFor(this.cachedModule());
+  });
   readonly supportTickets = signal<CustomerBookingSupportTicket[]>([]);
   readonly supportHistoryLoading = signal(false);
   readonly supportHistoryError = signal("");
@@ -3249,6 +3695,8 @@ export class CustomerHubPage implements OnInit {
   readonly recordCount = computed(() => this.records().length);
   readonly actionMessage = signal("");
   readonly actionLoading = signal(false);
+  readonly plansLoading = signal(false);
+  readonly plansLoaded = signal(false);
   readonly supportBooking = signal<Booking | null>(null);
   readonly supportTicket = signal<CustomerBookingSupportTicket | null>(null);
   readonly supportLoading = signal(false);
@@ -3267,8 +3715,8 @@ export class CustomerHubPage implements OnInit {
     { value: "other", label: "Other" }
   ];
   readonly hubModules = [
-    { slug: "rewards", label: "Rewards", copy: "Points, tier and booking rewards.", icon: "ribbon-outline", route: "/tabs/rewards" },
-    { slug: "wallet", label: "Wallet", copy: "Credits, refunds and invoice payments.", icon: "wallet-outline", route: "/tabs/wallet" },
+    { slug: "rewards", label: "Aura Rewards", copy: "Points, tier and booking rewards.", icon: "ribbon-outline", route: "/tabs/rewards" },
+    { slug: "wallet", label: "Aura Wallet", copy: "Credits, refunds and invoice payments.", icon: "wallet-outline", route: "/tabs/wallet" },
     { slug: "memberships", label: "Memberships", copy: "Active plans and benefit usage.", icon: "heart-circle-outline", route: "/tabs/memberships" },
     { slug: "packages", label: "Packages", copy: "Sessions, balances and redemptions.", icon: "ticket-outline", route: "/tabs/packages" },
     { slug: "gift-cards", label: "Gift cards", copy: "Purchase, redeem and track balances.", icon: "gift-outline", route: "/tabs/gift-cards" },
@@ -3276,7 +3724,6 @@ export class CustomerHubPage implements OnInit {
     { slug: "referrals", label: "Referrals", copy: "Invite friends and track rewards.", icon: "share-social-outline", route: "/tabs/referrals" },
     { slug: "gallery", label: "Gallery", copy: "Saved looks and before/after photos.", icon: "images-outline", route: "/tabs/gallery" },
     { slug: "family", label: "Family", copy: "Profiles for shared bookings.", icon: "people-outline", route: "/tabs/family" },
-    { slug: "corporate", label: "Corporate", copy: "Workplace benefits and packages.", icon: "briefcase-outline", route: "/tabs/corporate" },
     { slug: "goals", label: "Beauty goals", copy: "Plans, routines and treatment goals.", icon: "color-palette-outline", route: "/tabs/goals" },
     { slug: "payments", label: "Payments", copy: "UPI, card and invoice payment records.", icon: "wallet-outline", route: "/tabs/payments" },
     { slug: "invoices", label: "Invoices", copy: "Bills, balances and payment status.", icon: "ticket-outline", route: "/tabs/invoices" },
@@ -3412,6 +3859,29 @@ export class CustomerHubPage implements OnInit {
     return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(date);
   }
 
+  supportStatusLabel(status: string): string {
+    return status.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toLocaleUpperCase());
+  }
+
+  supportStatusClass(status: string): string {
+    const classes: Record<string, string> = {
+      open: "is-open",
+      pending: "is-pending",
+      in_progress: "is-progress",
+      escalated: "is-escalated",
+      resolved: "is-resolved",
+      closed: "is-closed"
+    };
+    return classes[status] ?? "is-pending";
+  }
+
+  supportExpectedResponse(status: string): string {
+    if (status === "resolved" || status === "closed") return "Completed";
+    const replyHours: Record<string, string> = { open: "4h", pending: "8h", in_progress: "12h", escalated: "6h" };
+    const reply = replyHours[status];
+    return reply ? `Replies within ${reply}` : "We'll get back to you";
+  }
+
   supportAppointmentDisplay(): string {
     const booking = this.supportBooking();
     const raw = String(booking?.displayStartAt || booking?.startsAt || booking?.startAt || "");
@@ -3448,6 +3918,11 @@ export class CustomerHubPage implements OnInit {
 
   money(pricePaise: number): string {
     return this.marketplace.formatMoney(pricePaise);
+  }
+
+  loyaltyMetricLabel(): string {
+    const points = this.marketplace.customer()?.loyaltyPoints;
+    return typeof points === "number" && Number.isFinite(points) ? `${points} pts` : "—";
   }
 
   walletTransactionAmount(amountPaise: number): number {
@@ -3487,10 +3962,25 @@ export class CustomerHubPage implements OnInit {
   }
 
   async loadPlans() {
-    await this.marketplace.loadMembershipPlans();
-    if (!this.marketplace.membershipPlans().length) {
-      this.actionMessage.set("No active membership plans are currently available for online purchase.");
+    if (this.plansLoading()) return;
+    this.plansLoading.set(true);
+    this.plansLoaded.set(false);
+    try {
+      await this.marketplace.loadMembershipPlans();
+      this.plansLoaded.set(true);
+    } finally {
+      this.plansLoading.set(false);
     }
+  }
+
+  planServiceCount(plan: CustomerMembershipPlan): number {
+    return Array.isArray(plan.includedServices) ? plan.includedServices.length : 0;
+  }
+
+  planTermsSummary(plan: CustomerMembershipPlan): string {
+    const keys = Object.keys(plan.benefitRules || {}).filter((key) => key.trim());
+    if (!keys.length) return "";
+    return keys.slice(0, 2).map((key) => key.replace(/[_-]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase())).join(" · ");
   }
 
   async buyPlan(plan: CustomerMembershipPlan) {

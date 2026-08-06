@@ -1,9 +1,9 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
-import { RouterLink } from "@angular/router";
+import { Router, RouterLink } from "@angular/router";
 import { AlertController, IonBackButton, IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { heart, locationOutline, searchOutline, star, storefrontOutline } from "ionicons/icons";
-import { Business } from "../../core/api.types";
+import { Business, CustomerFavorite } from "../../core/api.types";
 import { CustomerFeedbackService } from "../../core/customer-feedback.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 
@@ -17,7 +17,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <div class="header-copy">
             <div class="content-title-row">
               <ion-back-button class="content-back-button" [defaultHref]="backHref()" text=""></ion-back-button>
-              <h1>Liked salons</h1>
+              <h1>Favourites</h1>
             </div>
             <p>{{ savedCount() }} {{ savedCount() === 1 ? "salon" : "salons" }} saved</p>
           </div>
@@ -31,7 +31,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
           <section class="state-card" aria-labelledby="login-title">
             <div class="state-icon"><ion-icon name="heart"></ion-icon></div>
             <div>
-              <h2 id="login-title">Login to use wishlist</h2>
+              <h2 id="login-title">Login to use favourites</h2>
               <p>Keep your favourite salons close at hand.</p>
             </div>
             <ion-button class="primary-gradient" [routerLink]="['/login']" [queryParams]="{ returnUrl: '/tabs/wishlist' }">Login</ion-button>
@@ -39,7 +39,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
         } @else {
           @if (marketplace.loading() && savedCount() === 0) {
             <section class="loading-state" aria-live="polite" aria-busy="true">
-              <span class="sr-only">Loading liked salons</span>
+              <span class="sr-only">Loading favourite salons</span>
               @for (item of loadingItems; track item) {
                 <div class="skeleton-card" aria-hidden="true">
                   <div class="skeleton-image"></div>
@@ -55,15 +55,21 @@ import { MarketplaceService } from "../../core/marketplace.service";
           } @else if (marketplace.error() && savedCount() === 0) {
             <section class="state-card error" role="alert">
               <div class="state-icon"><ion-icon name="storefront-outline"></ion-icon></div>
-              <h2>Could not load wishlist</h2>
+              <h2>Could not load favourites</h2>
               <p>{{ marketplace.error() }}</p>
               <ion-button class="primary-gradient" (click)="reload()">Retry</ion-button>
             </section>
           } @else {
-            <section class="wishlist-grid" aria-label="Liked salons">
+            <section class="wishlist-grid" aria-label="Favourite salons">
               @for (favorite of saved(); track favorite.businessId) {
                 @if (favorite.business; as business) {
-                  <article class="wishlist-card">
+                  <article
+                    class="wishlist-card"
+                    tabindex="0"
+                    role="link"
+                    [attr.aria-label]="'Open ' + business.businessName"
+                    (click)="openBusiness(business)"
+                    (keydown.enter)="openBusiness(business)">
                     <div class="salon-image">
                       @if (displayImage(business); as image) {
                         <img [src]="image" [alt]="business.businessName + ' cover'" loading="lazy" (error)="markImageFailed(business.id)" />
@@ -82,8 +88,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
                           class="remove-action"
                           type="button"
                           [disabled]="isRemoving(business.id)"
-                          [attr.aria-label]="'Remove ' + business.businessName + ' from liked salons'"
-                          (click)="remove(business)">
+                          [attr.aria-label]="'Remove ' + business.businessName + ' from favourites'"
+                          (click)="remove(business, $event)">
                           <ion-icon name="heart" aria-hidden="true"></ion-icon>
                         </button>
                       </div>
@@ -117,8 +123,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                       }
 
                       <div class="wishlist-actions">
-                        <a class="card-action primary" [routerLink]="businessBookLink(business)">Book</a>
-                        <a class="card-action secondary" [routerLink]="businessProfileLink(business)">View</a>
+                        <a class="card-action primary" [routerLink]="businessBookLink(business)" (click)="$event.stopPropagation()">Book</a>
                       </div>
                     </div>
                   </article>
@@ -127,7 +132,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
                 <section class="state-card empty-state">
                   <div class="state-icon"><ion-icon name="heart"></ion-icon></div>
                   <div>
-                    <h2>No liked salons yet</h2>
+                    <h2>No favourites yet</h2>
                     <p>Tap the heart on a salon to keep it here.</p>
                   </div>
                   <ion-button class="primary-gradient" [routerLink]="discoverLink()">
@@ -461,12 +466,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
       box-shadow: 0 4px 10px rgba(99, 102, 241, 0.14);
     }
 
-    .card-action.secondary {
-      color: var(--primary);
-      border-color: var(--border);
-      background: var(--surface);
-    }
-
     .state-card {
       display: grid;
       justify-items: start;
@@ -574,7 +573,6 @@ import { MarketplaceService } from "../../core/marketplace.service";
       }
 
       .discover-action:hover,
-      .card-action.secondary:hover,
       .remove-action:hover {
         background: var(--primary-soft);
       }
@@ -628,7 +626,18 @@ import { MarketplaceService } from "../../core/marketplace.service";
   `]
 })
 export class WishlistPage implements OnInit {
-  readonly saved = computed(() => this.marketplace.favorites().filter((favorite) => favorite.business));
+  readonly saved = computed<CustomerFavorite[]>(() => {
+    const seen = new Set<string>();
+    const merged: CustomerFavorite[] = [];
+    for (const item of [...this.marketplace.favorites(), ...this.marketplace.savedSalons()]) {
+      const key = item.businessId || item.business?.id || item.business?.slug || "";
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        merged.push(item);
+      }
+    }
+    return merged.filter((favorite) => favorite.business);
+  });
   readonly savedCount = computed(() => this.saved().length);
   readonly failedImages = signal<ReadonlySet<string>>(new Set());
   readonly removingIds = signal<ReadonlySet<string>>(new Set());
@@ -636,6 +645,7 @@ export class WishlistPage implements OnInit {
 
   constructor(
     readonly marketplace: MarketplaceService,
+    private readonly router: Router,
     private readonly alerts: AlertController,
     private readonly feedback: CustomerFeedbackService
   ) {
@@ -718,10 +728,15 @@ export class WishlistPage implements OnInit {
     return this.removingIds().has(businessId);
   }
 
-  async remove(business: Business) {
+  openBusiness(business: Business) {
+    void this.router.navigateByUrl(this.businessProfileLink(business));
+  }
+
+  async remove(business: Business, event?: Event) {
+    event?.stopPropagation();
     const alert = await this.alerts.create({
-      header: "Remove liked salon?",
-      message: `${business.businessName} will be removed from your liked salons.`,
+      header: "Remove favourite?",
+      message: `${business.businessName} will be removed from your favourites.`,
       buttons: [
         { text: "Keep", role: "cancel" },
         { text: "Remove", role: "destructive", handler: () => void this.confirmRemove(business) }
@@ -734,9 +749,12 @@ export class WishlistPage implements OnInit {
     this.removingIds.update((current) => new Set([...current, business.id]));
     try {
       await this.marketplace.removeFavorite(business.id);
-      await this.feedback.success(`${business.businessName} removed from liked salons.`);
+      if (this.marketplace.isSalonSaved(business.id)) {
+        await this.marketplace.toggleSavedSalon(business.id);
+      }
+      await this.feedback.success(`${business.businessName} removed from favourites.`);
     } catch {
-      await this.feedback.error(this.marketplace.error() || "Unable to remove liked salon.");
+      await this.feedback.error(this.marketplace.error() || "Unable to remove favourite.");
     } finally {
       this.removingIds.update((current) => {
         const next = new Set(current);

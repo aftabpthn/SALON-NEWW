@@ -1,6 +1,6 @@
 import { Component, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, RouterLink } from "@angular/router";
-import { IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline } from "ionicons/icons";
 import { Booking } from "../../core/api.types";
@@ -19,7 +19,7 @@ interface HelpItem {
 
 @Component({
   standalone: true,
-  imports: [RouterLink, IonBackButton, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar],
+  imports: [RouterLink, IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar],
   template: `
     <ion-header class="ion-no-border help-header">
       <ion-toolbar>
@@ -43,7 +43,7 @@ interface HelpItem {
               id="help-search"
               type="search"
               autocomplete="off"
-              placeholder="Try “refund” or “reschedule”"
+              placeholder="Search bookings, payments, refunds or account help."
               [value]="query()"
               (input)="onSearch($event)"
               aria-describedby="search-status"
@@ -101,7 +101,43 @@ interface HelpItem {
 
           @if (filteredItems().length) {
             <div class="faq-list">
-              @for (item of filteredItems(); track item.id) {
+              @for (item of firstFaqItems(); track item.id) {
+                <article class="faq-item" [class.expanded]="expandedItem() === item.id">
+                  <h3>
+                    <button
+                      type="button"
+                      [attr.aria-expanded]="expandedItem() === item.id"
+                      [attr.aria-controls]="item.id + '-answer'"
+                      (click)="toggleItem(item.id)"
+                    >
+                      <span>{{ item.title }}</span>
+                      <ion-icon name="chevron-down-outline" aria-hidden="true"></ion-icon>
+                    </button>
+                  </h3>
+                  @if (expandedItem() === item.id) {
+                    <div class="faq-answer" [id]="item.id + '-answer'">
+                      <p>{{ item.body }}</p>
+                      @if (item.route && item.actionLabel) {
+                        <a [routerLink]="helpRoute(item.route)">{{ item.actionLabel }}</a>
+                      }
+                    </div>
+                  }
+                </article>
+              }
+
+              <div class="faq-escalation">
+                <div class="faq-escalation-copy">
+                  <strong>Still need help?</strong>
+                  <span>Reach our support team for anything not covered above.</span>
+                </div>
+                <a class="faq-escalation-contact" [routerLink]="supportLink()">
+                  <ion-icon name="chatbubbles-outline" aria-hidden="true"></ion-icon>
+                  Contact support
+                </a>
+                <a class="faq-escalation-security" [routerLink]="supportLink()">Report a security issue</a>
+              </div>
+
+              @for (item of restFaqItems(); track item.id) {
                 <article class="faq-item" [class.expanded]="expandedItem() === item.id">
                   <h3>
                     <button
@@ -128,26 +164,10 @@ interface HelpItem {
           } @else {
             <div class="empty-state" role="status">
               <h3>No matching answers</h3>
-              <p>Try a broader search, or contact the support team below.</p>
+              <p>Try a broader search, or clear your search to browse all topics.</p>
               <button type="button" (click)="clearSearch()">Clear search</button>
             </div>
           }
-        </section>
-
-        <section class="support-escalation" aria-labelledby="human-support-title">
-          <div>
-            <p class="eyebrow">Still need help?</p>
-            <h2 id="human-support-title">Talk to our support team</h2>
-            <p>Get help with bookings, payments, refunds, or your account.</p>
-          </div>
-          <ion-button [routerLink]="supportLink()">
-            <ion-icon name="chatbubbles-outline" slot="start"></ion-icon>
-            Contact support
-          </ion-button>
-          <ion-button fill="outline" class="security-button" [routerLink]="supportLink()">
-            <ion-icon name="shield-checkmark-outline" slot="start"></ion-icon>
-            Report a security issue
-          </ion-button>
         </section>
       </main>
     </ion-content>
@@ -320,14 +340,14 @@ interface HelpItem {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 48px;
-      min-width: 48px;
-      padding: 0 9px;
+      min-height: 40px;
+      min-width: 0;
+      padding: 0 12px;
       border: 0;
-      border-radius: 12px;
+      border-radius: 10px;
       color: var(--brand-700);
       background: var(--primary-soft);
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       font-weight: 850;
       text-decoration: none;
       transition: color var(--motion-fast), background-color var(--motion-fast);
@@ -367,7 +387,7 @@ interface HelpItem {
     .category-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: 8px;
     }
 
     .category-button {
@@ -376,7 +396,7 @@ interface HelpItem {
       align-items: center;
       gap: 6px;
       min-width: 0;
-      min-height: 64px;
+      min-height: 62px;
       padding: 8px 10px;
       border: 1px solid var(--border-strong);
       border-radius: 14px;
@@ -489,8 +509,8 @@ interface HelpItem {
     .faq-answer p {
       margin: 0;
       color: var(--muted);
-      font-size: 0.84rem;
-      line-height: 1.5;
+      font-size: 0.9rem;
+      line-height: 1.65;
     }
 
     .faq-answer a {
@@ -502,6 +522,75 @@ interface HelpItem {
       font-size: 0.88rem;
       font-weight: 850;
       text-underline-offset: 3px;
+    }
+
+    .faq-escalation {
+      display: grid;
+      gap: 8px;
+      align-items: center;
+      padding: 14px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+
+    .faq-escalation-copy {
+      display: grid;
+      gap: 2px;
+    }
+
+    .faq-escalation-copy strong {
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 850;
+    }
+
+    .faq-escalation-copy span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.4;
+    }
+
+    .faq-escalation-contact {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 44px;
+      padding: 0 16px;
+      border-radius: 12px;
+      color: #FFFFFF;
+      background: var(--brand-700);
+      font-size: 0.84rem;
+      font-weight: 850;
+      text-decoration: none;
+      transition: background var(--motion-fast), transform var(--motion-fast);
+    }
+
+    .faq-escalation-contact:hover {
+      background: var(--brand-800);
+      transform: translateY(-1px);
+    }
+
+    .faq-escalation-contact ion-icon {
+      font-size: 1rem;
+    }
+
+    .faq-escalation-security {
+      justify-self: start;
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 750;
+      text-decoration: underline;
+      text-decoration-color: var(--border-strong);
+      text-underline-offset: 3px;
+    }
+
+    .faq-escalation-security:hover {
+      color: var(--brand-700);
+      text-decoration-color: var(--brand-700);
     }
 
     .empty-state {
@@ -526,52 +615,6 @@ interface HelpItem {
       font: inherit;
       font-weight: 850;
       cursor: pointer;
-    }
-
-    .support-escalation {
-      display: grid;
-      gap: 4px;
-      padding: 11px 12px;
-      border-top: 2px solid var(--brand-700);
-      border-radius: 0 0 var(--radius-md) var(--radius-md);
-      color: var(--text);
-      background: var(--surface-soft);
-    }
-
-    .support-escalation > div > p:last-child {
-      margin: 2px 0 0;
-      font-size: 0.78rem;
-      line-height: 1.35;
-    }
-
-    .support-escalation ion-button {
-      min-height: 48px;
-      margin: 4px 0 0;
-      justify-self: start;
-      --border-radius: 14px;
-      font-size: 0.84rem;
-      font-weight: 850;
-    }
-
-    .security-button {
-      margin-top: 2px;
-      --border-color: var(--brand-700);
-      --border-radius: 12px;
-      --color: var(--brand-700);
-      --padding-start: 13px;
-      --padding-end: 13px;
-      font-size: 0.84rem;
-      font-weight: 800;
-    }
-
-    @media (max-width: 599px) {
-      .support-escalation h2 {
-        font-size: 1rem;
-      }
-    }
-
-    .security-button ion-icon {
-      font-size: 1.05rem;
     }
 
     button:focus-visible,
@@ -646,12 +689,13 @@ interface HelpItem {
 
       .booking-support > a {
         grid-column: auto;
-        min-width: 152px;
-        padding: 0 16px;
+        min-width: 112px;
+        min-height: 42px;
+        padding: 0 14px;
         border: 1px solid var(--brand-700);
-        border-radius: 14px;
+        border-radius: 12px;
         background: transparent;
-        font-size: 0.88rem;
+        font-size: 0.84rem;
       }
 
       .category-section,
@@ -664,32 +708,29 @@ interface HelpItem {
       }
 
       .section-copy .eyebrow,
-      .search-intro .eyebrow,
-      .support-escalation .eyebrow {
+      .search-intro .eyebrow {
         font-size: inherit;
         line-height: inherit;
       }
 
-      .section-copy h2,
-      .support-escalation h2 {
+      .section-copy h2 {
         font-size: 1.25rem;
       }
 
       .category-button {
-        grid-template-columns: 32px minmax(0, 1fr);
-        align-items: start;
+        grid-template-columns: 30px minmax(0, 1fr);
+        align-items: center;
         gap: 9px;
-        min-height: 96px;
-        padding: 16px;
+        min-height: 78px;
+        padding: 12px 14px;
       }
 
       .category-button ion-icon {
-        margin-top: 1px;
-        font-size: 1.35rem;
+        font-size: 1.2rem;
       }
 
       .category-button span {
-        gap: 5px;
+        gap: 4px;
       }
 
       .category-button strong {
@@ -716,24 +757,18 @@ interface HelpItem {
       }
 
       .faq-answer p {
-        font-size: 0.9rem;
-        line-height: 1.65;
+        font-size: 0.95rem;
+        line-height: 1.75;
       }
 
-      .support-escalation {
+      .faq-escalation {
         grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        padding: 24px;
+        padding: 16px 18px;
       }
 
-      .support-escalation ion-button {
-        min-width: 170px;
-        font-size: inherit;
-      }
-
-      .security-button {
-        grid-column: 1 / -1;
-        min-width: 0;
+      .faq-escalation-security {
+        grid-column: 2;
+        justify-self: end;
       }
     }
 
@@ -742,7 +777,8 @@ interface HelpItem {
       .booking-support > a,
       .category-button,
       .faq-item h3 button,
-      .faq-item h3 ion-icon {
+      .faq-item h3 ion-icon,
+      .faq-escalation-contact {
         transition: none;
       }
 
@@ -785,6 +821,8 @@ export class HelpPage implements OnInit {
     const categoryMatches = query && this.categoryMatches(this.activeCategory(), query);
     return this.helpItems.filter((item) => item.category === this.activeCategory() && (!query || categoryMatches || this.itemMatches(item, query)));
   });
+  readonly firstFaqItems = computed(() => this.filteredItems().slice(0, 3));
+  readonly restFaqItems = computed(() => this.filteredItems().slice(3));
   readonly resultCount = computed(() => {
     const query = this.normalizedQuery();
     return query
@@ -812,7 +850,10 @@ export class HelpPage implements OnInit {
   }
 
   supportLink(): string {
-    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+    const base = this.marketplace.salonMode() ? this.marketplace.salonModeUrl("support") : "/tabs/support";
+    const booking = this.upcomingBooking();
+    if (!booking?.id) return base;
+    return `${base}?mode=booking&bookingId=${encodeURIComponent(booking.id)}`;
   }
 
   helpRoute(route: string | undefined): string | undefined {

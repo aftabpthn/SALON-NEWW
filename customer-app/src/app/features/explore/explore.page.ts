@@ -3,18 +3,28 @@ import { Router, RouterLink } from "@angular/router";
 import { IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import {
-  businessOutline,
+  bagHandleOutline,
+  barbellOutline,
+  bodyOutline,
+  brushOutline,
   chevronForwardOutline,
+  colorPaletteOutline,
+  colorWandOutline,
+  cutOutline,
+  flashOutline,
+  flowerOutline,
+  leafOutline,
   locationOutline,
   mapOutline,
+  medkitOutline,
   navigateOutline,
   optionsOutline,
   pricetagOutline,
-  ribbonOutline,
   searchOutline,
   sparklesOutline,
   swapVerticalOutline,
-  timeOutline
+  timeOutline,
+  waterOutline
 } from "ionicons/icons";
 import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
@@ -28,13 +38,17 @@ import { Business } from "../../core/api.types";
       <main class="page explore-page">
         <header class="explore-header">
           <h1>Explore</h1>
-          <p><ion-icon name="location-outline"></ion-icon><span>Discovering around <strong>{{ areaLabel() }}</strong></span></p>
+          <button type="button" class="location-line" (click)="chooseLocation()">
+            <ion-icon name="location-outline"></ion-icon>
+            <span>{{ locationLabel() }}</span>
+            <ion-icon name="chevron-forward-outline"></ion-icon>
+          </button>
         </header>
 
         <section class="search-command" aria-labelledby="search-command-title">
           <button type="button" class="explore-search-bar" (click)="openSearch()">
             <ion-icon name="search-outline"></ion-icon>
-            <span><strong id="search-command-title">What are you looking for?</strong><small>Salons, services, professionals or an area</small></span>
+            <span id="search-command-title" class="search-placeholder">Search salons, services or professionals</span>
             <ion-icon name="chevron-forward-outline"></ion-icon>
           </button>
           <nav class="search-tools" aria-label="Search tools">
@@ -45,48 +59,45 @@ import { Business } from "../../core/api.types";
         </section>
 
         <nav class="explore-chips" aria-label="Discovery shortcuts">
-          <a routerLink="/search" [queryParams]="{ filter: 'nearest', sort: 'distance', nearMe: true }" class="chip"><ion-icon name="navigate-outline"></ion-icon> Near me</a>
-          <a routerLink="/search" [queryParams]="{ filter: 'open' }" class="chip">Open now</a>
-          <a routerLink="/search" [queryParams]="{ filter: 'top', sort: 'rating' }" class="chip">Top rated</a>
-          <a routerLink="/search" [queryParams]="{ filter: 'deals' }" class="chip"><ion-icon name="pricetag-outline"></ion-icon> Offers</a>
+          <a routerLink="/search" [queryParams]="{ filter: 'nearest', sort: 'distance', nearMe: true }" class="chip" [class.active]="activeQuickFilter() === 'nearest'" (click)="rememberQuickFilter('nearest')"><ion-icon name="navigate-outline"></ion-icon> Near me</a>
+          <a routerLink="/search" [queryParams]="{ filter: 'open' }" class="chip" [class.active]="activeQuickFilter() === 'open'" (click)="rememberQuickFilter('open')">Open now</a>
+          <a routerLink="/search" [queryParams]="{ filter: 'top', sort: 'rating' }" class="chip" [class.active]="activeQuickFilter() === 'top'" (click)="rememberQuickFilter('top')">Top rated</a>
+          <a routerLink="/search" [queryParams]="{ filter: 'deals' }" class="chip" [class.active]="activeQuickFilter() === 'deals'" (click)="rememberQuickFilter('deals')"><ion-icon name="pricetag-outline"></ion-icon> Offers</a>
         </nav>
 
+        @if (nearby().length) {
+          <section class="explore-section salon-group">
+            <div class="explore-section-head"><div><span>{{ nearYouKicker() }}</span><h2>Salons near you</h2></div><a routerLink="/search" [queryParams]="{ filter: 'nearest', sort: 'distance', nearMe: true }">See all</a></div>
+            <div class="salon-previews">@for (biz of nearby(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div>
+          </section>
+        }
+
+        @if (openBusinessCount() > 0) {
+          <a routerLink="/search" [queryParams]="{ filter: 'open', sort: 'distance', nearMe: true }" class="open-banner">
+            <span class="open-banner-icon"><ion-icon name="time-outline"></ion-icon></span>
+            <span class="open-banner-copy"><strong>{{ openBusinessCount() }} {{ openBusinessCount() === 1 ? "salon" : "salons" }} open now</strong><small>Currently taking bookings near you</small></span>
+            <span class="open-banner-arrow"><ion-icon name="chevron-forward-outline"></ion-icon></span>
+          </a>
+        }
+
         <section class="explore-section">
-          <div class="explore-section-head"><div><span>Find your treatment</span><h2>Browse categories</h2></div></div>
+          <div class="explore-section-head"><div><span>Find your treatment</span><h2>Browse categories</h2></div><a routerLink="/search">View all</a></div>
           <div class="explore-categories">
-            @for (cat of featuredCategories(); track cat.slug) {
-              <a routerLink="/search" [queryParams]="{ q: cat.label, mode: 'services' }" class="category-card"><b aria-hidden="true">{{ cat.label.slice(0, 1) }}</b><span>{{ cat.label }}</span></a>
-            }
-            @if (!showAllCategories()) {
-              <button type="button" class="category-card category-view-all" (click)="showAllCategories.set(true)"><b aria-hidden="true">+</b><span>View all</span></button>
-            } @else {
-              <button type="button" class="category-card category-view-all" (click)="showAllCategories.set(false)"><b aria-hidden="true">−</b><span>View less</span></button>
+            @for (cat of mainCategories(); track cat.slug) {
+              <a routerLink="/search" [queryParams]="{ q: cat.label, mode: 'services' }" class="category-card"><ion-icon [name]="categoryIcon(cat.label)" aria-hidden="true"></ion-icon><span>{{ cat.label }}</span></a>
             }
           </div>
         </section>
 
-        <section class="discovery-feature" aria-labelledby="discovery-feature-title">
-          @if (editorialCollections()[0]; as collection) {
-            <a routerLink="/search" [queryParams]="collection.queryParams" class="feature-primary">
-              <span>Around {{ areaLabel() }}</span>
-              <h2 id="discovery-feature-title">{{ collection.title }}</h2>
-              <p>{{ collection.description }}</p>
-              <strong>Browse open salons <ion-icon name="chevron-forward-outline"></ion-icon></strong>
-            </a>
-          }
-          <nav class="collection-actions" aria-label="Curated collections">
-            @if (editorialCollections()[1]; as collection) {
-              <a routerLink="/search" [queryParams]="collection.queryParams"><span>{{ collection.title }}</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-            }
-            <a routerLink="/search" [queryParams]="{ filter: 'today', sort: 'earliest' }"><span>Available today</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-            <a routerLink="/search" [queryParams]="{ filter: 'top', sort: 'rating' }"><span>Top rated</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          </nav>
-          <a routerLink="/tabs/consultation" class="concierge-callout">
-            <ion-icon name="sparkles-outline"></ion-icon>
-            <div><h2>Aura Concierge</h2><p>Not sure what to book? Build a guided salon plan.</p></div>
-            <b>Start <ion-icon name="chevron-forward-outline"></ion-icon></b>
-          </a>
-        </section>
+        @if (offers().length) {
+          <section class="explore-section salon-group"><div class="explore-section-head"><div><span>Published by participating salons</span><h2>Offers worth exploring</h2></div><a routerLink="/search" [queryParams]="{ filter: 'deals' }">See all</a></div><div class="salon-previews">@for (biz of offers(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div></section>
+        }
+
+        <a routerLink="/tabs/consultation" class="concierge-card">
+          <ion-icon name="sparkles-outline"></ion-icon>
+          <div><h2>Aura Concierge</h2><p>Not sure what to book? Build a guided salon plan.</p></div>
+          <b>Start <ion-icon name="chevron-forward-outline"></ion-icon></b>
+        </a>
 
         @if (trending().length) {
           <section class="explore-section salon-group"><div class="explore-section-head"><div><span>Rating meets review momentum</span><h2>Trending now</h2></div><a routerLink="/search" [queryParams]="{ sort: 'reviews' }">See all</a></div><div class="salon-previews">@for (biz of trending(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div></section>
@@ -96,12 +107,9 @@ import { Business } from "../../core/api.types";
         } @else if (premium().length) {
           <section class="explore-section salon-group"><div class="explore-section-head"><div><span>Higher prices with ratings of 4.2+</span><h2>Premium edit</h2></div><a routerLink="/search" [queryParams]="{ filter: 'premium', sort: 'rating' }">See all</a></div><div class="salon-previews">@for (biz of premium(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div></section>
         }
-        @if (offers().length) {
-          <section class="explore-section salon-group"><div class="explore-section-head"><div><span>Published by participating salons</span><h2>Offers worth exploring</h2></div><a routerLink="/search" [queryParams]="{ filter: 'deals' }">See all</a></div><div class="salon-previews">@for (biz of offers(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div></section>
-        }
 
         @if (popularServices().length) {
-          <section class="explore-section"><div class="explore-section-head"><div><span>Popular on salon menus</span><h2>Services to discover</h2></div><a routerLink="/search" [queryParams]="{ mode: 'services' }">See all</a></div><div class="service-grid">@for (item of popularServices(); track item.business.id + item.name) { <a routerLink="/search" [queryParams]="{ q: item.name, mode: 'services' }"><span>{{ item.business.category }}</span><h3>{{ item.name }}</h3><p>{{ item.business.businessName }}</p><strong>From {{ money(item.business.startingPricePaise) }}</strong></a> }</div></section>
+          <section class="explore-section"><div class="explore-section-head"><div><span>Popular on salon menus</span><h2>Services to discover</h2></div><a routerLink="/search" [queryParams]="{ mode: 'services' }">See all</a></div><div class="service-grid">@for (item of popularServices(); track item.business.id + item.name) { <a routerLink="/search" [queryParams]="{ q: item.name, mode: 'services' }"><span>{{ item.business.category }}</span><h3>{{ item.name }}</h3><p>{{ item.business.businessName }}</p><strong>{{ servicePriceLabel(item.business) }}</strong></a> }</div></section>
         }
 
         @if (professionals().length) {
@@ -148,7 +156,7 @@ import { Business } from "../../core/api.types";
 
     .explore-header {
       display: grid;
-      gap: 5px;
+      gap: 2px;
       padding-top: 2px;
     }
 
@@ -161,26 +169,40 @@ import { Business } from "../../core/api.types";
       line-height: 1;
     }
 
-    .explore-header p {
-      display: flex;
+    .location-line {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
+      justify-self: start;
       min-width: 0;
+      min-height: 44px;
+      max-width: 100%;
       margin: 0;
+      padding: 0 4px 0 2px;
+      border: 0;
+      border-radius: 12px;
       color: var(--muted);
+      background: transparent;
+      font: inherit;
       font-size: 0.82rem;
+      font-weight: 800;
       line-height: 1.35;
+      text-align: left;
+      cursor: pointer;
+      transition: background 160ms ease;
     }
 
-    .explore-header p span {
+    .location-line span {
       min-width: 0;
       overflow: hidden;
+      color: var(--text);
+      font-weight: 850;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .explore-header p strong { color: var(--text); font-weight: 850; }
-    .explore-header p ion-icon { flex: 0 0 auto; color: var(--primary); }
+    .location-line ion-icon:first-child { flex: 0 0 auto; color: var(--primary); }
+    .location-line ion-icon:last-child { flex: 0 0 auto; color: var(--muted); font-size: 0.72rem; }
 
     .search-command {
       display: grid;
@@ -196,24 +218,30 @@ import { Business } from "../../core/api.types";
       display: flex;
       align-items: center;
       width: 100%;
-      min-height: 62px;
+      min-height: 56px;
       gap: 10px;
-      padding: 10px 12px;
+      padding: 0 14px;
       border: 0;
       border-radius: 16px;
       color: var(--muted);
       background: var(--surface-soft);
       font: inherit;
+      font-size: 0.9rem;
       font-weight: 800;
       text-align: left;
       cursor: pointer;
       transition: border-color 160ms ease, box-shadow 160ms ease;
     }
 
-    .explore-search-bar > span { display: grid; flex: 1; gap: 2px; min-width: 0; }
-    .explore-search-bar strong { color: var(--text); font-size: 0.94rem; }
-    .explore-search-bar small { overflow: hidden; color: var(--muted); font-size: 0.76rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-    .explore-search-bar ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 1.1rem; }
+    .explore-search-bar .search-placeholder {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .explore-search-bar ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 1.05rem; }
 
     .search-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
     .search-tools a {
@@ -261,6 +289,12 @@ import { Business } from "../../core/api.types";
       white-space: nowrap;
     }
     .chip ion-icon { color: var(--primary); font-size: 0.9rem; }
+    .chip.active {
+      color: #fff;
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+    .chip.active ion-icon { color: #fff; }
 
     .explore-section { display: grid; gap: 12px; }
     .explore-section-head { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
@@ -297,6 +331,36 @@ import { Business } from "../../core/api.types";
       white-space: nowrap;
     }
 
+    .open-banner {
+      display: grid;
+      grid-template-columns: 40px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 64px;
+      padding: 10px 14px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 18px;
+      color: var(--text);
+      background: linear-gradient(135deg, var(--primary-soft), var(--surface));
+      text-decoration: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .open-banner-icon {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 13px;
+      color: #fff;
+      background: var(--primary);
+    }
+
+    .open-banner-copy { display: grid; gap: 2px; min-width: 0; }
+    .open-banner-copy strong { font-size: 0.86rem; line-height: 1.2; }
+    .open-banner-copy small { color: var(--muted); font-size: 0.7rem; line-height: 1.3; }
+    .open-banner-arrow { color: var(--primary); }
+
     .explore-categories {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -327,15 +391,14 @@ import { Business } from "../../core/api.types";
       cursor: pointer;
     }
 
-    .category-card b {
-      display: grid;
-      place-items: center;
+    .category-card ion-icon {
       width: 38px;
       height: 38px;
+      padding: 10px;
       border-radius: 12px;
       color: #fff;
       background: linear-gradient(145deg, var(--brand-600), var(--brand-800));
-      font-size: 1rem;
+      font-size: 1.05rem;
     }
 
     .category-card span {
@@ -353,121 +416,35 @@ import { Business } from "../../core/api.types";
       -webkit-line-clamp: 2;
     }
 
-    .category-view-all {
-      border-color: rgba(99, 102, 241, 0.26);
-      background: var(--primary-soft);
-    }
-
-    .category-view-all b {
-      background: var(--primary);
-    }
-
-    .discovery-feature {
-      display: grid;
-      gap: 10px;
-    }
-
-    .feature-primary {
-      display: grid;
-      align-content: end;
-      min-height: 184px;
-      padding: 20px;
-      overflow: hidden;
-      border-radius: 24px;
-      color: #fff;
-      background:
-        radial-gradient(circle at 90% 8%, rgba(255, 255, 255, 0.15), transparent 34%),
-        linear-gradient(145deg, var(--brand-800), var(--primary));
-      text-decoration: none;
-      box-shadow: 0 16px 34px rgba(28, 28, 28, 0.14);
-    }
-
-    .feature-primary > span {
-      color: rgba(255, 255, 255, 0.76);
-      font-size: 0.74rem;
-      font-weight: 800;
-    }
-
-    .feature-primary h2 {
-      margin: 5px 0 6px;
-      color: #fff;
-      font-size: clamp(1.45rem, 7vw, 2rem);
-      letter-spacing: -0.04em;
-      line-height: 1;
-    }
-
-    .feature-primary p {
-      max-width: 460px;
-      margin: 0 0 14px;
-      color: rgba(255, 255, 255, 0.78);
-      font-size: 0.82rem;
-      line-height: 1.45;
-    }
-
-    .feature-primary strong,
-    .concierge-callout b {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      color: #fff;
-      font-size: 0.8rem;
-      font-weight: 900;
-    }
-
-    .collection-actions {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .collection-actions a {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 3px;
-      min-width: 0;
-      min-height: 58px;
-      padding: 9px 8px;
-      border: 1px solid var(--border);
-      border-radius: 15px;
-      color: var(--text);
-      background: var(--surface);
-      font-size: 0.69rem;
-      font-weight: 850;
-      line-height: 1.2;
-      text-decoration: none;
-    }
-
-    .collection-actions span { min-width: 0; overflow-wrap: anywhere; }
-    .collection-actions ion-icon { flex: 0 0 auto; color: var(--primary); font-size: 0.82rem; }
-
-    .concierge-callout {
+    .concierge-card {
       display: grid;
       grid-template-columns: 44px minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
-      min-height: 78px;
-      padding: 12px;
-      border: 1px solid rgba(99, 102, 241, 0.24);
-      border-radius: 19px;
-      color: #fff;
-      background: var(--brand-900);
+      gap: 12px;
+      min-height: 82px;
+      padding: 14px;
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      border-radius: 20px;
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: 0 10px 26px rgba(28, 28, 28, 0.07);
       text-decoration: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
     }
 
-    .concierge-callout > ion-icon {
+    .concierge-card > ion-icon {
       width: 44px;
       height: 44px;
       padding: 11px;
       border-radius: 14px;
       color: #fff;
-      background: rgba(255, 255, 255, 0.1);
+      background: linear-gradient(145deg, var(--brand-600), var(--primary));
     }
 
-    .concierge-callout > div { display: grid; gap: 2px; min-width: 0; }
-    .concierge-callout h2 { margin: 0; color: #fff; font-size: 0.88rem; line-height: 1.2; }
-    .concierge-callout p { margin: 0; color: rgba(255, 255, 255, 0.76); font-size: 0.7rem; line-height: 1.35; }
-    .concierge-callout b { white-space: nowrap; }
+    .concierge-card > div { display: grid; gap: 2px; min-width: 0; }
+    .concierge-card h2 { margin: 0; font-size: 0.9rem; line-height: 1.2; }
+    .concierge-card p { margin: 0; color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
+    .concierge-card b { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); font-size: 0.78rem; font-weight: 900; white-space: nowrap; }
 
     .salon-group { gap: 14px; }
     .salon-previews {
@@ -553,9 +530,13 @@ import { Business } from "../../core/api.types";
     }
 
     @media (hover: hover) and (pointer: fine) {
+      .location-line:hover { background: var(--surface-soft); }
       .explore-search-bar:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 12px 28px rgba(28, 28, 28, 0.09); }
       .chip:hover { border-color: rgba(99, 102, 241, 0.4); background: var(--primary-soft); }
+      .chip.active:hover { border-color: var(--primary); background: var(--primary); }
       .category-card:hover { border-color: rgba(99, 102, 241, 0.4); }
+      .open-banner:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 14px 30px rgba(28, 28, 28, 0.09); }
+      .concierge-card:hover { border-color: rgba(99, 102, 241, 0.4); box-shadow: 0 16px 34px rgba(28, 28, 28, 0.11); }
     }
 
     a:focus-visible, button:focus-visible { outline: 3px solid rgba(99, 102, 241, 0.42); outline-offset: 3px; }
@@ -563,10 +544,8 @@ import { Business } from "../../core/api.types";
     @media (max-width: 349px) {
       .explore-categories { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .service-grid { grid-template-columns: minmax(0, 1fr); }
-      .collection-actions { grid-template-columns: minmax(0, 1fr); }
-      .collection-actions a { min-height: 44px; }
-      .concierge-callout { grid-template-columns: 44px minmax(0, 1fr); }
-      .concierge-callout b { grid-column: 2; }
+      .concierge-card { grid-template-columns: 44px minmax(0, 1fr); }
+      .concierge-card b { grid-column: 2; }
     }
 
     @media (min-width: 600px) {
@@ -590,10 +569,6 @@ import { Business } from "../../core/api.types";
 
     @media (min-width: 900px) {
       .explore-page { padding-inline: 28px; }
-      .discovery-feature { grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr); }
-      .feature-primary { grid-row: span 2; min-height: 260px; }
-      .collection-actions { grid-template-columns: minmax(0, 1fr); }
-      .collection-actions a { min-height: 52px; }
       .explore-categories { grid-template-columns: repeat(8, minmax(0, 1fr)); }
       .salon-previews { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .service-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -606,15 +581,18 @@ import { Business } from "../../core/api.types";
 
     @media (prefers-reduced-motion: reduce) {
       .skeleton-card { animation: none; }
-      .explore-search-bar, .chip, .category-card { transition: none; }
+      .explore-search-bar, .chip, .category-card, .open-banner, .concierge-card { transition: none; }
     }
   `]
 })
 export class ExplorePage implements OnInit {
-  readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "Current area");
+  private static readonly FILTER_STORAGE_KEY = "aura_explore_last_filter";
+
+  readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "");
+  readonly locationLabel = computed(() => this.areaLabel() || "Choose location");
+  readonly activeQuickFilter = signal(this.lastQuickFilter());
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(null);
   readonly skeletons = [1, 2, 3];
-  readonly showAllCategories = signal(false);
 
   /** Keyword map: if raw category contains any keyword → it belongs to that main bucket */
   private static readonly GROUP_MAP: Array<{ main: string; keywords: string[] }> = [
@@ -632,6 +610,25 @@ export class ExplorePage implements OnInit {
     { main: "Therapy",    keywords: ["therap", "ayurveda", "acupressure", "reflexology", "physio"] },
   ];
 
+  /** Icons for the same main buckets; unmatched labels fall back to sparkles. */
+  private static readonly ICON_MAP: Array<{ keywords: string[]; icon: string }> = [
+    { keywords: ["hair", "shampoo", "scalp", "keratin"], icon: "cut-outline" },
+    { keywords: ["skin", "facial", "glow", "derma", "bleach", "tan"], icon: "flower-outline" },
+    { keywords: ["nail", "manicure", "pedicure", "gel", "acrylic"], icon: "color-palette-outline" },
+    { keywords: ["makeup", "bridal", "foundation", "contour"], icon: "brush-outline" },
+    { keywords: ["massage"], icon: "body-outline" },
+    { keywords: ["wax", "sugaring", "threading", "epil"], icon: "leaf-outline" },
+    { keywords: ["shav", "beard", "trim", "razor"], icon: "flash-outline" },
+    { keywords: ["spa", "steam", "scrub", "polish", "wrap"], icon: "water-outline" },
+    { keywords: ["fitness", "gym", "yoga", "pilates"], icon: "barbell-outline" },
+    { keywords: ["tattoo", "pierc", "ink"], icon: "color-wand-outline" },
+    { keywords: ["extension", "weave", "wig"], icon: "bag-handle-outline" },
+    { keywords: ["therap", "ayurveda", "acupressure", "reflexology", "physio"], icon: "medkit-outline" },
+  ];
+
+  /** Words that read as filler when they lead an uncategorized label ("Complementary therapies"). */
+  private static readonly LABEL_FILLERS = new Set(["complementary", "advanced", "premium", "signature", "luxury", "classic", "exclusive", "special", "modern", "professional"]);
+
   readonly mainCategories = computed(() => {
     const raw = this.marketplace.categories();
     const grouped = new Map<string, string>(); // mainLabel → first matching raw slug for query
@@ -648,32 +645,45 @@ export class ExplorePage implements OnInit {
         }
       }
       if (!matched) {
-        // Uncategorized → show raw label as-is (first word only if long)
-        const label = cat.label.length > 16 ? cat.label.split(/\s+/)[0] : cat.label;
-        if (!grouped.has(label)) {
-          grouped.set(label, cat.slug);
-        }
+        grouped.set(this.shortLabel(cat.label), cat.slug);
       }
     }
     return Array.from(grouped, ([label, slug]) => ({ label, slug }));
   });
 
-  readonly featuredCategories = computed(() => this.showAllCategories() ? this.mainCategories() : this.mainCategories().slice(0, 7));
+  readonly nearYouKicker = computed(() =>
+    this.marketplace.businesses().some((business) => business.distanceKm != null && Number(business.distanceKm) > 0)
+      ? "Sorted by distance"
+      : "Recommended for you"
+  );
 
-  readonly greeting = computed(() => {
-    const name = this.marketplace.customer()?.name?.trim().split(/\s+/)[0];
-    return name ? `Hey ${name}, where to today?` : "Discover salons near you";
-  });
-
-  readonly recommendations = computed(() => {
+  readonly nearby = computed(() => {
     const businesses = this.marketplace.businesses();
-    return businesses.slice(0, 6);
+    const located = businesses
+      .filter((business) => business.distanceKm != null && Number(business.distanceKm) > 0)
+      .sort((left, right) => Number(left.distanceKm) - Number(right.distanceKm));
+    if (located.length >= 3) return located.slice(0, 4);
+    return [...businesses]
+      .filter((business) => Number(business.ratingCount || 0) > 0)
+      .sort((left, right) => Number(right.ratingAverage || 0) - Number(left.ratingAverage || 0) || Number(right.ratingCount || 0) - Number(left.ratingCount || 0))
+      .slice(0, 4);
   });
 
-  readonly trending = computed(() => [...this.marketplace.businesses()]
-    .filter((business) => Number(business.ratingCount || 0) > 0)
-    .sort((left, right) => this.trendingScore(right) - this.trendingScore(left))
-    .slice(0, 4));
+  readonly openBusinessCount = computed(() => this.marketplace.businesses().filter((business) => business.isOpen).length);
+
+  readonly offers = computed(() => this.takeWithExclusions(
+    this.marketplace.businesses().filter((business) => business.hasOffer),
+    this.nearby(),
+    4
+  ));
+
+  readonly trending = computed(() => this.takeWithExclusions(
+    [...this.marketplace.businesses()]
+      .filter((business) => Number(business.ratingCount || 0) > 0)
+      .sort((left, right) => this.trendingScore(right) - this.trendingScore(left)),
+    [...this.nearby(), ...this.offers()],
+    4
+  ));
 
   readonly topRated = computed(() => [...this.marketplace.businesses()]
     .filter((business) => Number(business.ratingCount || 0) > 0 && Number(business.ratingAverage || 0) > 0)
@@ -683,26 +693,24 @@ export class ExplorePage implements OnInit {
   readonly newOpenings = computed(() => {
     const now = Date.now();
     const ninetyDays = 90 * 24 * 60 * 60 * 1000;
-    return [...this.marketplace.businesses()]
+    const recent = [...this.marketplace.businesses()]
       .filter((business) => {
         const createdAt = business.createdAt ? new Date(business.createdAt).getTime() : Number.NaN;
         return Number.isFinite(createdAt) && createdAt <= now && now - createdAt <= ninetyDays;
       })
-      .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime())
-      .slice(0, 4);
+      .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime());
+    return this.takeWithExclusions(recent, [...this.nearby(), ...this.offers(), ...this.trending()], 4);
   });
 
   readonly premium = computed(() => {
     const priced = this.marketplace.businesses().filter((business) => Number(business.startingPricePaise || 0) > 0);
     const prices = priced.map((business) => business.startingPricePaise).sort((left, right) => left - right);
     const threshold = prices[Math.floor((prices.length - 1) * 0.65)] || 0;
-    return priced
+    const candidates = priced
       .filter((business) => business.startingPricePaise >= threshold && Number(business.ratingAverage || 0) >= 4.2)
-      .sort((left, right) => Number(right.ratingAverage) - Number(left.ratingAverage) || right.startingPricePaise - left.startingPricePaise)
-      .slice(0, 4);
+      .sort((left, right) => Number(right.ratingAverage) - Number(left.ratingAverage) || right.startingPricePaise - left.startingPricePaise);
+    return this.takeWithExclusions(candidates, [...this.nearby(), ...this.offers(), ...this.trending(), ...this.newOpenings()], 4);
   });
-
-  readonly offers = computed(() => this.marketplace.businesses().filter((business) => business.hasOffer).slice(0, 4));
 
   readonly popularServices = computed(() => this.marketplace.businesses().flatMap((business) => {
     const published = business.services.filter((service) => service.popular).map((service) => service.name);
@@ -713,26 +721,6 @@ export class ExplorePage implements OnInit {
   readonly professionals = computed(() => this.marketplace.businesses()
     .flatMap((business) => business.staff.map((staff) => ({ staff, business })))
     .slice(0, 10));
-
-  readonly editorialCollections = computed(() => {
-    const businesses = this.marketplace.businesses();
-    const openCount = businesses.filter((business) => business.isOpen).length;
-    const offerCount = businesses.filter((business) => business.hasOffer).length;
-    return [
-      {
-        kicker: "Live marketplace view",
-        title: "Open around you",
-        description: `${openCount} ${openCount === 1 ? "business is" : "businesses are"} currently marked open in the marketplace.`,
-        queryParams: { filter: "open", sort: "distance", nearMe: true }
-      },
-      {
-        kicker: "Published salon offers",
-        title: "Explore current offers",
-        description: `${offerCount} ${offerCount === 1 ? "business has" : "businesses have"} an offer available to browse.`,
-        queryParams: { filter: "deals" }
-      }
-    ];
-  });
 
   readonly recentlyViewed = computed(() => {
     try {
@@ -748,43 +736,33 @@ export class ExplorePage implements OnInit {
     }
   });
 
-  readonly recentlyVisited = computed(() => {
-    const businesses = this.marketplace.businesses();
-    const bookings = this.marketplace.bookings();
-    const seen = new Set<string>();
-    return bookings
-      .filter((b) => !!b.businessId || !!b.businessName)
-      .sort((a, b) => new Date(b.startAt || b.displayStartAt || b.startsAt || "").getTime() - new Date(a.startAt || a.displayStartAt || a.startsAt || "").getTime())
-      .map((booking) => {
-        const business = businesses.find((b) => b.id === booking.businessId || b.businessName === booking.businessName);
-        return business ? { business, booking } : null;
-      })
-      .filter((item): item is { business: Business; booking: typeof bookings[0] } => !!item)
-      .filter((item) => {
-        if (seen.has(item.business.id)) return false;
-        seen.add(item.business.id);
-        return true;
-      })
-      .slice(0, 4);
-  });
-
   constructor(
     readonly marketplace: MarketplaceService,
     private readonly router: Router
   ) {
     addIcons({
-      businessOutline,
+      bagHandleOutline,
+      barbellOutline,
+      bodyOutline,
+      brushOutline,
       chevronForwardOutline,
+      colorPaletteOutline,
+      colorWandOutline,
+      cutOutline,
+      flashOutline,
+      flowerOutline,
+      leafOutline,
       locationOutline,
       mapOutline,
+      medkitOutline,
       navigateOutline,
       optionsOutline,
       pricetagOutline,
-      ribbonOutline,
       searchOutline,
       sparklesOutline,
       swapVerticalOutline,
-      timeOutline
+      timeOutline,
+      waterOutline
     });
 
     const saved = localStorage.getItem("aura_customer_location");
@@ -807,19 +785,71 @@ export class ExplorePage implements OnInit {
     return this.marketplace.formatMoney(pricePaise);
   }
 
+  /** Never surface "from ₹0" — hide the price until a real starting price exists. */
+  servicePriceLabel(business: Business): string {
+    const price = Number(business.startingPricePaise);
+    return price > 0 ? `From ${this.money(price)}` : "View prices";
+  }
+
   initials(name: string): string {
     return String(name || "Aura").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join("") || "A";
   }
 
-  private trendingScore(business: Business): number {
-    return Number(business.ratingAverage || 0) * Math.log2(Number(business.ratingCount || 0) + 1);
+  categoryIcon(label: string): string {
+    const lower = label.toLowerCase();
+    for (const map of ExplorePage.ICON_MAP) {
+      if (map.keywords.some((keyword) => lower.includes(keyword))) return map.icon;
+    }
+    return "sparkles-outline";
+  }
+
+  rememberQuickFilter(key: string) {
+    this.activeQuickFilter.set(key);
+    try { window.sessionStorage.setItem(ExplorePage.FILTER_STORAGE_KEY, key); } catch {}
   }
 
   openSearch() {
     void this.router.navigate(["/search"]);
   }
 
+  chooseLocation() {
+    void this.router.navigate(["/search"], { queryParams: { mode: "locations", nearMe: true } });
+  }
+
   reload() {
     void Promise.all([this.marketplace.loadPublicBusinesses(), this.marketplace.loadCategories()]).catch(() => undefined);
+  }
+
+  private lastQuickFilter(): string | null {
+    try { return window.sessionStorage.getItem(ExplorePage.FILTER_STORAGE_KEY); } catch { return null; }
+  }
+
+  private shortLabel(label: string): string {
+    const words = String(label || "").split(/\s+/).filter(Boolean);
+    if (!words.length) return label || "Other";
+    if (words.length === 1) return words[0].slice(0, 16);
+    const first = words[0];
+    const candidate = ExplorePage.LABEL_FILLERS.has(first.toLowerCase()) ? words[words.length - 1] : first;
+    return candidate.length <= 16 ? candidate : candidate.slice(0, 16);
+  }
+
+  /** Returns the first `limit` items not already present in `excluded` (matched by id). */
+  private takeWithExclusions<T extends { id?: string }>(items: T[], excluded: Array<{ id?: string }>, limit: number): T[] {
+    const seen = new Set<string>();
+    for (const item of excluded) {
+      if (item.id) seen.add(item.id);
+    }
+    const result: T[] = [];
+    for (const item of items) {
+      if (result.length >= limit) break;
+      if (item.id && seen.has(item.id)) continue;
+      result.push(item);
+      if (item.id) seen.add(item.id);
+    }
+    return result;
+  }
+
+  private trendingScore(business: Business): number {
+    return Number(business.ratingAverage || 0) * Math.log2(Number(business.ratingCount || 0) + 1);
   }
 }

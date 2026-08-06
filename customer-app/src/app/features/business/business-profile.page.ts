@@ -25,7 +25,7 @@ import {
   timeOutline,
   walletOutline
 } from "ionicons/icons";
-import { PublicOfferItem, ServiceItem } from "../../core/api.types";
+import { PublicOfferItem, ServiceItem, StaffMember } from "../../core/api.types";
 import { CustomerFeedbackService } from "../../core/customer-feedback.service";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
@@ -37,9 +37,15 @@ import { Subscription } from "rxjs";
     <ion-content>
       @if (business(); as b) {
       <main class="profile-page">
-        <section class="cover">
+        <section class="cover" [class.cover--placeholder]="!hasCoverPhoto()">
           <ion-back-button class="cover-back-button" [defaultHref]="backHref()"></ion-back-button>
-          <img [src]="b.coverImage || b.galleryImages[0] || b.logoUrl || 'assets/icons/icon.svg'" [alt]="b.businessName + ' cover image'" />
+          @if (hasCoverPhoto()) {
+            <img [src]="coverPhoto()" [alt]="b.businessName + ' cover photo'" />
+          } @else {
+            <div class="cover-placeholder" [style.background]="coverGradientStyle()" role="img" [attr.aria-label]="b.businessName + ' cover placeholder'">
+              <span class="cover-monogram" aria-hidden="true">{{ initials(b.businessName) }}</span>
+            </div>
+          }
           <div class="cover-overlay"></div>
           <div class="cover-actions">
             <ion-button fill="clear" shape="round" [class.saved-action]="isSaved()" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleWishlist()">
@@ -48,12 +54,11 @@ import { Subscription } from "rxjs";
             <ion-button fill="clear" shape="round" [class.saved-action]="isSalonSaved()" [disabled]="savedSalonPending" [attr.aria-label]="isSalonSaved() ? 'Remove saved salon' : 'Save salon'" (click)="toggleSavedSalon()">
               <ion-icon [name]="isSalonSaved() ? 'bookmark' : 'bookmark-outline'"></ion-icon>
             </ion-button>
-            <ion-button fill="clear" shape="round" aria-label="Share business"><ion-icon name="share-outline"></ion-icon></ion-button>
+            <ion-button fill="clear" shape="round" aria-label="Share business" (click)="shareBusiness()"><ion-icon name="share-outline"></ion-icon></ion-button>
           </div>
           <div class="cover-copy">
             <div class="hero-business-name" role="heading" aria-level="1">{{ b.businessName }}</div>
             <p>{{ b.area }}, {{ b.city }}</p>
-            <span class="hero-open-pill" [class.closed]="!b.isOpen">{{ b.isOpen ? "Open now" : "Closed now" }}</span>
           </div>
         </section>
 
@@ -64,18 +69,64 @@ import { Subscription } from "rxjs";
                 <p class="eyebrow">{{ b.area }}, {{ b.city }}</p>
                 <h2>{{ b.description }}</h2>
               </div>
-              <div class="stat-grid">
-                <span><strong>{{ b.ratingAverage }}</strong> {{ b.ratingCount }} reviews</span>
-                <span><strong>{{ b.distanceKm }} km</strong> from you</span>
-                <span><strong>{{ b.hoursLabel || b.nextAvailableSlot }}</strong> timing</span>
+
+              <div class="quick-actions" role="group" aria-label="Salon quick actions">
+                <button type="button" class="quick-action" [disabled]="!phoneHref()" (click)="callSalon()">
+                  <ion-icon name="call-outline" aria-hidden="true"></ion-icon> Call
+                </button>
+                <a class="quick-action" [href]="b.mapsUrl || undefined" target="_blank" rel="noopener">
+                  <ion-icon name="navigate-outline" aria-hidden="true"></ion-icon> Directions
+                </a>
+                <button type="button" class="quick-action" (click)="shareBusiness()">
+                  <ion-icon name="share-outline" aria-hidden="true"></ion-icon> Share
+                </button>
               </div>
+
+              <div class="hero-meta" aria-label="Salon status summary">
+                <span class="hero-meta-item" [class.closed]="!b.isOpen">
+                  <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+                  <strong>{{ b.isOpen ? "Open now" : "Closed now" }}</strong>
+                </span>
+                @if (hasRating()) {
+                  <button type="button" class="hero-meta-item hero-meta-rating" [attr.aria-label]="'Rated ' + b.ratingAverage + ', view ' + b.ratingCount + ' reviews'" (click)="scrollToSection('reviews')">
+                    <ion-icon name="star-outline" aria-hidden="true"></ion-icon>
+                    <strong>{{ b.ratingAverage }}</strong>
+                    <span>{{ b.ratingCount }} reviews</span>
+                  </button>
+                } @else {
+                  <span class="hero-meta-item">
+                    <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon>
+                    <strong>New</strong>
+                  </span>
+                }
+                <span class="hero-meta-item">
+                  <ion-icon name="location-outline" aria-hidden="true"></ion-icon>
+                  <strong>{{ b.area }}</strong>
+                </span>
+                <span class="hero-meta-item">
+                  <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+                  <strong>{{ b.hoursLabel || "Hours not published" }}</strong>
+                </span>
+              </div>
+
               @if (isAuthenticated()) {
                 <div class="primary-salon-strip">
                   @if (isPrimarySalon()) {
-                    <div><strong>Your primary salon</strong><span>Quick access enabled</span></div>
-                    <button type="button" class="primary-salon-action secondary" (click)="removeAsPrimary()">Change</button>
+                    <div>
+                      <strong>Your primary salon</strong>
+                      <span>Get faster booking, personalised offers, memberships and salon rewards.</span>
+                    </div>
+                    <div class="primary-salon-actions">
+                      <a class="primary-salon-action secondary" [routerLink]="mySalonHref()">
+                        <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon> Open My Salon
+                      </a>
+                      <button type="button" class="primary-salon-link" (click)="removeAsPrimary()">Change</button>
+                    </div>
                   } @else {
-                    <div><strong>Make this your primary salon</strong><span>Pin it for faster bookings and rewards</span></div>
+                    <div>
+                      <strong>Make this your primary salon</strong>
+                      <span>Get faster booking, personalised offers, memberships and salon rewards.</span>
+                    </div>
                     <button type="button" class="primary-salon-action" (click)="setAsPrimary()">Set primary</button>
                   }
                 </div>
@@ -87,6 +138,13 @@ import { Subscription } from "rxjs";
                 <span><ion-icon name="card-outline"></ion-icon>{{ paymentLabel() }}</span>
               </div>
             </section>
+
+            <nav class="page-section-nav" aria-label="Salon sections">
+              <button type="button" (click)="scrollToSection('services')">Services</button>
+              <button type="button" (click)="scrollToSection('team')">Team</button>
+              <button type="button" (click)="scrollToSection('reviews')">Reviews</button>
+              <button type="button" (click)="scrollToSection('about')">About</button>
+            </nav>
 
             @if (otherBranches().length) {
             <section class="other-branches-section">
@@ -102,7 +160,12 @@ import { Subscription } from "rxjs";
                     <span class="branch-option-mark">{{ branch.businessName.slice(0, 1).toUpperCase() }}</span>
                     <span class="branch-option-copy">
                       <strong>{{ branch.businessName }}</strong>
-                      <small>{{ branch.area || branch.city || 'Location details' }} · {{ branch.isOpen ? 'Open' : 'Closed' }}</small>
+                      <small>{{ branch.area || branch.city || 'Location details' }}</small>
+                      <small>
+                        {{ branch.distanceKm != null ? branch.distanceKm + " km" : "Distance not known" }} ·
+                        <span [class.open]="branch.isOpen">{{ branch.isOpen ? "Open" : "Closed" }}</span>
+                        @if (branch.nextAvailableSlot) { · next {{ branch.nextAvailableSlot }} }
+                      </small>
                     </span>
                     <ion-icon name="location-outline"></ion-icon>
                   </a>
@@ -110,6 +173,7 @@ import { Subscription } from "rxjs";
               </div>
             </section>
             }
+            @if (b.galleryImages.length) {
             <section class="gallery-section">
               <div class="section-heading">
                 <div>
@@ -119,21 +183,16 @@ import { Subscription } from "rxjs";
               <div class="gallery-strip">
                 @for (image of b.galleryImages; track image) {
                   <img [src]="image" [alt]="b.businessName + ' gallery image'" loading="lazy" />
-                } @empty {
-                  <section class="state-card premium-card"><h2>No gallery available</h2></section>
                 }
               </div>
             </section>
+            }
 
-            <section class="services-section">
+            <section class="services-section section-anchor" id="services">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">
-                    @if (serviceQuery() || selectedCategory()) {
-                      {{ filteredServices().length }} services
-                    } @else {
-                      {{ filteredServices().length }} services
-                    }
+                    Services @if (b.services.length) { <span class="section-title-count">· {{ b.services.length }}</span> }
                   </h2>
                 </div>
                 @if (serviceQuery() || selectedCategory()) {
@@ -148,7 +207,7 @@ import { Subscription } from "rxjs";
                   class="service-search-input"
                   [ngModel]="serviceQuery()"
                   (ngModelChange)="serviceQuery.set($event)"
-                  placeholder="Search services in {{ b.businessName }}..."
+                  placeholder="Search services"
                   aria-label="Search salon services" />
                 @if (serviceQuery()) {
                   <button type="button" class="clear-search-btn" (click)="serviceQuery.set('')" aria-label="Clear search">
@@ -164,7 +223,7 @@ import { Subscription } from "rxjs";
                     class="category-pill"
                     [class.active]="!selectedCategory()"
                     (click)="selectedCategory.set('')">
-                    All ({{ b.services.length }})
+                    All services
                   </button>
                   @for (cat of availableCategories(); track cat) {
                     <button
@@ -172,14 +231,14 @@ import { Subscription } from "rxjs";
                       class="category-pill"
                       [class.active]="selectedCategory() === cat"
                       (click)="selectedCategory.set(cat)">
-                      {{ cat }}
+                      {{ categoryLabel(cat) }}
                     </button>
                   }
                 </div>
               }
 
               <div class="service-stack">
-                @for (service of filteredServices(); track service.id) {
+                @for (service of paginatedServices(); track service.id) {
                   <article
                     class="salon-service-item"
                     [class.is-picked]="isServiceSelected(service.id)"
@@ -203,7 +262,13 @@ import { Subscription } from "rxjs";
                       }
                     </div>
                     <div class="salon-service-action">
-                      <div class="salon-service-thumb" [style.background-image]="serviceImageBackground(service, $index)" role="img" [attr.aria-label]="service.name + ' service image'"></div>
+                      @if (serviceImage(service, $index)) {
+                        <div class="salon-service-thumb" [style.background-image]="serviceImageBackground(service, $index)" role="img" [attr.aria-label]="service.name + ' service image'"></div>
+                      } @else {
+                        <div class="salon-service-thumb salon-service-thumb--letter" role="img" [attr.aria-label]="service.name">
+                          <span aria-hidden="true">{{ serviceInitial(service.name) }}</span>
+                        </div>
+                      }
                       <button
                         type="button"
                         class="salon-service-add"
@@ -222,11 +287,17 @@ import { Subscription } from "rxjs";
                   <section class="state-card premium-card service-empty-card">
                     <div class="empty-icon"><ion-icon name="search-outline" aria-hidden="true"></ion-icon></div>
                     <h3>No services found</h3>
-                    <p>No services match "{{ serviceQuery() }}"{{ selectedCategory() ? ' in ' + selectedCategory() : '' }}.</p>
+                    <p>No services match "{{ serviceQuery() }}"{{ selectedCategory() ? ' in ' + categoryLabel(selectedCategory()) : '' }}.</p>
                     <button type="button" class="primary-gradient reset-search-btn" (click)="clearServiceFilters()">Clear search</button>
                   </section>
                 }
               </div>
+
+              @if (paginatedServices().length < filteredServices().length) {
+                <button type="button" class="show-more-btn" (click)="showMoreServices()">
+                  Show more services · {{ filteredServices().length - paginatedServices().length }} more
+                </button>
+              }
             </section>
 
             @if (activeOffers().length > 0) {
@@ -264,7 +335,7 @@ import { Subscription } from "rxjs";
             </section>
             }
 
-            <section class="staff-section">
+            <section class="staff-section section-anchor" id="team">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Choose your professional</h2>
@@ -273,7 +344,11 @@ import { Subscription } from "rxjs";
               <div class="staff-grid">
                 @for (staff of b.staff; track staff.id) {
                   <article class="staff-card premium-card">
-                    <img [src]="staff.image || 'assets/icons/icon.svg'" [alt]="staff.name" />
+                    @if (staff.image) {
+                      <img [src]="staff.image" [alt]="staff.name" />
+                    } @else {
+                      <span class="staff-avatar" [style.background]="staffGradientStyle(staff)" aria-hidden="true">{{ initials(staff.name) }}</span>
+                    }
                     <strong>{{ staff.name }}</strong>
                     <span>{{ staff.title }}</span>
                     <small>Star {{ staff.rating }} · {{ staff.specialty }}</small>
@@ -286,10 +361,13 @@ import { Subscription } from "rxjs";
               </div>
             </section>
 
-            <section class="review-section">
+            <section class="review-section section-anchor" id="reviews">
               <div class="section-heading">
                 <div>
                   <h2 class="section-title">Loved by customers</h2>
+                  @if (hasRating()) {
+                    <p class="muted">Rated {{ b.ratingAverage }} · {{ b.ratingCount }} reviews</p>
+                  }
                 </div>
               </div>
               <div class="review-grid">
@@ -339,7 +417,7 @@ import { Subscription } from "rxjs";
             </section>
             }
 
-            <section class="info-grid">
+            <section class="info-grid section-anchor" id="about">
               <article class="premium-card info-card">
                 <h2>Location</h2>
                 <p><ion-icon name="location-outline"></ion-icon>{{ b.address }}</p>
@@ -387,7 +465,9 @@ import { Subscription } from "rxjs";
           </div>
 
           <aside class="booking-rail premium-card">
-            <span class="rating-pill">Star {{ b.ratingAverage }}</span>
+            @if (hasRating()) {
+              <span class="rating-pill">Star {{ b.ratingAverage }}</span>
+            }
             @if (selectedServices().length) {
               <h2>{{ selectedServices().length }} service{{ selectedServices().length === 1 ? "" : "s" }} selected</h2>
               <p class="muted">{{ selectedServicesLabel() }}</p>
@@ -433,7 +513,11 @@ import { Subscription } from "rxjs";
                 <h2 id="service-popup-title">{{ service.name }}</h2>
                 <strong>{{ servicePriceLabel(service) }}</strong>
               </div>
-              <div class="service-popup-thumb" [style.background-image]="serviceImageBackground(service, 0)" aria-hidden="true"></div>
+              @if (serviceImage(service, 0)) {
+                <div class="service-popup-thumb" [style.background-image]="serviceImageBackground(service, 0)" aria-hidden="true"></div>
+              } @else {
+                <div class="service-popup-thumb service-popup-thumb--letter" aria-hidden="true"><span>{{ serviceInitial(service.name) }}</span></div>
+              }
             </div>
             @if (serviceAddOns(service).length) {
               <div class="service-popup-section">
@@ -481,7 +565,7 @@ import { Subscription } from "rxjs";
 
     .cover {
       position: relative;
-      min-height: clamp(340px, 52vh, 520px);
+      min-height: clamp(260px, 40vh, 430px);
       display: grid;
       align-items: end;
       overflow: hidden;
@@ -489,8 +573,13 @@ import { Subscription } from "rxjs";
       background: var(--surface-soft);
     }
 
+    .cover.cover--placeholder {
+      min-height: clamp(150px, 24vh, 250px);
+    }
+
     .cover img,
-    .cover-overlay {
+    .cover-overlay,
+    .cover-placeholder {
       position: absolute;
       inset: 0;
       width: 100%;
@@ -499,6 +588,19 @@ import { Subscription } from "rxjs";
 
     .cover img {
       object-fit: cover;
+    }
+
+    .cover-placeholder {
+      display: grid;
+      place-items: center;
+    }
+
+    .cover-monogram {
+      color: rgba(255, 255, 255, 0.94);
+      font-size: clamp(2.6rem, 11vw, 4.8rem);
+      font-weight: 950;
+      letter-spacing: -0.05em;
+      text-shadow: 0 2px 24px rgba(28, 28, 28, 0.2);
     }
 
     .cover-overlay {
@@ -538,26 +640,6 @@ import { Subscription } from "rxjs";
       justify-items: start;
       gap: 6px;
       color: #ffffff;
-    }
-
-    .hero-open-pill {
-      display: inline-flex;
-      align-items: center;
-      min-height: 24px;
-      padding: 5px 10px;
-      border: 1px solid rgba(16, 185, 129, 0.38);
-      border-radius: 999px;
-      color: #059669;
-      background: #D1FAE5;
-      font-size: 0.72rem;
-      font-weight: 950;
-      box-shadow: 0 8px 18px rgba(28, 28, 28, 0.12);
-    }
-
-    .hero-open-pill.closed {
-      color: #EF4444;
-      border-color: rgba(248, 113, 113, 0.36);
-      background: var(--error-soft);
     }
 
     .hero-business-name {
@@ -646,24 +728,98 @@ import { Subscription } from "rxjs";
       line-height: 1.1;
     }
 
-    .stat-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
-    .stat-grid span {
-      padding: 14px;
-      border-radius: 18px;
+    .quick-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--surface);
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease;
+    }
+
+    .quick-action ion-icon {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-size: 1rem;
+    }
+
+    .quick-action:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      background: var(--primary-soft);
+    }
+
+    .quick-action:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hero-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      min-height: 46px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 14px;
       color: var(--muted);
       background: var(--surface-soft);
+      font: inherit;
+      font-size: 0.78rem;
       font-weight: 800;
+      text-align: left;
     }
 
-    .stat-grid strong {
-      display: block;
+    .hero-meta-item ion-icon {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-size: 0.95rem;
+    }
+
+    .hero-meta-item strong {
+      min-width: 0;
+      overflow: hidden;
       color: var(--text);
-      font-size: 1.02rem;
+      font-weight: 900;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .hero-meta-item.closed strong {
+      color: #EF4444;
+    }
+
+    .hero-meta-rating {
+      cursor: pointer;
+    }
+
+    .hero-meta-rating span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .primary-salon-strip {
@@ -677,7 +833,7 @@ import { Subscription } from "rxjs";
       background: var(--glass);
     }
 
-    .primary-salon-strip div {
+    .primary-salon-strip > div:first-child {
       display: grid;
       gap: 2px;
       min-width: 0;
@@ -699,21 +855,111 @@ import { Subscription } from "rxjs";
 
     .primary-salon-action {
       flex: 0 0 auto;
-      min-height: 34px;
-      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 42px;
+      margin: 0 0 0 auto;
+      padding: 0 18px;
       border: 0;
       border-radius: 999px;
       color: #FFFFFF;
       background: var(--primary);
-      font-size: 0.76rem;
+      font-family: inherit;
+      font-size: 0.84rem;
       font-weight: 950;
+      text-decoration: none;
       cursor: pointer;
+      box-shadow: 0 8px 18px rgba(99, 102, 241, 0.2);
+      transition: background 160ms ease, transform 160ms ease;
+    }
+
+    .primary-salon-action:hover {
+      background: var(--brand-800);
     }
 
     .primary-salon-action.secondary {
       color: var(--primary);
       border: 1px solid rgba(99, 102, 241, 0.22);
       background: var(--surface);
+      box-shadow: none;
+    }
+
+    .primary-salon-action.secondary:hover {
+      background: var(--primary-soft);
+    }
+
+    .primary-salon-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .primary-salon-link {
+      min-height: 42px;
+      padding: 0 8px;
+      border: 0;
+      color: var(--muted);
+      background: transparent;
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .primary-salon-link:hover {
+      color: var(--primary);
+    }
+
+    .page-section-nav {
+      position: sticky;
+      top: calc(8px + env(safe-area-inset-top));
+      z-index: 30;
+      display: flex;
+      gap: 6px;
+      margin: 2px 0 14px;
+      padding: 6px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--glass);
+      backdrop-filter: blur(14px);
+      scrollbar-width: none;
+    }
+
+    .page-section-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .page-section-nav button {
+      flex: 0 0 auto;
+      min-height: 34px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 11px;
+      color: var(--muted);
+      background: transparent;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 900;
+      cursor: pointer;
+      transition: color 160ms ease, background 160ms ease;
+    }
+
+    .page-section-nav button:active {
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .section-anchor {
+      scroll-margin-top: 68px;
+    }
+
+    .section-title-count {
+      color: var(--muted);
+      font-weight: 800;
     }
 
     .trust-row {
@@ -1039,6 +1285,13 @@ import { Subscription } from "rxjs";
       box-shadow: 0 12px 28px rgba(28, 28, 28, 0.1);
     }
 
+    .service-popup-thumb--letter {
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, var(--primary-soft), #F3E8FF);
+      box-shadow: none;
+    }
+
     .service-popup-section {
       display: grid;
       gap: 10px;
@@ -1145,6 +1398,21 @@ import { Subscription } from "rxjs";
       opacity: 1;
     }
 
+    .salon-service-thumb--letter {
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, var(--primary-soft), #F3E8FF);
+      box-shadow: none;
+    }
+
+    .salon-service-thumb--letter span,
+    .service-popup-thumb--letter span {
+      color: var(--brand-700);
+      font-size: 1.7rem;
+      font-weight: 950;
+      letter-spacing: -0.04em;
+    }
+
     .salon-service-add {
       min-width: 76px;
       min-height: 34px;
@@ -1175,12 +1443,47 @@ import { Subscription } from "rxjs";
       box-shadow: none;
     }
 
-    .staff-card img {
+    .show-more-btn {
+      width: 100%;
+      min-height: 46px;
+      margin-top: 4px;
+      border: 1px dashed rgba(99, 102, 241, 0.4);
+      border-radius: 14px;
+      color: var(--primary);
+      background: var(--surface);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 900;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease;
+    }
+
+    .show-more-btn:hover {
+      border-style: solid;
+      border-color: var(--primary);
+      background: var(--primary-soft);
+    }
+
+    .staff-card img,
+    .staff-avatar {
       width: 74px;
       height: 74px;
       margin-bottom: 6px;
       border-radius: 24px;
+    }
+
+    .staff-card img {
       object-fit: cover;
+    }
+
+    .staff-avatar {
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-size: 1.4rem;
+      font-weight: 950;
+      letter-spacing: -0.03em;
+      background: linear-gradient(145deg, var(--brand-600), var(--brand-800));
     }
 
     .staff-card span,
@@ -1490,8 +1793,12 @@ import { Subscription } from "rxjs";
       }
 
       .cover {
-        min-height: 190px;
+        min-height: 150px;
         border-radius: 0 0 22px 22px;
+      }
+
+      .cover.cover--placeholder {
+        min-height: 120px;
       }
 
       .cover-actions {
@@ -1501,10 +1808,7 @@ import { Subscription } from "rxjs";
 
       .cover-actions ion-button:last-child,
       .intro h2,
-      .trust-row,
-      .staff-section,
-      .review-section,
-      .info-grid {
+      .trust-row {
         display: none;
       }
 
@@ -1525,16 +1829,8 @@ import { Subscription } from "rxjs";
         font-size: 0.72rem;
       }
 
-      .hero-open-pill {
-        min-height: 22px;
-        padding: 4px 9px;
-        font-size: 0.68rem;
-      }
-
-      .status-pill {
-        min-height: 26px;
-        padding: 5px 9px;
-        font-size: 0.72rem;
+      .cover-monogram {
+        font-size: 1.8rem;
       }
 
       .profile-shell {
@@ -1557,30 +1853,48 @@ import { Subscription } from "rxjs";
         font-size: 0.72rem;
       }
 
-      .stat-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .stat-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+      .quick-actions {
         gap: 6px;
       }
 
-      .stat-grid span {
-        height: 46px;
-        display: grid;
-        align-content: center;
-        overflow: hidden;
-        padding: 4px 5px;
-        border-radius: 11px;
-        font-size: 0.58rem;
-        line-height: 1;
-        text-align: center;
+      .quick-action {
+        min-height: 38px;
+        padding: 0 14px;
+        font-size: 0.76rem;
       }
 
-      .stat-grid strong {
-        font-size: 0.68rem;
-        line-height: 1;
+      .hero-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .hero-meta-item {
+        min-height: 42px;
+        padding: 6px 10px;
+        font-size: 0.72rem;
+      }
+
+      .primary-salon-strip {
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .primary-salon-action {
+        min-height: 38px;
+        padding: 0 14px;
+        font-size: 0.78rem;
+      }
+
+      .page-section-nav {
+        margin: 0 0 10px;
+        padding: 5px;
+      }
+
+      .page-section-nav button {
+        min-height: 32px;
+        padding: 0 12px;
+        font-size: 0.74rem;
       }
 
       .section-heading {
@@ -1610,6 +1924,11 @@ import { Subscription } from "rxjs";
         width: 98px;
         height: 82px;
         border-radius: 16px;
+      }
+
+      .salon-service-thumb--letter span,
+      .service-popup-thumb--letter span {
+        font-size: 1.5rem;
       }
 
       .salon-service-add {
@@ -1712,6 +2031,11 @@ import { Subscription } from "rxjs";
       font-weight: 800;
     }
 
+    .branch-option-copy small .open {
+      color: #059669;
+      font-weight: 950;
+    }
+
     .branch-option > ion-icon {
       color: #a36d16;
       font-size: 0.95rem;
@@ -1754,12 +2078,23 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
   readonly serviceNotes = signal<Record<string, string>>({});
   readonly serviceQuery = signal<string>("");
   readonly selectedCategory = signal<string>("");
+  readonly visibleServiceLimit = signal(12);
 
   readonly business = computed(() => {
     const slug = this.slug();
     const business = slug ? this.marketplace.findBusiness(slug) : null;
     if (!business && slug) this.reload();
     return business;
+  });
+
+  readonly hasCoverPhoto = computed(() => {
+    const b = this.business();
+    return Boolean(b && (b.coverImage || b.galleryImages?.[0] || b.logoUrl));
+  });
+
+  readonly coverPhoto = computed(() => {
+    const b = this.business();
+    return b?.coverImage || b?.galleryImages?.[0] || b?.logoUrl || "";
   });
   readonly isAuthenticated = computed(() => this.marketplace.isAuthenticated());
   readonly isPrimarySalon = computed(() => {
@@ -1797,16 +2132,30 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     const q = this.serviceQuery().trim().toLowerCase();
     const cat = this.selectedCategory();
 
-    return biz.services.filter((service) => {
-      const matchCat = !cat || service.category === cat;
-      const matchQ = !q || service.name.toLowerCase().includes(q) || (service.description && service.description.toLowerCase().includes(q));
-      return matchCat && matchQ;
-    });
+    return biz.services
+      .filter((service) => {
+        const matchCat = !cat || service.category === cat;
+        const matchQ = !q || service.name.toLowerCase().includes(q) || (service.description && service.description.toLowerCase().includes(q));
+        return matchCat && matchQ;
+      })
+      .sort((left, right) => Number(right.popular) - Number(left.popular));
+  });
+
+  readonly paginatedServices = computed(() => {
+    const services = this.filteredServices();
+    const filtering = Boolean(this.serviceQuery() || this.selectedCategory());
+    const limit = filtering ? services.length : this.visibleServiceLimit();
+    return services.slice(0, limit);
   });
 
   clearServiceFilters() {
     this.serviceQuery.set("");
     this.selectedCategory.set("");
+    this.visibleServiceLimit.set(12);
+  }
+
+  showMoreServices() {
+    this.visibleServiceLimit.update((limit) => limit + 12);
   }
 
   readonly otherBranches = computed(() => {
@@ -1929,6 +2278,69 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
     return service.durationMinutes > 0 ? `${this.money(service.pricePaise)} · ${service.durationMinutes} min` : this.money(service.pricePaise);
   }
 
+  initials(name: string): string {
+    return String(name || "Aura").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join("") || "A";
+  }
+
+  serviceInitial(name: string): string {
+    return String(name || "?").trim().charAt(0).toUpperCase() || "?";
+  }
+
+  categoryLabel(cat: string): string {
+    return String(cat || "")
+      .trim()
+      .split(/[\s\-_]+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
+  hasRating(): boolean {
+    const b = this.business();
+    return Boolean(b && Number(b.ratingCount) > 0 && Number(b.ratingAverage) > 0);
+  }
+
+  coverGradientStyle(): string {
+    const b = this.business();
+    return b?.coverGradient || "linear-gradient(135deg, var(--primary), var(--primary-2), var(--accent))";
+  }
+
+  staffGradientStyle(staff: StaffMember): string {
+    return staff.avatarGradient || "linear-gradient(145deg, var(--brand-600), var(--brand-800))";
+  }
+
+  mySalonHref(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/my-salon";
+  }
+
+  callSalon() {
+    const href = this.phoneHref();
+    if (href) window.location.href = href;
+  }
+
+  async shareBusiness() {
+    const b = this.business();
+    if (!b) return;
+    const url = window.location.href;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title: b.businessName, text: `${b.businessName} — ${b.area}, ${b.city}`, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      await this.feedback.success("Salon link copied to clipboard");
+    } catch {
+      // Sharing was cancelled or clipboard is unavailable.
+    }
+  }
+
+  scrollToSection(id: string) {
+    const element = document.getElementById(id);
+    if (!element) return;
+    const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }
+
   isLongDescription(description: string): boolean {
     return description.trim().length > 96;
   }
@@ -1975,7 +2387,7 @@ export class BusinessProfilePage implements OnInit, OnDestroy {
 
   serviceImage(service: ServiceItem, index: number): string {
     const withImage = service as ServiceItem & { image?: string; imageUrl?: string; photoUrl?: string; thumbnailUrl?: string };
-    return withImage.image || withImage.imageUrl || withImage.photoUrl || withImage.thumbnailUrl || this.business()?.galleryImages[index % Math.max(this.business()?.galleryImages.length || 1, 1)] || this.business()?.coverImage || this.business()?.logoUrl || "assets/icons/icon.svg";
+    return withImage.image || withImage.imageUrl || withImage.photoUrl || withImage.thumbnailUrl || "";
   }
 
   serviceImageBackground(service: ServiceItem, index: number): string {

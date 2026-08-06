@@ -9,7 +9,34 @@ import { BusinessCardComponent } from "../../shared/business-card.component";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { Subscription } from "rxjs";
 
-type FilterKey = "anytime" | "open" | "today" | "morning" | "afternoon" | "evening" | "nearest" | "budget" | "mid" | "premium" | "top" | "reviewed" | "deals" | "offpeak" | "lastminute" | "female" | "male";
+type FilterKey = 
+  | "anytime" 
+  | "open" 
+  | "today" 
+  | "morning" 
+  | "afternoon" 
+  | "evening" 
+  | "nearest" 
+  | "within2km" 
+  | "within5km" 
+  | "within10km" 
+  | "customRadius" 
+  | "budget" 
+  | "mid" 
+  | "premium" 
+  | "top" 
+  | "reviewed" 
+  | "deals" 
+  | "offpeak" 
+  | "lastminute" 
+  | "instant-booking" 
+  | "home-service" 
+  | "female" 
+  | "male"
+  | "rating4"
+  | "rating4.5"
+  | "customMinPrice"
+  | "customMaxPrice";
 type SortKey = "recommended" | "distance" | "earliest" | "price" | "price_desc" | "rating" | "reviews";
 type SearchMode = "salons" | "services" | "staff" | "locations";
 
@@ -35,7 +62,7 @@ interface SearchSuggestion {
   type: string;
   copy: string;
   query: string;
-  business: import("../../core/api.types").Business;
+  business: import("../../core/api.types").Business | null;
 }
 
 interface ProfessionalResult {
@@ -48,7 +75,7 @@ interface ProfessionalResult {
 
 interface QuickFilterChip {
   label: string;
-  filter?: FilterKey;
+  filter?: FilterKey | SearchMode;
   query?: string;
   mode?: SearchMode;
   sort?: SortKey;
@@ -85,7 +112,9 @@ interface QuickFilterChip {
                   @for (suggestion of suggestions(); track suggestion.key) {
                     <button type="button" role="option" (click)="applySuggestion(suggestion)">
                       <span><strong>{{ suggestion.label }}</strong><small>{{ suggestion.type }} · {{ suggestion.copy }}</small></span>
-                      <em>{{ distanceLabel(suggestion.business) }}</em>
+                      @if (suggestion.business) {
+                        <em>{{ distanceLabel(suggestion.business) }}</em>
+                      }
                     </button>
                   }
                 </div>
@@ -152,14 +181,15 @@ interface QuickFilterChip {
                 }
 
                 <section class="sheet-section">
-                  <h3>Distance range</h3>
+<h3>Distance range</h3>
                   <label class="range-row">
                     <div class="range-label-row">
                       <span>Within <strong>{{ draftRadiusKm() }} km</strong></span>
                       @if (!location()) {
+                        <small class="location-hint">Enable location for distance filtering, or use custom radius.</small>
                       }
                     </div>
-                    <input type="range" min="3" max="50" step="1" [value]="draftRadiusKm()" [disabled]="!location()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
+                    <input type="range" min="3" max="50" step="1" [value]="draftRadiusKm()" (input)="draftRadiusKm.set(+$any($event.target).value)" />
                   </label>
                 </section>
 
@@ -204,14 +234,14 @@ interface QuickFilterChip {
                 @if (!location() && draftSort() === 'distance') {
                   <div class="sort-location-notice">
                     <ion-icon name="locate-outline"></ion-icon>
-                    <span>Distance sorting requires your location. It will be requested on apply.</span>
+                    <span>Enable location to sort by distance.</span>
                   </div>
                 }
                 <div class="option-grid sort-options">
                   @for (option of sortOptions; track option.key) {
                     <button type="button" [class.selected]="draftSort() === option.key" [class.needs-location]="option.key === 'distance' && !location()" (click)="draftSort.set(option.key)">
                       <span>{{ option.label }}</span>
-                      <small>{{ sortDescription(option.key) }}{{ option.key === 'distance' && !location() ? ' · needs location' : '' }}</small>
+                      <small>{{ sortDescription(option.key) }}{{ option.key === 'distance' && !location() ? ' · enable location' : '' }}</small>
                     </button>
                   }
                 </div>
@@ -320,12 +350,12 @@ interface QuickFilterChip {
                   <article class="map-preview-card">
                     <img [src]="venue.coverImage || 'assets/icons/icon.svg'" [alt]="venue.businessName + ' preview'" />
                     <div>
-                      <span class="rating-pill">Star {{ ratingText(venue) }}</span>
+                      <span class="rating-pill">{{ ratingText(venue) }}</span>
                       <h3>{{ venue.businessName }}</h3>
                       <p>{{ venue.address }}</p>
                       <strong>{{ distanceLabel(venue) }}</strong>
                     </div>
-                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', venue.slug]">View</ion-button>
+                    <ion-button size="small" class="primary-gradient" [routerLink]="['/business', venue.slug]">View salon</ion-button>
                   </article>
                 }
               </section>
@@ -936,7 +966,7 @@ interface QuickFilterChip {
 
     .live-map {
       position: relative;
-      min-height: 360px;
+      min-height: 420px;
       overflow: hidden;
       border-radius: 24px;
       background: var(--pink-soft);
@@ -1060,8 +1090,8 @@ interface QuickFilterChip {
     }
 
     .map-controls button {
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
       border: 1px solid rgba(17, 24, 39, 0.16);
       border-radius: 14px;
       color: var(--text);
@@ -2573,35 +2603,54 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   ];
   readonly filterSections: { title: string; options: { key: FilterKey; label: string; description: string; disabled?: boolean }[] }[] = [
     {
-      title: "Availability",
+      title: "Date filter",
       options: [
-        { key: "anytime", label: "Any time", description: "No time restriction" },
-        { key: "today", label: "Today", description: "Available today" },
-        { key: "open", label: "Open now", description: "Currently open venues" },
-        { key: "morning", label: "Morning", description: "Before 12 pm" },
-        { key: "afternoon", label: "Afternoon", description: "12 pm to 5 pm" },
-        { key: "evening", label: "Evening", description: "After 5 pm" }
+        { key: "anytime", label: "Anytime", description: "No date restriction" },
+        { key: "today", label: "Today", description: "Available today only" },
+        { key: "open", label: "Open now", description: "Currently open venues" }
       ]
     },
     {
-      title: "Location",
+      title: "Time-of-day filter",
       options: [
-        { key: "nearest", label: "Current location", description: "Use your detected area" }
+        { key: "morning", label: "Morning", description: "Available before 12 pm" },
+        { key: "afternoon", label: "Afternoon", description: "Available 12 pm to 5 pm" },
+        { key: "evening", label: "Evening", description: "Available after 5 pm" }
       ]
     },
     {
-      title: "Price",
+      title: "Open-now filter",
       options: [
-        { key: "budget", label: "Low budget", description: "Under Rs 1,000" },
-        { key: "mid", label: "Mid range", description: "Rs 1,000 to Rs 2,500" },
-        { key: "premium", label: "Premium", description: "Rs 2,500+" }
+        { key: "open", label: "Open now", description: "Currently open venues only" }
       ]
     },
     {
-      title: "Rating",
+      title: "Distance-radius filter",
       options: [
-        { key: "top", label: "Top rated 4.5+", description: "Highest guest scores" },
-        { key: "reviewed", label: "Most reviewed", description: "More customer reviews" }
+        { key: "within2km", label: "Within 2 km", description: "Show salons within 2 km" },
+        { key: "within5km", label: "Within 5 km", description: "Show salons within 5 km" },
+        { key: "within10km", label: "Within 10 km", description: "Show salons within 10 km" },
+        { key: "customRadius", label: "Custom", description: "Set custom distance radius" }
+      ]
+    },
+    {
+      title: "Price range",
+      options: [
+        { key: "customMinPrice", label: "Min price", description: "Set minimum price" },
+        { key: "customMaxPrice", label: "Max price", description: "Set maximum price" }
+      ]
+    },
+    {
+      title: "Rating filter",
+      options: [
+        { key: "rating4", label: "4.0+", description: "Salons with 4.0+ rating" },
+        { key: "rating4.5", label: "4.5+", description: "Salons with 4.5+ rating" }
+      ]
+    },
+    {
+      title: "Instant-booking filter",
+      options: [
+        { key: "instant-booking", label: "Instant booking", description: "Salons that can confirm immediately" }
       ]
     },
     {
@@ -2609,14 +2658,14 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
       options: [
         { key: "deals", label: "Deals", description: "Promos and savings" },
         { key: "offpeak", label: "Off-peak discounts", description: "Lower demand offers", disabled: true },
-        { key: "lastminute", label: "Last-minute offers", description: "Late availability deals", disabled: true }
+        { key: "lastminute", label: "Last-minute offers", description: "Late availability deals" }
       ]
     },
     {
       title: "Staff preference",
       options: [
-        { key: "female", label: "Female staff", description: "When staff data includes it" },
-        { key: "male", label: "Male staff", description: "When staff data includes it", disabled: true }
+        { key: "female", label: "Female", description: "When staff includes gender data" },
+        { key: "male", label: "Male", description: "When staff includes gender data", disabled: true }
       ]
     }
   ];
@@ -2630,7 +2679,9 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { key: "reviews", label: "Most reviewed" }
   ];
   readonly quickFilterChips: QuickFilterChip[] = [
-    { label: "Nearby", filter: "nearest", sort: "distance" },
+    { label: "Venues", filter: "salons", mode: "salons" },
+    { label: "Treatments", filter: "services", mode: "services" },
+    { label: "Professionals", filter: "staff", mode: "staff" },
     { label: "Open Now", filter: "open" },
     { label: "Offers", filter: "deals" },
     { label: "Premium", filter: "premium" },
@@ -2643,12 +2694,218 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     { label: "Nails", query: "Nail", mode: "services" }
   ];
   readonly flatFilterOptions = computed(() => this.filterSections.flatMap((section) => section.options));
-  readonly activeFilterCount = computed(() => this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0));
+  readonly activeFilterCount = computed(() => {
+    let count = this.activeFilters().length + (this.minPrice() || this.maxPrice() ? 1 : 0) + (this.draftRadiusKm() !== 25 ? 1 : 0) + (this.hasRatingFilter() ? 1 : 0) + (this.hasInstantBookingFilter() ? 1 : 0) + (this.hasHomeServiceFilter() ? 1 : 0) + (this.hasGenderFilter() ? 1 : 0);
+    if (this.hasDateFilter() || this.hasTimeFilter() || this.hasAvailabilityFilter()) count += 1;
+    if (this.hasPriceRangeFilter()) count += 2;
+    if (this.hasLocationSelectorFilter()) count += 1;
+    return count;
+  });
   readonly filterButtonLabel = computed(() => this.activeFilterCount() ? this.activeFilterSummary().slice(0, 2).join(", ") : "All filters");
   readonly sortButtonLabel = computed(() => this.sortOptions.find((option) => option.key === this.sort())?.label ?? "Best match");
   readonly hasPriceFilter = computed(() => this.activeFilters().some((key) => key === "budget" || key === "mid" || key === "premium") || !!this.minPrice() || !!this.maxPrice());
-  readonly hasTimeFilter = computed(() => this.activeFilters().some((key) => key === "today" || key === "morning" || key === "afternoon" || key === "evening"));
-  readonly hasAvailabilityFilter = computed(() => this.activeFilters().some((key) => key === "open" || key === "today" || key === "morning" || key === "afternoon" || key === "evening"));
+  readonly hasTimeFilter = computed(() => this.activeFilters().some((key) => key === "morning" || key === "afternoon" || key === "evening"));
+  readonly hasAvailabilityFilter = computed(() => this.activeFilters().some((key) => key === "open"));
+  readonly hasDateFilter = computed(() => this.activeFilters().some((key) => key === "today"));
+  readonly hasRatingFilter = computed(() => this.activeFilters().some((key) => key === "rating4" || key === "rating4.5"));
+  readonly hasDistanceFilter = computed(() => this.activeFilters().some((key) => key === "within2km" || key === "within5km" || key === "within10km" || key === "customRadius"));
+  readonly hasInstantBookingFilter = computed(() => this.activeFilters().some((key) => key === "instant-booking"));
+  readonly hasHomeServiceFilter = computed(() => this.activeFilters().some((key) => key === "home-service"));
+  readonly hasGenderFilter = computed(() => this.activeFilters().some((key) => key === "female" || key === "male"));
+  readonly hasPriceRangeFilter = computed(() => this.minPrice() || this.maxPrice());
+  readonly hasLocationSelectorFilter = computed(() => this.selectedCountry() || this.selectedState() || this.selectedCity());
+  readonly hasGenderDataAvailable = computed(() => {
+    const businesses = this.marketplace.businesses();
+    return businesses.some((business) => business.staff && business.staff.some((staff) => staff.gender)) || false;
+  });
+  readonly activeFilterChips = computed(() => {
+    const chips: { key: string; label: string }[] = [];
+    this.activeFilters().forEach((key) => {
+      switch (key) {
+        case "today":
+          chips.push({ key, label: "Today" });
+          break;
+        case "morning":
+          chips.push({ key, label: "Morning" });
+          break;
+        case "afternoon":
+          chips.push({ key, label: "Afternoon" });
+          break;
+        case "evening":
+          chips.push({ key, label: "Evening" });
+          break;
+        case "within2km":
+          chips.push({ key, label: "Within 2 km" });
+          break;
+        case "within5km":
+          chips.push({ key, label: "Within 5 km" });
+          break;
+        case "within10km":
+          chips.push({ key, label: "Within 10 km" });
+          break;
+        case "customRadius":
+          chips.push({ key, label: `Within ${this.radiusKm()} km` });
+          break;
+        case "budget":
+          chips.push({ key, label: "Low budget" });
+          break;
+        case "mid":
+          chips.push({ key, label: "Mid range" });
+          break;
+        case "premium":
+          chips.push({ key, label: "Premium" });
+          break;
+        case "rating4":
+          chips.push({ key, label: "4.0+" });
+          break;
+        case "rating4.5":
+          chips.push({ key, label: "4.5+" });
+          break;
+        case "instant-booking":
+          chips.push({ key, label: "Instant booking" });
+          break;
+        case "home-service":
+          chips.push({ key, label: "Home service" });
+          break;
+        case "female":
+          chips.push({ key, label: "Female" });
+          break;
+        case "male":
+          chips.push({ key, label: "Male" });
+          break;
+        case "deals":
+          chips.push({ key, label: "Deals" });
+          break;
+        case "nearest":
+          chips.push({ key, label: `Within ${this.radiusKm()} km` });
+          break;
+        case "open":
+          chips.push({ key, label: "Open now" });
+          break;
+      }
+    });
+    if (this.minPrice() || this.maxPrice()) {
+      chips.push({ key: "priceRange", label: `₹ ${this.minPrice() || "0"} - ${this.maxPrice() || "Any"}` });
+    }
+    if (this.selectedCountry() || this.selectedState() || this.selectedCity()) {
+      chips.push({ key: "location", label: this.getLocationLabel() });
+    }
+    return chips;
+  });
+  getLocationLabel(): string {
+    if (this.selectedCity()) return `City: ${this.selectedCity()}`;
+    if (this.selectedState()) return `State: ${this.selectedState()}`;
+    if (this.selectedCountry()) return `Country: ${this.selectedCountry()}`;
+    return "Location";
+  }
+
+  isQuickFilterSelected(chip: QuickFilterChip): boolean {
+    if (chip.filter) return this.activeFilters().includes(chip.filter as FilterKey);
+    if (!chip.query) return false;
+    return this.mode() === (chip.mode || "services") && this.query().trim().toLowerCase() === chip.query.toLowerCase();
+  }
+
+  isDraftOptionSelected(value: FilterKey): boolean {
+    if (value === "anytime") return !this.draftFilters().some((key) => this.isTimeFilterKey(key));
+    return this.draftFilters().includes(value);
+  }
+
+  toggleDraftFilter(value: FilterKey) {
+    if (value === "anytime") {
+      this.draftFilters.update((filters) => filters.filter((item) => !this.isTimeFilterKey(item)));
+      return;
+    }
+    this.draftFilters.update((filters) => {
+      const next = filters.includes(value) ? filters.filter((item) => item !== value) : [...filters, value];
+      return this.normalizedFilterList(next);
+    });
+  }
+
+  clearDraftFilters() {
+    this.draftFilters.set([]);
+    this.draftMode.set("salons");
+    this.draftRadiusKm.set(25);
+    this.draftMinPrice.set("");
+    this.draftMaxPrice.set("");
+  }
+
+  clearFilters() {
+    this.activeFilters.set([]);
+    this.filter.set("open");
+    this.minPrice.set("");
+    this.maxPrice.set("");
+    this.radiusKm.set(25);
+    this.draftFilters.set([]);
+    this.draftMinPrice.set("");
+    this.draftMaxPrice.set("");
+    this.draftRadiusKm.set(25);
+    this.filterPanelOpen.set(false);
+    void this.executeSearch();
+  }
+
+  applyFilters() {
+    const filters = this.normalizedFilterList(this.draftFilters());
+    this.mode.set(this.draftMode());
+    this.radiusKm.set(this.draftRadiusKm());
+    this.minPrice.set(this.draftMinPrice());
+    this.maxPrice.set(this.draftMaxPrice());
+    this.filterPanelOpen.set(false);
+    if (filters.includes("nearest") && !this.hasUsableLocation()) {
+      const withoutNearest = filters.filter((item) => item !== "nearest");
+      this.activeFilters.set(withoutNearest);
+      this.filter.set(withoutNearest[0] || "open");
+      this.useLocation();
+      return;
+    }
+    this.activeFilters.set(filters);
+    this.filter.set(filters[0] || "open");
+    void this.executeSearch();
+  }
+
+  applyQuickFilter(chip: QuickFilterChip) {
+    this.closeSheets();
+    if (chip.filter) {
+      if (this.isModeChipValue(chip.filter)) {
+        this.mode.set(chip.filter);
+        this.draftMode.set(chip.filter);
+        void this.executeSearch();
+        return;
+      }
+      const isSelected = this.activeFilters().includes(chip.filter as FilterKey);
+      const filters = isSelected
+        ? this.activeFilters().filter((item) => item !== chip.filter)
+        : this.normalizedFilterList([...this.activeFilters(), chip.filter]);
+      this.activeFilters.set(filters);
+      this.draftFilters.set(filters);
+      this.filter.set(filters[0] || "open");
+      if (chip.sort) {
+        this.sort.set(isSelected && this.sort() === chip.sort ? "recommended" : chip.sort);
+        this.draftSort.set(this.sort());
+      }
+      if (chip.filter === "nearest" && !isSelected && !this.hasUsableLocation()) {
+        this.activeFilters.set(filters.filter((item) => item !== "nearest"));
+        this.useLocation();
+        return;
+      }
+      void this.executeSearch();
+      return;
+    }
+
+    if (!chip.query) return;
+    if (this.isQuickFilterSelected(chip)) {
+      this.query.set("");
+      this.mode.set("salons");
+      this.draftMode.set("salons");
+    } else {
+      this.query.set(chip.query);
+      this.mode.set(chip.mode || "services");
+      this.draftMode.set(this.mode());
+    }
+    void this.executeSearch();
+  }
+  private isModeChipValue(value: FilterKey | SearchMode): value is SearchMode {
+    return value === "salons" || value === "services" || value === "staff" || value === "locations";
+  }
   private readonly initialLocation = this.savedLocation();
   readonly location = signal<{ lat: number; lng: number } | null>(this.initialLocation);
   readonly areaLabel = signal(this.savedAreaLabel(this.initialLocation));
@@ -2749,6 +3006,28 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   });
   readonly suggestions = computed<SearchSuggestion[]>(() => {
     const query = this.query().trim().toLowerCase();
+    if (this.mode() === "locations" && !query) {
+      const recent = this.recentAreas().slice(0, 3).map<SearchSuggestion>((area) => ({
+        key: `recent-${area}`,
+        label: area,
+        type: "Recent",
+        copy: "Places in this area",
+        query: area,
+        business: null
+      }));
+      const popular = this.popularAreas()
+        .filter((area) => !this.recentAreas().includes(area.label))
+        .slice(0, 4)
+        .map<SearchSuggestion>((area) => ({
+          key: `popular-${area.label}`,
+          label: area.label,
+          type: "Popular",
+          copy: `${area.count} places`,
+          query: area.label,
+          business: null
+        }));
+      return [...recent, ...popular].slice(0, 6);
+    }
     if (!query) return [];
     const suggestions: SearchSuggestion[] = [];
     for (const business of this.filtered()) {
@@ -2758,6 +3037,18 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }
     return suggestions;
   });
+  readonly popularAreas = computed(() => {
+    const counts = new Map<string, number>();
+    for (const business of this.marketplace.businesses()) {
+      const area = (business.city || business.area || "").trim();
+      if (!area) continue;
+      counts.set(area, (counts.get(area) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([label, count]) => ({ label, count }))
+      .sort((left, right) => right.count - left.count);
+  });
+  readonly recentAreas = computed(() => this.readRecentAreas());
   readonly countryOptions = computed(() => this.uniqueLocationValues("country"));
   readonly stateOptions = computed(() => {
     const country = this.selectedCountry();
@@ -2874,6 +3165,15 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   ngOnInit() {
     this.routeSubscription = this.route.queryParamMap.subscribe((params) => {
+      // Re-entering /search with no explicit URL intent (e.g. via the Explore bar after a
+      // round trip) should restore the query and filters the customer last used.
+      const hasExplicitIntent = ["q", "mode", "filter", "sort", "panel", "map", "nearMe", "country", "state", "city"].some((key) => params.has(key));
+      if (!hasExplicitIntent && this.restoreLastSearch()) {
+        if (params.get("map") === "true") this.mapPanelOpen.set(true);
+        this.openPanelFromRoute(params.get("panel"));
+        void this.executeSearch();
+        return;
+      }
       const intent = this.routeSearchIntent(params.get("q") || "");
       const nextQuery = intent.query;
       const nextMode = this.toSearchMode(params.get("mode")) || intent.mode;
@@ -2960,6 +3260,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     this.draftRadiusKm.set(25);
     this.filterPanelOpen.set(false);
     this.sortPanelOpen.set(false);
+    try { window.sessionStorage.removeItem(SearchPage.LAST_SEARCH_KEY); } catch {}
     void this.executeSearch();
   }
 
@@ -3091,108 +3392,9 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     void this.executeSearch();
   }
 
-  isQuickFilterSelected(chip: QuickFilterChip): boolean {
-    if (chip.filter) return this.activeFilters().includes(chip.filter);
-    if (!chip.query) return false;
-    return this.mode() === (chip.mode || "services") && this.query().trim().toLowerCase() === chip.query.toLowerCase();
-  }
-
-  applyQuickFilter(chip: QuickFilterChip) {
-    this.closeSheets();
-    if (chip.filter) {
-      const isSelected = this.activeFilters().includes(chip.filter);
-      const filters = isSelected
-        ? this.activeFilters().filter((item) => item !== chip.filter)
-        : this.normalizedFilterList([...this.activeFilters(), chip.filter]);
-      this.activeFilters.set(filters);
-      this.draftFilters.set(filters);
-      this.filter.set(filters[0] || "open");
-      if (chip.sort) {
-        this.sort.set(isSelected && this.sort() === chip.sort ? "recommended" : chip.sort);
-        this.draftSort.set(this.sort());
-      }
-      if (chip.filter === "nearest" && !isSelected && !this.hasUsableLocation()) {
-        this.activeFilters.set(filters.filter((item) => item !== "nearest"));
-        this.useLocation();
-        return;
-      }
-      void this.executeSearch();
-      return;
-    }
-
-    if (!chip.query) return;
-    if (this.isQuickFilterSelected(chip)) {
-      this.query.set("");
-      this.mode.set("salons");
-      this.draftMode.set("salons");
-    } else {
-      this.query.set(chip.query);
-      this.mode.set(chip.mode || "services");
-      this.draftMode.set(this.mode());
-    }
-    void this.executeSearch();
-  }
-
   closeSheets() {
     this.filterPanelOpen.set(false);
     this.sortPanelOpen.set(false);
-  }
-
-  toggleDraftFilter(value: FilterKey) {
-    if (value === "anytime") {
-      this.draftFilters.update((filters) => filters.filter((item) => !this.isTimeFilterKey(item)));
-      return;
-    }
-    this.draftFilters.update((filters) => {
-      const next = filters.includes(value) ? filters.filter((item) => item !== value) : [...filters, value];
-      return this.normalizedFilterList(next);
-    });
-  }
-
-  isDraftOptionSelected(value: FilterKey): boolean {
-    if (value === "anytime") return !this.draftFilters().some((key) => this.isTimeFilterKey(key));
-    return this.draftFilters().includes(value);
-  }
-
-  clearDraftFilters() {
-    this.draftFilters.set([]);
-    this.draftMode.set("salons");
-    this.draftRadiusKm.set(25);
-    this.draftMinPrice.set("");
-    this.draftMaxPrice.set("");
-  }
-
-  clearFilters() {
-    this.activeFilters.set([]);
-    this.filter.set("open");
-    this.minPrice.set("");
-    this.maxPrice.set("");
-    this.radiusKm.set(25);
-    this.draftFilters.set([]);
-    this.draftMinPrice.set("");
-    this.draftMaxPrice.set("");
-    this.draftRadiusKm.set(25);
-    this.filterPanelOpen.set(false);
-    void this.executeSearch();
-  }
-
-  applyFilters() {
-    const filters = this.normalizedFilterList(this.draftFilters());
-    this.mode.set(this.draftMode());
-    this.radiusKm.set(this.draftRadiusKm());
-    this.minPrice.set(this.draftMinPrice());
-    this.maxPrice.set(this.draftMaxPrice());
-    this.filterPanelOpen.set(false);
-    if (filters.includes("nearest") && !this.hasUsableLocation()) {
-      const withoutNearest = filters.filter((item) => item !== "nearest");
-      this.activeFilters.set(withoutNearest);
-      this.filter.set(withoutNearest[0] || "open");
-      this.useLocation();
-      return;
-    }
-    this.activeFilters.set(filters);
-    this.filter.set(filters[0] || "open");
-    void this.executeSearch();
   }
 
   applySort() {
@@ -3214,6 +3416,11 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   applySuggestion(suggestion: SearchSuggestion) {
     this.query.set(suggestion.query);
+    if (!suggestion.business) {
+      this.selectedBusiness.set(null);
+      void this.executeSearch();
+      return;
+    }
     this.selectedBusiness.set(suggestion.business);
     const coordinates = this.businessCoordinates(suggestion.business);
     if (coordinates) this.mapCenter.set(coordinates);
@@ -3221,6 +3428,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   async executeSearch() {
+    this.persistSearchState();
     const sequence = ++this.searchSequence;
     const query = this.query().trim();
     const filters = this.activeFilters();
@@ -3248,10 +3456,82 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     }).catch(() => undefined);
   }
 
-  useLocation(isManualRetry = false) {
+  /** sessionStorage key holding the last search intent so returning customers keep their query and filters. */
+  private static readonly LAST_SEARCH_KEY = "aura_last_search";
+
+  private persistSearchState(): void {
+    try {
+      const payload = {
+        query: this.query(),
+        mode: this.mode(),
+        filter: this.filter(),
+        sort: this.sort(),
+        activeFilters: this.activeFilters(),
+        minPrice: this.minPrice(),
+        maxPrice: this.maxPrice(),
+        radiusKm: this.radiusKm()
+      };
+      window.sessionStorage.setItem(SearchPage.LAST_SEARCH_KEY, JSON.stringify(payload));
+    } catch { /* sessionStorage unavailable — best-effort persistence */ }
+  }
+
+  private restoreLastSearch(): boolean {
+    try {
+      const raw = window.sessionStorage.getItem(SearchPage.LAST_SEARCH_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw) as {
+        query?: string;
+        mode?: string;
+        filter?: string;
+        sort?: string;
+        activeFilters?: string[];
+        minPrice?: string;
+        maxPrice?: string;
+        radiusKm?: number;
+      };
+      if (!saved || typeof saved !== "object") return false;
+      this.query.set(typeof saved.query === "string" ? saved.query : "");
+      const mode = this.toSearchMode(saved.mode ?? null);
+      if (mode) this.mode.set(mode);
+      const filter = this.toFilterKey(saved.filter ?? null);
+      if (filter) this.filter.set(filter);
+      if (Array.isArray(saved.activeFilters)) {
+        const valid = saved.activeFilters.map((key) => this.toFilterKey(key)).filter((key): key is FilterKey => !!key);
+        if (valid.length) this.activeFilters.set(valid);
+      }
+      const sort = this.toSortKey(saved.sort ?? null);
+      if (sort) this.sort.set(sort);
+      if (typeof saved.minPrice === "string") this.minPrice.set(saved.minPrice);
+      if (typeof saved.maxPrice === "string") this.maxPrice.set(saved.maxPrice);
+      if (typeof saved.radiusKm === "number" && Number.isFinite(saved.radiusKm)) this.radiusKm.set(saved.radiusKm);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+useLocation(isManualRetry = false) {
+    if (this.isLocationPermissionBlocked()) {
+      this.openLocationSettings();
+      return;
+    }
     this.mapPanelOpen.set(true);
     this.mapPickMode.set(false);
     this.requestCurrentLocation(isManualRetry ? 2 : 1);
+  }
+
+  isLocationPermissionBlocked(): boolean {
+    return this.mapErrorTitle() === "Location permission blocked" || !this.hasUsableLocation();
+  }
+
+  openLocationSettings() {
+    this.mapErrorTitle.set("Location permission blocked");
+    this.mapError.set("Location permission is blocked. You can still search by picking an area on the map or entering a city manually. To use your current location, enable permission in your device settings.");
+    this.locationRetryAvailable.set(true);
+  }
+
+  isLocationAvailable(): boolean {
+    return !!this.location();
   }
 
   toggleMapPickMode() {
@@ -3335,7 +3615,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   private setLocationError(error: GeolocationPositionError) {
     if (error.code === 1) {
       this.mapErrorTitle.set("Location permission blocked");
-      this.mapError.set("Location permission is blocked. Please enable location access in your browser.");
+      this.mapError.set("Location permission is blocked. Results are based on your selected or manually picked area. You can pick an area on the map or enter a city manually.");
       this.locationRetryAvailable.set(false);
       return;
     }
@@ -3425,6 +3705,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     );
     this.location.set(pickedLocation);
     this.areaLabel.set(`Selected area ${this.coordinateLabel(pickedLocation)}`);
+    this.recordRecentArea(this.areaLabel());
     this.mapCenter.set(pickedLocation);
     this.mapPickMode.set(false);
     this.filter.set("nearest");
@@ -3441,7 +3722,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   distanceLabel(business: import("../../core/api.types").Business): string {
     const distance = this.businessDistance(business);
-    return distance !== null ? `${this.decimalText(distance)} km away` : "Distance available after location";
+    return distance !== null ? `${this.decimalText(distance)} km away` : "Enable location to see distance";
   }
 
   businessDistanceForCard(business: import("../../core/api.types").Business): number | null {
@@ -3449,15 +3730,15 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   ratingText(business: import("../../core/api.types").Business): string {
-    if (this.isNewForRating(business)) return "New";
+    if (this.isNewForRating(business)) return "New salon";
     const rating = Number(business.ratingAverage);
-    if (!Number.isFinite(rating) || rating <= 0) return "New";
+    if (!Number.isFinite(rating) || rating <= 0) return "New salon";
     return this.oneDecimalText(Math.min(5, rating));
   }
 
   professionalRatingText(professional: ProfessionalResult): string {
     const rating = this.professionalRatingNumber(professional);
-    return Number.isFinite(rating) && rating > 0 ? this.oneDecimalText(Math.min(5, rating)) : "New";
+    return Number.isFinite(rating) && rating > 0 ? this.oneDecimalText(Math.min(5, rating)) : "New salon";
   }
 
   professionalDistanceLabel(business: import("../../core/api.types").Business): string {
@@ -3517,9 +3798,29 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
     try {
       localStorage.setItem("aura_customer_area_label", label);
       localStorage.setItem("aura_customer_location", JSON.stringify(coordinates));
+      this.recordRecentArea(label);
       window.dispatchEvent(new CustomEvent("aura:customer-location-updated", { detail: { label, location: coordinates } }));
     } catch {
       // Local storage can be unavailable in private or restricted browser modes.
+    }
+  }
+
+  private recordRecentArea(label: string) {
+    try {
+      const areas = this.readRecentAreas().filter((area) => area.toLowerCase() !== label.toLowerCase());
+      areas.unshift(label);
+      localStorage.setItem("aura_customer_recent_areas", JSON.stringify(areas.slice(0, 6)));
+    } catch {
+      // Local storage can be unavailable in private or restricted browser modes.
+    }
+  }
+
+  private readRecentAreas(): string[] {
+    try {
+      const parsed = JSON.parse(localStorage.getItem("aura_customer_recent_areas") || "[]") as string[];
+      return Array.isArray(parsed) ? parsed.filter((area) => typeof area === "string").slice(0, 6) : [];
+    } catch {
+      return [];
     }
   }
 
@@ -3748,7 +4049,9 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
 
   private toFilterKey(value: string | null): FilterKey | null {
     const key = value === "offers" ? "deals" : value === "price" ? "mid" : value;
-    return key === "anytime" || key === "open" || key === "today" || key === "morning" || key === "afternoon" || key === "evening" || key === "nearest" || key === "budget" || key === "mid" || key === "premium" || key === "top" || key === "reviewed" || key === "deals" || key === "offpeak" || key === "lastminute" || key === "female" || key === "male" ? key : null;
+    if (!key) return null;
+    const validKeys: FilterKey[] = ["anytime", "open", "today", "morning", "afternoon", "evening", "nearest", "within2km", "within5km", "within10km", "customRadius", "budget", "mid", "premium", "top", "reviewed", "deals", "offpeak", "lastminute", "instant-booking", "home-service", "female", "male", "rating4", "rating4.5", "customMinPrice", "customMaxPrice"];
+    return validKeys.includes(key as FilterKey) ? (key as FilterKey) : null;
   }
 
   private toSortKey(value: string | null): SortKey | null {

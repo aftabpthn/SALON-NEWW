@@ -20,8 +20,13 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 
       @if (salons.length === 0) {
         <div class="empty-state">
-          <p>You haven't visited any salons yet. Start exploring!</p>
-          <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+          @if (hasBookings) {
+            <p>Your salon visits will appear here as you book and visit.</p>
+            <a class="empty-link" routerLink="/tabs/bookings">View my bookings</a>
+          } @else {
+            <p>You haven't visited any salons yet. Start exploring!</p>
+            <ion-button class="primary-gradient" routerLink="/tabs/search">Discover salons</ion-button>
+          }
         </div>
       } @else {
         <ul class="salon-list" role="list">
@@ -118,6 +123,22 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
     .empty-state ion-button {
       min-height: 44px;
       margin: 0;
+    }
+
+    .empty-link {
+      justify-self: center;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--primary);
+      background: var(--surface);
+      font-size: 0.85rem;
+      font-weight: 900;
+      text-decoration: none;
     }
 
     .empty-state p {
@@ -274,6 +295,7 @@ import { CustomerPrimarySalon, CustomerSalonRelationship } from "../core/api.typ
 export class YourSalonsListComponent {
   @Input() salons: CustomerSalonRelationship[] = [];
   @Input() primarySalon: CustomerPrimarySalon | null = null;
+  @Input() hasBookings = false;
   @Output() setAsPrimary = new EventEmitter<CustomerSalonRelationship>();
   @Output() removePrimary = new EventEmitter<void>();
 

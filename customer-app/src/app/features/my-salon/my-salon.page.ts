@@ -68,7 +68,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
               <span class="ms-picker-count">{{ salonChoices().length }} connected</span>
             </div>
             <p class="ms-picker-note">
-              Switching loads isolated wallet balance, loyalty points, active membership, package credits, Happy Hours offers and visit history for that specific salon.
+              Switching loads that salon's credit balance, loyalty points, active membership, package credits, Happy Hours offers and visit history for that specific salon.
             </p>
 
             @if (salonChoices().length) {
@@ -199,10 +199,10 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                 <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon><span>Book</span>
               </a>
               <a [routerLink]="scopedLink('wallet')">
-                <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon><span>Wallet</span>
+                <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon><span>Salon credit</span>
               </a>
               <a [routerLink]="scopedLink('rewards')">
-                <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon><span>Loyalty</span>
+                <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon><span>Salon loyalty</span>
               </a>
               <a [routerLink]="scopedLink('memberships')">
                 <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon><span>Membership</span>
@@ -238,23 +238,23 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
                   <small>{{ d.membership ? safeCount(d.membership.creditsRemaining) + ' service credits left' : 'No active plan' }}</small>
                 </a>
 
-                <!-- Salon Wallet -->
+                <!-- Salon Credit -->
                 <a [routerLink]="scopedLink('wallet')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
-                    <span>Salon Wallet</span>
+                    <span>{{ d.salon.name }} credit</span>
                     <ion-icon name="wallet-outline" aria-hidden="true"></ion-icon>
                   </div>
-                  <strong class="ms-currency">{{ d.wallet ? formatMoney(d.wallet.balancePaise) : '₹0' }}</strong>
-                  <small>{{ walletTxCount(d.wallet) }}</small>
+                  <strong class="ms-currency">{{ d.wallet ? formatMoney(d.wallet.balancePaise) : '—' }}</strong>
+                  <small>{{ d.wallet ? walletTxCount(d.wallet) : 'No credits on record' }}</small>
                 </a>
 
-                <!-- Loyalty Points -->
+                <!-- Salon Loyalty Points -->
                 <a [routerLink]="scopedLink('rewards')" class="ms-snapshot-item">
                   <div class="ms-snap-top">
-                    <span>{{ d.loyalty?.tier || 'Loyalty Tier' }}</span>
+                    <span>{{ d.loyalty?.tier || 'Salon loyalty' }}</span>
                     <ion-icon name="star-outline" aria-hidden="true"></ion-icon>
                   </div>
-                  <strong>{{ d.loyalty ? formatNumber(d.loyalty.points) + ' pts' : '0 pts' }}</strong>
+                  <strong>{{ d.loyalty ? formatNumber(d.loyalty.points) + ' pts' : '—' }}</strong>
                   <small>{{ d.loyalty ? 'Points for discounts' : 'Earn on every visit' }}</small>
                 </a>
 
@@ -801,6 +801,7 @@ import { CustomerSalonRelationship, MySalonDashboard } from "../../core/api.type
     .ms-snapshot-item { min-width: 0; min-height: 114px; display: grid; align-content: space-between; gap: 6px; padding: 16px; border: 1px solid var(--ms-line); border-radius: 20px; color: inherit; background: var(--ms-ivory); text-decoration: none; transition: transform var(--ms-motion), box-shadow var(--ms-motion), border-color var(--ms-motion); }
     .ms-snapshot-item:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,.05); }
     .ms-snap-top { display: flex; align-items: center; justify-content: space-between; color: var(--ms-muted); font-size: .72rem; font-weight: 750; letter-spacing: .01em; }
+    .ms-snap-top span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .ms-snap-top ion-icon { color: var(--ms-accent); font-size: 17px; }
     .ms-snapshot-item strong { overflow: hidden; font-size: 1.25rem; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }
     .ms-snapshot-item small { color: var(--ms-muted); font-size: .7rem; line-height: 1.25; }

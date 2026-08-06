@@ -49,6 +49,8 @@ export class MarketplaceService {
   readonly availability = signal<AvailabilityDay[]>([]);
   readonly accountModule = signal<CustomerAccountModule | null>(null);
   readonly membershipPlans = signal<CustomerMembershipPlan[]>([]);
+  /** Last successfully loaded account module per hub slug, kept so failed or empty refetches never wipe known data. */
+  private readonly moduleCacheStore = new Map<string, CustomerAccountModule>();
   readonly customer = computed(() => this.auth.customer());
   readonly isAuthenticated = computed(() => this.auth.isAuthenticated());
   readonly mySalons = signal<CustomerSalonRelationship[]>([]);
@@ -370,8 +372,14 @@ export class MarketplaceService {
     return this.run("Unable to load customer records", async () => {
       const data = await this.accountModuleRequest(slug);
       this.accountModule.set(data);
+      this.moduleCacheStore.set(slug, data);
       return data;
     });
+  }
+
+  /** Last successfully loaded module for a hub slug, or null on the very first load. */
+  cachedModule(slug: string): CustomerAccountModule | null {
+    return this.moduleCacheStore.get(slug) ?? null;
   }
 
   async loadMembershipPlans(branchId?: string): Promise<CustomerMembershipPlan[]> {

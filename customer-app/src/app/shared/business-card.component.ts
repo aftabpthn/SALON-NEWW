@@ -2,7 +2,7 @@ import { Component, EventEmitter, Input, OnInit, Output } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { IonButton, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { bookmark, bookmarkOutline, heart, heartOutline, locationOutline, timeOutline } from "ionicons/icons";
+import { bookmark, bookmarkOutline, globeOutline, heart, heartOutline, locationOutline, star, timeOutline } from "ionicons/icons";
 import { Business } from "../core/api.types";
 import { ClockService } from "../core/clock.service";
 import { CustomerFeedbackService } from "../core/customer-feedback.service";
@@ -34,7 +34,7 @@ import { MarketplaceService } from "../core/marketplace.service";
             <small>{{ business.category || 'Salon' }}</small>
           </div>
         }
-        <span class="rating-pill">Star {{ ratingText() }}</span>
+        <span class="rating-pill">{{ ratingText() }}{{ ratingCountText() }}</span>
         <div class="cover-actions">
           <button class="favorite" [class.saved]="isSaved()" type="button" [disabled]="favoritePending" [attr.aria-label]="isSaved() ? 'Remove from wishlist' : 'Save to wishlist'" (click)="toggleSave($event)">
             <ion-icon [name]="isSaved() ? 'heart' : 'heart-outline'"></ion-icon>
@@ -51,10 +51,16 @@ import { MarketplaceService } from "../core/marketplace.service";
       <div class="content">
         <div class="topline">
           <span class="status-pill" [class.closed]="!isOpenNow()">{{ isOpenNow() ? "Open now" : "Closed" }}</span>
-          <span class="countdown-pill" [class.warning]="isClosingSoon()" [class.closed]="!isOpenNow()">{{ timingStatus() }}</span>
         </div>
         <h3>{{ business.businessName }}</h3>
         <p class="business-meta">
+          @if (variant !== 'miniRail' && variant !== 'rail') {
+            @if (ratingText() === 'New') {
+              <span class="business-rating is-new">New</span>
+            } @else {
+              <span class="business-rating"><ion-icon name="star"></ion-icon>{{ ratingText() }}{{ ratingCountText() }}</span>
+            }
+          }
           @if (variant === 'miniRail' && business.popularService) {
             <span class="business-category">{{ business.popularService }}</span>
           } @else if (business.category) {
@@ -66,10 +72,17 @@ import { MarketplaceService } from "../core/marketplace.service";
         </p>
         <div class="service-row">
           <span>{{ business.popularService || business.categories[0] || "Service" }}</span>
-          <strong>from {{ money(business.startingPricePaise) }}</strong>
+          <strong>{{ priceLabel() }}</strong>
+        </div>
+        <div class="booking-row">
+          <ion-icon name="time-outline"></ion-icon>
+          <span class="booking-status" [class.warning]="isClosingSoon()" [class.closed]="!isOpenNow()">{{ timingStatus() }}</span>
+          @if (supportsOnlineBooking()) {
+            <span class="booking-online"><ion-icon name="globe-outline"></ion-icon>Online booking</span>
+          }
         </div>
         <div class="footer-row">
-          <span><ion-icon name="time-outline"></ion-icon>{{ business.nextAvailableSlot || business.hoursLabel || "Availability updating" }}</span>
+          <span>{{ business.nextAvailableSlot || business.hoursLabel || "Availability updating" }}</span>
           <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
         </div>
       </div>
@@ -162,8 +175,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       place-items: center;
       gap: 4px;
       text-align: center;
-      background: linear-gradient(135deg, #e8f5fa 0%, #c8e9f3 50%, #a8dbe9 100%);
-      color: #6366F1;
+      background: linear-gradient(135deg, #eef0ff 0%, #d9dcfb 50%, #b8bcf8 100%);
+      color: var(--primary-2);
     }
 
     .cover-fallback span {
@@ -174,7 +187,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       border-radius: 12px;
       background: var(--surface);
       box-shadow: 0 4px 12px rgba(99, 102, 241, 0.14);
-      color: #6366F1;
+      color: var(--primary-2);
       font-size: 1rem;
       font-weight: 900;
       letter-spacing: -0.02em;
@@ -182,7 +195,7 @@ import { MarketplaceService } from "../core/marketplace.service";
 
     .cover-fallback small {
       padding: 0 14px;
-      color: rgba(15, 79, 101, 0.84);
+      color: rgba(67, 56, 202, 0.82);
       font-size: 0.74rem;
       font-weight: 950;
       letter-spacing: 0.12em;
@@ -269,31 +282,49 @@ import { MarketplaceService } from "../core/marketplace.service";
       font-weight: 800;
     }
 
-    .countdown-pill {
+    .booking-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .booking-row > ion-icon {
+      flex: 0 0 auto;
+      color: var(--primary);
+      font-size: 0.9rem;
+    }
+
+    .booking-status {
+      min-width: 0;
+      color: var(--brand-800);
+      font-size: 0.78rem;
+      font-weight: 850;
+      line-height: 1.25;
+    }
+
+    .booking-status.warning {
+      color: var(--primary);
+    }
+
+    .booking-status.closed {
+      color: var(--muted);
+    }
+
+    .booking-online {
       display: inline-flex;
       align-items: center;
-      min-height: 28px;
-      padding: 0 10px;
+      gap: 4px;
+      min-height: 24px;
+      padding: 0 9px;
       border: 1px solid rgba(99, 102, 241, 0.22);
       border-radius: 999px;
-      color: var(--brand-800);
+      color: var(--primary-2);
       background: var(--primary-soft);
-      font-size: 0.76rem;
+      font-size: 0.68rem;
       font-weight: 900;
       white-space: nowrap;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
-    }
-
-    .countdown-pill.warning {
-      color: var(--primary);
-      border-color: rgba(99, 102, 241, 0.3);
-      background: var(--primary-soft);
-    }
-
-    .countdown-pill.closed {
-      color: var(--muted);
-      border-color: var(--border);
-      background: var(--surface-soft);
     }
 
     h3 {
@@ -330,6 +361,26 @@ import { MarketplaceService } from "../core/marketplace.service";
       text-overflow: ellipsis;
     }
 
+    .business-rating {
+      display: inline-flex;
+      flex: 0 0 auto;
+      align-items: center;
+      gap: 3px;
+      color: var(--primary-2);
+      font-size: 0.8rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .business-rating.is-new {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 850;
+      letter-spacing: 0.02em;
+    }
+
+    .business-rating ion-icon { color: var(--primary); font-size: 0.8rem; }
+
     .business-location {
       display: inline-flex;
       align-items: center;
@@ -337,6 +388,12 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .business-category + .business-location::before {
+      content: "·";
+      color: rgba(82, 101, 121, 0.68);
+    }
+
+    .business-rating + .business-category::before,
+    .business-rating + .business-location::before {
       content: "·";
       color: rgba(82, 101, 121, 0.68);
     }
@@ -369,8 +426,13 @@ import { MarketplaceService } from "../core/marketplace.service";
       padding-top: 0;
     }
 
-    ion-button {
-      min-width: 86px;
+    .footer-row ion-button {
+      min-width: 84px;
+      height: 44px;
+      min-height: 44px;
+      --padding-start: 14px;
+      --padding-end: 14px;
+      font-size: 0.78rem;
     }
 
     @media (hover: hover) and (pointer: fine) {
@@ -441,8 +503,8 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row ion-button {
         min-width: 70px;
-        min-height: 36px;
-        height: 36px;
+        min-height: 40px;
+        height: 40px;
       }
 
       .business-card.variant-rail {
@@ -473,6 +535,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-rail .cover-actions,
       .business-card.variant-rail .offer-pill,
       .business-card.variant-rail .topline,
+      .business-card.variant-rail .booking-row,
       .business-card.variant-rail .service-row strong,
       .business-card.variant-rail .footer-row > span {
         display: none;
@@ -704,7 +767,8 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-rail .rating-pill,
       .business-card.variant-rail .cover-actions,
       .business-card.variant-rail .offer-pill,
-      .business-card.variant-rail .topline {
+      .business-card.variant-rail .topline,
+      .business-card.variant-rail .booking-row {
         display: none;
       }
 
@@ -793,8 +857,8 @@ import { MarketplaceService } from "../core/marketplace.service";
         padding: 10px 12px 12px;
       }
 
-      .business-card.variant-discovery .countdown-pill {
-        display: none;
+      .business-card.variant-discovery .booking-status {
+        font-size: 0.72rem;
       }
 
       .business-card.variant-discovery h3 {
@@ -903,6 +967,7 @@ import { MarketplaceService } from "../core/marketplace.service";
       .business-card.variant-mini-rail .cover-actions,
       .business-card.variant-mini-rail .offer-pill,
       .business-card.variant-mini-rail .topline,
+      .business-card.variant-mini-rail .booking-row,
       .business-card.variant-mini-rail .service-row,
       .business-card.variant-mini-rail .footer-row {
         display: none;
@@ -947,7 +1012,7 @@ export class BusinessCardComponent implements OnInit {
   savedSalonPending = false;
 
   constructor(private readonly marketplace: MarketplaceService, private readonly router: Router, private readonly clock: ClockService, private readonly feedback: CustomerFeedbackService) {
-    addIcons({ bookmark, bookmarkOutline, heart, heartOutline, locationOutline, timeOutline });
+    addIcons({ bookmark, bookmarkOutline, globeOutline, heart, heartOutline, locationOutline, star, timeOutline });
   }
 
   ngOnInit() {
@@ -957,6 +1022,23 @@ export class BusinessCardComponent implements OnInit {
 
   money(pricePaise: number): string {
     return this.marketplace.formatMoney(pricePaise);
+  }
+
+  /** Never surface "from ₹0" — hide the price until a real starting price exists. */
+  priceLabel(): string {
+    const price = Number(this.business.startingPricePaise);
+    return price > 0 ? `from ${this.money(price)}` : "View prices";
+  }
+
+  /** Review count beside the rating, e.g. "4.5 · 120". */
+  ratingCountText(): string {
+    if (this.ratingText() === "New") return "";
+    const count = Number(this.business.ratingCount || 0);
+    return count > 0 ? ` · ${count}` : "";
+  }
+
+  supportsOnlineBooking(): boolean {
+    return Array.isArray(this.business.paymentModes) && this.business.paymentModes.includes("online");
   }
 
   private get now(): number {

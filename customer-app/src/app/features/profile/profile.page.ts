@@ -1,12 +1,12 @@
-import { Component, OnInit } from "@angular/core";
+import { Component, OnInit, computed } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { IonButton, IonCheckbox, IonContent, IonIcon, IonInput, IonItem, IonList } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { bookmarkOutline, briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
+import { briefcaseOutline, calendarOutline, chatbubblesOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, searchOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline } from "ionicons/icons";
 import { MarketplaceService } from "../../core/marketplace.service";
 import { YourSalonsListComponent } from "../../shared/your-salons-list.component";
-import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../../core/api.types";
+import { CustomerNotificationPreferences, CustomerProfile, CustomerSalonRelationship } from "../../core/api.types";
 
 @Component({
   standalone: true,
@@ -17,13 +17,13 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         @if (marketplace.isAuthenticated()) {
           <section class="profile-card premium-card">
             <div class="avatar">{{ profileName().charAt(0) }}</div>
-            <div>
+            <div class="profile-identity">
               <h1>{{ profileName() || "Loading profile" }}</h1>
               <p class="muted">{{ marketplace.customer()?.email || "No email saved" }} · {{ marketplace.customer()?.phone || "No phone saved" }}</p>
             </div>
             <button type="button" class="edit-profile-button" [routerLink]="profileRoute('profile/edit')" aria-label="Edit profile">
-              <ion-icon name="create-outline"></ion-icon>
-              <span>Edit</span>
+              <ion-icon name="create-outline" aria-hidden="true"></ion-icon>
+              <span>Edit profile</span>
             </button>
           </section>
         } @else {
@@ -47,38 +47,56 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
           <section class="pass-card">
             <div>
               <span>{{ customer.membershipLabel || "Customer account" }}</span>
-              <h2>{{ customer.bookingCount || 0 }} bookings completed</h2>
-              <p>Provider: {{ customer.authProvider || "customer" }} · Joined {{ joinedLabel(customer.createdAt) }}</p>
+              <h2>{{ summaryHeading(customer) }}</h2>
+              <p>{{ summaryLine(customer) }}</p>
             </div>
-            <ion-icon name="sparkles-outline"></ion-icon>
+            <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon>
           </section>
 
-          <section class="account-grid">
-            <a class="summary-card premium-card" [routerLink]="profileRoute('wishlist')">
-              <ion-icon name="heart-outline"></ion-icon>
-              <strong>{{ savedSalonsCount() }} liked salons</strong>
-              <span>Salons you have liked</span>
-            </a>
-            <a class="summary-card premium-card" [routerLink]="profileRoute('saved-salons')">
-              <ion-icon name="bookmark-outline"></ion-icon>
-              <strong>{{ marketplace.savedSalons().length }} saved salons</strong>
-              <span>Your shortlist for later</span>
-            </a>
+          <section class="account-grid" aria-label="Account summary">
+            @if (favouriteCount() > 0) {
+              <a class="summary-card premium-card" [routerLink]="profileRoute('wishlist')">
+                <ion-icon name="heart-outline" aria-hidden="true"></ion-icon>
+                <strong>{{ favouriteCount() }} favour{{ favouriteCount() === 1 ? "ite" : "ites" }}</strong>
+                <span>Salons you saved</span>
+              </a>
+            }
+            @if (upcomingCount() > 0) {
+              <a class="summary-card premium-card" [routerLink]="profileRoute('bookings')">
+                <ion-icon name="calendar-outline" aria-hidden="true"></ion-icon>
+                <strong>{{ upcomingCount() }} upcoming</strong>
+                <span>Confirmed and pending visits</span>
+              </a>
+            }
             <a class="summary-card premium-card" [routerLink]="profileRoute('bookings')">
-              <ion-icon name="sparkles-outline"></ion-icon>
-              <strong>{{ upcomingCount() }} upcoming</strong>
-              <span>Confirmed and pending visits</span>
+              <ion-icon name="sparkles-outline" aria-hidden="true"></ion-icon>
+              <strong>{{ bookingsCompleted() }} completed</strong>
+              <span>Visits you have had</span>
             </a>
             <a class="summary-card premium-card" [routerLink]="profileRoute('rewards')">
-              <ion-icon name="ribbon-outline"></ion-icon>
+              <ion-icon name="ribbon-outline" aria-hidden="true"></ion-icon>
               <strong>{{ customer.membershipLabel || "Starter" }}</strong>
               <span>Loyalty and rewards status</span>
             </a>
           </section>
 
+          @if (!marketplace.loading() && isNewUser()) {
+            <section class="discover-card premium-card">
+              <div>
+                <strong>Ready for your first visit?</strong>
+                <p>Explore salons near you and book your first appointment.</p>
+              </div>
+              <ion-button class="primary-gradient" [routerLink]="discoverLink()">
+                <ion-icon name="search-outline" slot="start"></ion-icon>
+                Discover salons
+              </ion-button>
+            </section>
+          }
+
           <aura-your-salons-list
             [salons]="marketplace.mySalons()"
             [primarySalon]="marketplace.primarySalon()"
+            [hasBookings]="hasBookings()"
             (setAsPrimary)="onSetPrimarySalon($event)"
             (removePrimary)="onRemovePrimarySalon()">
           </aura-your-salons-list>
@@ -215,26 +233,22 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         }
 
         <nav class="menu premium-card" aria-label="Profile menu">
-          <div class="menu-section-title">Hub</div>
-          <a [routerLink]="profileRoute('bookings')"><ion-icon name="sparkles-outline"></ion-icon><span>My bookings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('wishlist')"><ion-icon name="heart-outline"></ion-icon><span>Liked Salons / Wishlist</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('saved-salons')"><ion-icon name="bookmark-outline"></ion-icon><span>Saved salons</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('wallet')"><ion-icon name="wallet-outline"></ion-icon><span>Wallet and payments</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('rewards')"><ion-icon name="ribbon-outline"></ion-icon><span>Loyalty rewards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('memberships')"><ion-icon name="heart-circle-outline"></ion-icon><span>Memberships</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('packages')"><ion-icon name="ticket-outline"></ion-icon><span>Packages</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('gift-cards')"><ion-icon name="gift-outline"></ion-icon><span>Gift cards</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('referrals')"><ion-icon name="share-social-outline"></ion-icon><span>Referrals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('family')"><ion-icon name="people-outline"></ion-icon><span>Family profiles</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('corporate')"><ion-icon name="briefcase-outline"></ion-icon><span>Corporate benefits</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('goals')"><ion-icon name="color-palette-outline"></ion-icon><span>Beauty goals</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('notifications')"><ion-icon name="notifications-outline"></ion-icon><span>Notifications</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('support')"><ion-icon name="help-circle-outline"></ion-icon><span>Help, support and AI</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
-          <a [routerLink]="profileRoute('settings')"><ion-icon name="shield-checkmark-outline"></ion-icon><span>Privacy and settings</span><ion-icon name="chevron-forward-outline"></ion-icon></a>
+          @for (group of menuGroups; track group.label) {
+            <div class="menu-group">
+              <h2 class="menu-group-title">{{ group.label }}</h2>
+              @for (item of group.items; track item.route) {
+                <a [routerLink]="profileRoute(item.route)">
+                  <ion-icon [name]="item.icon" aria-hidden="true"></ion-icon>
+                  <span>{{ item.label }}</span>
+                  <ion-icon name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+                </a>
+              }
+            </div>
+          }
         </nav>
 
         @if (marketplace.isAuthenticated()) {
-          <ion-button expand="block" fill="outline" class="secondary-button" (click)="logout()">
+          <ion-button expand="block" fill="outline" class="secondary-button logout-button" (click)="logout()">
             <ion-icon name="log-out-outline" slot="start"></ion-icon>
             Logout
           </ion-button>
@@ -324,46 +338,10 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.38), transparent 34%),
         linear-gradient(135deg, var(--brand-600) 0%, var(--primary) 48%, var(--brand-900) 100%);
       box-shadow:
-        0 28px 56px rgba(28, 28, 28, 0.22),
-        0 10px 22px rgba(99, 102, 241, 0.22),
-        inset 0 1px 0 rgba(255, 255, 255, 0.58),
-        inset 0 -18px 34px rgba(28, 28, 28, 0.16);
-      transform: perspective(1100px) translate3d(0, 0, 0);
-      transform-style: preserve-3d;
-      backface-visibility: hidden;
-      animation: aura-pass-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both, aura-pass-float 6.8s ease-in-out infinite 560ms;
-      transition:
-        transform 280ms cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 280ms cubic-bezier(0.16, 1, 0.3, 1),
-        filter 220ms ease;
-    }
-
-    .pass-card::before {
-      position: absolute;
-      inset: 0;
-      content: "";
-      pointer-events: none;
-      background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 24%, transparent 62%, rgba(28, 28, 28, 0.14)),
-        radial-gradient(circle at 82% 20%, rgba(255, 255, 255, 0.3), transparent 20%);
-      transform: translateZ(18px);
-    }
-
-    .pass-card::after {
-      position: absolute;
-      inset: -40% auto -40% -66%;
-      width: 48%;
-      content: "";
-      pointer-events: none;
-      background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.36), transparent);
-      transform: translateX(-120%) rotate(14deg);
-      transition: transform 760ms cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .pass-card > * {
-      position: relative;
-      z-index: 1;
-      transform: translateZ(26px);
+        0 18px 38px rgba(28, 28, 28, 0.18),
+        0 8px 18px rgba(99, 102, 241, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.58);
+      transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 260ms ease;
     }
 
     .pass-card span {
@@ -390,38 +368,21 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       flex: 0 0 auto;
       font-size: 2.4rem;
       filter: drop-shadow(0 10px 16px rgba(28, 28, 28, 0.24));
-      transform: translateZ(42px);
     }
 
     @media (hover: hover) and (pointer: fine) {
       .pass-card:hover {
-        transform: perspective(1100px) translate3d(0, -8px, 26px) rotateX(1.4deg) rotateY(-1.8deg) scale(1.01);
+        transform: translateY(-3px);
         box-shadow:
-          0 38px 82px rgba(28, 28, 28, 0.25),
-          0 16px 34px rgba(99, 102, 241, 0.24),
-          inset 0 1px 0 rgba(255, 255, 255, 0.72),
-          inset 0 -20px 38px rgba(28, 28, 28, 0.16);
-        filter: saturate(1.06) brightness(1.03);
-        animation-play-state: paused;
+          0 22px 46px rgba(28, 28, 28, 0.2),
+          0 12px 24px rgba(99, 102, 241, 0.24),
+          inset 0 1px 0 rgba(255, 255, 255, 0.68);
       }
-
-      .pass-card:hover::after {
-        transform: translateX(390%) rotate(14deg);
-      }
-
-      .pass-card:hover ion-icon {
-        transform: translate3d(0, -2px, 48px) scale(1.08) rotate(-4deg);
-      }
-    }
-
-    .pass-card:active {
-      transform: perspective(1100px) translate3d(0, 2px, -8px) rotateX(-1deg) scale(0.985);
-      filter: saturate(1.02) brightness(0.98);
     }
 
     .account-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 12px;
     }
 
@@ -444,7 +405,34 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
 
     .summary-card span {
       color: var(--muted);
+      font-size: 0.78rem;
       font-weight: 800;
+    }
+
+    .discover-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 18px;
+    }
+
+    .discover-card strong {
+      display: block;
+      font-size: 1.05rem;
+      letter-spacing: -0.02em;
+    }
+
+    .discover-card p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .discover-card ion-button {
+      min-height: 44px;
+      margin: 0;
     }
 
     .profile-editor {
@@ -544,11 +532,15 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       overflow: hidden;
     }
 
-    .menu-section-title {
-      padding: 14px 18px 8px;
-      color: var(--primary);
-      background: var(--primary-soft);
-      font-size: 0.76rem;
+    .menu-group + .menu-group {
+      border-top: 1px solid var(--border);
+    }
+
+    .menu-group-title {
+      margin: 0;
+      padding: 16px 18px 6px;
+      color: var(--muted);
+      font-size: 0.72rem;
       font-weight: 950;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -560,26 +552,26 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 12px;
       align-items: center;
-      min-height: 58px;
+      min-height: 52px;
       padding: 0 18px;
-      border-bottom: 1px solid var(--border);
       color: var(--text);
       font-weight: 900;
       text-decoration: none;
     }
 
-    .menu a:last-child,
-    .menu-item:last-child {
-      border-bottom: 0;
+    .menu a + a {
+      border-top: 1px solid var(--border);
     }
 
     .menu ion-icon {
-      color: var(--primary-2);
+      color: var(--muted);
       font-size: 1.2rem;
     }
 
     .menu a ion-icon:last-child {
       color: var(--muted);
+      font-size: 0.95rem;
+      opacity: 0.55;
     }
 
     .menu-item.disabled {
@@ -635,7 +627,7 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       }
 
       .profile-card .muted {
-        max-width: 190px;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -643,20 +635,19 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       }
 
       .edit-profile-button {
-        min-width: 38px;
-        min-height: 38px;
-        padding: 0;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 12px;
       }
 
       .edit-profile-button span {
-        display: none;
+        font-size: 0.72rem;
       }
 
       .pass-card {
         min-height: 62px;
         padding: 12px 14px;
         border-radius: 18px;
-        animation: none;
       }
 
       .pass-card span {
@@ -670,37 +661,36 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         line-height: 1.1;
       }
 
-      .pass-card p,
-      .pass-card ion-icon,
-      .summary-card span,
-      .menu-section-title {
-        display: none;
+      .pass-card p {
+        margin-top: 2px;
+        font-size: 0.72rem;
       }
 
       .account-grid {
-        gap: 6px;
+        gap: 8px;
       }
 
       .summary-card {
-        align-items: center;
-        justify-items: center;
-        min-height: 56px;
-        gap: 2px;
-        padding: 4px;
+        gap: 5px;
+        padding: 12px;
         border-radius: 14px;
-        text-align: center;
       }
 
       .summary-card ion-icon {
-        width: 24px;
-        height: 24px;
-        padding: 5px;
-        border-radius: 10px;
+        width: 30px;
+        height: 30px;
+        padding: 6px;
+        border-radius: 11px;
       }
 
       .summary-card strong {
-        font-size: 0.62rem;
+        font-size: 0.8rem;
         line-height: 1.15;
+      }
+
+      .discover-card {
+        grid-template-columns: 1fr;
+        text-align: center;
       }
 
       .menu a,
@@ -720,13 +710,14 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
       .status-card,
       .pass-card,
       .account-grid,
+      .discover-card,
       .profile-editor {
         grid-column: 1;
       }
 
       .menu {
         grid-column: 2;
-        grid-row: 1 / span 4;
+        grid-row: 1 / span 8;
         position: sticky;
         top: 118px;
       }
@@ -736,31 +727,58 @@ import { CustomerNotificationPreferences, CustomerSalonRelationship } from "../.
         max-width: 280px;
       }
     }
-
-    @keyframes aura-pass-rise {
-      from {
-        opacity: 0;
-        transform: perspective(1100px) translate3d(0, 18px, -12px) rotateX(-2deg) scale(0.985);
-      }
-      to {
-        opacity: 1;
-        transform: perspective(1100px) translate3d(0, 0, 0) rotateX(0) scale(1);
-      }
-    }
-
-    @keyframes aura-pass-float {
-      0%,
-      100% {
-        transform: perspective(1100px) translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg);
-      }
-      50% {
-        transform: perspective(1100px) translate3d(0, -3px, 10px) rotateX(0.35deg) rotateY(-0.45deg);
-      }
-    }
   `]
 })
 export class ProfilePage implements OnInit {
-  readonly savedSalonsCount = () => this.marketplace.favorites().length;
+  readonly favouriteCount = computed(() => {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const item of [...this.marketplace.favorites(), ...this.marketplace.savedSalons()]) {
+      const key = item.businessId || item.business?.id || item.business?.slug || "";
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        count += 1;
+      }
+    }
+    return count;
+  });
+  readonly menuGroups = [
+    {
+      label: "Activity",
+      items: [
+        { label: "My bookings", icon: "calendar-outline", route: "bookings" },
+        { label: "Favourites", icon: "heart-outline", route: "wishlist" }
+      ]
+    },
+    {
+      label: "Payments and benefits",
+      items: [
+        { label: "Wallet and payments", icon: "wallet-outline", route: "wallet" },
+        { label: "Loyalty rewards", icon: "ribbon-outline", route: "rewards" },
+        { label: "Memberships", icon: "heart-circle-outline", route: "memberships" },
+        { label: "Packages", icon: "ticket-outline", route: "packages" }
+      ]
+    },
+    {
+      label: "Account",
+      items: [
+        { label: "Family profiles", icon: "people-outline", route: "family" },
+        { label: "Corporate benefits", icon: "briefcase-outline", route: "corporate" },
+        { label: "Beauty goals", icon: "color-palette-outline", route: "goals" },
+        { label: "Notifications", icon: "notifications-outline", route: "notifications" },
+        { label: "Gift cards", icon: "gift-outline", route: "gift-cards" },
+        { label: "Referrals", icon: "share-social-outline", route: "referrals" },
+        { label: "Privacy and settings", icon: "shield-checkmark-outline", route: "settings" }
+      ]
+    },
+    {
+      label: "Support",
+      items: [
+        { label: "Help centre", icon: "help-circle-outline", route: "help" },
+        { label: "Contact support", icon: "chatbubbles-outline", route: "support" }
+      ]
+    }
+  ] as const;
   readonly editMode = () => this.route.snapshot.routeConfig?.path === "profile/edit";
   profileForm = { name: "", email: "", phone: "" };
   notifications: CustomerNotificationPreferences = {
@@ -778,7 +796,7 @@ export class ProfilePage implements OnInit {
   passwordNotice = "";
 
   constructor(readonly marketplace: MarketplaceService, private readonly router: Router, private readonly route: ActivatedRoute) {
-    addIcons({ bookmarkOutline, briefcaseOutline, cardOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline });
+    addIcons({ briefcaseOutline, calendarOutline, chatbubblesOutline, chevronForwardOutline, colorPaletteOutline, createOutline, giftOutline, heartCircleOutline, heartOutline, helpCircleOutline, lockClosedOutline, logOutOutline, mailOutline, notificationsOutline, peopleOutline, personOutline, phonePortraitOutline, ribbonOutline, saveOutline, searchOutline, shareSocialOutline, shieldCheckmarkOutline, sparklesOutline, ticketOutline, trashOutline, walletOutline });
   }
 
   async ngOnInit() {
@@ -859,8 +877,41 @@ export class ProfilePage implements OnInit {
   }
 
   profileRoute(path: string): string {
-    if (!this.marketplace.salonMode()) return path === "notifications" || path === "settings" ? `/${path}` : `/tabs/${path}`;
+    if (!this.marketplace.salonMode()) return path === "notifications" || path === "settings" || path === "help" ? `/${path}` : `/tabs/${path}`;
     return this.marketplace.salonModeUrl(...path.split("/"));
+  }
+
+  summaryHeading(customer: CustomerProfile): string {
+    const completed = Number(customer.bookingCount) || this.bookingsCompleted();
+    return completed > 0 ? `${completed} ${completed === 1 ? "booking" : "bookings"} completed` : "Welcome to Aura";
+  }
+
+  summaryLine(customer: CustomerProfile): string {
+    const parts: string[] = [];
+    const completed = Number(customer.bookingCount) || this.bookingsCompleted();
+    if (completed > 0) parts.push(`${completed} ${completed === 1 ? "visit" : "visits"}`);
+    const upcoming = this.upcomingCount();
+    if (upcoming > 0) parts.push(`${upcoming} upcoming`);
+    if (parts.length) return parts.join(" · ");
+    return customer.createdAt
+      ? `Member since ${this.joinedLabel(customer.createdAt)}`
+      : "Explore salons to plan your first visit";
+  }
+
+  bookingsCompleted(): number {
+    return this.marketplace.bookings().filter((booking) => booking.status === "completed").length;
+  }
+
+  hasBookings(): boolean {
+    return this.marketplace.bookings().length > 0;
+  }
+
+  isNewUser(): boolean {
+    return this.marketplace.bookings().length === 0 && this.marketplace.mySalons().length === 0;
+  }
+
+  discoverLink(): string {
+    return this.marketplace.salonMode() ? this.marketplace.salonModeUrl() : "/tabs/search";
   }
 
   async verifyEmailChange() {
