@@ -201,7 +201,7 @@ const hubConfigs: Record<string, HubConfig> = {
               } @else if (supportBooking(); as booking) {
                 <section class="support-booking-card" aria-label="Verified booking details">
                   <div>
-                    <span class="status-pill" [class.closed]="booking.status === 'cancelled'">{{ booking.status }}</span>
+                    <span class="status-pill status-{{ booking.status }}">{{ hubStatusLabel(booking.status) }}</span>
                     <h2>{{ booking.serviceName }}</h2>
                     <p>{{ booking.businessName }}</p>
                   </div>
@@ -3262,8 +3262,11 @@ const hubConfigs: Record<string, HubConfig> = {
     .support-booking-card dl div { min-width: 0; padding: 11px 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
     .support-booking-card dt { color: rgba(255, 255, 255, 0.8); font-size: 0.72rem; font-weight: 800; }
     .support-booking-card dd { margin: 3px 0 0; color: #FFFFFF; font-size: 0.88rem; font-weight: 750; overflow-wrap: anywhere; }
-    .support-booking-card .status-pill { color: var(--text); background: var(--surface); text-transform: capitalize; }
-    .support-booking-card .status-pill.closed { color: var(--muted); background: var(--surface-soft); }
+    .support-booking-card .status-pill { text-transform: capitalize; }
+    .support-booking-card .status-pill.status-pending { color: #92600A; background: rgba(251, 191, 36, 0.14); }
+    .support-booking-card .status-pill.status-confirmed { color: #047857; background: rgba(16, 185, 129, 0.13); }
+    .support-booking-card .status-pill.status-completed { color: #1D4ED8; background: rgba(59, 130, 246, 0.12); }
+    .support-booking-card .status-pill.status-cancelled { color: #B91C1C; background: rgba(239, 68, 68, 0.11); }
     .support-form { display: grid; gap: 15px; }
     .support-context-note {
       display: flex;
@@ -3880,6 +3883,12 @@ export class CustomerHubPage implements OnInit {
     const replyHours: Record<string, string> = { open: "4h", pending: "8h", in_progress: "12h", escalated: "6h" };
     const reply = replyHours[status];
     return reply ? `Replies within ${reply}` : "We'll get back to you";
+  }
+
+  hubStatusLabel(status: string): string {
+    if (!status) return "Pending";
+    const labels: Record<string, string> = { pending: "Pending", confirmed: "Confirmed", completed: "Completed", cancelled: "Cancelled" };
+    return labels[status.toLowerCase()] || status.toLowerCase().replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
   }
 
   supportAppointmentDisplay(): string {

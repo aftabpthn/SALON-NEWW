@@ -21,7 +21,7 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
 
           <section class="itinerary-card" aria-labelledby="booking-service">
             <div class="summary-top">
-              <span class="booking-status-pill" [class.closed]="booking.status === 'cancelled'">{{ statusLabel() }}</span>
+              <span class="booking-status-pill status-{{ booking.status }}" role="status">{{ statusLabel() }}</span>
               <h1 id="booking-service">{{ booking.serviceName }}</h1>
               <p>{{ booking.businessName }}</p>
             </div>
@@ -315,16 +315,17 @@ import { CustomerMobileHeaderComponent } from "../../shared/customer-mobile-head
       width: fit-content;
       min-height: 20px;
       padding: 4px 9px;
-      color: #059669;
-      border: 1px solid rgba(52, 211, 153, 0.38);
-      background: #D1FAE5;
+      border: 1px solid transparent;
       border-radius: 999px;
       font-size: 0.62rem;
       font-weight: 900;
       line-height: 1;
       text-transform: capitalize;
     }
-    .booking-status-pill.closed { color: var(--muted); background: var(--surface-soft); border-color: transparent; }
+    .booking-status-pill.status-pending { color: #92600A; border-color: rgba(217, 119, 6, 0.35); background: rgba(251, 191, 36, 0.14); }
+    .booking-status-pill.status-confirmed { color: #047857; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.13); }
+    .booking-status-pill.status-completed { color: #1D4ED8; border-color: rgba(59, 130, 246, 0.36); background: rgba(59, 130, 246, 0.12); }
+    .booking-status-pill.status-cancelled { color: #B91C1C; border-color: rgba(239, 68, 68, 0.38); background: rgba(239, 68, 68, 0.11); }
     .summary-top h1 {
       margin: 8px 0 2px;
       color: #FFFFFF;

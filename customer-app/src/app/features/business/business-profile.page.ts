@@ -351,7 +351,7 @@ import { Subscription } from "rxjs";
                     }
                     <strong>{{ staff.name }}</strong>
                     <span>{{ staff.title }}</span>
-                    <small>Star {{ staff.rating }} · {{ staff.specialty }}</small>
+                    <small>{{ staff.rating }} · {{ staff.specialty }}</small>
                     <em>{{ staff.nextAvailable }}</em>
                     <ion-button size="small" fill="outline" class="secondary-button" [routerLink]="businessBookLink(b.slug)">Book with {{ staff.name.split(' ')[0] }}</ion-button>
                   </article>
@@ -1026,7 +1026,7 @@ import { Subscription } from "rxjs";
 
     .service-search-input:focus {
       border-color: var(--primary);
-      box-shadow: 0 0 0 3.5px rgba(14, 165, 233, 0.15);
+      box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.18);
     }
 
     .clear-search-btn {
@@ -1097,7 +1097,7 @@ import { Subscription } from "rxjs";
       width: 44px;
       height: 44px;
       border-radius: 14px;
-      background: rgba(14, 165, 233, 0.1);
+      background: rgba(99, 102, 241, 0.1);
       color: var(--primary);
       display: grid;
       place-items: center;
