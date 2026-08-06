@@ -2,11 +2,11 @@ import { Component, OnInit, computed, signal } from "@angular/core";
 import { ActivatedRoute, RouterLink } from "@angular/router";
 import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonTitle, IonToolbar } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
-import { calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline } from "ionicons/icons";
+import { calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, flagOutline, refreshOutline, searchOutline, shieldCheckmarkOutline } from "ionicons/icons";
 import { Booking } from "../../core/api.types";
 import { MarketplaceService } from "../../core/marketplace.service";
 
-type HelpCategory = "booking" | "payment" | "refund" | "account";
+type HelpCategory = "booking" | "payment" | "refund" | "account" | "goals";
 
 interface HelpItem {
   id: string;
@@ -796,7 +796,8 @@ export class HelpPage implements OnInit {
     { key: "booking" as const, label: "Bookings", shortCopy: "Manage appointments", searchCopy: "reschedule cancel waitlist appointment status", icon: "calendar-outline" },
     { key: "payment" as const, label: "Payments", shortCopy: "Pay and view invoices", searchCopy: "online payment venue invoice wallet", icon: "card-outline" },
     { key: "refund" as const, label: "Refunds", shortCopy: "Policies and timing", searchCopy: "cancellation refund late policy", icon: "refresh-outline" },
-    { key: "account" as const, label: "Account & safety", shortCopy: "Profile and security", searchCopy: "login mobile verification notifications privacy security", icon: "shield-checkmark-outline" }
+    { key: "account" as const, label: "Account & safety", shortCopy: "Profile and security", searchCopy: "login mobile verification notifications privacy security", icon: "shield-checkmark-outline" },
+    { key: "goals" as const, label: "Rewards goals", shortCopy: "Track and reach loyalty goals", searchCopy: "rewards loyalty points goal track progress redeem", icon: "flag-outline" }
   ];
   readonly helpItems: HelpItem[] = [
     { id: "view-booking", category: "booking", title: "How do I view a booking?", body: "Open Bookings, choose the appointment, and review the service, staff, time, payment status, cancellation policy, and support actions.", route: "/tabs/bookings", actionLabel: "View my bookings" },
@@ -807,7 +808,9 @@ export class HelpPage implements OnInit {
     { id: "refund-process", category: "refund", title: "How do refunds work?", body: "Refund eligibility follows the business cancellation policy and payment provider status. Check the live policy on your booking when it is available.", route: "/tabs/bookings", actionLabel: "Review booking policy" },
     { id: "late-cancellation", category: "refund", title: "Can I cancel late?", body: "Late cancellation depends on the salon’s policy. Open your booking detail to review the current rule and available cancellation action.", route: "/tabs/bookings", actionLabel: "Check cancellation options" },
     { id: "mobile-verification", category: "account", title: "Why do I need mobile verification?", body: "AuraSalon uses a verified mobile number for booking ownership, reminders, OTP security, and support handoff.", route: "/tabs/profile/edit/personal", actionLabel: "Review personal details" },
-    { id: "update-notifications", category: "account", title: "How do I update notifications?", body: "Open profile settings to manage booking reminders, promotions, loyalty, and membership notifications.", route: "/tabs/profile/edit/notifications", actionLabel: "Manage notifications" }
+    { id: "update-notifications", category: "account", title: "How do I update notifications?", body: "Open profile settings to manage booking reminders, promotions, loyalty, and membership notifications.", route: "/tabs/profile/edit/notifications", actionLabel: "Manage notifications" },
+    { id: "set-rewards-goal", category: "goals", title: "How do I track a rewards goal?", body: "Define a goal in Rewards, then book services and refer friends to earn points. Follow the plan and check progress on the Rewards screen.", route: "/tabs/rewards", actionLabel: "Open my rewards" },
+    { id: "claim-reward", category: "goals", title: "How do I claim a reward?", body: "Once your goal balance is reached, the reward becomes claimable on the Rewards screen. Contact the salon for redemption at the venue.", route: "/tabs/rewards", actionLabel: "Review my rewards" }
   ];
   readonly normalizedQuery = computed(() => this.query().trim().toLocaleLowerCase());
   readonly visibleCategories = computed(() => {
@@ -838,7 +841,7 @@ export class HelpPage implements OnInit {
     .sort((a, b) => this.bookingTimestamp(a) - this.bookingTimestamp(b))[0] ?? null);
 
   constructor(readonly marketplace: MarketplaceService, private readonly route: ActivatedRoute) {
-    addIcons({ calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, refreshOutline, searchOutline, shieldCheckmarkOutline });
+    addIcons({ calendarOutline, cardOutline, chatbubblesOutline, chevronDownOutline, flagOutline, refreshOutline, searchOutline, shieldCheckmarkOutline });
   }
 
   backHref(): string {
