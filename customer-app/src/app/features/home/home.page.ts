@@ -1660,12 +1660,17 @@ interface ConsultationChatMessage {
       }
 
       .concierge-card {
-        grid-template-columns: 40px minmax(0, 1fr);
+        grid-template-columns: 36px minmax(0, 1fr);
+        gap: 10px;
+        overflow: hidden;
       }
 
       .concierge-action {
         grid-column: 1 / -1;
         width: 100%;
+        min-width: 0;
+        --padding-start: 10px;
+        --padding-end: 10px;
       }
 
       .discover-service-card {
@@ -1724,8 +1729,8 @@ interface ConsultationChatMessage {
         gap: 24px;
         padding-top: 10px;
         padding-inline: 16px;
-        padding-bottom: calc(76px + env(safe-area-inset-bottom));
-        scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom));
+        padding-bottom: calc(92px + env(safe-area-inset-bottom));
+        scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom));
       }
 
       .hero {
@@ -2196,7 +2201,7 @@ interface ConsultationChatMessage {
       outline-offset: 3px;
     }
 
-    ion-content::part(scroll) { scroll-padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+    ion-content::part(scroll) { scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
 
     @media (max-width: 900px) {
       .home-page .business-rail,
@@ -2381,8 +2386,8 @@ export class HomePage implements OnInit {
   readonly activeQuery = signal("");
   readonly categoryFilter = signal("");
   readonly mobileHome = signal(this.isMobileViewport());
-  readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "Choose location");
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(this.savedLocation());
+  readonly areaLabel = signal(this.initialAreaLabel());
   readonly locating = signal(false);
   readonly locationNotice = signal("");
   readonly recentSearches = signal<HomeRecentSearch[]>(this.readRecentSearches());
@@ -2535,10 +2540,10 @@ export class HomePage implements OnInit {
     const cards: DiscoverServiceCard[] = [];
     for (const business of this.homeResults()) {
       for (const service of business.services) {
-        const serviceName = this.cleanServiceLabel(service.name || service.category || "Service");
+        const serviceName = this.cleanServiceLabel(service.name || service.category || "");
         const categoryLabel = this.mapCategoryLabel(service.category || serviceName);
         const key = `${serviceName.toLowerCase()}::${categoryLabel.toLowerCase()}`;
-        if (!serviceName || seen.has(key) || Number(service.pricePaise || 0) <= 0) continue;
+        if (!serviceName || !categoryLabel || seen.has(key) || Number(service.pricePaise || 0) <= 0) continue;
         if (usedCategories.has(categoryLabel) && cards.length < 8) continue;
         seen.add(key);
         usedCategories.add(categoryLabel);
@@ -3072,13 +3077,16 @@ export class HomePage implements OnInit {
     const raw = String(value || "").trim().replace(/\s+/g, " ");
     const normalized = raw.replace(/\bcompliment\s*ory\b/i, "Complimentary");
     const upper = normalized.toUpperCase();
-    if (!upper || upper === "CLEAN") return "";
+    if (!upper || /^(CLEAN|SERVICE|SERVICES|GENERAL|MISC|OTHER|OTHERS|NA|N\/A)$/.test(upper)) return "";
     if (upper === "COLOURS") return "Hair Colour";
     if (upper === "D-TANS") return "Detan";
     if (upper === "MENS") return "Men’s Grooming";
     if (upper === "PARTY") return "Party Makeup";
     if (upper === "ROOT") return "Root Touch-up";
     if (upper === "WASH") return "Hair Wash";
+    if (upper === "HAIRS") return "Hair";
+    if (upper === "NAILS") return "Nails";
+    if (upper === "SKINS") return "Skin";
     return normalized.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
@@ -3249,6 +3257,16 @@ export class HomePage implements OnInit {
       })
       .filter((item) => item.distance !== Number.MAX_SAFE_INTEGER)
       .sort((left, right) => left.distance - right.distance)[0]?.business ?? null;
+  }
+
+  private initialAreaLabel(): string {
+    if (!this.currentLocation()) return "Choose location";
+    try {
+      const label = String(localStorage.getItem("aura_customer_area_label") || "").trim();
+      return label && !/^(near me|near you|current location|choose location)$/i.test(label) ? label : "Detected area";
+    } catch {
+      return "Detected area";
+    }
   }
 
   private readRecentSearches(): HomeRecentSearch[] {

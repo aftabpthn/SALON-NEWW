@@ -67,15 +67,15 @@ import { Business } from "../../core/api.types";
 
         @if (nearby().length) {
           <section class="explore-section salon-group">
-            <div class="explore-section-head"><div><span>{{ nearYouKicker() }}</span><h2>Salons near you</h2></div><a routerLink="/search" [queryParams]="{ filter: 'nearest', sort: 'distance', nearMe: true }">See all</a></div>
+            <div class="explore-section-head"><div><span>{{ nearYouKicker() }}</span><h2>{{ nearbyHeading() }}</h2></div><a routerLink="/search" [queryParams]="{ filter: currentLocation() ? 'nearest' : undefined, sort: currentLocation() ? 'distance' : undefined, nearMe: currentLocation() ? true : undefined }">See all</a></div>
             <div class="salon-previews">@for (biz of nearby(); track biz.id) { <aura-business-card variant="discovery" [business]="biz" [userLocation]="currentLocation()"></aura-business-card> }</div>
           </section>
         }
 
         @if (openBusinessCount() > 0) {
-          <a routerLink="/search" [queryParams]="{ filter: 'open', sort: 'distance', nearMe: true }" class="open-banner">
+          <a routerLink="/search" [queryParams]="{ filter: 'open', sort: currentLocation() ? 'distance' : undefined, nearMe: currentLocation() ? true : undefined }" class="open-banner">
             <span class="open-banner-icon"><ion-icon name="time-outline"></ion-icon></span>
-            <span class="open-banner-copy"><strong>{{ openBusinessCount() }} {{ openBusinessCount() === 1 ? "salon" : "salons" }} open now</strong><small>Currently taking bookings near you</small></span>
+            <span class="open-banner-copy"><strong>{{ openBusinessCount() }} {{ openBusinessCount() === 1 ? "salon" : "salons" }} open now</strong><small>{{ openBannerCopy() }}</small></span>
             <span class="open-banner-arrow"><ion-icon name="chevron-forward-outline"></ion-icon></span>
           </a>
         }
@@ -588,7 +588,7 @@ import { Business } from "../../core/api.types";
 export class ExplorePage implements OnInit {
   private static readonly FILTER_STORAGE_KEY = "aura_explore_last_filter";
 
-  readonly areaLabel = signal(localStorage.getItem("aura_customer_area_label") || "");
+  readonly areaLabel = signal(this.savedAreaLabel());
   readonly locationLabel = computed(() => this.areaLabel() || "Choose location");
   readonly activeQuickFilter = signal(this.lastQuickFilter());
   readonly currentLocation = signal<{ lat: number; lng: number } | null>(null);
@@ -648,14 +648,17 @@ export class ExplorePage implements OnInit {
         grouped.set(this.shortLabel(cat.label), cat.slug);
       }
     }
-    return Array.from(grouped, ([label, slug]) => ({ label, slug }));
+    return Array.from(grouped, ([label, slug]) => ({ label, slug })).slice(0, 8);
   });
 
   readonly nearYouKicker = computed(() =>
-    this.marketplace.businesses().some((business) => business.distanceKm != null && Number(business.distanceKm) > 0)
+    this.currentLocation() && this.marketplace.businesses().some((business) => business.distanceKm != null && Number(business.distanceKm) > 0)
       ? "Sorted by distance"
       : "Recommended for you"
   );
+
+  readonly nearbyHeading = computed(() => this.currentLocation() ? `Salons near ${this.locationLabel()}` : "Recommended salons");
+  readonly openBannerCopy = computed(() => this.currentLocation() ? `Currently taking bookings near ${this.locationLabel()}` : "Currently taking bookings");
 
   readonly nearby = computed(() => {
     const businesses = this.marketplace.businesses();
@@ -831,6 +834,16 @@ export class ExplorePage implements OnInit {
     const first = words[0];
     const candidate = ExplorePage.LABEL_FILLERS.has(first.toLowerCase()) ? words[words.length - 1] : first;
     return candidate.length <= 16 ? candidate : candidate.slice(0, 16);
+  }
+
+  private savedAreaLabel(): string {
+    try {
+      if (!localStorage.getItem("aura_customer_location")) return "";
+      const label = String(localStorage.getItem("aura_customer_area_label") || "").trim();
+      return label && !/^(near me|near you|current location|choose location)$/i.test(label) ? label : "Detected area";
+    } catch {
+      return "";
+    }
   }
 
   /** Returns the first `limit` items not already present in `excluded` (matched by id). */

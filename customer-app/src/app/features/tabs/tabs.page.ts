@@ -276,8 +276,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
         right: 8px;
         bottom: calc(8px + env(safe-area-inset-bottom));
         width: auto;
-        height: calc(48px + env(safe-area-inset-bottom));
-        min-height: calc(48px + env(safe-area-inset-bottom));
+        height: calc(46px + env(safe-area-inset-bottom));
+        min-height: calc(46px + env(safe-area-inset-bottom));
         margin: 0;
         border-radius: 14px;
         box-sizing: border-box;
@@ -353,8 +353,8 @@ import { MarketplaceService } from "../../core/marketplace.service";
     ion-tab-bar {
       --background: var(--glass);
       --border: 1px solid rgba(99, 102, 241, 0.16);
-      height: calc(50px + env(safe-area-inset-bottom));
-      min-height: calc(50px + env(safe-area-inset-bottom));
+      height: calc(48px + env(safe-area-inset-bottom));
+      min-height: calc(48px + env(safe-area-inset-bottom));
       padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
       box-shadow: 0 -4px 14px rgba(28, 28, 28, 0.05);
       backdrop-filter: blur(18px);
@@ -391,7 +391,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
 
       ion-tabs {
         padding-top: 0;
-        padding-bottom: calc(50px + env(safe-area-inset-bottom) + 16px);
+        padding-bottom: calc(58px + env(safe-area-inset-bottom));
       }
     }
 
@@ -1011,9 +1011,10 @@ export class TabsPage implements OnInit {
   private readLocationLabel(): string {
     try {
       const label = (localStorage.getItem("aura_customer_area_label") || "").trim();
-      return label && label.toLowerCase() !== "near me" ? label : "Current location";
+      const hasLocation = !!localStorage.getItem("aura_customer_location");
+      return hasLocation && label && !/^(near me|near you|current location|choose location)$/i.test(label) ? label : "Choose location";
     } catch {
-      return "Current location";
+      return "Choose location";
     }
   }
 }

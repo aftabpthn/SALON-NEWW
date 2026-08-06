@@ -19,7 +19,11 @@ const LAST_ROUTE_KEY = "auraCustomerLastRoute";
       @if (launchVisible()) {
         <div class="app-launch-shell" [class.closing]="launchClosing()" aria-hidden="true">
           <div class="app-launch-shell__brand">
-            <img src="assets/branding/aurashine-logo.png" alt="" />
+            @if (!launchImageFailed()) {
+              <img src="assets/branding/aurashine-logo.png" alt="" (error)="launchImageFailed.set(true)" />
+            } @else {
+              <strong>Aura Shine</strong>
+            }
             <div class="app-launch-shell__loader">
               <span></span>
               <span></span>
@@ -62,6 +66,13 @@ const LAST_ROUTE_KEY = "auraCustomerLastRoute";
       object-fit: contain;
     }
 
+    .app-launch-shell__brand strong {
+      color: #4b1238;
+      font-size: clamp(1.6rem, 9vw, 2.5rem);
+      font-weight: 950;
+      letter-spacing: -0.05em;
+    }
+
     .app-launch-shell__loader {
       display: inline-flex;
       align-items: center;
@@ -91,6 +102,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private redirectingToSalon = false;
   readonly launchVisible = signal(true);
   readonly launchClosing = signal(false);
+  readonly launchImageFailed = signal(false);
   private launchCompleted = false;
 
   constructor(private readonly router: Router, private readonly pushNotifications: CustomerPushNotificationService, private readonly marketplace: MarketplaceService) {}
@@ -107,10 +119,10 @@ export class AppComponent implements OnInit, OnDestroy {
       .pipe(filter((event): event is NavigationStart => event instanceof NavigationStart))
       .subscribe((event) => this.enforceSalonBoundary(event.url));
 
+    window.setTimeout(() => this.finishLaunchShell(), 2400);
     if (!this.hasStoredSession() || !this.isStartupRoute()) return;
     const route = this.readLastRoute();
     setTimeout(() => void this.router.navigateByUrl(route), 0);
-    window.setTimeout(() => this.finishLaunchShell(), 1800);
   }
 
   ngOnDestroy() {

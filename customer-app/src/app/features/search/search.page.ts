@@ -2780,7 +2780,7 @@ export class SearchPage implements AfterViewInit, OnDestroy, OnInit {
   readonly mapFullscreen = signal(false);
   readonly selectedBusiness = signal<import("../../core/api.types").Business | null>(null);
   readonly searchModes: { key: SearchMode; label: string; copy: string; icon: string }[] = [
-    { key: "salons", label: "Salons", copy: "Venues near you", icon: "business-outline" },
+    { key: "salons", label: "Salons", copy: "Recommended venues", icon: "business-outline" },
     { key: "services", label: "Services", copy: "Hair, skin, nails", icon: "sparkles-outline" },
     { key: "staff", label: "Staff", copy: "Find professionals", icon: "people-outline" },
     { key: "locations", label: "Locations", copy: "Area and distance", icon: "location-outline" }

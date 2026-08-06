@@ -78,10 +78,12 @@ import { MarketplaceService } from "../core/marketplace.service";
             <strong>{{ priceLabel() }}</strong>
           </div>
         }
-        <div class="booking-row">
-          <ion-icon name="time-outline"></ion-icon>
-          <span class="booking-status" [class.closed]="!isOpenNow()">{{ timingLabel() }}</span>
-        </div>
+        @if (timingLabel()) {
+          <div class="booking-row">
+            <ion-icon name="time-outline"></ion-icon>
+            <span class="booking-status" [class.closed]="!isOpenNow()">{{ timingLabel() }}</span>
+          </div>
+        }
         <div class="footer-row">
           <span>{{ nextAvailabilityLabel() }}</span>
           <ion-button size="small" class="primary-gradient" [routerLink]="['/business', business.slug, 'book']" (click)="$event.stopPropagation()">Book</ion-button>
@@ -435,12 +437,12 @@ import { MarketplaceService } from "../core/marketplace.service";
     }
 
     .footer-row ion-button {
-      min-width: 76px;
-      height: 44px;
-      min-height: 44px;
-      --padding-start: 12px;
-      --padding-end: 12px;
-      font-size: 0.88rem;
+      min-width: 62px;
+      height: 40px;
+      min-height: 40px;
+      --padding-start: 10px;
+      --padding-end: 10px;
+      font-size: 0.84rem;
       white-space: nowrap;
     }
 
@@ -511,9 +513,9 @@ import { MarketplaceService } from "../core/marketplace.service";
       }
 
       .business-card:not(.variant-rail):not(.variant-mini-rail) .footer-row ion-button {
-        min-width: 84px;
-        height: 44px;
-        min-height: 44px;
+        min-width: 62px;
+        height: 40px;
+        min-height: 40px;
       }
 
       .business-card.variant-rail {
@@ -705,8 +707,8 @@ import { MarketplaceService } from "../core/marketplace.service";
 
       .footer-row ion-button {
         width: auto;
-        min-width: 76px;
-        min-height: 44px;
+        min-width: 62px;
+        min-height: 40px;
         margin: 0;
       }
 
@@ -1102,9 +1104,9 @@ export class BusinessCardComponent implements OnInit {
 
   timingLabel(): string {
     const hours = this.hoursRangeLabel();
-    if (this.isOpenNow()) return hours ? `Open today · ${hours}` : "Open today";
+    if (this.isOpenNow()) return hours ? `Open today · ${hours}` : "";
     const openAt = this.nextOpeningTimestamp();
-    return openAt && openAt > this.now ? `Closed · Opens ${this.timeLabel(openAt)}` : "Closed today";
+    return openAt && openAt > this.now ? `Closed · Opens ${this.timeLabel(openAt)}` : "";
   }
 
   distanceLabel(): string {
@@ -1145,7 +1147,7 @@ export class BusinessCardComponent implements OnInit {
     if (this.displayDistanceKm !== null && this.displayDistanceKm !== undefined && Number.isFinite(Number(this.displayDistanceKm))) {
       return Number(this.displayDistanceKm);
     }
-    if (this.business.distanceKm !== null && this.business.distanceKm !== undefined && Number.isFinite(Number(this.business.distanceKm))) {
+    if (this.business.distanceKm !== null && this.business.distanceKm !== undefined && Number.isFinite(Number(this.business.distanceKm)) && Number(this.business.distanceKm) >= 0) {
       return Number(this.business.distanceKm);
     }
     const userLocation = this.userLocation || this.savedUserLocation;
@@ -1224,17 +1226,17 @@ export class BusinessCardComponent implements OnInit {
   nextAvailabilityLabel(): string {
     const next = String(this.business.nextAvailableSlot || "").trim();
     if (next) return next;
-    return this.isOpenNow() ? "Book now" : "Availability updating";
+    return this.isOpenNow() ? "Available today" : "Check availability";
   }
 
   private realStartingPricePaise(): number {
     const servicePrices = (this.business.services || [])
       .filter((service) => service.active !== false)
       .map((service) => Number(service.pricePaise || 0))
-      .filter((price) => Number.isFinite(price) && price > 0);
+      .filter((price) => Number.isFinite(price) && price > 0 && price < 100000000);
     if (servicePrices.length) return Math.min(...servicePrices);
     const fallback = Number(this.business.startingPricePaise || 0);
-    return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+    return Number.isFinite(fallback) && fallback > 0 && fallback < 100000000 ? fallback : 0;
   }
 
   private shortAddress(): string {
@@ -1248,13 +1250,16 @@ export class BusinessCardComponent implements OnInit {
     if (!raw) return "";
     const normalized = raw.replace(/\bcompliment\s*ory\b/i, "Complimentary");
     const upper = normalized.toUpperCase();
-    if (upper === "CLEAN") return "";
+    if (/^(CLEAN|SERVICE|SERVICES|GENERAL|MISC|OTHER|OTHERS|NA|N\/A)$/.test(upper)) return "";
     if (upper === "COLOURS") return "Hair Colour";
     if (upper === "D-TANS") return "Detan";
     if (upper === "MENS") return "Men’s Grooming";
     if (upper === "PARTY") return "Party Makeup";
     if (upper === "ROOT") return "Root Touch-up";
     if (upper === "WASH") return "Hair Wash";
+    if (upper === "HAIRS") return "Hair";
+    if (upper === "NAILS") return "Nails";
+    if (upper === "SKINS") return "Skin";
     return normalized.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
