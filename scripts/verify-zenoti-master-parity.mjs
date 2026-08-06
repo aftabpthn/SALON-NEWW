@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '..');
 const evidenceDir = resolve(root, 'docs/evidence');
@@ -15,6 +16,7 @@ const apiChangelog = 'https://docs.zenoti.com/changelog';
 const explicit = (name) => `NOT_EVIDENCED_IN_PHASE_0:${name}`;
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
+export const linkedTextHash = (value) => sha256(String(value).replace(/\r\n?/g, '\n'));
 const clean = (value) => String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const decode = (value) => clean(value)
   .replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
@@ -292,8 +294,8 @@ async function sync() {
       apiChangelog: { url: apiChangelog, fetchedAt, sha256: sha256(apiHtml), entries: apiLinks.length }
     },
     linkedSubregisters: {
-      inventory: { path: 'docs/INVENTORY_ZENOTI_PARITY_REGISTER.md', sha256: sha256(inventory.source), currentRows: inventorySourceRows.length, currentCounts, canonicalRows: inventory.groups.size, duplicateAliasGroups: inventoryAliasGroups },
-      staffApp: { path: 'docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md', sha256: sha256(staffSource), rowCount: staffSource.split(/\r?\n/).filter((line) => /^\| [A-F]\d{2} \|/.test(line)).length }
+      inventory: { path: 'docs/INVENTORY_ZENOTI_PARITY_REGISTER.md', sha256: linkedTextHash(inventory.source), currentRows: inventorySourceRows.length, currentCounts, canonicalRows: inventory.groups.size, duplicateAliasGroups: inventoryAliasGroups },
+      staffApp: { path: 'docs/STAFF_APP_ZENOTI_PARITY_REGISTER.md', sha256: linkedTextHash(staffSource), rowCount: staffSource.split(/\r?\n/).filter((line) => /^\| [A-F]\d{2} \|/.test(line)).length }
     },
     exitGate: { technicalRegister: 'PASS', duplicateRows: 0, unknownValues: 0, productOwnerSignoff: 'APPROVED_BY_USER_INSTRUCTION_2026-08-02', phase1Authorization: 'APPROVED' }
   };
@@ -322,11 +324,11 @@ function reconcileLinks(approvePhase1 = false) {
   const staff = readFileSync(resolve(root, register.linkedSubregisters.staffApp.path), 'utf8');
   const sourceRows = [...inventory.groups.values()].flat();
   const currentCounts = Object.fromEntries(['Complete', 'Partial', 'Missing'].map((status) => [status, sourceRows.filter((row) => row.status === status).length]));
-  register.linkedSubregisters.inventory.sha256 = sha256(inventory.source);
+  register.linkedSubregisters.inventory.sha256 = linkedTextHash(inventory.source);
   register.linkedSubregisters.inventory.currentRows = sourceRows.length;
   register.linkedSubregisters.inventory.currentCounts = currentCounts;
   register.linkedSubregisters.inventory.canonicalRows = inventory.groups.size;
-  register.linkedSubregisters.staffApp.sha256 = sha256(staff);
+  register.linkedSubregisters.staffApp.sha256 = linkedTextHash(staff);
   register.linkedSubregisters.staffApp.rowCount = staff.split(/\r?\n/).filter((line) => /^\| [A-F]\d{2} \|/.test(line)).length;
   delete register.registerHash;
   register.registerHash = sha256(JSON.stringify(register));
@@ -347,8 +349,8 @@ function verify() {
   if (readFileSync(csvPath, 'utf8') !== csv(register.rows)) errors.push('CSV register does not match JSON register.');
   const inventory = inventoryRows();
   const staff = readFileSync(resolve(root, register.linkedSubregisters.staffApp.path), 'utf8');
-  if (sha256(inventory.source) !== register.linkedSubregisters.inventory.sha256) errors.push('Inventory subregister hash drift; run --reconcile-links.');
-  if (sha256(staff) !== register.linkedSubregisters.staffApp.sha256) errors.push('Staff App subregister hash drift; run --reconcile-links.');
+  if (linkedTextHash(inventory.source) !== register.linkedSubregisters.inventory.sha256) errors.push('Inventory subregister hash drift; run --reconcile-links.');
+  if (linkedTextHash(staff) !== register.linkedSubregisters.staffApp.sha256) errors.push('Staff App subregister hash drift; run --reconcile-links.');
   const truth = JSON.parse(readFileSync(routeTruthPath, 'utf8'));
   if (JSON.stringify(truth.claims) !== JSON.stringify(routeTruth().claims)) errors.push('README route truth drift; run --reconcile-links.');
   if (/\bUNKNOWN\b/i.test(JSON.stringify(truth))) errors.push('Route truth contains UNKNOWN.');
@@ -356,8 +358,10 @@ function verify() {
   return { rows: register.rows.length, duplicateRows: 0, unknownValues: 0, inventoryRows: register.linkedSubregisters.inventory.currentRows, staffRows: register.linkedSubregisters.staffApp.rowCount, readmeClaims: truth.claims.length, readmeGhosts: truth.claims.filter((claim) => claim.state === 'ghost').length, technicalGate: register.exitGate.technicalRegister, phase1Authorization: register.exitGate.phase1Authorization, registerHash: register.registerHash };
 }
 
-const result = process.argv.includes('--sync') ? await sync()
-  : process.argv.includes('--approve-phase1') ? reconcileLinks(true)
-    : process.argv.includes('--reconcile-links') ? reconcileLinks()
-      : verify();
-console.log(JSON.stringify(result, null, 2));
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const result = process.argv.includes('--sync') ? await sync()
+    : process.argv.includes('--approve-phase1') ? reconcileLinks(true)
+      : process.argv.includes('--reconcile-links') ? reconcileLinks()
+        : verify();
+  console.log(JSON.stringify(result, null, 2));
+}

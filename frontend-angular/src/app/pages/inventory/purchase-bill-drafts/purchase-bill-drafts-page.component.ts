@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { DatePickerComponent } from '../../../shared/date-picker/date-picker.component';
 import { ApiEnvelope, ApiService } from '../../../shared/services/api.service';
 import { TranslatePipe } from '../../../shared/pipes/translate.pipe';
+import { ActionDialogService } from '../../../shared/services/action-dialog.service';
 
 type Draft = {
   id: string; status: string; workflowMode: 'live_receipt' | 'historical_pilot'; sourceFileName: string; sourceContentType: string; sourceSha256: string; sourceSizeBytes: number;
@@ -51,6 +52,7 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(ActionDialogService);
   drafts: Draft[] = [];
   suppliers: Supplier[] = [];
   items: Item[] = [];
@@ -104,7 +106,7 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
 
   private async loadReferences() {
     try {
-      const [suppliers, orders] = await Promise.all([this.get<Supplier[]>('/purchases/suppliers'), this.get<Order[]>('/purchases/orders?page=1&pageSize=50&withCount=false')]);
+      const [suppliers, orders] = await Promise.all([this.get<Supplier[]>('/purchases/suppliers'), this.getAllPages<Order>('/purchases/orders')]);
       this.suppliers = suppliers;
       this.orders = orders;
       await this.loadItems(this.itemSearch);
@@ -178,7 +180,7 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
   }
 
   async removeLine(line: DraftLine) {
-    if (!this.selected || !confirm(`Remove line ${line.lineNumber}?`)) return;
+    if (!this.selected || !await this.dialogs.confirm(`Remove line ${line.lineNumber}?`)) return;
     await this.mutate(this.api.delete<ApiEnvelope<Details>>(
       `/purchases/bill-drafts/${this.selected.draft.id}/lines/${line.id}`,
     ), 'Bill line removed');
@@ -192,14 +194,14 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
   }
 
   async confirmDraft() {
-    if (!this.selected || !confirm(this.language.text('inventory.message.95314d6110'))) return;
+    if (!this.selected || !await this.dialogs.confirm(this.language.text('inventory.message.95314d6110'))) return;
     await this.mutate(this.api.post<ApiEnvelope<Details>>(
       `/purchases/bill-drafts/${this.selected.draft.id}/confirm`, {},
     ), 'Bill confirmed and GRN posted');
   }
 
   async cancelDraft() {
-    if (!this.selected || !confirm(this.language.text('inventory.message.3a17f1770d'))) return;
+    if (!this.selected || !await this.dialogs.confirm(this.language.text('inventory.message.3a17f1770d'))) return;
     await this.mutate(this.api.post<ApiEnvelope<Details>>(
       `/purchases/bill-drafts/${this.selected.draft.id}/cancel`, {},
     ), 'Draft cancelled');
@@ -299,9 +301,9 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
 
   private async loadItems(query: string) {
     const request = ++this.itemSearchRequest;
-    const params = new URLSearchParams({ page: '1', pageSize: '100', withCount: 'false' });
+    const params = new URLSearchParams();
     if (query.trim()) params.set('q', query.trim());
-    const rows = await this.get<Item[]>(`/inventory?${params.toString()}`);
+    const rows = await this.getAllPages<Item>(`/inventory?${params.toString()}`);
     if (request === this.itemSearchRequest) {
       const retainedIds = new Set([
         ...(this.selected?.lines.map((line) => line.inventoryItemId).filter(Boolean) || []),
@@ -478,6 +480,19 @@ export class PurchaseBillDraftsPageComponent implements OnInit, OnDestroy {
     const response = await firstValueFrom(this.api.get<ApiEnvelope<T>>(path));
     if (response.data === undefined) throw new Error('API response did not contain data');
     return response.data;
+  }
+  private async getAllPages<T>(path: string, pageSize = 200) {
+    const [base, rawQuery = ''] = path.split('?', 2);
+    const params = new URLSearchParams(rawQuery);
+    const rows: T[] = [];
+    for (let page = 1; ; page++) {
+      params.set('page', String(page));
+      params.set('pageSize', String(pageSize));
+      params.set('withCount', 'false');
+      const batch = await this.get<T[]>(`${base}?${params}`);
+      rows.push(...batch);
+      if (batch.length < pageSize) return rows;
+    }
   }
 
   private message(error: unknown, fallback: string) {

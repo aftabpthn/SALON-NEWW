@@ -1,5 +1,5 @@
-import { Component, computed } from "@angular/core";
-import { RouterLink } from "@angular/router";
+import { Component, OnInit, computed, signal } from "@angular/core";
+import { ActivatedRoute, RouterLink } from "@angular/router";
 import { IonButton, IonContent, IonIcon } from "@ionic/angular/standalone";
 import { addIcons } from "ionicons";
 import { calendarOutline, checkmarkDoneOutline, homeOutline } from "ionicons/icons";
@@ -27,7 +27,7 @@ import { MarketplaceService } from "../../core/marketplace.service";
             @if (booking.paymentStatus === 'pending') {
               <ion-button expand="block" class="primary-gradient" [disabled]="marketplace.loading()" (click)="openPayment(booking)">Pay deposit</ion-button>
             }
-            <ion-button expand="block" class="primary-gradient" routerLink="/tabs/bookings">View booking</ion-button>
+            <ion-button expand="block" class="primary-gradient" [routerLink]="['/bookings', booking.id]">View booking</ion-button>
             <ion-button expand="block" fill="outline" class="secondary-button" (click)="addToCalendar(booking)">
               <ion-icon name="calendar-outline" slot="start"></ion-icon>
               Add to Google Calendar
@@ -38,9 +38,15 @@ import { MarketplaceService } from "../../core/marketplace.service";
             </ion-button>
           </div>
         </section>
+        } @else if (marketplace.loading()) {
+          <section class="success-card premium-card"><h1>Loading booking</h1></section>
         } @else {
           <section class="success-card premium-card">
-            <h1>No booking loaded</h1>
+            <h1>Booking unavailable</h1>
+            <p class="muted">{{ actionError() || marketplace.error() || "This booking could not be loaded." }}</p>
+            @if (bookingId()) {
+              <ion-button expand="block" class="primary-gradient" (click)="reload()">Retry</ion-button>
+            }
             <ion-button expand="block" class="primary-gradient" routerLink="/tabs/bookings">View bookings</ion-button>
           </section>
         }
@@ -53,14 +59,15 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       place-items: center;
       padding: 24px;
-      background:
-        radial-gradient(circle at 50% 16%, rgba(244, 114, 182, 0.14), transparent 34%),
-        transparent;
+      background: var(--app-bg);
     }
 
     .success-card {
       width: min(560px, 100%);
-      padding: 30px;
+      padding: 24px;
+      border-color: var(--border) !important;
+      background: var(--surface) !important;
+      box-shadow: var(--shadow-soft) !important;
       text-align: center;
       animation-name: aura-card-in;
       animation-duration: var(--motion-slow);
@@ -74,18 +81,18 @@ import { MarketplaceService } from "../../core/marketplace.service";
       display: grid;
       place-items: center;
       margin: 0 auto 18px;
-      border-radius: 30px;
+      border-radius: 24px;
       color: #ffffff;
-      background: linear-gradient(135deg, #10B981, #F472B6);
-      box-shadow: 0 16px 34px rgba(20, 184, 166, 0.24);
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      box-shadow: 0 16px 34px rgba(11, 79, 138, 0.22);
       font-size: 2.35rem;
     }
 
     h1 {
       margin: 0 0 8px;
-      font-size: clamp(2rem, 6vw, 3.6rem);
-      letter-spacing: -0.055em;
-      line-height: 0.98;
+      font-size: clamp(1.65rem, 5vw, 2.5rem);
+      letter-spacing: -0.04em;
+      line-height: 1.05;
     }
 
     .summary-list {
@@ -118,10 +125,10 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
 
     .home-button {
-      --color: #7A5019;
-      --color-activated: #241609;
-      --background-hover: rgba(214, 169, 74, 0.12);
-      --background-activated: rgba(214, 169, 74, 0.18);
+      --color: var(--primary);
+      --color-activated: var(--primary-2);
+      --background-hover: var(--accent-2);
+      --background-activated: var(--accent-2);
       margin-top: 8px;
       font-weight: 900;
       letter-spacing: 0;
@@ -136,20 +143,38 @@ import { MarketplaceService } from "../../core/marketplace.service";
     }
   `]
 })
-export class BookingSuccessPage {
-  readonly booking = computed(() => this.marketplace.latestBooking());
+export class BookingSuccessPage implements OnInit {
+  readonly bookingId = signal(this.route.snapshot.queryParamMap.get("id") || "");
+  readonly booking = computed(() => this.marketplace.findBooking(this.bookingId() || null));
+  readonly actionError = signal("");
 
-  constructor(readonly marketplace: MarketplaceService) {
+  constructor(private readonly route: ActivatedRoute, readonly marketplace: MarketplaceService) {
     addIcons({ calendarOutline, checkmarkDoneOutline, homeOutline });
   }
 
+  ngOnInit() {
+    void this.reload();
+  }
+
+  async reload() {
+    const id = this.bookingId();
+    if (!id || this.booking()?.id === id) return;
+    this.actionError.set("");
+    await this.marketplace.loadBooking(id).catch(() => undefined);
+  }
+
   async openPayment(booking: Booking) {
+    this.actionError.set("");
     let url = booking.paymentUrl || "";
     if (!url) {
       const payment = await this.marketplace.createBookingPaymentLink(booking.id).catch(() => null);
       url = payment?.url || payment?.shortUrl || "";
     }
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    if (!url) {
+      this.actionError.set(this.marketplace.error() || "Secure payment link is unavailable.");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   addToCalendar(booking: Booking) {

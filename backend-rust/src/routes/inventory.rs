@@ -49,6 +49,7 @@ pub struct InventoryLedgerQuery {
     pub movement: Option<String>,
     pub q: Option<String>,
     pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -799,9 +800,16 @@ async fn advanced_controls(
         .unwrap_or(30);
     let all_branches = query.all_branches.unwrap_or(false);
     if all_branches
-        && !matches!(
-            claims.role.as_str(),
-            "owner" | "admin" | "manager" | "analyst" | "inventory_manager" | "inventoryManager"
+        && !role_is_one_of(
+            &claims.role,
+            &[
+                "owner",
+                "admin",
+                "manager",
+                "analyst",
+                "inventory_manager",
+                "inventoryManager",
+            ],
         )
     {
         return Err(AppError::forbidden(
@@ -871,7 +879,7 @@ async fn save_autonomous_operations(
     headers: HeaderMap,
     Json(payload): Json<InventoryAutomationPolicyRequest>,
 ) -> ApiResult<inventory_controls_service::InventoryAutomationOverview> {
-    if !matches!(claims.role.as_str(), "owner" | "admin") {
+    if !role_is_one_of(&claims.role, &["owner", "admin"]) {
         return Err(AppError::forbidden(
             "owner or admin role is required to change autonomous inventory policy",
         ));
@@ -903,7 +911,7 @@ async fn run_autonomous_operations(
     Extension(claims): Extension<AuthClaims>,
     headers: HeaderMap,
 ) -> ApiResult<inventory_controls_service::InventoryAutomationOverview> {
-    if !matches!(claims.role.as_str(), "owner" | "admin" | "manager")
+    if !role_is_one_of(&claims.role, &["owner", "admin", "manager"])
         && !claims
             .permissions
             .iter()
@@ -992,7 +1000,7 @@ async fn gl_reconciliation(
     Query(query): Query<GlReconciliationQuery>,
 ) -> ApiResult<inventory_controls_service::GlReconciliationResponse> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let today = chrono::Utc::now().date_naive();
+    let today = current_business_date();
     let as_of = query.as_of.unwrap_or(today);
     if as_of > today {
         return Err(AppError::validation("asOf cannot be in the future"));
@@ -1057,6 +1065,7 @@ async fn stock_ledger(
         &movement,
         query.q.as_deref().unwrap_or_default().trim(),
         query.limit.unwrap_or(500).clamp(1, 2000),
+        query.offset.unwrap_or(0).max(0),
     )
     .await
     .map_err(|_| AppError::internal("failed to load stock ledger"))?;
@@ -1079,7 +1088,7 @@ async fn valuation(
     Query(query): Query<InventoryValuationQuery>,
 ) -> ApiResult<Vec<inventory_repository::InventoryValuationRecord>> {
     let (tenant_id, branch_id) = tenant_branch(&headers)?;
-    let today = chrono::Utc::now().date_naive();
+    let today = current_business_date();
     let as_of = query.as_of.unwrap_or(today);
     if as_of > today {
         return Err(AppError::validation("asOf cannot be in the future"));
@@ -1707,15 +1716,28 @@ fn positive_i32(value: Option<i32>, field: &'static str) -> Result<i32, AppError
         .ok_or_else(|| AppError::validation(format!("{field} must be greater than 0")))
 }
 
+fn role_is_one_of(role: &str, allowed: &[&str]) -> bool {
+    allowed
+        .iter()
+        .any(|candidate| role.eq_ignore_ascii_case(candidate))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::inventory_unit;
+    use super::{inventory_unit, role_is_one_of};
 
     #[test]
     fn inventory_unit_accepts_options_and_rejects_numbers() {
         assert_eq!(inventory_unit(" Bottle ").unwrap(), "bottle");
         assert_eq!(inventory_unit("KIT").unwrap(), "kit");
         assert!(inventory_unit("4000").is_err());
+    }
+
+    #[test]
+    fn inventory_roles_are_case_insensitive() {
+        assert!(role_is_one_of("Owner", &["owner", "admin"]));
+        assert!(role_is_one_of("INVENTORY_MANAGER", &["inventory_manager"]));
+        assert!(!role_is_one_of("staff", &["owner", "admin"]));
     }
 }
 

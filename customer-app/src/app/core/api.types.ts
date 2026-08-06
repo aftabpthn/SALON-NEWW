@@ -276,8 +276,12 @@ export interface LiveConsultationResponse {
 
 export interface AvailabilityQuery {
   serviceId: string;
+  serviceIds?: string[];
   staffId?: string;
   date: string;
+  days?: number;
+  durationMinutes?: number;
+  participants?: number;
   timezone?: string;
 }
 

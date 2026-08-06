@@ -539,6 +539,7 @@ pub async fn list_ledger(
     movement: &str,
     q: &str,
     limit: i64,
+    offset: i64,
 ) -> Result<Vec<InventoryLedgerRecord>, sqlx::Error> {
     let started = Instant::now();
     let normalized_query = q.trim().to_lowercase();
@@ -609,9 +610,10 @@ pub async fn list_ledger(
         WHERE ledger.tenant_id = $1
           AND ledger.branch_id = $2{where_sql}
         ORDER BY ledger.created_at DESC, ledger.id DESC
-        LIMIT ${next_param}
+        LIMIT ${next_param} OFFSET ${offset_param}
         "#,
-        where_sql = where_sql
+        where_sql = where_sql,
+        offset_param = next_param + 1,
     );
 
     let mut query = sqlx::query_as::<_, InventoryLedgerRecord>(&sql)
@@ -631,7 +633,7 @@ pub async fn list_ledger(
         query = query.bind(&q_like);
     }
 
-    query = query.bind(limit);
+    query = query.bind(limit).bind(offset);
 
     let rows = query.fetch_all(db).await?;
 
@@ -641,9 +643,10 @@ pub async fn list_ledger(
         branch_id,
         started.elapsed().as_millis(),
         &format!(
-            "movement={}, limit={}, has_query={}",
+            "movement={}, limit={}, offset={}, has_query={}",
             movement,
             limit,
+            offset,
             !normalized_query.is_empty()
         ),
     );
@@ -681,9 +684,9 @@ pub async fn valuation(
           LEFT JOIN open_containers container ON container.inventory_item_id=item.id
           WHERE item.tenant_id=$1 AND item.branch_id=$2 AND item.created_at<($3::date+INTERVAL '1 day')
         )
-        SELECT id AS inventory_item_id,name AS product_name,category,quantity_as_of AS stock_quantity,
-               CASE WHEN quantity_as_of<>0 THEN value_as_of/quantity_as_of ELSE unit_cost_paise END AS unit_cost_paise,
-               value_as_of AS stock_value_paise,
+        SELECT id AS inventory_item_id,name AS product_name,category,quantity_as_of::BIGINT AS stock_quantity,
+               (CASE WHEN quantity_as_of<>0 THEN value_as_of/quantity_as_of ELSE unit_cost_paise END)::BIGINT AS unit_cost_paise,
+               value_as_of::BIGINT AS stock_value_paise,
                item.reorder_point
         FROM values item
         ORDER BY item.name

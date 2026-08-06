@@ -22,7 +22,8 @@ test('AI bill draft page is routed and API-backed', () => {
   assert.match(page, /readyToConfirm/);
   assert.match(page, /candidateMatches\(line/);
   assert.match(page, /line\.purchaseQuantity \|\| 0\) \* Number\(line\.unitCostPaise/);
-  assert.match(page, /new URLSearchParams\(\{ page: '1', pageSize: '100'/);
+  assert.match(page, /getAllPages<Item>/);
+  assert.match(page, /for \(let page = 1; ; page\+\+\)/);
   assert.match(page, /params\.set\('q', query\.trim\(\)\)/);
   assert.match(template, /compact-gates/);
   assert.match(template, /Purchase Bill Review/);
