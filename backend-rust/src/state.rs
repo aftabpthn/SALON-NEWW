@@ -1,10 +1,14 @@
 use crate::config::Settings;
-use crate::infrastructure::{cache::RedisClient, db::DbPool};
+use crate::infrastructure::{
+    cache::RedisClient,
+    db::DbPool,
+    realtime::{cluster_channel, ClusterSender},
+};
 use sqlx::PgPool;
 use std::{collections::HashMap, sync::Arc, time::Instant};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::RwLock;
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct AppointmentEvent {
     pub tenant_id: String,
     pub branch_id: String,
@@ -14,7 +18,7 @@ pub struct AppointmentEvent {
     pub action: String,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct PosEvent {
     pub tenant_id: String,
     pub branch_id: String,
@@ -23,7 +27,7 @@ pub struct PosEvent {
     pub action: String,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
 pub struct TeamChatEvent {
     pub tenant_id: String,
     pub branch_id: String,
@@ -58,18 +62,18 @@ pub struct AppState {
     #[allow(dead_code)]
     pub redis: RedisClient,
     pub auth_cache: Arc<RwLock<HashMap<String, AppSessionCacheEntry>>>,
-    pub appointment_events: broadcast::Sender<AppointmentEvent>,
-    pub pos_events: broadcast::Sender<PosEvent>,
-    pub team_chat_events: broadcast::Sender<TeamChatEvent>,
+    pub appointment_events: ClusterSender<AppointmentEvent>,
+    pub pos_events: ClusterSender<PosEvent>,
+    pub team_chat_events: ClusterSender<TeamChatEvent>,
 }
 
 impl AppState {
     pub fn new(settings: Settings, db: PgPool, redis: RedisClient) -> Self {
-        let (appointment_events, _) = broadcast::channel(256);
-        // ponytail: in-process fanout is enough for one API replica; switch this sender to
-        // Redis pub/sub when production runs more than one backend replica.
-        let (pos_events, _) = broadcast::channel(512);
-        let (team_chat_events, _) = broadcast::channel(512);
+        let appointment_events =
+            cluster_channel(redis.clone(), "aurashine:realtime:appointments:v1", 256);
+        let pos_events = cluster_channel(redis.clone(), "aurashine:realtime:pos:v1", 512);
+        let team_chat_events =
+            cluster_channel(redis.clone(), "aurashine:realtime:team-chat:v1", 512);
         Self {
             settings,
             db,

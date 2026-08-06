@@ -50,7 +50,7 @@ flowchart LR
 | HTTP surface | `backend-rust/src/routes` | Route modules compose services; registration is in `backend-rust/src/routes/mod.rs` |
 | Cross-cutting | `backend-rust/src/middleware`, `backend-rust/src/infrastructure` | Auth, tenant resolution, RBAC, tracing, CORS, cache/DB client setup |
 | Migrations | `backend-rust/migrations` | Sequential, additive-first, applied on startup |
-| Realtime | WebSocket handlers in routes/services | Live bookings, dashboards, staff status, notifications, front-desk queue |
+| Realtime | WebSocket handlers plus Redis pub/sub | Cross-replica live bookings, POS, team chat, staff status, notifications, and front-desk queue |
 | AI service | `ai-service/` | Python FastAPI service for AI recommendations/analytics |
 | Tests | `backend-rust/tests` + backend unit modules | Backend verification via Cargo test |
 
