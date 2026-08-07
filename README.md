@@ -2,6 +2,10 @@
 
 Original Angular + Express + SQLite salon CRM/POS suite for multi-location, multi-tenant salon SaaS operations.
 
+## Engineering audit
+
+- [AuraSalon source audit and Rust porting guidance (6 August 2026)](docs/AURASALON_AUDIT_2026-08-06.md)
+
 ## Modules
 
 - Dashboard with revenue, bookings, new clients, pending payments, low stock, staff performance and membership revenue.
